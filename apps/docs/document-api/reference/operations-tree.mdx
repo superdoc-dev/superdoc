@@ -1,0 +1,6560 @@
+---
+title: Operations tree
+sidebarTitle: Operations Tree
+description: Browse all Document API operations in a collapsible tree with input fields
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+Click a category to expand it, then click an operation to see its input fields.
+
+<AccordionGroup>
+
+<Accordion title="Anchored Metadata (6)">
+
+<AccordionGroup>
+
+<Accordion title="metadata.attach">
+
+`editor.doc.metadata.attach(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string |  |  |
+| `namespace` | string | ✓ |  |
+| `payload` | any | ✓ |  |
+| `target` | SelectionTarget | ✓ | SelectionTarget |
+| `target.end` | SelectionPoint | ✓ | SelectionPoint |
+| `target.kind` | `"selection"` | ✓ | Constant: `"selection"` |
+| `target.start` | SelectionPoint | ✓ | SelectionPoint |
+
+[Full reference →](/document-api/reference/metadata/attach)
+
+</Accordion>
+
+<Accordion title="metadata.list">
+
+`editor.doc.metadata.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `namespace` | string |  |  |
+| `offset` | integer |  |  |
+| `within` | SelectionTarget |  | SelectionTarget |
+| `within.end` | SelectionPoint |  | SelectionPoint |
+| `within.kind` | `"selection"` |  | Constant: `"selection"` |
+| `within.start` | SelectionPoint |  | SelectionPoint |
+
+[Full reference →](/document-api/reference/metadata/list)
+
+</Accordion>
+
+<Accordion title="metadata.get">
+
+`editor.doc.metadata.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/metadata/get)
+
+</Accordion>
+
+<Accordion title="metadata.update">
+
+`editor.doc.metadata.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+| `payload` | any | ✓ |  |
+
+[Full reference →](/document-api/reference/metadata/update)
+
+</Accordion>
+
+<Accordion title="metadata.remove">
+
+`editor.doc.metadata.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/metadata/remove)
+
+</Accordion>
+
+<Accordion title="metadata.resolve">
+
+`editor.doc.metadata.resolve(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/metadata/resolve)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Blocks (3)">
+
+<AccordionGroup>
+
+<Accordion title="blocks.list">
+
+`editor.doc.blocks.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `includeText` | boolean |  |  |
+| `limit` | number |  |  |
+| `nodeTypes` | "paragraph" \| "heading" \| "listItem" \| ...[] |  |  |
+| `offset` | number |  |  |
+
+[Full reference →](/document-api/reference/blocks/list)
+
+</Accordion>
+
+<Accordion title="blocks.delete">
+
+`editor.doc.blocks.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | DeletableBlockNodeAddress | ✓ | DeletableBlockNodeAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... | ✓ | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/blocks/delete)
+
+</Accordion>
+
+<Accordion title="blocks.deleteRange">
+
+`editor.doc.blocks.deleteRange(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `end` | BlockNodeAddress | ✓ | BlockNodeAddress |
+| `end.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `end.nodeId` | string | ✓ |  |
+| `end.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... | ✓ | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `start` | BlockNodeAddress | ✓ | BlockNodeAddress |
+| `start.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `start.nodeId` | string | ✓ |  |
+| `start.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... | ✓ | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/blocks/delete-range)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Bookmarks (5)">
+
+<AccordionGroup>
+
+<Accordion title="bookmarks.list">
+
+`editor.doc.bookmarks.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/bookmarks/list)
+
+</Accordion>
+
+<Accordion title="bookmarks.get">
+
+`editor.doc.bookmarks.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "bookmark" }` | ✓ |  |
+| `target.entityType` | `"bookmark"` | ✓ | Constant: `"bookmark"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.name` | string | ✓ |  |
+| `target.story` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/bookmarks/get)
+
+</Accordion>
+
+<Accordion title="bookmarks.insert">
+
+`editor.doc.bookmarks.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `name` | string | ✓ |  |
+| `tableColumn` | object |  |  |
+| `tableColumn.colFirst` | integer |  |  |
+| `tableColumn.colLast` | integer |  |  |
+
+[Full reference →](/document-api/reference/bookmarks/insert)
+
+</Accordion>
+
+<Accordion title="bookmarks.rename">
+
+`editor.doc.bookmarks.rename(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `newName` | string | ✓ |  |
+| `target` | `{ kind: "entity", entityType: "bookmark" }` | ✓ |  |
+| `target.entityType` | `"bookmark"` | ✓ | Constant: `"bookmark"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.name` | string | ✓ |  |
+| `target.story` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/bookmarks/rename)
+
+</Accordion>
+
+<Accordion title="bookmarks.remove">
+
+`editor.doc.bookmarks.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "bookmark" }` | ✓ |  |
+| `target.entityType` | `"bookmark"` | ✓ | Constant: `"bookmark"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.name` | string | ✓ |  |
+| `target.story` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/bookmarks/remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Capabilities (1)">
+
+<AccordionGroup>
+
+<Accordion title="capabilities.get">
+
+`editor.doc.capabilities(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/capabilities/get)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Captions (6)">
+
+<AccordionGroup>
+
+<Accordion title="captions.list">
+
+`editor.doc.captions.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `label` | string |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/captions/list)
+
+</Accordion>
+
+<Accordion title="captions.get">
+
+`editor.doc.captions.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"paragraph"` | ✓ | Constant: `"paragraph"` |
+
+[Full reference →](/document-api/reference/captions/get)
+
+</Accordion>
+
+<Accordion title="captions.insert">
+
+`editor.doc.captions.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `adjacentTo` | BlockNodeAddress | ✓ | BlockNodeAddress |
+| `adjacentTo.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `adjacentTo.nodeId` | string | ✓ |  |
+| `adjacentTo.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... | ✓ | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `label` | string | ✓ |  |
+| `position` | "above" \| "below" | ✓ | `"above"`, `"below"` |
+| `text` | string |  |  |
+
+[Full reference →](/document-api/reference/captions/insert)
+
+</Accordion>
+
+<Accordion title="captions.update">
+
+`editor.doc.captions.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.text` | string |  |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"paragraph"` | ✓ | Constant: `"paragraph"` |
+
+[Full reference →](/document-api/reference/captions/update)
+
+</Accordion>
+
+<Accordion title="captions.remove">
+
+`editor.doc.captions.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"paragraph"` | ✓ | Constant: `"paragraph"` |
+
+[Full reference →](/document-api/reference/captions/remove)
+
+</Accordion>
+
+<Accordion title="captions.configure">
+
+`editor.doc.captions.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `chapterStyle` | string |  |  |
+| `format` | "decimal" \| "lowerRoman" \| "upperRoman" \| ... |  | `"decimal"`, `"lowerRoman"`, `"upperRoman"`, `"lowerLetter"`, `"upperLetter"` |
+| `includeChapter` | boolean |  |  |
+| `label` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/captions/configure)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Citations (15)">
+
+<AccordionGroup>
+
+<Accordion title="citations.list">
+
+`editor.doc.citations.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/citations/list)
+
+</Accordion>
+
+<Accordion title="citations.get">
+
+`editor.doc.citations.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "citation" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"citation"` | ✓ | Constant: `"citation"` |
+
+[Full reference →](/document-api/reference/citations/get)
+
+</Accordion>
+
+<Accordion title="citations.insert">
+
+`editor.doc.citations.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `sourceIds` | string[] | ✓ |  |
+
+[Full reference →](/document-api/reference/citations/insert)
+
+</Accordion>
+
+<Accordion title="citations.update">
+
+`editor.doc.citations.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.sourceIds` | string[] |  |  |
+| `target` | `{ kind: "inline", nodeType: "citation" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"citation"` | ✓ | Constant: `"citation"` |
+
+[Full reference →](/document-api/reference/citations/update)
+
+</Accordion>
+
+<Accordion title="citations.remove">
+
+`editor.doc.citations.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "citation" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"citation"` | ✓ | Constant: `"citation"` |
+
+[Full reference →](/document-api/reference/citations/remove)
+
+</Accordion>
+
+<Accordion title="citations.sources.list">
+
+`editor.doc.citations.sources.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `type` | string |  |  |
+
+[Full reference →](/document-api/reference/citations/sources-list)
+
+</Accordion>
+
+<Accordion title="citations.sources.get">
+
+`editor.doc.citations.sources.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "citationSource" }` | ✓ |  |
+| `target.entityType` | `"citationSource"` | ✓ | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.sourceId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/citations/sources-get)
+
+</Accordion>
+
+<Accordion title="citations.sources.insert">
+
+`editor.doc.citations.sources.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `fields` | object | ✓ |  |
+| `fields.authors` | object[] |  |  |
+| `fields.city` | string |  |  |
+| `fields.doi` | string |  |  |
+| `fields.edition` | string |  |  |
+| `fields.editor` | object[] |  |  |
+| `fields.issue` | string |  |  |
+| `fields.journalName` | string |  |  |
+| `fields.medium` | string |  |  |
+| `fields.pages` | string |  |  |
+| `fields.publisher` | string |  |  |
+| `fields.shortTitle` | string |  |  |
+| `fields.standardNumber` | string |  |  |
+| `fields.title` | string |  |  |
+| `fields.translator` | object[] |  |  |
+| `fields.url` | string |  |  |
+| `fields.volume` | string |  |  |
+| `fields.year` | string |  |  |
+| `type` | "book" \| "journalArticle" \| "conferenceProceedings" \| ... | ✓ | `"book"`, `"journalArticle"`, `"conferenceProceedings"`, `"report"`, `"website"`, `"patent"`, `"case"`, `"statute"`, `"thesis"`, `"film"`, `"interview"`, `"misc"` |
+
+[Full reference →](/document-api/reference/citations/sources-insert)
+
+</Accordion>
+
+<Accordion title="citations.sources.update">
+
+`editor.doc.citations.sources.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.authors` | object[] |  |  |
+| `patch.city` | string |  |  |
+| `patch.doi` | string |  |  |
+| `patch.edition` | string |  |  |
+| `patch.editor` | object[] |  |  |
+| `patch.issue` | string |  |  |
+| `patch.journalName` | string |  |  |
+| `patch.medium` | string |  |  |
+| `patch.pages` | string |  |  |
+| `patch.publisher` | string |  |  |
+| `patch.shortTitle` | string |  |  |
+| `patch.standardNumber` | string |  |  |
+| `patch.title` | string |  |  |
+| `patch.translator` | object[] |  |  |
+| `patch.url` | string |  |  |
+| `patch.volume` | string |  |  |
+| `patch.year` | string |  |  |
+| `target` | `{ kind: "entity", entityType: "citationSource" }` | ✓ |  |
+| `target.entityType` | `"citationSource"` | ✓ | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.sourceId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/citations/sources-update)
+
+</Accordion>
+
+<Accordion title="citations.sources.remove">
+
+`editor.doc.citations.sources.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "citationSource" }` | ✓ |  |
+| `target.entityType` | `"citationSource"` | ✓ | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.sourceId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/citations/sources-remove)
+
+</Accordion>
+
+<Accordion title="citations.bibliography.get">
+
+`editor.doc.citations.bibliography.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "bibliography" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"bibliography"` | ✓ | Constant: `"bibliography"` |
+
+[Full reference →](/document-api/reference/citations/bibliography-get)
+
+</Accordion>
+
+<Accordion title="citations.bibliography.insert">
+
+`editor.doc.citations.bibliography.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` | ✓ | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `style` | string |  |  |
+
+[Full reference →](/document-api/reference/citations/bibliography-insert)
+
+</Accordion>
+
+<Accordion title="citations.bibliography.rebuild">
+
+`editor.doc.citations.bibliography.rebuild(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "bibliography" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"bibliography"` | ✓ | Constant: `"bibliography"` |
+
+[Full reference →](/document-api/reference/citations/bibliography-rebuild)
+
+</Accordion>
+
+<Accordion title="citations.bibliography.configure">
+
+`editor.doc.citations.bibliography.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `style` | string | ✓ |  |
+| `target` | `{ kind: "block", nodeType: "bibliography" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"bibliography"` | ✓ | Constant: `"bibliography"` |
+
+[Full reference →](/document-api/reference/citations/bibliography-configure)
+
+</Accordion>
+
+<Accordion title="citations.bibliography.remove">
+
+`editor.doc.citations.bibliography.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "bibliography" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"bibliography"` | ✓ | Constant: `"bibliography"` |
+
+[Full reference →](/document-api/reference/citations/bibliography-remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Comments (5)">
+
+<AccordionGroup>
+
+<Accordion title="comments.create">
+
+`editor.doc.comments.create(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `parentCommentId` | string |  |  |
+| `target` | `{ kind: "text" }` \| `{ kind: "selection" }` \| `{ kind: "trackedChange" }` |  | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/comments/create)
+
+</Accordion>
+
+<Accordion title="comments.patch">
+
+`editor.doc.comments.patch(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `commentId` | string | ✓ |  |
+| `isInternal` | boolean |  |  |
+| `status` | "resolved" \| "active" |  | `"resolved"`, `"active"` |
+| `target` | `{ kind: "text" }` \| `{ kind: "selection" }` \| `{ kind: "trackedChange" }` |  | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
+| `text` | string |  |  |
+
+[Full reference →](/document-api/reference/comments/patch)
+
+</Accordion>
+
+<Accordion title="comments.delete">
+
+`editor.doc.comments.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `commentId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/comments/delete)
+
+</Accordion>
+
+<Accordion title="comments.get">
+
+`editor.doc.comments.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `commentId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/comments/get)
+
+</Accordion>
+
+<Accordion title="comments.list">
+
+`editor.doc.comments.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `includeResolved` | boolean |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/comments/list)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Content Controls (55)">
+
+<AccordionGroup>
+
+<Accordion title="create.contentControl">
+
+`editor.doc.create.contentControl(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alias` | string |  |  |
+| `at` | SelectionTarget |  | SelectionTarget |
+| `at.end` | SelectionPoint |  | SelectionPoint |
+| `at.kind` | `"selection"` |  | Constant: `"selection"` |
+| `at.start` | SelectionPoint |  | SelectionPoint |
+| `content` | string |  |  |
+| `controlType` | string |  |  |
+| `kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `lockMode` | "unlocked" \| "sdtLocked" \| "contentLocked" \| ... |  | `"unlocked"`, `"sdtLocked"`, `"contentLocked"`, `"sdtContentLocked"` |
+| `tag` | string |  |  |
+| `target` | `{ nodeType: "sdt" }` |  |  |
+| `target.kind` | "block" \| "inline" |  | `"block"`, `"inline"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"sdt"` |  | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/create)
+
+</Accordion>
+
+<Accordion title="contentControls.list">
+
+`editor.doc.contentControls.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `controlType` | string |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `tag` | string |  |  |
+
+[Full reference →](/document-api/reference/content-controls/list)
+
+</Accordion>
+
+<Accordion title="contentControls.get">
+
+`editor.doc.contentControls.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/get)
+
+</Accordion>
+
+<Accordion title="contentControls.listInRange">
+
+`editor.doc.contentControls.listInRange(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `endBlockId` | string | ✓ |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `startBlockId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/list-in-range)
+
+</Accordion>
+
+<Accordion title="contentControls.selectByTag">
+
+`editor.doc.contentControls.selectByTag(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `tag` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/select-by-tag)
+
+</Accordion>
+
+<Accordion title="contentControls.selectByTitle">
+
+`editor.doc.contentControls.selectByTitle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `title` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/select-by-title)
+
+</Accordion>
+
+<Accordion title="contentControls.listChildren">
+
+`editor.doc.contentControls.listChildren(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/list-children)
+
+</Accordion>
+
+<Accordion title="contentControls.getParent">
+
+`editor.doc.contentControls.getParent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/get-parent)
+
+</Accordion>
+
+<Accordion title="contentControls.wrap">
+
+`editor.doc.contentControls.wrap(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alias` | string |  |  |
+| `kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `lockMode` | "unlocked" \| "sdtLocked" \| "contentLocked" \| ... |  | `"unlocked"`, `"sdtLocked"`, `"contentLocked"`, `"sdtContentLocked"` |
+| `tag` | string |  |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/wrap)
+
+</Accordion>
+
+<Accordion title="contentControls.unwrap">
+
+`editor.doc.contentControls.unwrap(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/unwrap)
+
+</Accordion>
+
+<Accordion title="contentControls.delete">
+
+`editor.doc.contentControls.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/delete)
+
+</Accordion>
+
+<Accordion title="contentControls.copy">
+
+`editor.doc.contentControls.copy(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `destination` | `{ nodeType: "sdt" }` | ✓ |  |
+| `destination.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `destination.nodeId` | string | ✓ |  |
+| `destination.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/copy)
+
+</Accordion>
+
+<Accordion title="contentControls.move">
+
+`editor.doc.contentControls.move(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `destination` | `{ nodeType: "sdt" }` | ✓ |  |
+| `destination.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `destination.nodeId` | string | ✓ |  |
+| `destination.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/move)
+
+</Accordion>
+
+<Accordion title="contentControls.patch">
+
+`editor.doc.contentControls.patch(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alias` | any |  |  |
+| `appearance` | "boundingBox" \| "tags" \| "hidden" |  | `"boundingBox"`, `"tags"`, `"hidden"` |
+| `color` | string |  |  |
+| `placeholder` | string |  |  |
+| `showingPlaceholder` | boolean |  |  |
+| `tabIndex` | integer |  |  |
+| `tag` | any |  |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `temporary` | boolean |  |  |
+
+[Full reference →](/document-api/reference/content-controls/patch)
+
+</Accordion>
+
+<Accordion title="contentControls.setLockMode">
+
+`editor.doc.contentControls.setLockMode(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `lockMode` | "unlocked" \| "sdtLocked" \| "contentLocked" \| ... | ✓ | `"unlocked"`, `"sdtLocked"`, `"contentLocked"`, `"sdtContentLocked"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/set-lock-mode)
+
+</Accordion>
+
+<Accordion title="contentControls.setType">
+
+`editor.doc.contentControls.setType(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `controlType` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/set-type)
+
+</Accordion>
+
+<Accordion title="contentControls.getContent">
+
+`editor.doc.contentControls.getContent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/get-content)
+
+</Accordion>
+
+<Accordion title="contentControls.replaceContent">
+
+`editor.doc.contentControls.replaceContent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `format` | "text" \| "html" |  | `"text"`, `"html"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/replace-content)
+
+</Accordion>
+
+<Accordion title="contentControls.clearContent">
+
+`editor.doc.contentControls.clearContent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/clear-content)
+
+</Accordion>
+
+<Accordion title="contentControls.appendContent">
+
+`editor.doc.contentControls.appendContent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `format` | "text" \| "html" |  | `"text"`, `"html"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/append-content)
+
+</Accordion>
+
+<Accordion title="contentControls.prependContent">
+
+`editor.doc.contentControls.prependContent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `format` | "text" \| "html" |  | `"text"`, `"html"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/prepend-content)
+
+</Accordion>
+
+<Accordion title="contentControls.insertBefore">
+
+`editor.doc.contentControls.insertBefore(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `format` | "text" \| "html" |  | `"text"`, `"html"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/insert-before)
+
+</Accordion>
+
+<Accordion title="contentControls.insertAfter">
+
+`editor.doc.contentControls.insertAfter(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `format` | "text" \| "html" |  | `"text"`, `"html"` |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/insert-after)
+
+</Accordion>
+
+<Accordion title="contentControls.getBinding">
+
+`editor.doc.contentControls.getBinding(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/get-binding)
+
+</Accordion>
+
+<Accordion title="contentControls.setBinding">
+
+`editor.doc.contentControls.setBinding(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `prefixMappings` | string |  |  |
+| `storeItemId` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `xpath` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/set-binding)
+
+</Accordion>
+
+<Accordion title="contentControls.clearBinding">
+
+`editor.doc.contentControls.clearBinding(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/clear-binding)
+
+</Accordion>
+
+<Accordion title="contentControls.getRawProperties">
+
+`editor.doc.contentControls.getRawProperties(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/get-raw-properties)
+
+</Accordion>
+
+<Accordion title="contentControls.patchRawProperties">
+
+`editor.doc.contentControls.patchRawProperties(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patches` | object[] | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/patch-raw-properties)
+
+</Accordion>
+
+<Accordion title="contentControls.validateWordCompatibility">
+
+`editor.doc.contentControls.validateWordCompatibility(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/validate-word-compatibility)
+
+</Accordion>
+
+<Accordion title="contentControls.normalizeWordCompatibility">
+
+`editor.doc.contentControls.normalizeWordCompatibility(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/normalize-word-compatibility)
+
+</Accordion>
+
+<Accordion title="contentControls.normalizeTagPayload">
+
+`editor.doc.contentControls.normalizeTagPayload(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/normalize-tag-payload)
+
+</Accordion>
+
+<Accordion title="contentControls.text.setMultiline">
+
+`editor.doc.contentControls.text.setMultiline(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `multiline` | boolean | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/text/set-multiline)
+
+</Accordion>
+
+<Accordion title="contentControls.text.setValue">
+
+`editor.doc.contentControls.text.setValue(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `value` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/text/set-value)
+
+</Accordion>
+
+<Accordion title="contentControls.text.clearValue">
+
+`editor.doc.contentControls.text.clearValue(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/text/clear-value)
+
+</Accordion>
+
+<Accordion title="contentControls.date.setValue">
+
+`editor.doc.contentControls.date.setValue(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `value` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/date/set-value)
+
+</Accordion>
+
+<Accordion title="contentControls.date.clearValue">
+
+`editor.doc.contentControls.date.clearValue(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/date/clear-value)
+
+</Accordion>
+
+<Accordion title="contentControls.date.setDisplayFormat">
+
+`editor.doc.contentControls.date.setDisplayFormat(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `format` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/date/set-display-format)
+
+</Accordion>
+
+<Accordion title="contentControls.date.setDisplayLocale">
+
+`editor.doc.contentControls.date.setDisplayLocale(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `locale` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/date/set-display-locale)
+
+</Accordion>
+
+<Accordion title="contentControls.date.setStorageFormat">
+
+`editor.doc.contentControls.date.setStorageFormat(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `format` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/date/set-storage-format)
+
+</Accordion>
+
+<Accordion title="contentControls.date.setCalendar">
+
+`editor.doc.contentControls.date.setCalendar(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `calendar` | string | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/date/set-calendar)
+
+</Accordion>
+
+<Accordion title="contentControls.checkbox.getState">
+
+`editor.doc.contentControls.checkbox.getState(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/checkbox/get-state)
+
+</Accordion>
+
+<Accordion title="contentControls.checkbox.setState">
+
+`editor.doc.contentControls.checkbox.setState(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `checked` | boolean | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/checkbox/set-state)
+
+</Accordion>
+
+<Accordion title="contentControls.checkbox.toggle">
+
+`editor.doc.contentControls.checkbox.toggle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/checkbox/toggle)
+
+</Accordion>
+
+<Accordion title="contentControls.checkbox.setSymbolPair">
+
+`editor.doc.contentControls.checkbox.setSymbolPair(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `checkedSymbol` | object | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `uncheckedSymbol` | object | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/checkbox/set-symbol-pair)
+
+</Accordion>
+
+<Accordion title="contentControls.choiceList.getItems">
+
+`editor.doc.contentControls.choiceList.getItems(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/choice-list/get-items)
+
+</Accordion>
+
+<Accordion title="contentControls.choiceList.setItems">
+
+`editor.doc.contentControls.choiceList.setItems(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `items` | object[] | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/choice-list/set-items)
+
+</Accordion>
+
+<Accordion title="contentControls.choiceList.setSelected">
+
+`editor.doc.contentControls.choiceList.setSelected(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+| `value` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/content-controls/choice-list/set-selected)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.listItems">
+
+`editor.doc.contentControls.repeatingSection.listItems(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/list-items)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.insertItemBefore">
+
+`editor.doc.contentControls.repeatingSection.insertItemBefore(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `index` | integer | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/insert-item-before)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.insertItemAfter">
+
+`editor.doc.contentControls.repeatingSection.insertItemAfter(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `index` | integer | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/insert-item-after)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.cloneItem">
+
+`editor.doc.contentControls.repeatingSection.cloneItem(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `index` | integer | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/clone-item)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.deleteItem">
+
+`editor.doc.contentControls.repeatingSection.deleteItem(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `index` | integer | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/delete-item)
+
+</Accordion>
+
+<Accordion title="contentControls.repeatingSection.setAllowInsertDelete">
+
+`editor.doc.contentControls.repeatingSection.setAllowInsertDelete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `allow` | boolean | ✓ |  |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/repeating-section/set-allow-insert-delete)
+
+</Accordion>
+
+<Accordion title="contentControls.group.wrap">
+
+`editor.doc.contentControls.group.wrap(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/group/wrap)
+
+</Accordion>
+
+<Accordion title="contentControls.group.ungroup">
+
+`editor.doc.contentControls.group.ungroup(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ nodeType: "sdt" }` | ✓ |  |
+| `target.kind` | "block" \| "inline" | ✓ | `"block"`, `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"sdt"` | ✓ | Constant: `"sdt"` |
+
+[Full reference →](/document-api/reference/content-controls/group/ungroup)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Core (14)">
+
+<AccordionGroup>
+
+<Accordion title="get">
+
+`editor.doc.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `options` | object |  |  |
+| `options.includeContext` | boolean |  |  |
+| `options.includeProvenance` | boolean |  |  |
+| `options.includeResolved` | boolean |  |  |
+
+[Full reference →](/document-api/reference/get)
+
+</Accordion>
+
+<Accordion title="find">
+
+`editor.doc.find(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `options` | object |  |  |
+| `options.includeContext` | boolean |  |  |
+| `options.includeProvenance` | boolean |  |  |
+| `options.includeResolved` | boolean |  |  |
+| `select` | `{ type: "text" }` \| `{ type: "node" }` | ✓ | One of: object(type="text"), object(type="node") |
+| `within` | BlockNodeAddress |  | BlockNodeAddress |
+| `within.kind` | `"block"` |  | Constant: `"block"` |
+| `within.nodeId` | string |  |  |
+| `within.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/find)
+
+</Accordion>
+
+<Accordion title="getNode">
+
+`editor.doc.getNode(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/get-node)
+
+</Accordion>
+
+<Accordion title="getNodeById">
+
+`editor.doc.getNodeById(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | ✓ |  |
+| `nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/get-node-by-id)
+
+</Accordion>
+
+<Accordion title="getText">
+
+`editor.doc.getText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/get-text)
+
+</Accordion>
+
+<Accordion title="getMarkdown">
+
+`editor.doc.getMarkdown(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/get-markdown)
+
+</Accordion>
+
+<Accordion title="getHtml">
+
+`editor.doc.getHtml(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+| `unflattenLists` | boolean |  |  |
+
+[Full reference →](/document-api/reference/get-html)
+
+</Accordion>
+
+<Accordion title="markdownToFragment">
+
+`editor.doc.markdownToFragment(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `markdown` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/markdown-to-fragment)
+
+</Accordion>
+
+<Accordion title="info">
+
+`editor.doc.info(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/info)
+
+</Accordion>
+
+<Accordion title="extract">
+
+`editor.doc.extract(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/extract)
+
+</Accordion>
+
+<Accordion title="clearContent">
+
+`editor.doc.clearContent(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/clear-content)
+
+</Accordion>
+
+<Accordion title="insert">
+
+`editor.doc.insert(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/insert)
+
+</Accordion>
+
+<Accordion title="replace">
+
+`editor.doc.replace(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/replace)
+
+</Accordion>
+
+<Accordion title="delete">
+
+`editor.doc.delete(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/delete)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Create (6)">
+
+<AccordionGroup>
+
+<Accordion title="create.paragraph">
+
+`editor.doc.create.paragraph(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator |  | StoryLocator |
+| `text` | string |  |  |
+
+[Full reference →](/document-api/reference/create/paragraph)
+
+</Accordion>
+
+<Accordion title="create.heading">
+
+`editor.doc.create.heading(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator |  | StoryLocator |
+| `level` | integer | ✓ |  |
+| `text` | string |  |  |
+
+[Full reference →](/document-api/reference/create/heading)
+
+</Accordion>
+
+<Accordion title="create.sectionBreak">
+
+`editor.doc.create.sectionBreak(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `breakType` | "continuous" \| "nextPage" \| "evenPage" \| ... |  | `"continuous"`, `"nextPage"`, `"evenPage"`, `"oddPage"` |
+| `headerFooterMargins` | object |  |  |
+| `headerFooterMargins.footer` | number |  |  |
+| `headerFooterMargins.header` | number |  |  |
+| `pageMargins` | object |  |  |
+| `pageMargins.bottom` | number |  |  |
+| `pageMargins.gutter` | number |  |  |
+| `pageMargins.left` | number |  |  |
+| `pageMargins.right` | number |  |  |
+| `pageMargins.top` | number |  |  |
+
+[Full reference →](/document-api/reference/create/section-break)
+
+</Accordion>
+
+<Accordion title="create.table">
+
+`editor.doc.create.table(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="before"), object(kind="after") |
+| `columns` | integer | ✓ |  |
+| `rows` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/create/table)
+
+</Accordion>
+
+<Accordion title="create.tableOfContents">
+
+`editor.doc.create.tableOfContents(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `config` | object |  |  |
+| `config.hideInWebView` | boolean |  |  |
+| `config.hyperlinks` | boolean |  |  |
+| `config.includePageNumbers` | boolean |  |  |
+| `config.omitPageNumberLevels` | object |  |  |
+| `config.omitPageNumberLevels.from` | integer |  |  |
+| `config.omitPageNumberLevels.to` | integer |  |  |
+| `config.outlineLevels` | object |  |  |
+| `config.outlineLevels.from` | integer |  |  |
+| `config.outlineLevels.to` | integer |  |  |
+| `config.rightAlignPageNumbers` | boolean |  |  |
+| `config.separator` | string |  |  |
+| `config.tabLeader` | "none" \| "dot" \| "hyphen" \| ... |  | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `config.tcFieldIdentifier` | string |  |  |
+| `config.tcFieldLevels` | object |  |  |
+| `config.tcFieldLevels.from` | integer |  |  |
+| `config.tcFieldLevels.to` | integer |  |  |
+| `config.useAppliedOutlineLevel` | boolean |  |  |
+
+[Full reference →](/document-api/reference/create/table-of-contents)
+
+</Accordion>
+
+<Accordion title="create.image">
+
+`editor.doc.create.image(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alt` | string |  |  |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| ... |  | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="inParagraph") |
+| `in` | StoryLocator |  | StoryLocator |
+| `size` | object |  |  |
+| `size.height` | number |  |  |
+| `size.width` | number |  |  |
+| `src` | string | ✓ |  |
+| `title` | string |  |  |
+
+[Full reference →](/document-api/reference/create/image)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Cross-References (5)">
+
+<AccordionGroup>
+
+<Accordion title="crossRefs.list">
+
+`editor.doc.crossRefs.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/cross-refs/list)
+
+</Accordion>
+
+<Accordion title="crossRefs.get">
+
+`editor.doc.crossRefs.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "crossRef" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"crossRef"` | ✓ | Constant: `"crossRef"` |
+
+[Full reference →](/document-api/reference/cross-refs/get)
+
+</Accordion>
+
+<Accordion title="crossRefs.insert">
+
+`editor.doc.crossRefs.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `display` | "content" \| "pageNumber" \| "noteNumber" \| ... | ✓ | `"content"`, `"pageNumber"`, `"noteNumber"`, `"labelAndNumber"`, `"aboveBelow"`, `"numberOnly"`, `"numberFullContext"`, `"styledContent"`, `"styledPageNumber"` |
+| `target` | `{ kind: "bookmark" }` \| `{ kind: "heading" }` \| `{ kind: "note" }` \| ... | ✓ | One of: object(kind="bookmark"), object(kind="heading"), object(kind="note"), object(kind="caption"), object(kind="numberedItem"), object(kind="styledParagraph") |
+
+[Full reference →](/document-api/reference/cross-refs/insert)
+
+</Accordion>
+
+<Accordion title="crossRefs.rebuild">
+
+`editor.doc.crossRefs.rebuild(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "crossRef" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"crossRef"` | ✓ | Constant: `"crossRef"` |
+
+[Full reference →](/document-api/reference/cross-refs/rebuild)
+
+</Accordion>
+
+<Accordion title="crossRefs.remove">
+
+`editor.doc.crossRefs.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "crossRef" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"crossRef"` | ✓ | Constant: `"crossRef"` |
+
+[Full reference →](/document-api/reference/cross-refs/remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Custom XML (5)">
+
+<AccordionGroup>
+
+<Accordion title="customXml.parts.list">
+
+`editor.doc.customXml.parts.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `rootNamespace` | string |  |  |
+| `schemaRef` | string |  |  |
+
+[Full reference →](/document-api/reference/custom-xml/parts/list)
+
+</Accordion>
+
+<Accordion title="customXml.parts.get">
+
+`editor.doc.customXml.parts.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | object | ✓ | One of: object, object |
+
+[Full reference →](/document-api/reference/custom-xml/parts/get)
+
+</Accordion>
+
+<Accordion title="customXml.parts.create">
+
+`editor.doc.customXml.parts.create(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string | ✓ |  |
+| `schemaRefs` | string[] |  |  |
+
+[Full reference →](/document-api/reference/custom-xml/parts/create)
+
+</Accordion>
+
+<Accordion title="customXml.parts.patch">
+
+`editor.doc.customXml.parts.patch(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `content` | string |  |  |
+| `schemaRefs` | string[] |  |  |
+| `target` | object | ✓ | One of: object, object |
+
+[Full reference →](/document-api/reference/custom-xml/parts/patch)
+
+</Accordion>
+
+<Accordion title="customXml.parts.remove">
+
+`editor.doc.customXml.parts.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | object | ✓ | One of: object, object |
+
+[Full reference →](/document-api/reference/custom-xml/parts/remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Diff (3)">
+
+<AccordionGroup>
+
+<Accordion title="diff.capture">
+
+`editor.doc.diff.capture(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/diff/capture)
+
+</Accordion>
+
+<Accordion title="diff.compare">
+
+`editor.doc.diff.compare(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `targetSnapshot` | object | ✓ |  |
+| `targetSnapshot.coverage` | `{ body: true }` | ✓ |  |
+| `targetSnapshot.coverage.body` | `true` | ✓ | Constant: `true` |
+| `targetSnapshot.coverage.comments` | boolean | ✓ |  |
+| `targetSnapshot.coverage.headerFooters` | boolean | ✓ |  |
+| `targetSnapshot.coverage.numbering` | boolean | ✓ |  |
+| `targetSnapshot.coverage.styles` | boolean | ✓ |  |
+| `targetSnapshot.engine` | "super-editor" | ✓ | `"super-editor"` |
+| `targetSnapshot.fingerprint` | string | ✓ |  |
+| `targetSnapshot.payload` | object | ✓ |  |
+| `targetSnapshot.version` | "sd-diff-snapshot/v1" \| "sd-diff-snapshot/v2" | ✓ | `"sd-diff-snapshot/v1"`, `"sd-diff-snapshot/v2"` |
+
+[Full reference →](/document-api/reference/diff/compare)
+
+</Accordion>
+
+<Accordion title="diff.apply">
+
+`editor.doc.diff.apply(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `diff` | object | ✓ |  |
+| `diff.baseFingerprint` | string | ✓ |  |
+| `diff.coverage` | `{ body: true }` | ✓ |  |
+| `diff.coverage.body` | `true` | ✓ | Constant: `true` |
+| `diff.coverage.comments` | boolean | ✓ |  |
+| `diff.coverage.headerFooters` | boolean | ✓ |  |
+| `diff.coverage.numbering` | boolean | ✓ |  |
+| `diff.coverage.styles` | boolean | ✓ |  |
+| `diff.engine` | "super-editor" | ✓ | `"super-editor"` |
+| `diff.payload` | object | ✓ |  |
+| `diff.summary` | object | ✓ |  |
+| `diff.summary.body` | object | ✓ |  |
+| `diff.summary.body.hasChanges` | boolean | ✓ |  |
+| `diff.summary.changedComponents` | "body" \| "comments" \| "styles" \| ...[] | ✓ |  |
+| `diff.summary.comments` | object | ✓ |  |
+| `diff.summary.comments.hasChanges` | boolean | ✓ |  |
+| `diff.summary.hasChanges` | boolean | ✓ |  |
+| `diff.summary.headerFooters` | object | ✓ |  |
+| `diff.summary.headerFooters.hasChanges` | boolean | ✓ |  |
+| `diff.summary.numbering` | object | ✓ |  |
+| `diff.summary.numbering.hasChanges` | boolean | ✓ |  |
+| `diff.summary.parts` | object | ✓ |  |
+| `diff.summary.parts.hasChanges` | boolean | ✓ |  |
+| `diff.summary.styles` | object | ✓ |  |
+| `diff.summary.styles.hasChanges` | boolean | ✓ |  |
+| `diff.targetFingerprint` | string | ✓ |  |
+| `diff.version` | "sd-diff-payload/v1" \| "sd-diff-payload/v2" | ✓ | `"sd-diff-payload/v1"`, `"sd-diff-payload/v2"` |
+
+[Full reference →](/document-api/reference/diff/apply)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Fields (5)">
+
+<AccordionGroup>
+
+<Accordion title="fields.list">
+
+`editor.doc.fields.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/fields/list)
+
+</Accordion>
+
+<Accordion title="fields.get">
+
+`editor.doc.fields.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "field" }` | ✓ |  |
+| `target.blockId` | string | ✓ |  |
+| `target.kind` | `"field"` | ✓ | Constant: `"field"` |
+| `target.nestingDepth` | integer |  |  |
+| `target.occurrenceIndex` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/fields/get)
+
+</Accordion>
+
+<Accordion title="fields.insert">
+
+`editor.doc.fields.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `instruction` | string | ✓ |  |
+| `mode` | `"raw"` | ✓ | Constant: `"raw"` |
+
+[Full reference →](/document-api/reference/fields/insert)
+
+</Accordion>
+
+<Accordion title="fields.rebuild">
+
+`editor.doc.fields.rebuild(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "field" }` | ✓ |  |
+| `target.blockId` | string | ✓ |  |
+| `target.kind` | `"field"` | ✓ | Constant: `"field"` |
+| `target.nestingDepth` | integer |  |  |
+| `target.occurrenceIndex` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/fields/rebuild)
+
+</Accordion>
+
+<Accordion title="fields.remove">
+
+`editor.doc.fields.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `mode` | `"raw"` | ✓ | Constant: `"raw"` |
+| `target` | `{ kind: "field" }` | ✓ |  |
+| `target.blockId` | string | ✓ |  |
+| `target.kind` | `"field"` | ✓ | Constant: `"field"` |
+| `target.nestingDepth` | integer |  |  |
+| `target.occurrenceIndex` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/fields/remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Footnotes (6)">
+
+<AccordionGroup>
+
+<Accordion title="footnotes.list">
+
+`editor.doc.footnotes.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `type` | "footnote" \| "endnote" |  | `"footnote"`, `"endnote"` |
+
+[Full reference →](/document-api/reference/footnotes/list)
+
+</Accordion>
+
+<Accordion title="footnotes.get">
+
+`editor.doc.footnotes.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "footnote" }` | ✓ |  |
+| `target.entityType` | `"footnote"` | ✓ | Constant: `"footnote"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.noteId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/footnotes/get)
+
+</Accordion>
+
+<Accordion title="footnotes.insert">
+
+`editor.doc.footnotes.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `content` | string | ✓ |  |
+| `type` | "footnote" \| "endnote" | ✓ | `"footnote"`, `"endnote"` |
+
+[Full reference →](/document-api/reference/footnotes/insert)
+
+</Accordion>
+
+<Accordion title="footnotes.update">
+
+`editor.doc.footnotes.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.content` | string |  |  |
+| `target` | `{ kind: "entity", entityType: "footnote" }` | ✓ |  |
+| `target.entityType` | `"footnote"` | ✓ | Constant: `"footnote"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.noteId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/footnotes/update)
+
+</Accordion>
+
+<Accordion title="footnotes.remove">
+
+`editor.doc.footnotes.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "entity", entityType: "footnote" }` | ✓ |  |
+| `target.entityType` | `"footnote"` | ✓ | Constant: `"footnote"` |
+| `target.kind` | `"entity"` | ✓ | Constant: `"entity"` |
+| `target.noteId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/footnotes/remove)
+
+</Accordion>
+
+<Accordion title="footnotes.configure">
+
+`editor.doc.footnotes.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `numbering` | object |  |  |
+| `numbering.format` | "decimal" \| "lowerRoman" \| "upperRoman" \| ... |  | `"decimal"`, `"lowerRoman"`, `"upperRoman"`, `"lowerLetter"`, `"upperLetter"`, `"symbol"` |
+| `numbering.position` | "pageBottom" \| "beneathText" \| "sectionEnd" \| ... |  | `"pageBottom"`, `"beneathText"`, `"sectionEnd"`, `"documentEnd"` |
+| `numbering.restartPolicy` | "continuous" \| "eachSection" \| "eachPage" |  | `"continuous"`, `"eachSection"`, `"eachPage"` |
+| `numbering.start` | integer |  |  |
+| `scope` | `{ kind: "document" }` \| `{ kind: "section" }` | ✓ | One of: object(kind="document"), object(kind="section") |
+| `type` | "footnote" \| "endnote" | ✓ | `"footnote"`, `"endnote"` |
+
+[Full reference →](/document-api/reference/footnotes/configure)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Format (45)">
+
+<AccordionGroup>
+
+<Accordion title="formatRange">
+
+`editor.doc.formatRange(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/apply)
+
+</Accordion>
+
+<Accordion title="format.apply">
+
+`editor.doc.format.apply(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/apply)
+
+</Accordion>
+
+<Accordion title="format.bold">
+
+`editor.doc.format.bold(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/bold)
+
+</Accordion>
+
+<Accordion title="format.italic">
+
+`editor.doc.format.italic(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/italic)
+
+</Accordion>
+
+<Accordion title="format.strike">
+
+`editor.doc.format.strike(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/strike)
+
+</Accordion>
+
+<Accordion title="format.underline">
+
+`editor.doc.format.underline(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/underline)
+
+</Accordion>
+
+<Accordion title="format.highlight">
+
+`editor.doc.format.highlight(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/highlight)
+
+</Accordion>
+
+<Accordion title="format.color">
+
+`editor.doc.format.color(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/color)
+
+</Accordion>
+
+<Accordion title="format.fontSize">
+
+`editor.doc.format.fontSize(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/font-size)
+
+</Accordion>
+
+<Accordion title="format.fontFamily">
+
+`editor.doc.format.fontFamily(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/font-family)
+
+</Accordion>
+
+<Accordion title="format.letterSpacing">
+
+`editor.doc.format.letterSpacing(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/letter-spacing)
+
+</Accordion>
+
+<Accordion title="format.vertAlign">
+
+`editor.doc.format.vertAlign(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/vert-align)
+
+</Accordion>
+
+<Accordion title="format.position">
+
+`editor.doc.format.position(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/position)
+
+</Accordion>
+
+<Accordion title="format.dstrike">
+
+`editor.doc.format.dstrike(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/dstrike)
+
+</Accordion>
+
+<Accordion title="format.smallCaps">
+
+`editor.doc.format.smallCaps(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/small-caps)
+
+</Accordion>
+
+<Accordion title="format.caps">
+
+`editor.doc.format.caps(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/caps)
+
+</Accordion>
+
+<Accordion title="format.shading">
+
+`editor.doc.format.shading(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/shading)
+
+</Accordion>
+
+<Accordion title="format.border">
+
+`editor.doc.format.border(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/border)
+
+</Accordion>
+
+<Accordion title="format.outline">
+
+`editor.doc.format.outline(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/outline)
+
+</Accordion>
+
+<Accordion title="format.shadow">
+
+`editor.doc.format.shadow(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/shadow)
+
+</Accordion>
+
+<Accordion title="format.emboss">
+
+`editor.doc.format.emboss(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/emboss)
+
+</Accordion>
+
+<Accordion title="format.imprint">
+
+`editor.doc.format.imprint(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/imprint)
+
+</Accordion>
+
+<Accordion title="format.charScale">
+
+`editor.doc.format.charScale(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/char-scale)
+
+</Accordion>
+
+<Accordion title="format.kerning">
+
+`editor.doc.format.kerning(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/kerning)
+
+</Accordion>
+
+<Accordion title="format.vanish">
+
+`editor.doc.format.vanish(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/vanish)
+
+</Accordion>
+
+<Accordion title="format.webHidden">
+
+`editor.doc.format.webHidden(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/web-hidden)
+
+</Accordion>
+
+<Accordion title="format.specVanish">
+
+`editor.doc.format.specVanish(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/spec-vanish)
+
+</Accordion>
+
+<Accordion title="format.rtl">
+
+`editor.doc.format.rtl(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/rtl)
+
+</Accordion>
+
+<Accordion title="format.cs">
+
+`editor.doc.format.cs(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/cs)
+
+</Accordion>
+
+<Accordion title="format.bCs">
+
+`editor.doc.format.bCs(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/b-cs)
+
+</Accordion>
+
+<Accordion title="format.iCs">
+
+`editor.doc.format.iCs(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/i-cs)
+
+</Accordion>
+
+<Accordion title="format.eastAsianLayout">
+
+`editor.doc.format.eastAsianLayout(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/east-asian-layout)
+
+</Accordion>
+
+<Accordion title="format.em">
+
+`editor.doc.format.em(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/em)
+
+</Accordion>
+
+<Accordion title="format.fitText">
+
+`editor.doc.format.fitText(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/fit-text)
+
+</Accordion>
+
+<Accordion title="format.snapToGrid">
+
+`editor.doc.format.snapToGrid(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/snap-to-grid)
+
+</Accordion>
+
+<Accordion title="format.lang">
+
+`editor.doc.format.lang(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/lang)
+
+</Accordion>
+
+<Accordion title="format.oMath">
+
+`editor.doc.format.oMath(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/o-math)
+
+</Accordion>
+
+<Accordion title="format.rStyle">
+
+`editor.doc.format.rStyle(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/r-style)
+
+</Accordion>
+
+<Accordion title="format.rFonts">
+
+`editor.doc.format.rFonts(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/r-fonts)
+
+</Accordion>
+
+<Accordion title="format.fontSizeCs">
+
+`editor.doc.format.fontSizeCs(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/font-size-cs)
+
+</Accordion>
+
+<Accordion title="format.ligatures">
+
+`editor.doc.format.ligatures(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/ligatures)
+
+</Accordion>
+
+<Accordion title="format.numForm">
+
+`editor.doc.format.numForm(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/num-form)
+
+</Accordion>
+
+<Accordion title="format.numSpacing">
+
+`editor.doc.format.numSpacing(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/num-spacing)
+
+</Accordion>
+
+<Accordion title="format.stylisticSets">
+
+`editor.doc.format.stylisticSets(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/stylistic-sets)
+
+</Accordion>
+
+<Accordion title="format.contextualAlternates">
+
+`editor.doc.format.contextualAlternates(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/format/contextual-alternates)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Headers & Footers (9)">
+
+<AccordionGroup>
+
+<Accordion title="headerFooters.list">
+
+`editor.doc.headerFooters.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" |  | `"header"`, `"footer"` |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `section` | SectionAddress |  | SectionAddress |
+| `section.kind` | `"section"` |  | Constant: `"section"` |
+| `section.sectionId` | string |  |  |
+
+[Full reference →](/document-api/reference/header-footers/list)
+
+</Accordion>
+
+<Accordion title="headerFooters.get">
+
+`editor.doc.headerFooters.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "headerFooterSlot" }` | ✓ |  |
+| `target.headerFooterKind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | ✓ | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | ✓ | SectionAddress |
+| `target.section.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.section.sectionId` | string | ✓ |  |
+| `target.variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/header-footers/get)
+
+</Accordion>
+
+<Accordion title="headerFooters.resolve">
+
+`editor.doc.headerFooters.resolve(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "headerFooterSlot" }` | ✓ |  |
+| `target.headerFooterKind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | ✓ | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | ✓ | SectionAddress |
+| `target.section.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.section.sectionId` | string | ✓ |  |
+| `target.variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/header-footers/resolve)
+
+</Accordion>
+
+<Accordion title="headerFooters.refs.set">
+
+`editor.doc.headerFooters.refs.set(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `refId` | string | ✓ |  |
+| `target` | `{ kind: "headerFooterSlot" }` | ✓ |  |
+| `target.headerFooterKind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | ✓ | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | ✓ | SectionAddress |
+| `target.section.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.section.sectionId` | string | ✓ |  |
+| `target.variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/header-footers/refs/set)
+
+</Accordion>
+
+<Accordion title="headerFooters.refs.clear">
+
+`editor.doc.headerFooters.refs.clear(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "headerFooterSlot" }` | ✓ |  |
+| `target.headerFooterKind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | ✓ | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | ✓ | SectionAddress |
+| `target.section.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.section.sectionId` | string | ✓ |  |
+| `target.variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/header-footers/refs/clear)
+
+</Accordion>
+
+<Accordion title="headerFooters.refs.setLinkedToPrevious">
+
+`editor.doc.headerFooters.refs.setLinkedToPrevious(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `linked` | boolean | ✓ |  |
+| `target` | `{ kind: "headerFooterSlot" }` | ✓ |  |
+| `target.headerFooterKind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | ✓ | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | ✓ | SectionAddress |
+| `target.section.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.section.sectionId` | string | ✓ |  |
+| `target.variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/header-footers/refs/set-linked-to-previous)
+
+</Accordion>
+
+<Accordion title="headerFooters.parts.list">
+
+`editor.doc.headerFooters.parts.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" |  | `"header"`, `"footer"` |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/header-footers/parts/list)
+
+</Accordion>
+
+<Accordion title="headerFooters.parts.create">
+
+`editor.doc.headerFooters.parts.create(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `sourceRefId` | string |  |  |
+
+[Full reference →](/document-api/reference/header-footers/parts/create)
+
+</Accordion>
+
+<Accordion title="headerFooters.parts.delete">
+
+`editor.doc.headerFooters.parts.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "headerFooterPart" }` | ✓ |  |
+| `target.kind` | `"headerFooterPart"` | ✓ | Constant: `"headerFooterPart"` |
+| `target.refId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/header-footers/parts/delete)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="History (3)">
+
+<AccordionGroup>
+
+<Accordion title="history.get">
+
+`editor.doc.history.get(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/history/get)
+
+</Accordion>
+
+<Accordion title="history.undo">
+
+`editor.doc.history.undo(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/history/undo)
+
+</Accordion>
+
+<Accordion title="history.redo">
+
+`editor.doc.history.redo(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/history/redo)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Hyperlinks (6)">
+
+<AccordionGroup>
+
+<Accordion title="hyperlinks.list">
+
+`editor.doc.hyperlinks.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `anchor` | string |  |  |
+| `hrefPattern` | string |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `textPattern` | string |  |  |
+| `within` | BlockNodeAddress |  | BlockNodeAddress |
+| `within.kind` | `"block"` |  | Constant: `"block"` |
+| `within.nodeId` | string |  |  |
+| `within.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/hyperlinks/list)
+
+</Accordion>
+
+<Accordion title="hyperlinks.get">
+
+`editor.doc.hyperlinks.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "hyperlink" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"hyperlink"` | ✓ | Constant: `"hyperlink"` |
+
+[Full reference →](/document-api/reference/hyperlinks/get)
+
+</Accordion>
+
+<Accordion title="hyperlinks.wrap">
+
+`editor.doc.hyperlinks.wrap(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `link` | object | ✓ |  |
+| `link.destination` | object | ✓ |  |
+| `link.destination.anchor` | string |  |  |
+| `link.destination.docLocation` | string |  |  |
+| `link.destination.href` | string |  |  |
+| `link.rel` | string |  |  |
+| `link.target` | string |  |  |
+| `link.tooltip` | string |  |  |
+| `target` | TextAddress | ✓ | TextAddress |
+| `target.blockId` | string | ✓ |  |
+| `target.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `target.range` | Range | ✓ | Range |
+| `target.range.end` | integer | ✓ |  |
+| `target.range.start` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/hyperlinks/wrap)
+
+</Accordion>
+
+<Accordion title="hyperlinks.insert">
+
+`editor.doc.hyperlinks.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `link` | object | ✓ |  |
+| `link.destination` | object | ✓ |  |
+| `link.destination.anchor` | string |  |  |
+| `link.destination.docLocation` | string |  |  |
+| `link.destination.href` | string |  |  |
+| `link.rel` | string |  |  |
+| `link.target` | string |  |  |
+| `link.tooltip` | string |  |  |
+| `target` | TextAddress |  | TextAddress |
+| `target.blockId` | string |  |  |
+| `target.kind` | `"text"` |  | Constant: `"text"` |
+| `target.range` | Range |  | Range |
+| `target.range.end` | integer |  |  |
+| `target.range.start` | integer |  |  |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/hyperlinks/insert)
+
+</Accordion>
+
+<Accordion title="hyperlinks.patch">
+
+`editor.doc.hyperlinks.patch(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.anchor` | string \| null |  | One of: string, null |
+| `patch.docLocation` | string \| null |  | One of: string, null |
+| `patch.href` | string \| null |  | One of: string, null |
+| `patch.rel` | string \| null |  | One of: string, null |
+| `patch.target` | string \| null |  | One of: string, null |
+| `patch.tooltip` | string \| null |  | One of: string, null |
+| `target` | `{ kind: "inline", nodeType: "hyperlink" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"hyperlink"` | ✓ | Constant: `"hyperlink"` |
+
+[Full reference →](/document-api/reference/hyperlinks/patch)
+
+</Accordion>
+
+<Accordion title="hyperlinks.remove">
+
+`editor.doc.hyperlinks.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `mode` | "unwrap" \| "deleteText" |  | `"unwrap"`, `"deleteText"` |
+| `target` | `{ kind: "inline", nodeType: "hyperlink" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"hyperlink"` | ✓ | Constant: `"hyperlink"` |
+
+[Full reference →](/document-api/reference/hyperlinks/remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Images (27)">
+
+<AccordionGroup>
+
+<Accordion title="images.list">
+
+`editor.doc.images.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/images/list)
+
+</Accordion>
+
+<Accordion title="images.get">
+
+`editor.doc.images.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/get)
+
+</Accordion>
+
+<Accordion title="images.delete">
+
+`editor.doc.images.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/delete)
+
+</Accordion>
+
+<Accordion title="images.move">
+
+`editor.doc.images.move(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `to` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| ... | ✓ | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="inParagraph") |
+
+[Full reference →](/document-api/reference/images/move)
+
+</Accordion>
+
+<Accordion title="images.convertToInline">
+
+`editor.doc.images.convertToInline(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/convert-to-inline)
+
+</Accordion>
+
+<Accordion title="images.convertToFloating">
+
+`editor.doc.images.convertToFloating(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/convert-to-floating)
+
+</Accordion>
+
+<Accordion title="images.setSize">
+
+`editor.doc.images.setSize(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `size` | object | ✓ |  |
+| `size.height` | number | ✓ |  |
+| `size.unit` | "px" \| "pt" \| "twip" |  | `"px"`, `"pt"`, `"twip"` |
+| `size.width` | number | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-size)
+
+</Accordion>
+
+<Accordion title="images.setWrapType">
+
+`editor.doc.images.setWrapType(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `type` | "None" \| "Square" \| "Through" \| ... | ✓ | `"None"`, `"Square"`, `"Through"`, `"Tight"`, `"TopAndBottom"`, `"Inline"` |
+
+[Full reference →](/document-api/reference/images/set-wrap-type)
+
+</Accordion>
+
+<Accordion title="images.setWrapSide">
+
+`editor.doc.images.setWrapSide(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `side` | "bothSides" \| "left" \| "right" \| ... | ✓ | `"bothSides"`, `"left"`, `"right"`, `"largest"` |
+
+[Full reference →](/document-api/reference/images/set-wrap-side)
+
+</Accordion>
+
+<Accordion title="images.setWrapDistances">
+
+`editor.doc.images.setWrapDistances(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `distances` | object | ✓ |  |
+| `distances.distBottom` | number |  |  |
+| `distances.distLeft` | number |  |  |
+| `distances.distRight` | number |  |  |
+| `distances.distTop` | number |  |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-wrap-distances)
+
+</Accordion>
+
+<Accordion title="images.setPosition">
+
+`editor.doc.images.setPosition(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `position` | object | ✓ |  |
+| `position.alignH` | string |  |  |
+| `position.alignV` | string |  |  |
+| `position.hRelativeFrom` | string |  |  |
+| `position.marginOffset` | object |  |  |
+| `position.marginOffset.horizontal` | number |  |  |
+| `position.marginOffset.top` | number |  |  |
+| `position.vRelativeFrom` | string |  |  |
+
+[Full reference →](/document-api/reference/images/set-position)
+
+</Accordion>
+
+<Accordion title="images.setAnchorOptions">
+
+`editor.doc.images.setAnchorOptions(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `options` | object | ✓ |  |
+| `options.allowOverlap` | boolean |  |  |
+| `options.behindDoc` | boolean |  |  |
+| `options.layoutInCell` | boolean |  |  |
+| `options.lockAnchor` | boolean |  |  |
+| `options.simplePos` | boolean |  |  |
+
+[Full reference →](/document-api/reference/images/set-anchor-options)
+
+</Accordion>
+
+<Accordion title="images.setZOrder">
+
+`editor.doc.images.setZOrder(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `zOrder` | object | ✓ |  |
+| `zOrder.relativeHeight` | integer | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-z-order)
+
+</Accordion>
+
+<Accordion title="images.scale">
+
+`editor.doc.images.scale(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `factor` | number | ✓ |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/scale)
+
+</Accordion>
+
+<Accordion title="images.setLockAspectRatio">
+
+`editor.doc.images.setLockAspectRatio(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `locked` | boolean | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-lock-aspect-ratio)
+
+</Accordion>
+
+<Accordion title="images.rotate">
+
+`editor.doc.images.rotate(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `angle` | number | ✓ |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/rotate)
+
+</Accordion>
+
+<Accordion title="images.flip">
+
+`editor.doc.images.flip(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `horizontal` | boolean |  |  |
+| `imageId` | string | ✓ |  |
+| `vertical` | boolean |  |  |
+
+[Full reference →](/document-api/reference/images/flip)
+
+</Accordion>
+
+<Accordion title="images.crop">
+
+`editor.doc.images.crop(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `crop` | object | ✓ |  |
+| `crop.bottom` | number |  |  |
+| `crop.left` | number |  |  |
+| `crop.right` | number |  |  |
+| `crop.top` | number |  |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/crop)
+
+</Accordion>
+
+<Accordion title="images.resetCrop">
+
+`editor.doc.images.resetCrop(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/reset-crop)
+
+</Accordion>
+
+<Accordion title="images.replaceSource">
+
+`editor.doc.images.replaceSource(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `resetSize` | boolean |  |  |
+| `src` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/replace-source)
+
+</Accordion>
+
+<Accordion title="images.setAltText">
+
+`editor.doc.images.setAltText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `description` | string | ✓ |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-alt-text)
+
+</Accordion>
+
+<Accordion title="images.setDecorative">
+
+`editor.doc.images.setDecorative(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `decorative` | boolean | ✓ |  |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-decorative)
+
+</Accordion>
+
+<Accordion title="images.setName">
+
+`editor.doc.images.setName(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `name` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-name)
+
+</Accordion>
+
+<Accordion title="images.setHyperlink">
+
+`editor.doc.images.setHyperlink(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `tooltip` | string |  |  |
+| `url` | string \| null | ✓ |  |
+
+[Full reference →](/document-api/reference/images/set-hyperlink)
+
+</Accordion>
+
+<Accordion title="images.insertCaption">
+
+`editor.doc.images.insertCaption(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/insert-caption)
+
+</Accordion>
+
+<Accordion title="images.updateCaption">
+
+`editor.doc.images.updateCaption(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/update-caption)
+
+</Accordion>
+
+<Accordion title="images.removeCaption">
+
+`editor.doc.images.removeCaption(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/images/remove-caption)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Index (11)">
+
+<AccordionGroup>
+
+<Accordion title="index.list">
+
+`editor.doc.index.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/index/list)
+
+</Accordion>
+
+<Accordion title="index.get">
+
+`editor.doc.index.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "index" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"index"` | ✓ | Constant: `"index"` |
+
+[Full reference →](/document-api/reference/index/get)
+
+</Accordion>
+
+<Accordion title="index.insert">
+
+`editor.doc.index.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` | ✓ | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `config` | object |  |  |
+| `config.accentedSorting` | boolean |  |  |
+| `config.columns` | integer |  |  |
+| `config.entryPageSeparator` | string |  |  |
+| `config.entryTypeFilter` | string |  |  |
+| `config.headingSeparator` | string |  |  |
+| `config.letterRange` | object |  |  |
+| `config.letterRange.from` | string |  |  |
+| `config.letterRange.to` | string |  |  |
+| `config.pageRangeBookmark` | string |  |  |
+| `config.pageRangeSeparator` | string |  |  |
+| `config.runIn` | boolean |  |  |
+| `config.sequenceId` | string |  |  |
+
+[Full reference →](/document-api/reference/index/insert)
+
+</Accordion>
+
+<Accordion title="index.configure">
+
+`editor.doc.index.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.accentedSorting` | boolean |  |  |
+| `patch.columns` | integer |  |  |
+| `patch.entryPageSeparator` | string |  |  |
+| `patch.entryTypeFilter` | string |  |  |
+| `patch.headingSeparator` | string |  |  |
+| `patch.letterRange` | object |  |  |
+| `patch.letterRange.from` | string |  |  |
+| `patch.letterRange.to` | string |  |  |
+| `patch.pageRangeBookmark` | string |  |  |
+| `patch.pageRangeSeparator` | string |  |  |
+| `patch.runIn` | boolean |  |  |
+| `patch.sequenceId` | string |  |  |
+| `target` | `{ kind: "block", nodeType: "index" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"index"` | ✓ | Constant: `"index"` |
+
+[Full reference →](/document-api/reference/index/configure)
+
+</Accordion>
+
+<Accordion title="index.rebuild">
+
+`editor.doc.index.rebuild(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "index" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"index"` | ✓ | Constant: `"index"` |
+
+[Full reference →](/document-api/reference/index/rebuild)
+
+</Accordion>
+
+<Accordion title="index.remove">
+
+`editor.doc.index.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "index" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"index"` | ✓ | Constant: `"index"` |
+
+[Full reference →](/document-api/reference/index/remove)
+
+</Accordion>
+
+<Accordion title="index.entries.list">
+
+`editor.doc.index.entries.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `entryType` | string |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/index/entries-list)
+
+</Accordion>
+
+<Accordion title="index.entries.get">
+
+`editor.doc.index.entries.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "indexEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"indexEntry"` | ✓ | Constant: `"indexEntry"` |
+
+[Full reference →](/document-api/reference/index/entries-get)
+
+</Accordion>
+
+<Accordion title="index.entries.insert">
+
+`editor.doc.index.entries.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `entry` | object | ✓ |  |
+| `entry.bold` | boolean |  |  |
+| `entry.crossReference` | string |  |  |
+| `entry.entryType` | string |  |  |
+| `entry.italic` | boolean |  |  |
+| `entry.pageRangeBookmark` | string |  |  |
+| `entry.subEntry` | string |  |  |
+| `entry.text` | string | ✓ |  |
+| `entry.yomi` | string |  |  |
+
+[Full reference →](/document-api/reference/index/entries-insert)
+
+</Accordion>
+
+<Accordion title="index.entries.update">
+
+`editor.doc.index.entries.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.bold` | boolean |  |  |
+| `patch.crossReference` | string |  |  |
+| `patch.entryType` | string |  |  |
+| `patch.italic` | boolean |  |  |
+| `patch.pageRangeBookmark` | string |  |  |
+| `patch.subEntry` | string |  |  |
+| `patch.text` | string |  |  |
+| `patch.yomi` | string |  |  |
+| `target` | `{ kind: "inline", nodeType: "indexEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"indexEntry"` | ✓ | Constant: `"indexEntry"` |
+
+[Full reference →](/document-api/reference/index/entries-update)
+
+</Accordion>
+
+<Accordion title="index.entries.remove">
+
+`editor.doc.index.entries.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "indexEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"indexEntry"` | ✓ | Constant: `"indexEntry"` |
+
+[Full reference →](/document-api/reference/index/entries-remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Lists (39)">
+
+<AccordionGroup>
+
+<Accordion title="lists.list">
+
+`editor.doc.lists.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "ordered" \| "bullet" |  | `"ordered"`, `"bullet"` |
+| `level` | integer |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `ordinal` | integer |  |  |
+| `within` | BlockNodeAddress |  | BlockNodeAddress |
+| `within.kind` | `"block"` |  | Constant: `"block"` |
+| `within.nodeId` | string |  |  |
+| `within.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/lists/list)
+
+</Accordion>
+
+<Accordion title="lists.get">
+
+`editor.doc.lists.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `address` | ListItemAddress | ✓ | ListItemAddress |
+| `address.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `address.nodeId` | string | ✓ |  |
+| `address.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/get)
+
+</Accordion>
+
+<Accordion title="lists.insert">
+
+`editor.doc.lists.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `position` | "before" \| "after" | ✓ | `"before"`, `"after"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `text` | string |  |  |
+
+[Full reference →](/document-api/reference/lists/insert)
+
+</Accordion>
+
+<Accordion title="lists.create">
+
+`editor.doc.lists.create(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/lists/create)
+
+</Accordion>
+
+<Accordion title="lists.attach">
+
+`editor.doc.lists.attach(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `attachTo` | ListItemAddress | ✓ | ListItemAddress |
+| `attachTo.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `attachTo.nodeId` | string | ✓ |  |
+| `attachTo.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `level` | integer |  |  |
+| `target` | BlockAddressOrRange | ✓ | BlockAddressOrRange |
+
+[Full reference →](/document-api/reference/lists/attach)
+
+</Accordion>
+
+<Accordion title="lists.detach">
+
+`editor.doc.lists.detach(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/detach)
+
+</Accordion>
+
+<Accordion title="lists.delete">
+
+`editor.doc.lists.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/delete)
+
+</Accordion>
+
+<Accordion title="lists.indent">
+
+`editor.doc.lists.indent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/indent)
+
+</Accordion>
+
+<Accordion title="lists.outdent">
+
+`editor.doc.lists.outdent(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/outdent)
+
+</Accordion>
+
+<Accordion title="lists.join">
+
+`editor.doc.lists.join(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `direction` | "withPrevious" \| "withNext" | ✓ | `"withPrevious"`, `"withNext"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/join)
+
+</Accordion>
+
+<Accordion title="lists.canJoin">
+
+`editor.doc.lists.canJoin(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `direction` | "withPrevious" \| "withNext" | ✓ | `"withPrevious"`, `"withNext"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/can-join)
+
+</Accordion>
+
+<Accordion title="lists.separate">
+
+`editor.doc.lists.separate(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `copyOverrides` | boolean |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/separate)
+
+</Accordion>
+
+<Accordion title="lists.merge">
+
+`editor.doc.lists.merge(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `direction` | "withPrevious" \| "withNext" | ✓ | `"withPrevious"`, `"withNext"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/merge)
+
+</Accordion>
+
+<Accordion title="lists.split">
+
+`editor.doc.lists.split(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `restartNumbering` | boolean |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/split)
+
+</Accordion>
+
+<Accordion title="lists.setLevel">
+
+`editor.doc.lists.setLevel(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level)
+
+</Accordion>
+
+<Accordion title="lists.setValue">
+
+`editor.doc.lists.setValue(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `value` | integer \| null | ✓ |  |
+
+[Full reference →](/document-api/reference/lists/set-value)
+
+</Accordion>
+
+<Accordion title="lists.continuePrevious">
+
+`editor.doc.lists.continuePrevious(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/continue-previous)
+
+</Accordion>
+
+<Accordion title="lists.canContinuePrevious">
+
+`editor.doc.lists.canContinuePrevious(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/can-continue-previous)
+
+</Accordion>
+
+<Accordion title="lists.setLevelRestart">
+
+`editor.doc.lists.setLevelRestart(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `restartAfterLevel` | integer \| null | ✓ |  |
+| `scope` | "definition" \| "instance" |  | `"definition"`, `"instance"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-restart)
+
+</Accordion>
+
+<Accordion title="lists.convertToText">
+
+`editor.doc.lists.convertToText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `includeMarker` | boolean |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/convert-to-text)
+
+</Accordion>
+
+<Accordion title="lists.applyTemplate">
+
+`editor.doc.lists.applyTemplate(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `template` | `{ version: 1 }` | ✓ |  |
+| `template.levels` | object[] | ✓ |  |
+| `template.version` | `1` | ✓ | Constant: `1` |
+
+[Full reference →](/document-api/reference/lists/apply-template)
+
+</Accordion>
+
+<Accordion title="lists.applyPreset">
+
+`editor.doc.lists.applyPreset(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] |  |  |
+| `preset` | "decimal" \| "decimalParenthesis" \| "lowerLetter" \| ... | ✓ | `"decimal"`, `"decimalParenthesis"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"disc"`, `"circle"`, `"square"`, `"dash"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/apply-preset)
+
+</Accordion>
+
+<Accordion title="lists.setType">
+
+`editor.doc.lists.setType(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `continuity` | "preserve" \| "none" |  | `"preserve"`, `"none"` |
+| `kind` | "ordered" \| "bullet" | ✓ | `"ordered"`, `"bullet"` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-type)
+
+</Accordion>
+
+<Accordion title="lists.captureTemplate">
+
+`editor.doc.lists.captureTemplate(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/capture-template)
+
+</Accordion>
+
+<Accordion title="lists.setLevelNumbering">
+
+`editor.doc.lists.setLevelNumbering(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `lvlText` | string | ✓ |  |
+| `numFmt` | string | ✓ |  |
+| `start` | integer |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-numbering)
+
+</Accordion>
+
+<Accordion title="lists.setLevelBullet">
+
+`editor.doc.lists.setLevelBullet(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `markerText` | string | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-bullet)
+
+</Accordion>
+
+<Accordion title="lists.setLevelPictureBullet">
+
+`editor.doc.lists.setLevelPictureBullet(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `pictureBulletId` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-picture-bullet)
+
+</Accordion>
+
+<Accordion title="lists.setLevelAlignment">
+
+`editor.doc.lists.setLevelAlignment(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alignment` | "left" \| "center" \| "right" | ✓ | `"left"`, `"center"`, `"right"` |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-alignment)
+
+</Accordion>
+
+<Accordion title="lists.setLevelIndents">
+
+`editor.doc.lists.setLevelIndents(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `firstLine` | integer |  |  |
+| `hanging` | integer |  |  |
+| `left` | integer |  |  |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-indents)
+
+</Accordion>
+
+<Accordion title="lists.setLevelTrailingCharacter">
+
+`editor.doc.lists.setLevelTrailingCharacter(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `trailingCharacter` | "tab" \| "space" \| "nothing" | ✓ | `"tab"`, `"space"`, `"nothing"` |
+
+[Full reference →](/document-api/reference/lists/set-level-trailing-character)
+
+</Accordion>
+
+<Accordion title="lists.setLevelMarkerFont">
+
+`editor.doc.lists.setLevelMarkerFont(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `fontFamily` | string | ✓ |  |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-marker-font)
+
+</Accordion>
+
+<Accordion title="lists.clearLevelOverrides">
+
+`editor.doc.lists.clearLevelOverrides(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/clear-level-overrides)
+
+</Accordion>
+
+<Accordion title="lists.getStyle">
+
+`editor.doc.lists.getStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] |  |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/get-style)
+
+</Accordion>
+
+<Accordion title="lists.applyStyle">
+
+`editor.doc.lists.applyStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] |  |  |
+| `style` | `{ version: 1 }` | ✓ |  |
+| `style.levels` | object[] | ✓ |  |
+| `style.version` | `1` | ✓ | Constant: `1` |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/apply-style)
+
+</Accordion>
+
+<Accordion title="lists.restartAt">
+
+`editor.doc.lists.restartAt(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `startAt` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/restart-at)
+
+</Accordion>
+
+<Accordion title="lists.setLevelNumberStyle">
+
+`editor.doc.lists.setLevelNumberStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `numberStyle` | string | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-number-style)
+
+</Accordion>
+
+<Accordion title="lists.setLevelText">
+
+`editor.doc.lists.setLevelText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/lists/set-level-text)
+
+</Accordion>
+
+<Accordion title="lists.setLevelStart">
+
+`editor.doc.lists.setLevelStart(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer | ✓ |  |
+| `startAt` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-start)
+
+</Accordion>
+
+<Accordion title="lists.setLevelLayout">
+
+`editor.doc.lists.setLevelLayout(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `layout` | object | ✓ |  |
+| `layout.alignedAt` | integer |  |  |
+| `layout.alignment` | "left" \| "center" \| "right" |  | `"left"`, `"center"`, `"right"` |
+| `layout.followCharacter` | "tab" \| "space" \| "nothing" |  | `"tab"`, `"space"`, `"nothing"` |
+| `layout.tabStopAt` | integer \| null |  |  |
+| `layout.textIndentAt` | integer |  |  |
+| `level` | integer | ✓ |  |
+| `target` | ListItemAddress | ✓ | ListItemAddress |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"listItem"` | ✓ | Constant: `"listItem"` |
+
+[Full reference →](/document-api/reference/lists/set-level-layout)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Mutations (2)">
+
+<AccordionGroup>
+
+<Accordion title="mutations.preview">
+
+`editor.doc.mutations.preview(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `atomic` | `true` | ✓ | Constant: `true` |
+| `changeMode` | "direct" \| "tracked" | ✓ | `"direct"`, `"tracked"` |
+| `expectedRevision` | string |  |  |
+| `in` | StoryLocator |  | StoryLocator |
+| `steps` | `{ op: "text.rewrite" }` \| `{ op: "text.insert" }` \| `{ op: "text.delete" }` \| ...[] | ✓ |  |
+
+[Full reference →](/document-api/reference/mutations/preview)
+
+</Accordion>
+
+<Accordion title="mutations.apply">
+
+`editor.doc.mutations.apply(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `atomic` | `true` | ✓ | Constant: `true` |
+| `changeMode` | "direct" \| "tracked" | ✓ | `"direct"`, `"tracked"` |
+| `expectedRevision` | string |  |  |
+| `in` | StoryLocator |  | StoryLocator |
+| `steps` | `{ op: "text.rewrite" }` \| `{ op: "text.insert" }` \| `{ op: "text.delete" }` \| ...[] | ✓ |  |
+
+[Full reference →](/document-api/reference/mutations/apply)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Paragraph Formatting (19)">
+
+<AccordionGroup>
+
+<Accordion title="format.paragraph.resetDirectFormatting">
+
+`editor.doc.format.paragraph.resetDirectFormatting(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/reset-direct-formatting)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setAlignment">
+
+`editor.doc.format.paragraph.setAlignment(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alignment` | "left" \| "center" \| "right" \| ... | ✓ | `"left"`, `"center"`, `"right"`, `"justify"` |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-alignment)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearAlignment">
+
+`editor.doc.format.paragraph.clearAlignment(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-alignment)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setIndentation">
+
+`editor.doc.format.paragraph.setIndentation(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `firstLine` | integer |  |  |
+| `hanging` | integer |  |  |
+| `left` | integer |  |  |
+| `right` | integer |  |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-indentation)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearIndentation">
+
+`editor.doc.format.paragraph.clearIndentation(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-indentation)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setSpacing">
+
+`editor.doc.format.paragraph.setSpacing(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `after` | integer |  |  |
+| `before` | integer |  |  |
+| `line` | integer |  |  |
+| `lineRule` | "auto" \| "exact" \| "atLeast" |  | `"auto"`, `"exact"`, `"atLeast"` |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-spacing)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearSpacing">
+
+`editor.doc.format.paragraph.clearSpacing(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-spacing)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setKeepOptions">
+
+`editor.doc.format.paragraph.setKeepOptions(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `keepLines` | boolean |  |  |
+| `keepNext` | boolean |  |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `widowControl` | boolean |  |  |
+
+[Full reference →](/document-api/reference/format/paragraph/set-keep-options)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setOutlineLevel">
+
+`editor.doc.format.paragraph.setOutlineLevel(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `outlineLevel` | integer \| null | ✓ | One of: integer, null |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-outline-level)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setFlowOptions">
+
+`editor.doc.format.paragraph.setFlowOptions(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `contextualSpacing` | boolean |  |  |
+| `pageBreakBefore` | boolean |  |  |
+| `suppressAutoHyphens` | boolean |  |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-flow-options)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setTabStop">
+
+`editor.doc.format.paragraph.setTabStop(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alignment` | "left" \| "center" \| "right" \| ... | ✓ | `"left"`, `"center"`, `"right"`, `"decimal"`, `"bar"` |
+| `leader` | "none" \| "dot" \| "hyphen" \| ... |  | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"heavy"`, `"middleDot"` |
+| `position` | integer | ✓ |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-tab-stop)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearTabStop">
+
+`editor.doc.format.paragraph.clearTabStop(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `position` | integer | ✓ |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-tab-stop)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearAllTabStops">
+
+`editor.doc.format.paragraph.clearAllTabStops(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-all-tab-stops)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setBorder">
+
+`editor.doc.format.paragraph.setBorder(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `color` | string |  |  |
+| `side` | "top" \| "bottom" \| "left" \| ... | ✓ | `"top"`, `"bottom"`, `"left"`, `"right"`, `"between"`, `"bar"` |
+| `size` | integer |  |  |
+| `space` | integer |  |  |
+| `style` | string | ✓ |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-border)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearBorder">
+
+`editor.doc.format.paragraph.clearBorder(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `side` | "top" \| "bottom" \| "left" \| ... | ✓ | `"top"`, `"bottom"`, `"left"`, `"right"`, `"between"`, `"bar"`, `"all"` |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-border)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setShading">
+
+`editor.doc.format.paragraph.setShading(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `color` | string |  |  |
+| `fill` | string |  |  |
+| `pattern` | string |  |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-shading)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearShading">
+
+`editor.doc.format.paragraph.clearShading(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-shading)
+
+</Accordion>
+
+<Accordion title="format.paragraph.setDirection">
+
+`editor.doc.format.paragraph.setDirection(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alignmentPolicy` | "preserve" \| "matchDirection" |  | `"preserve"`, `"matchDirection"` |
+| `direction` | "ltr" \| "rtl" | ✓ | `"ltr"`, `"rtl"` |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/set-direction)
+
+</Accordion>
+
+<Accordion title="format.paragraph.clearDirection">
+
+`editor.doc.format.paragraph.clearDirection(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/format/paragraph/clear-direction)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Paragraph Styles (2)">
+
+<AccordionGroup>
+
+<Accordion title="styles.paragraph.setStyle">
+
+`editor.doc.styles.paragraph.setStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `styleId` | string | ✓ |  |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/styles/paragraph/set-style)
+
+</Accordion>
+
+<Accordion title="styles.paragraph.clearStyle">
+
+`editor.doc.styles.paragraph.clearStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "paragraph" }` \| `{ kind: "block", nodeType: "heading" }` \| `{ kind: "block", nodeType: "listItem" }` | ✓ | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+[Full reference →](/document-api/reference/styles/paragraph/clear-style)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Permission Ranges (5)">
+
+<AccordionGroup>
+
+<Accordion title="permissionRanges.list">
+
+`editor.doc.permissionRanges.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/permission-ranges/list)
+
+</Accordion>
+
+<Accordion title="permissionRanges.get">
+
+`editor.doc.permissionRanges.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/permission-ranges/get)
+
+</Accordion>
+
+<Accordion title="permissionRanges.create">
+
+`editor.doc.permissionRanges.create(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string |  |  |
+| `principal` | object | ✓ |  |
+| `principal.id` | string |  |  |
+| `principal.kind` | "everyone" \| "editor" | ✓ | `"everyone"`, `"editor"` |
+| `target` | SelectionTarget | ✓ | SelectionTarget |
+| `target.end` | SelectionPoint | ✓ | SelectionPoint |
+| `target.kind` | `"selection"` | ✓ | Constant: `"selection"` |
+| `target.start` | SelectionPoint | ✓ | SelectionPoint |
+
+[Full reference →](/document-api/reference/permission-ranges/create)
+
+</Accordion>
+
+<Accordion title="permissionRanges.remove">
+
+`editor.doc.permissionRanges.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/permission-ranges/remove)
+
+</Accordion>
+
+<Accordion title="permissionRanges.updatePrincipal">
+
+`editor.doc.permissionRanges.updatePrincipal(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+| `principal` | object | ✓ |  |
+| `principal.id` | string |  |  |
+| `principal.kind` | "everyone" \| "editor" | ✓ | `"everyone"`, `"editor"` |
+
+[Full reference →](/document-api/reference/permission-ranges/update-principal)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Protection (3)">
+
+<AccordionGroup>
+
+<Accordion title="protection.get">
+
+`editor.doc.protection.get(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/protection/get)
+
+</Accordion>
+
+<Accordion title="protection.setEditingRestriction">
+
+`editor.doc.protection.setEditingRestriction(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `formattingRestricted` | boolean |  |  |
+| `mode` | "readOnly" | ✓ | `"readOnly"` |
+
+[Full reference →](/document-api/reference/protection/set-editing-restriction)
+
+</Accordion>
+
+<Accordion title="protection.clearEditingRestriction">
+
+`editor.doc.protection.clearEditingRestriction(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/protection/clear-editing-restriction)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Query (1)">
+
+<AccordionGroup>
+
+<Accordion title="query.match">
+
+`editor.doc.query.match(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator |  | StoryLocator |
+| `includeNodes` | boolean |  |  |
+| `limit` | integer |  |  |
+| `mode` | "strict" \| "candidates" |  | `"strict"`, `"candidates"` |
+| `offset` | integer |  |  |
+| `require` | "any" \| "first" \| "exactlyOne" \| ... |  | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
+| `select` | `{ type: "text" }` \| `{ type: "node" }` | ✓ | One of: object(type="text"), object(type="node") |
+| `within` | BlockNodeAddress |  | BlockNodeAddress |
+| `within.kind` | `"block"` |  | Constant: `"block"` |
+| `within.nodeId` | string |  |  |
+| `within.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/query/match)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Ranges (1)">
+
+<AccordionGroup>
+
+<Accordion title="ranges.resolve">
+
+`editor.doc.ranges.resolve(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `end` | `{ kind: "document" }` \| `{ kind: "point" }` \| `{ kind: "ref" }` | ✓ | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+| `expectedRevision` | string |  |  |
+| `start` | `{ kind: "document" }` \| `{ kind: "point" }` \| `{ kind: "ref" }` | ✓ | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+
+[Full reference →](/document-api/reference/ranges/resolve)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Sections (18)">
+
+<AccordionGroup>
+
+<Accordion title="sections.list">
+
+`editor.doc.sections.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/sections/list)
+
+</Accordion>
+
+<Accordion title="sections.get">
+
+`editor.doc.sections.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `address` | SectionAddress | ✓ | SectionAddress |
+| `address.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `address.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/get)
+
+</Accordion>
+
+<Accordion title="sections.setBreakType">
+
+`editor.doc.sections.setBreakType(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `breakType` | "continuous" \| "nextPage" \| "evenPage" \| ... | ✓ | `"continuous"`, `"nextPage"`, `"evenPage"`, `"oddPage"` |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-break-type)
+
+</Accordion>
+
+<Accordion title="sections.setPageMargins">
+
+`editor.doc.sections.setPageMargins(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `bottom` | number |  |  |
+| `gutter` | number |  |  |
+| `left` | number |  |  |
+| `right` | number |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `top` | number |  |  |
+
+[Full reference →](/document-api/reference/sections/set-page-margins)
+
+</Accordion>
+
+<Accordion title="sections.setHeaderFooterMargins">
+
+`editor.doc.sections.setHeaderFooterMargins(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `footer` | number |  |  |
+| `header` | number |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-header-footer-margins)
+
+</Accordion>
+
+<Accordion title="sections.setPageSetup">
+
+`editor.doc.sections.setPageSetup(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `height` | number |  |  |
+| `orientation` | "portrait" \| "landscape" |  | `"portrait"`, `"landscape"` |
+| `paperSize` | string |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `width` | number |  |  |
+
+[Full reference →](/document-api/reference/sections/set-page-setup)
+
+</Accordion>
+
+<Accordion title="sections.setColumns">
+
+`editor.doc.sections.setColumns(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `count` | integer |  |  |
+| `equalWidth` | boolean |  |  |
+| `gap` | number |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-columns)
+
+</Accordion>
+
+<Accordion title="sections.setLineNumbering">
+
+`editor.doc.sections.setLineNumbering(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `countBy` | integer |  |  |
+| `distance` | number |  |  |
+| `enabled` | boolean | ✓ |  |
+| `restart` | "continuous" \| "newPage" \| "newSection" |  | `"continuous"`, `"newPage"`, `"newSection"` |
+| `start` | integer |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-line-numbering)
+
+</Accordion>
+
+<Accordion title="sections.setPageNumbering">
+
+`editor.doc.sections.setPageNumbering(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `chapterSeparator` | "hyphen" \| "period" \| "colon" \| ... |  | `"hyphen"`, `"period"`, `"colon"`, `"emDash"`, `"enDash"` |
+| `chapterStyle` | integer |  |  |
+| `format` | "decimal" \| "lowerLetter" \| "upperLetter" \| ... |  | `"decimal"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"numberInDash"` |
+| `start` | integer |  |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-page-numbering)
+
+</Accordion>
+
+<Accordion title="sections.setTitlePage">
+
+`editor.doc.sections.setTitlePage(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | ✓ |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-title-page)
+
+</Accordion>
+
+<Accordion title="sections.setOddEvenHeadersFooters">
+
+`editor.doc.sections.setOddEvenHeadersFooters(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-odd-even-headers-footers)
+
+</Accordion>
+
+<Accordion title="sections.setVerticalAlign">
+
+`editor.doc.sections.setVerticalAlign(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `value` | "top" \| "center" \| "bottom" \| ... | ✓ | `"top"`, `"center"`, `"bottom"`, `"both"` |
+
+[Full reference →](/document-api/reference/sections/set-vertical-align)
+
+</Accordion>
+
+<Accordion title="sections.setSectionDirection">
+
+`editor.doc.sections.setSectionDirection(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `direction` | "ltr" \| "rtl" | ✓ | `"ltr"`, `"rtl"` |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-section-direction)
+
+</Accordion>
+
+<Accordion title="sections.setHeaderFooterRef">
+
+`editor.doc.sections.setHeaderFooterRef(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `refId` | string | ✓ |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/sections/set-header-footer-ref)
+
+</Accordion>
+
+<Accordion title="sections.clearHeaderFooterRef">
+
+`editor.doc.sections.clearHeaderFooterRef(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/sections/clear-header-footer-ref)
+
+</Accordion>
+
+<Accordion title="sections.setLinkToPrevious">
+
+`editor.doc.sections.setLinkToPrevious(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `kind` | "header" \| "footer" | ✓ | `"header"`, `"footer"` |
+| `linked` | boolean | ✓ |  |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+| `variant` | "default" \| "first" \| "even" | ✓ | `"default"`, `"first"`, `"even"` |
+
+[Full reference →](/document-api/reference/sections/set-link-to-previous)
+
+</Accordion>
+
+<Accordion title="sections.setPageBorders">
+
+`editor.doc.sections.setPageBorders(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `borders` | any | ✓ | One of: any, any, any, any, any, any, any |
+| `borders.bottom` | any |  | One of: any, any, any, any, any, any |
+| `borders.bottom.color` | string |  |  |
+| `borders.bottom.frame` | boolean |  |  |
+| `borders.bottom.shadow` | boolean |  |  |
+| `borders.bottom.size` | number |  |  |
+| `borders.bottom.space` | number |  |  |
+| `borders.bottom.style` | string |  |  |
+| `borders.display` | "allPages" \| "firstPage" \| "notFirstPage" |  | `"allPages"`, `"firstPage"`, `"notFirstPage"` |
+| `borders.left` | any |  | One of: any, any, any, any, any, any |
+| `borders.left.color` | string |  |  |
+| `borders.left.frame` | boolean |  |  |
+| `borders.left.shadow` | boolean |  |  |
+| `borders.left.size` | number |  |  |
+| `borders.left.space` | number |  |  |
+| `borders.left.style` | string |  |  |
+| `borders.offsetFrom` | "page" \| "text" |  | `"page"`, `"text"` |
+| `borders.right` | any |  | One of: any, any, any, any, any, any |
+| `borders.right.color` | string |  |  |
+| `borders.right.frame` | boolean |  |  |
+| `borders.right.shadow` | boolean |  |  |
+| `borders.right.size` | number |  |  |
+| `borders.right.space` | number |  |  |
+| `borders.right.style` | string |  |  |
+| `borders.top` | any |  | One of: any, any, any, any, any, any |
+| `borders.top.color` | string |  |  |
+| `borders.top.frame` | boolean |  |  |
+| `borders.top.shadow` | boolean |  |  |
+| `borders.top.size` | number |  |  |
+| `borders.top.space` | number |  |  |
+| `borders.top.style` | string |  |  |
+| `borders.zOrder` | "front" \| "back" |  | `"front"`, `"back"` |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/set-page-borders)
+
+</Accordion>
+
+<Accordion title="sections.clearPageBorders">
+
+`editor.doc.sections.clearPageBorders(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | SectionAddress | ✓ | SectionAddress |
+| `target.kind` | `"section"` | ✓ | Constant: `"section"` |
+| `target.sectionId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/sections/clear-page-borders)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Selection (1)">
+
+<AccordionGroup>
+
+<Accordion title="selection.current">
+
+`editor.doc.selection.current(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `includeText` | boolean |  |  |
+
+[Full reference →](/document-api/reference/selection/current)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Styles (1)">
+
+<AccordionGroup>
+
+<Accordion title="styles.apply">
+
+`editor.doc.styles.apply(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/styles/apply)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Table of Authorities (11)">
+
+<AccordionGroup>
+
+<Accordion title="authorities.list">
+
+`editor.doc.authorities.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/authorities/list)
+
+</Accordion>
+
+<Accordion title="authorities.get">
+
+`editor.doc.authorities.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "tableOfAuthorities" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfAuthorities"` | ✓ | Constant: `"tableOfAuthorities"` |
+
+[Full reference →](/document-api/reference/authorities/get)
+
+</Accordion>
+
+<Accordion title="authorities.insert">
+
+`editor.doc.authorities.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` | ✓ | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `config` | object |  |  |
+| `config.category` | integer |  |  |
+| `config.entryPageSeparator` | string |  |  |
+| `config.includeHeadings` | boolean |  |  |
+| `config.pageRangeSeparator` | string |  |  |
+| `config.tabLeader` | string |  |  |
+| `config.usePassim` | boolean |  |  |
+
+[Full reference →](/document-api/reference/authorities/insert)
+
+</Accordion>
+
+<Accordion title="authorities.configure">
+
+`editor.doc.authorities.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.category` | integer |  |  |
+| `patch.entryPageSeparator` | string |  |  |
+| `patch.includeHeadings` | boolean |  |  |
+| `patch.pageRangeSeparator` | string |  |  |
+| `patch.tabLeader` | string |  |  |
+| `patch.usePassim` | boolean |  |  |
+| `target` | `{ kind: "block", nodeType: "tableOfAuthorities" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfAuthorities"` | ✓ | Constant: `"tableOfAuthorities"` |
+
+[Full reference →](/document-api/reference/authorities/configure)
+
+</Accordion>
+
+<Accordion title="authorities.rebuild">
+
+`editor.doc.authorities.rebuild(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "tableOfAuthorities" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfAuthorities"` | ✓ | Constant: `"tableOfAuthorities"` |
+
+[Full reference →](/document-api/reference/authorities/rebuild)
+
+</Accordion>
+
+<Accordion title="authorities.remove">
+
+`editor.doc.authorities.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "tableOfAuthorities" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfAuthorities"` | ✓ | Constant: `"tableOfAuthorities"` |
+
+[Full reference →](/document-api/reference/authorities/remove)
+
+</Accordion>
+
+<Accordion title="authorities.entries.list">
+
+`editor.doc.authorities.entries.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `category` | string \| integer |  | One of: string, integer |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/authorities/entries-list)
+
+</Accordion>
+
+<Accordion title="authorities.entries.get">
+
+`editor.doc.authorities.entries.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "authorityEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"authorityEntry"` | ✓ | Constant: `"authorityEntry"` |
+
+[Full reference →](/document-api/reference/authorities/entries-get)
+
+</Accordion>
+
+<Accordion title="authorities.entries.insert">
+
+`editor.doc.authorities.entries.insert(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | ✓ | TextTarget |
+| `at.kind` | `"text"` | ✓ | Constant: `"text"` |
+| `at.segments` | TextSegment[] | ✓ |  |
+| `at.story` | StoryLocator |  | StoryLocator |
+| `entry` | object | ✓ |  |
+| `entry.bold` | boolean |  |  |
+| `entry.category` | string \| integer | ✓ | One of: string, integer |
+| `entry.italic` | boolean |  |  |
+| `entry.longCitation` | string | ✓ |  |
+| `entry.shortCitation` | string |  |  |
+
+[Full reference →](/document-api/reference/authorities/entries-insert)
+
+</Accordion>
+
+<Accordion title="authorities.entries.update">
+
+`editor.doc.authorities.entries.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.bold` | boolean |  |  |
+| `patch.category` | string \| integer |  | One of: string, integer |
+| `patch.italic` | boolean |  |  |
+| `patch.longCitation` | string |  |  |
+| `patch.shortCitation` | string |  |  |
+| `target` | `{ kind: "inline", nodeType: "authorityEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"authorityEntry"` | ✓ | Constant: `"authorityEntry"` |
+
+[Full reference →](/document-api/reference/authorities/entries-update)
+
+</Accordion>
+
+<Accordion title="authorities.entries.remove">
+
+`editor.doc.authorities.entries.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "authorityEntry" }` | ✓ |  |
+| `target.anchor` | InlineAnchor | ✓ | InlineAnchor |
+| `target.anchor.end` | Position | ✓ | Position |
+| `target.anchor.end.blockId` | string | ✓ |  |
+| `target.anchor.end.offset` | integer | ✓ |  |
+| `target.anchor.start` | Position | ✓ | Position |
+| `target.anchor.start.blockId` | string | ✓ |  |
+| `target.anchor.start.offset` | integer | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeType` | `"authorityEntry"` | ✓ | Constant: `"authorityEntry"` |
+
+[Full reference →](/document-api/reference/authorities/entries-remove)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Table of Contents (10)">
+
+<AccordionGroup>
+
+<Accordion title="toc.list">
+
+`editor.doc.toc.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+
+[Full reference →](/document-api/reference/toc/list)
+
+</Accordion>
+
+<Accordion title="toc.get">
+
+`editor.doc.toc.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "tableOfContents" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContents"` | ✓ | Constant: `"tableOfContents"` |
+
+[Full reference →](/document-api/reference/toc/get)
+
+</Accordion>
+
+<Accordion title="toc.configure">
+
+`editor.doc.toc.configure(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.hideInWebView` | boolean |  |  |
+| `patch.hyperlinks` | boolean |  |  |
+| `patch.includePageNumbers` | boolean |  |  |
+| `patch.omitPageNumberLevels` | object |  |  |
+| `patch.omitPageNumberLevels.from` | integer |  |  |
+| `patch.omitPageNumberLevels.to` | integer |  |  |
+| `patch.outlineLevels` | object |  |  |
+| `patch.outlineLevels.from` | integer |  |  |
+| `patch.outlineLevels.to` | integer |  |  |
+| `patch.rightAlignPageNumbers` | boolean |  |  |
+| `patch.separator` | string |  |  |
+| `patch.tabLeader` | "none" \| "dot" \| "hyphen" \| ... |  | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `patch.tcFieldIdentifier` | string |  |  |
+| `patch.tcFieldLevels` | object |  |  |
+| `patch.tcFieldLevels.from` | integer |  |  |
+| `patch.tcFieldLevels.to` | integer |  |  |
+| `patch.useAppliedOutlineLevel` | boolean |  |  |
+| `target` | `{ kind: "block", nodeType: "tableOfContents" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContents"` | ✓ | Constant: `"tableOfContents"` |
+
+[Full reference →](/document-api/reference/toc/configure)
+
+</Accordion>
+
+<Accordion title="toc.update">
+
+`editor.doc.toc.update(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `mode` | "all" \| "pageNumbers" |  | `"all"`, `"pageNumbers"` |
+| `target` | `{ kind: "block", nodeType: "tableOfContents" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContents"` | ✓ | Constant: `"tableOfContents"` |
+
+[Full reference →](/document-api/reference/toc/update)
+
+</Accordion>
+
+<Accordion title="toc.remove">
+
+`editor.doc.toc.remove(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "block", nodeType: "tableOfContents" }` | ✓ |  |
+| `target.kind` | `"block"` | ✓ | Constant: `"block"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContents"` | ✓ | Constant: `"tableOfContents"` |
+
+[Full reference →](/document-api/reference/toc/remove)
+
+</Accordion>
+
+<Accordion title="toc.markEntry">
+
+`editor.doc.toc.markEntry(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `level` | integer |  |  |
+| `omitPageNumber` | boolean |  |  |
+| `tableIdentifier` | string |  |  |
+| `target` | `{ kind: "inline-insert" }` | ✓ |  |
+| `target.anchor` | `{ nodeType: "paragraph" }` | ✓ |  |
+| `target.anchor.nodeId` | string | ✓ |  |
+| `target.anchor.nodeType` | `"paragraph"` | ✓ | Constant: `"paragraph"` |
+| `target.kind` | `"inline-insert"` | ✓ | Constant: `"inline-insert"` |
+| `target.position` | "start" \| "end" |  | `"start"`, `"end"` |
+| `text` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/toc/mark-entry)
+
+</Accordion>
+
+<Accordion title="toc.unmarkEntry">
+
+`editor.doc.toc.unmarkEntry(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "tableOfContentsEntry" }` | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContentsEntry"` | ✓ | Constant: `"tableOfContentsEntry"` |
+
+[Full reference →](/document-api/reference/toc/unmark-entry)
+
+</Accordion>
+
+<Accordion title="toc.listEntries">
+
+`editor.doc.toc.listEntries(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `levelRange` | object |  |  |
+| `levelRange.from` | integer |  |  |
+| `levelRange.to` | integer |  |  |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `tableIdentifier` | string |  |  |
+
+[Full reference →](/document-api/reference/toc/list-entries)
+
+</Accordion>
+
+<Accordion title="toc.getEntry">
+
+`editor.doc.toc.getEntry(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `target` | `{ kind: "inline", nodeType: "tableOfContentsEntry" }` | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContentsEntry"` | ✓ | Constant: `"tableOfContentsEntry"` |
+
+[Full reference →](/document-api/reference/toc/get-entry)
+
+</Accordion>
+
+<Accordion title="toc.editEntry">
+
+`editor.doc.toc.editEntry(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `patch` | object | ✓ |  |
+| `patch.level` | integer |  |  |
+| `patch.omitPageNumber` | boolean |  |  |
+| `patch.tableIdentifier` | string |  |  |
+| `patch.text` | string |  |  |
+| `target` | `{ kind: "inline", nodeType: "tableOfContentsEntry" }` | ✓ |  |
+| `target.kind` | `"inline"` | ✓ | Constant: `"inline"` |
+| `target.nodeId` | string | ✓ |  |
+| `target.nodeType` | `"tableOfContentsEntry"` | ✓ | Constant: `"tableOfContentsEntry"` |
+
+[Full reference →](/document-api/reference/toc/edit-entry)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Tables (47)">
+
+<AccordionGroup>
+
+<Accordion title="tables.convertFromText">
+
+`editor.doc.tables.convertFromText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columns` | integer |  |  |
+| `delimiter` | "tab" \| "comma" \| "paragraph" \| object |  | One of: enum, object |
+| `inferColumns` | boolean |  |  |
+| `nodeId` | string |  |  |
+| `target` | BlockNodeAddress |  | BlockNodeAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/tables/convert-from-text)
+
+</Accordion>
+
+<Accordion title="tables.delete">
+
+`editor.doc.tables.delete(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/delete)
+
+</Accordion>
+
+<Accordion title="tables.clearContents">
+
+`editor.doc.tables.clearContents(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/clear-contents)
+
+</Accordion>
+
+<Accordion title="tables.move">
+
+`editor.doc.tables.move(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `destination` | `{ kind: "documentStart" }` \| `{ kind: "documentEnd" }` \| `{ kind: "before" }` \| `{ kind: "after" }` | ✓ | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="before"), object(kind="after") |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/move)
+
+</Accordion>
+
+<Accordion title="tables.split">
+
+`editor.doc.tables.split(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `rowIndex` | integer | ✓ |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/split)
+
+</Accordion>
+
+<Accordion title="tables.convertToText">
+
+`editor.doc.tables.convertToText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `delimiter` | "tab" \| "comma" \| "paragraph" |  | `"tab"`, `"comma"`, `"paragraph"` |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/convert-to-text)
+
+</Accordion>
+
+<Accordion title="tables.setLayout">
+
+`editor.doc.tables.setLayout(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `alignment` | "left" \| "center" \| "right" |  | `"left"`, `"center"`, `"right"` |
+| `autoFitMode` | "fixedWidth" \| "fitContents" \| "fitWindow" |  | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
+| `leftIndentPt` | number |  |  |
+| `nodeId` | string |  |  |
+| `preferredWidth` | number |  |  |
+| `tableDirection` | "ltr" \| "rtl" |  | `"ltr"`, `"rtl"` |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/set-layout)
+
+</Accordion>
+
+<Accordion title="tables.insertRow">
+
+`editor.doc.tables.insertRow(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/insert-row)
+
+</Accordion>
+
+<Accordion title="tables.deleteRow">
+
+`editor.doc.tables.deleteRow(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/delete-row)
+
+</Accordion>
+
+<Accordion title="tables.setRowHeight">
+
+`editor.doc.tables.setRowHeight(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/set-row-height)
+
+</Accordion>
+
+<Accordion title="tables.distributeRows">
+
+`editor.doc.tables.distributeRows(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/distribute-rows)
+
+</Accordion>
+
+<Accordion title="tables.setRowOptions">
+
+`editor.doc.tables.setRowOptions(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/set-row-options)
+
+</Accordion>
+
+<Accordion title="tables.insertColumn">
+
+`editor.doc.tables.insertColumn(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer |  |  |
+| `count` | integer |  |  |
+| `nodeId` | string |  |  |
+| `position` | "left" \| "right" \| "first" \| ... | ✓ | `"left"`, `"right"`, `"first"`, `"last"` |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/insert-column)
+
+</Accordion>
+
+<Accordion title="tables.deleteColumn">
+
+`editor.doc.tables.deleteColumn(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | ✓ |  |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/delete-column)
+
+</Accordion>
+
+<Accordion title="tables.setColumnWidth">
+
+`editor.doc.tables.setColumnWidth(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | ✓ |  |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+| `widthPt` | number | ✓ |  |
+
+[Full reference →](/document-api/reference/tables/set-column-width)
+
+</Accordion>
+
+<Accordion title="tables.distributeColumns">
+
+`editor.doc.tables.distributeColumns(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columnRange` | object |  |  |
+| `columnRange.end` | integer |  |  |
+| `columnRange.start` | integer |  |  |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/distribute-columns)
+
+</Accordion>
+
+<Accordion title="tables.insertCell">
+
+`editor.doc.tables.insertCell(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `mode` | "shiftRight" \| "shiftDown" | ✓ | `"shiftRight"`, `"shiftDown"` |
+| `nodeId` | string |  |  |
+| `target` | TableCellAddress |  | TableCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"tableCell"` |  | Constant: `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/insert-cell)
+
+</Accordion>
+
+<Accordion title="tables.deleteCell">
+
+`editor.doc.tables.deleteCell(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `mode` | "shiftLeft" \| "shiftUp" | ✓ | `"shiftLeft"`, `"shiftUp"` |
+| `nodeId` | string |  |  |
+| `target` | TableCellAddress |  | TableCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"tableCell"` |  | Constant: `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/delete-cell)
+
+</Accordion>
+
+<Accordion title="tables.mergeCells">
+
+`editor.doc.tables.mergeCells(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `end` | object | ✓ |  |
+| `end.columnIndex` | integer | ✓ |  |
+| `end.rowIndex` | integer | ✓ |  |
+| `nodeId` | string |  |  |
+| `start` | object | ✓ |  |
+| `start.columnIndex` | integer | ✓ |  |
+| `start.rowIndex` | integer | ✓ |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/merge-cells)
+
+</Accordion>
+
+<Accordion title="tables.unmergeCells">
+
+`editor.doc.tables.unmergeCells(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/unmerge-cells)
+
+</Accordion>
+
+<Accordion title="tables.splitCell">
+
+`editor.doc.tables.splitCell(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columns` | integer | ✓ |  |
+| `nodeId` | string |  |  |
+| `rows` | integer | ✓ |  |
+| `target` | TableCellAddress |  | TableCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"tableCell"` |  | Constant: `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/split-cell)
+
+</Accordion>
+
+<Accordion title="tables.setCellProperties">
+
+`editor.doc.tables.setCellProperties(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `fitText` | boolean |  |  |
+| `nodeId` | string |  |  |
+| `preferredWidthPt` | number |  |  |
+| `target` | TableCellAddress |  | TableCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"tableCell"` |  | Constant: `"tableCell"` |
+| `verticalAlign` | "top" \| "center" \| "bottom" |  | `"top"`, `"center"`, `"bottom"` |
+| `wrapText` | boolean |  |  |
+
+[Full reference →](/document-api/reference/tables/set-cell-properties)
+
+</Accordion>
+
+<Accordion title="tables.setCellText">
+
+`editor.doc.tables.setCellText(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/set-cell-text)
+
+</Accordion>
+
+<Accordion title="tables.sort">
+
+`editor.doc.tables.sort(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `keys` | object[] | ✓ |  |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/sort)
+
+</Accordion>
+
+<Accordion title="tables.setAltText">
+
+`editor.doc.tables.setAltText(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `description` | string |  |  |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+| `title` | string |  |  |
+
+[Full reference →](/document-api/reference/tables/set-alt-text)
+
+</Accordion>
+
+<Accordion title="tables.setStyle">
+
+`editor.doc.tables.setStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `styleId` | string | ✓ |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/set-style)
+
+</Accordion>
+
+<Accordion title="tables.clearStyle">
+
+`editor.doc.tables.clearStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/clear-style)
+
+</Accordion>
+
+<Accordion title="tables.setStyleOption">
+
+`editor.doc.tables.setStyleOption(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | ✓ |  |
+| `flag` | "headerRow" \| "lastRow" \| "totalRow" \| ... | ✓ | `"headerRow"`, `"lastRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/set-style-option)
+
+</Accordion>
+
+<Accordion title="tables.setBorder">
+
+`editor.doc.tables.setBorder(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `color` | string | ✓ |  |
+| `edge` | "top" \| "bottom" \| "left" \| ... | ✓ | `"top"`, `"bottom"`, `"left"`, `"right"`, `"insideH"`, `"insideV"`, `"diagonalDown"`, `"diagonalUp"` |
+| `lineStyle` | string | ✓ |  |
+| `lineWeightPt` | number | ✓ |  |
+| `nodeId` | string |  |  |
+| `target` | TableOrCellAddress |  | TableOrCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "table" \| "tableCell" |  | `"table"`, `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/set-border)
+
+</Accordion>
+
+<Accordion title="tables.clearBorder">
+
+`editor.doc.tables.clearBorder(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `edge` | "top" \| "bottom" \| "left" \| ... | ✓ | `"top"`, `"bottom"`, `"left"`, `"right"`, `"insideH"`, `"insideV"`, `"diagonalDown"`, `"diagonalUp"` |
+| `nodeId` | string |  |  |
+| `target` | TableOrCellAddress |  | TableOrCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "table" \| "tableCell" |  | `"table"`, `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/clear-border)
+
+</Accordion>
+
+<Accordion title="tables.applyBorderPreset">
+
+`editor.doc.tables.applyBorderPreset(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `preset` | "box" \| "all" \| "none" \| ... | ✓ | `"box"`, `"all"`, `"none"`, `"grid"`, `"custom"` |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/apply-border-preset)
+
+</Accordion>
+
+<Accordion title="tables.setShading">
+
+`editor.doc.tables.setShading(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `color` | string \| null | ✓ | One of: string, null |
+| `nodeId` | string |  |  |
+| `target` | TableOrCellAddress |  | TableOrCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "table" \| "tableCell" |  | `"table"`, `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/set-shading)
+
+</Accordion>
+
+<Accordion title="tables.clearShading">
+
+`editor.doc.tables.clearShading(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableOrCellAddress |  | TableOrCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "table" \| "tableCell" |  | `"table"`, `"tableCell"` |
+
+[Full reference →](/document-api/reference/tables/clear-shading)
+
+</Accordion>
+
+<Accordion title="tables.setTablePadding">
+
+`editor.doc.tables.setTablePadding(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `bottomPt` | number | ✓ |  |
+| `leftPt` | number | ✓ |  |
+| `nodeId` | string |  |  |
+| `rightPt` | number | ✓ |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+| `topPt` | number | ✓ |  |
+
+[Full reference →](/document-api/reference/tables/set-table-padding)
+
+</Accordion>
+
+<Accordion title="tables.setCellPadding">
+
+`editor.doc.tables.setCellPadding(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `bottomPt` | number | ✓ |  |
+| `leftPt` | number | ✓ |  |
+| `nodeId` | string |  |  |
+| `rightPt` | number | ✓ |  |
+| `target` | TableCellAddress |  | TableCellAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"tableCell"` |  | Constant: `"tableCell"` |
+| `topPt` | number | ✓ |  |
+
+[Full reference →](/document-api/reference/tables/set-cell-padding)
+
+</Accordion>
+
+<Accordion title="tables.setCellSpacing">
+
+`editor.doc.tables.setCellSpacing(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `spacingPt` | number | ✓ |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/set-cell-spacing)
+
+</Accordion>
+
+<Accordion title="tables.clearCellSpacing">
+
+`editor.doc.tables.clearCellSpacing(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/clear-cell-spacing)
+
+</Accordion>
+
+<Accordion title="tables.applyStyle">
+
+`editor.doc.tables.applyStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `styleId` | string |  |  |
+| `styleOptions` | object |  |  |
+| `styleOptions.bandedColumns` | boolean |  |  |
+| `styleOptions.bandedRows` | boolean |  |  |
+| `styleOptions.firstColumn` | boolean |  |  |
+| `styleOptions.headerRow` | boolean |  |  |
+| `styleOptions.lastColumn` | boolean |  |  |
+| `styleOptions.lastRow` | boolean |  |  |
+| `styleOptions.totalRow` | boolean |  |  |
+| `target` | BlockNodeAddress |  | BlockNodeAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/tables/apply-style)
+
+</Accordion>
+
+<Accordion title="tables.setBorders">
+
+`editor.doc.tables.setBorders(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/set-borders)
+
+</Accordion>
+
+<Accordion title="tables.setTableOptions">
+
+`editor.doc.tables.setTableOptions(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `cellSpacingPt` | number \| null |  | One of: number, null |
+| `defaultCellMargins` | object |  |  |
+| `defaultCellMargins.bottomPt` | number |  |  |
+| `defaultCellMargins.leftPt` | number |  |  |
+| `defaultCellMargins.rightPt` | number |  |  |
+| `defaultCellMargins.topPt` | number |  |  |
+| `nodeId` | string |  |  |
+| `target` | BlockNodeAddress |  | BlockNodeAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | "paragraph" \| "heading" \| "listItem" \| ... |  | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+[Full reference →](/document-api/reference/tables/set-table-options)
+
+</Accordion>
+
+<Accordion title="tables.applyPreset">
+
+`editor.doc.tables.applyPreset(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `accentColor` | string |  |  |
+| `nodeId` | string |  |  |
+| `preset` | "grid" \| "minimal" \| "striped" \| ... | ✓ | `"grid"`, `"minimal"`, `"striped"`, `"accent"` |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/apply-preset)
+
+</Accordion>
+
+<Accordion title="tables.get">
+
+`editor.doc.tables.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/get)
+
+</Accordion>
+
+<Accordion title="tables.getCells">
+
+`editor.doc.tables.getCells(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer |  |  |
+| `nodeId` | string |  |  |
+| `rowIndex` | integer |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/get-cells)
+
+</Accordion>
+
+<Accordion title="tables.getProperties">
+
+`editor.doc.tables.getProperties(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string |  |  |
+| `target` | TableAddress |  | TableAddress |
+| `target.kind` | `"block"` |  | Constant: `"block"` |
+| `target.nodeId` | string |  |  |
+| `target.nodeType` | `"table"` |  | Constant: `"table"` |
+
+[Full reference →](/document-api/reference/tables/get-properties)
+
+</Accordion>
+
+<Accordion title="tables.getStyles">
+
+`editor.doc.tables.getStyles(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/get-styles)
+
+</Accordion>
+
+<Accordion title="tables.setDefaultStyle">
+
+`editor.doc.tables.setDefaultStyle(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `styleId` | string | ✓ |  |
+
+[Full reference →](/document-api/reference/tables/set-default-style)
+
+</Accordion>
+
+<Accordion title="tables.clearDefaultStyle">
+
+`editor.doc.tables.clearDefaultStyle(...)`
+
+_No input fields._
+
+[Full reference →](/document-api/reference/tables/clear-default-style)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Templates (1)">
+
+<AccordionGroup>
+
+<Accordion title="templates.apply">
+
+`editor.doc.templates.apply(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `bodyPolicy` | `"preserve"` |  | Constant: `"preserve"` |
+| `source` | `{ kind: "path" }` \| `{ kind: "base64" }` | ✓ | One of: object(kind="path"), object(kind="base64") |
+
+[Full reference →](/document-api/reference/templates/apply)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+<Accordion title="Track Changes (3)">
+
+<AccordionGroup>
+
+<Accordion title="trackChanges.list">
+
+`editor.doc.trackChanges.list(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator \| `"all"` |  | One of: StoryLocator, `"all"` |
+| `limit` | integer |  |  |
+| `offset` | integer |  |  |
+| `type` | "insert" \| "delete" \| "replacement" \| ... |  | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
+
+[Full reference →](/document-api/reference/track-changes/list)
+
+</Accordion>
+
+<Accordion title="trackChanges.get">
+
+`editor.doc.trackChanges.get(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `id` | string | ✓ |  |
+| `story` | StoryLocator |  | StoryLocator |
+
+[Full reference →](/document-api/reference/track-changes/get)
+
+</Accordion>
+
+<Accordion title="trackChanges.decide">
+
+`editor.doc.trackChanges.decide(...)`
+
+| Field | Type | Req | Description |
+| --- | --- | --- | --- |
+| `decision` | "accept" \| "reject" | ✓ | `"accept"`, `"reject"` |
+| `target` | object \| `{ kind: "range" }` | ✓ | One of: object, object(kind="range"), object |
+
+[Full reference →](/document-api/reference/track-changes/decide)
+
+</Accordion>
+
+</AccordionGroup>
+
+</Accordion>
+
+</AccordionGroup>

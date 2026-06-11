@@ -390,16 +390,18 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
  * Replace the entire SDT node (wrapper + content) while preserving all attrs.
  * Used for `contentLocked` SDTs where inner-content modification is blocked
  * by the lock plugin, but whole-node replacement is allowed.
+ *
+ * SD-3429: Returns false if the transaction was silently rejected by a plugin
+ * (e.g., lock plugin filterTransaction returning false for nested locked SDTs).
  */
 function replaceEntireSdt(editor: Editor, target: ContentControlTarget, text: string): boolean {
   const resolved = resolveSdtByTarget(editor.state.doc, target);
 
-  // 1. Capture original node state FIRST for potential recovery
   const originalNode = resolved.node;
   const originalPos = resolved.pos;
   const originalAttrs = { ...resolved.node.attrs };
 
-  // 2. Build the new content
+  // Build the new content
   let newContent;
   if (resolved.kind === 'inline') {
     newContent = text.length > 0 ? editor.schema.text(text) : null;
@@ -410,21 +412,31 @@ function replaceEntireSdt(editor: Editor, target: ContentControlTarget, text: st
     newContent = paragraph.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks);
   }
 
-  // 3. Create the replacement node preserving all original attributes (including id)
+  // Create the replacement node preserving all original attributes (including id)
   const updatedNode = originalNode.type.create(originalAttrs, newContent, originalNode.marks);
 
-  // 4. Perform the replacement - if this fails, original doc state is unchanged
-  //    (ProseMirror transactions are atomic - either fully applied or not at all)
+  // Capture doc reference before dispatch to detect silent rejection
+  const docBefore = editor.state.doc;
+
   try {
     const { tr } = editor.state;
     const from = originalPos;
     const to = originalPos + originalNode.nodeSize;
     tr.replaceWith(from, to, updatedNode);
     dispatchTransaction(editor, tr);
+
+    // Check if transaction was actually applied. filterTransaction can silently
+    // reject transactions (returning false) without throwing, e.g., when this
+    // SDT is nested inside a contentLocked ancestor. Detect this by comparing
+    // doc references - ProseMirror creates a new doc instance on change.
+    const docAfter = editor.state.doc;
+    if (docBefore === docAfter) {
+      // Transaction was silently dropped (likely by lock plugin)
+      return false;
+    }
     return true;
   } catch (err) {
-    // Transaction failed - document state is unchanged, original node still exists
-    console.error('[replaceEntireSdt] Replacement failed, original node preserved:', err);
+    console.error('[replaceEntireSdt] Replacement failed:', err);
     return false;
   }
 }

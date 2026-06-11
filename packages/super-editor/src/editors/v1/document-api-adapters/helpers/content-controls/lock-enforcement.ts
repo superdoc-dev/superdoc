@@ -4,6 +4,31 @@
  * Centralized lock-check logic used by all mutation wrappers.
  * The plan mandates that lock checks happen pre-apply (before PM dispatch),
  * throwing LOCK_VIOLATION for locks and TYPE_MISMATCH for type guards.
+ *
+ * ## Lock Mode Semantics
+ *
+ * The ECMA-376 lock modes define restrictions for interactive (UI) editing:
+ * - `unlocked` — no restrictions
+ * - `sdtLocked` — cannot delete the wrapper (content editable)
+ * - `contentLocked` — cannot edit content interactively (can delete wrapper)
+ * - `sdtContentLocked` — cannot delete wrapper OR edit content
+ *
+ * ## Document API Bypass for contentLocked (SD-3429)
+ *
+ * The Document API allows programmatic updates to `contentLocked` SDTs via
+ * whole-node replacement. This is an intentional asymmetry:
+ *
+ * - **Interactive editing** — blocked by the lock plugin's `filterTransaction`
+ *   which rejects inner-content modifications
+ * - **Programmatic (Document API)** — allowed via `replaceEntireSdt` which
+ *   replaces the entire SDT node (wrapper + content). The lock plugin permits
+ *   this because the step covers the full node range (wrapper-level, not content-level).
+ *
+ * This enables use cases where template authors lock fields to prevent user typing
+ * but still need automated systems to populate values programmatically.
+ *
+ * `sdtContentLocked` remains fully blocked for both interactive and programmatic
+ * mutations via `assertNotFullyLocked`.
  */
 
 import type { ContentControlType } from '@superdoc/document-api';
@@ -47,8 +72,13 @@ export function assertNotContentLocked(sdt: ResolvedSdt, operation: string): voi
 
 /**
  * Assert that the SDT is not fully locked (sdtContentLocked).
- * Used before operations that modify content — allows `contentLocked` SDTs
- * to be updated via whole-node replacement (which the lock plugin permits).
+ *
+ * This is the check for Document API content mutations. It intentionally allows
+ * `contentLocked` SDTs to be updated programmatically via whole-node replacement
+ * (see file-level docs for SD-3429 rationale).
+ *
+ * Only `sdtContentLocked` is blocked — this mode indicates the author explicitly
+ * prohibited all modifications, including programmatic ones.
  */
 export function assertNotFullyLocked(sdt: ResolvedSdt, operation: string): void {
   const mode = resolveLockMode(sdt.node.attrs as Record<string, unknown>);

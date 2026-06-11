@@ -14,12 +14,17 @@ export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock'
  * Lock modes (ECMA-376 w:lock):
  * - unlocked: No restrictions
  * - sdtLocked: Cannot delete the SDT wrapper (content editable)
- * - contentLocked: Cannot edit content (can delete wrapper)
+ * - contentLocked: Cannot edit content interactively (can delete wrapper)
  * - sdtContentLocked: Cannot delete wrapper OR edit content
  *
  * Strategy:
  * 1. handleKeyDown - Intercept keys BEFORE transaction to prevent browser selection issues
- * 2. filterTransaction - Safety net to catch programmatic changes
+ * 2. filterTransaction - Block inner-content modifications for locked SDTs
+ *
+ * Note: The Document API can programmatically update `contentLocked` SDTs via
+ * whole-node replacement (replaceEntireSdt). This plugin allows such operations
+ * because the step covers the full node range, which is classified as wrapper-level
+ * replacement rather than content modification. See lock-enforcement.ts SD-3429 docs.
  */
 
 /**

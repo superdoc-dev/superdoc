@@ -23,7 +23,9 @@ test.describe('auto paragraph direction', () => {
     await superdoc.waitForStable();
 
     const second = await lineDir(superdoc, 1);
-    expect(second.dir).toBe('auto');
+    // The line inherits the paragraph wrapper's resolved auto direction
+    // (wrapper carries dir="auto"; lines don't stamp their own dir).
+    expect(second.dir).toBeNull();
     expect(second.computed).toBe('rtl');
   });
 
@@ -34,7 +36,7 @@ test.describe('auto paragraph direction', () => {
     await superdoc.waitForStable();
 
     const second = await lineDir(superdoc, 1);
-    expect(second.dir).toBe('auto');
+    expect(second.dir).toBeNull();
     expect(second.computed).toBe('ltr');
   });
 

@@ -21,11 +21,27 @@ describe('applyRtlStyles direction mapping', () => {
     expect(element.style.direction).toBe('ltr');
   });
 
-  it('sets dir="auto" for unset paragraphs', () => {
+  it('sets dir="auto" for unset paragraphs (wrapper)', () => {
     const element = el();
     expect(applyRtlStyles(element, unsetAttrs as any)).toBe(false);
     expect(element.getAttribute('dir')).toBe('auto');
     expect(element.style.direction).toBe('');
+  });
+
+  it('inheritAuto: leaves dir unset for unset paragraphs (line inherits wrapper)', () => {
+    const element = el();
+    expect(applyRtlStyles(element, unsetAttrs as any, true)).toBe(false);
+    expect(element.getAttribute('dir')).toBeNull();
+    expect(element.style.direction).toBe('');
+  });
+
+  it('inheritAuto: still stamps explicit rtl/ltr on lines', () => {
+    const r = el();
+    applyRtlStyles(r, rtlAttrs as any, true);
+    expect(r.getAttribute('dir')).toBe('rtl');
+    const l = el();
+    applyRtlStyles(l, ltrAttrs as any, true);
+    expect(l.getAttribute('dir')).toBe('ltr');
   });
 });
 

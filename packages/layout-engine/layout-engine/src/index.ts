@@ -692,6 +692,40 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
   return isAtTopOfFreshPage;
 };
 
+/** An explicit page break (manual `w:br w:type="page"`), as opposed to a style/direct pageBreakBefore. */
+const isExplicitPageBreakBlock = (block: FlowBlock | undefined): boolean => {
+  return block?.kind === 'pageBreak' && (block as PageBreakBlock).attrs?.source !== 'pageBreakBefore';
+};
+
+/** A paragraph that renders no content: every run is a text run with empty text. */
+const isEmptyParagraphBlock = (block: FlowBlock | undefined): boolean => {
+  if (block?.kind !== 'paragraph') return false;
+  const runs = (block as ParagraphBlock).runs ?? [];
+  return runs.every((run) => (run.kind === undefined || run.kind === 'text') && run.text === '');
+};
+
+/**
+ * Word collapses a style/direct pageBreakBefore when the paragraph directly
+ * follows an explicit page break. The break paragraph's own empty remnant
+ * (its paragraph mark, emitted as an empty paragraph block right after the
+ * break) does not re-arm the break — but any other content does: one extra
+ * empty paragraph, or text after the break in the same paragraph, and Word
+ * renders the second page break again. Verified against Word renders of the
+ * SD-3366 fixture matrix (shapes A-E).
+ *
+ * The directly-adjacent case (break at the end of a paragraph with content,
+ * which emits no remnant) is already covered by the fresh-page geometric
+ * guard above; this structural check covers the remnant case, where the
+ * remnant fragment makes the fresh page non-empty.
+ */
+const isPageBreakBeforeSatisfiedByExplicitBreak = (blocks: readonly FlowBlock[], index: number): boolean => {
+  const block = blocks[index];
+  if (block?.kind !== 'pageBreak' || (block as PageBreakBlock).attrs?.source !== 'pageBreakBefore') {
+    return false;
+  }
+  return isEmptyParagraphBlock(blocks[index - 1]) && isExplicitPageBreakBlock(blocks[index - 2]);
+};
+
 const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
   return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
@@ -2785,7 +2819,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         throw new Error(`layoutDocument: expected pageBreak measure for block ${block.id}`);
       }
       const currentState = states[states.length - 1];
-      if (shouldSkipRedundantPageBreakBefore(block as PageBreakBlock, currentState)) {
+      if (
+        shouldSkipRedundantPageBreakBefore(block as PageBreakBlock, currentState) ||
+        isPageBreakBeforeSatisfiedByExplicitBreak(blocks, index)
+      ) {
         continue;
       }
       paginator.startNewPage();

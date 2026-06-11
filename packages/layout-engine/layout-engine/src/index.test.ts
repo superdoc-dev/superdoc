@@ -2431,6 +2431,156 @@ describe('layoutDocument', () => {
       expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
       expect(layout.pages[1].fragments).toHaveLength(0);
     });
+
+    // SD-3366: Word collapses a style/direct pageBreakBefore when the paragraph
+    // directly follows an explicit page break. Shapes A-E below are Word-verified
+    // (see the SD-3366 fixture matrix): A and E suppress; B, C and D fire.
+    describe('pageBreakBefore after an explicit page break (SD-3366)', () => {
+      const explicitBreak = (id: string): PageBreakBlock =>
+        ({ kind: 'pageBreak', id, attrs: { lineBreakType: 'page' } }) as PageBreakBlock;
+      const styleBreak = (id: string): PageBreakBlock =>
+        ({ kind: 'pageBreak', id, attrs: { source: 'pageBreakBefore' } }) as PageBreakBlock;
+      const emptyParagraph = (id: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text: '', fontFamily: 'Arial', fontSize: 16 }],
+      });
+      const textParagraph = (id: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ text: 'content', fontFamily: 'Arial', fontSize: 16 }],
+      });
+
+      it('suppresses pageBreakBefore directly after an explicit page break (shape E)', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(2);
+        expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      });
+
+      it('suppresses pageBreakBefore after an explicit break and its empty remnant paragraph (shape A)', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          emptyParagraph('remnant'),
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([20]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(2);
+        expect(pageContainsBlock(layout.pages[1], 'remnant')).toBe(true);
+        expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      });
+
+      it('still fires pageBreakBefore after a plain empty paragraph with no explicit break (shape B)', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          emptyParagraph('plain-empty'),
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [makeMeasure([40]), makeMeasure([20]), { kind: 'pageBreak' }, makeMeasure([40])];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(2);
+        expect(pageContainsBlock(layout.pages[0], 'p1')).toBe(true);
+        expect(pageContainsBlock(layout.pages[0], 'plain-empty')).toBe(true);
+        expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      });
+
+      it('still fires pageBreakBefore when text follows the explicit break on the fresh page (shape C)', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          textParagraph('after-break'),
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(3);
+        expect(pageContainsBlock(layout.pages[1], 'after-break')).toBe(true);
+        expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      });
+
+      it('still fires pageBreakBefore when an extra empty paragraph follows the break remnant (shape D)', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          emptyParagraph('remnant'),
+          emptyParagraph('extra-empty'),
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([20]),
+          makeMeasure([20]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(3);
+        expect(pageContainsBlock(layout.pages[1], 'remnant')).toBe(true);
+        expect(pageContainsBlock(layout.pages[1], 'extra-empty')).toBe(true);
+        expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      });
+
+      it('does not suppress an explicit page break that follows another explicit page break', () => {
+        // Two manual breaks in a row intentionally produce a blank page.
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-1'),
+          explicitBreak('pb-2'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(3);
+        expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      });
+    });
   });
 
   describe('Phase 4: Column Breaks', () => {

@@ -22,7 +22,11 @@ export {
 export { getPageElementByIndex } from './PageDom.js';
 export {
   clickToPositionDom,
+  findLineAtClientPoint,
   findPageElement,
+  getClickableSpansFromLine,
+  mapPmPosToDomTextOffset,
+  computePaintedCaretPageLocalFromRoots,
   readLayoutEpochFromDom,
   resolvePositionWithinFragmentDom,
   resolveTextBoundaryWithinFragmentDom,

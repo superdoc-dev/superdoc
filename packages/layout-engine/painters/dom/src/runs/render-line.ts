@@ -765,7 +765,6 @@ const renderExplicitlyPositionedRuns = ({
         !coveredByOverlay,
       );
       appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
-      tabEl.style.top = `${contentTopPx}px`;
       if (coveredByOverlay && underlineSpanCollector) {
         appendUnderlineOverlaySpan(
           underlineSpanCollector,

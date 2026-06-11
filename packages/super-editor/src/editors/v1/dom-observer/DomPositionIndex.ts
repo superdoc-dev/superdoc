@@ -38,6 +38,13 @@ function isExcludedFromBodyDomIndex(node: HTMLElement): boolean {
     return true;
   }
 
+  // behindDoc header/footer textboxes are painted on the page element with their
+  // own PM ranges. Those positions are unrelated to the body document and must
+  // not participate in body caret/selection DOM lookup.
+  if (node.closest('[data-behind-doc-section]')) {
+    return true;
+  }
+
   const blockId = node.closest<HTMLElement>('[data-block-id]')?.dataset.blockId ?? '';
   return (
     blockId.startsWith('footnote-') ||

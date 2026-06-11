@@ -28,7 +28,8 @@ import { namedStoryLocator } from '@superdoc/contracts';
 import type { PageDecorationPayload, PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
+import { computePaintedCaretPageLocalFromRoots, mapPmPosToDomTextOffset } from '../../../dom-observer/index.js';
 
 import type { Editor } from '../../Editor.js';
 import type {
@@ -61,7 +62,7 @@ import {
   type MultiSectionHeaderFooterIdentifier,
   type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
-import { selectionToRects } from '@superdoc/layout-bridge';
+import { getFragmentAtPosition, selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
@@ -97,28 +98,23 @@ function hasSectionRefsForKind(
 // dataset (`data-layout-fragment-id` etc.) which a future v2 consumer can
 // pick up via `LayoutHitV1Compat.readRenderedElementIdentity`. Do not strip
 // the PM reads here without an explicit migration plan.
-function buildSurfacePmEntries(surface: HTMLElement): SurfacePmEntry[] {
-  const nodes = Array.from(surface.querySelectorAll<HTMLElement>('[data-pm-start][data-pm-end]'));
-  const nonLeaf = new WeakSet<HTMLElement>();
-  const nodeSet = new WeakSet<HTMLElement>();
-  nodes.forEach((node) => nodeSet.add(node));
+function isStructuredContentChromeLabel(el: HTMLElement): boolean {
+  return STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => el.classList.contains(className));
+}
 
-  for (const node of nodes) {
-    let parent = node.parentElement;
-    while (parent && parent !== surface) {
-      if (nodeSet.has(parent)) {
-        nonLeaf.add(parent);
-      }
-      parent = parent.parentElement;
-    }
-  }
+function buildSurfacePmEntries(surface: HTMLElement): SurfacePmEntry[] {
+  // Mirror DomPointerMapping#getClickableSpans: inline SDT wrappers carry PM ranges
+  // for highlighting, but caret placement must target the inner content spans.
+  const nodes = Array.from(
+    surface.querySelectorAll<HTMLElement>('span[data-pm-start][data-pm-end], a[data-pm-start][data-pm-end]'),
+  );
 
   const entries: SurfacePmEntry[] = [];
   for (const node of nodes) {
     if (node.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER)) {
       continue;
     }
-    if (nonLeaf.has(node)) {
+    if (isStructuredContentChromeLabel(node)) {
       continue;
     }
 
@@ -157,53 +153,10 @@ function findSurfaceEntriesInRange(
   );
 }
 
-function findSurfaceEntryAtPos(entries: SurfacePmEntry[], pos: number): SurfacePmEntry | null {
-  if (!Number.isFinite(pos) || entries.length === 0) {
-    return null;
-  }
-
-  const exactEntry = entries.find((entry) => pos >= entry.pmStart && pos <= entry.pmEnd);
-  if (exactEntry) {
-    return exactEntry;
-  }
-
-  const nextEntry = entries.find((entry) => pos < entry.pmStart);
-  if (nextEntry) {
-    return nextEntry;
-  }
-
-  return entries[entries.length - 1] ?? null;
-}
-
-function mapPmPosToTextOffset(pos: number, pmStart: number, pmEnd: number, textLength: number): number {
-  if (!Number.isFinite(pos) || !Number.isFinite(pmStart) || !Number.isFinite(pmEnd) || textLength <= 0) {
-    return 0;
-  }
-
-  const pmRange = pmEnd - pmStart;
-  if (!Number.isFinite(pmRange) || pmRange <= 0) {
-    return 0;
-  }
-
-  if (pmRange === textLength) {
-    return Math.min(textLength, Math.max(0, pos - pmStart));
-  }
-
-  if (pos <= pmStart) {
-    return 0;
-  }
-  if (pos >= pmEnd) {
-    return textLength;
-  }
-
-  const midpoint = pmStart + pmRange / 2;
-  return pos <= midpoint ? 0 : textLength;
-}
-
 function setSurfaceRangeStart(range: Range, entry: SurfacePmEntry, pos: number): boolean {
   const textNode = entry.el.firstChild;
   if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-    range.setStart(textNode, mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
+    range.setStart(textNode, mapPmPosToDomTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
     return true;
   }
 
@@ -223,7 +176,7 @@ function setSurfaceRangeStart(range: Range, entry: SurfacePmEntry, pos: number):
 function setSurfaceRangeEnd(range: Range, entry: SurfacePmEntry, pos: number): boolean {
   const textNode = entry.el.firstChild;
   if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-    range.setEnd(textNode, mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
+    range.setEnd(textNode, mapPmPosToDomTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
     return true;
   }
 
@@ -2220,22 +2173,9 @@ export class HeaderFooterSessionManager {
       return null;
     }
 
-    // behindDoc fragments sit directly on the page element (not inside the H/F container)
-    // so buildSurfacePmEntries on surfaceElement misses them. Include them explicitly.
     const behindDocFragments = Array.from(
       pageElement.querySelectorAll<HTMLElement>(`[data-behind-doc-section="${this.#session.mode}"]`),
     );
-    const allEntries = [
-      ...buildSurfacePmEntries(surfaceElement),
-      ...behindDocFragments.flatMap((frag) => buildSurfacePmEntries(frag)),
-    ].sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
-
-    const entry = findSurfaceEntryAtPos(allEntries, pos);
-    if (!entry) {
-      return null;
-    }
-
-    const pageRect = pageElement.getBoundingClientRect();
     const zoom =
       typeof this.#deps?.getLayoutOptions()?.zoom === 'number' &&
       Number.isFinite(this.#deps?.getLayoutOptions()?.zoom) &&
@@ -2243,43 +2183,22 @@ export class HeaderFooterSessionManager {
         ? (this.#deps?.getLayoutOptions()?.zoom as number)
         : 1;
 
-    const textNode = Array.from(entry.el.childNodes).find((node): node is Text => node.nodeType === Node.TEXT_NODE);
-    if (textNode) {
-      const range = entry.el.ownerDocument?.createRange();
-      if (!range) {
-        return null;
-      }
-
-      const charIndex = mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, textNode.length);
-      range.setStart(textNode, charIndex);
-      range.setEnd(textNode, charIndex);
-
-      const rangeRect = range.getBoundingClientRect();
-      if (!Number.isFinite(rangeRect.left) || !Number.isFinite(rangeRect.top) || rangeRect.height <= 0) {
-        return null;
-      }
-
-      return {
-        pageIndex: context.region.pageIndex,
-        x: (rangeRect.left - pageRect.left) / zoom,
-        y: context.region.pageIndex * bodyPageHeight + (rangeRect.top - pageRect.top) / zoom,
-        width: 1,
-        height: clampSuspiciousHeaderFooterCaretHeight(Math.max(1, rangeRect.height / zoom), context),
-      };
-    }
-
-    const elementRect = entry.el.getBoundingClientRect();
-    if (!Number.isFinite(elementRect.left) || !Number.isFinite(elementRect.top) || elementRect.height <= 0) {
+    const painted = computePaintedCaretPageLocalFromRoots(
+      pageElement,
+      [surfaceElement, ...behindDocFragments],
+      pos,
+      zoom,
+    );
+    if (!painted) {
       return null;
     }
 
-    const localX = (pos <= entry.pmStart ? elementRect.left : elementRect.right) - pageRect.left;
     return {
       pageIndex: context.region.pageIndex,
-      x: localX / zoom,
-      y: context.region.pageIndex * bodyPageHeight + (elementRect.top - pageRect.top) / zoom,
+      x: painted.x,
+      y: context.region.pageIndex * bodyPageHeight + painted.y,
       width: 1,
-      height: clampSuspiciousHeaderFooterCaretHeight(Math.max(1, elementRect.height / zoom), context),
+      height: clampSuspiciousHeaderFooterCaretHeight(Math.max(1, painted.height), context),
     };
   }
 
@@ -2409,6 +2328,21 @@ export class HeaderFooterSessionManager {
     );
 
     if (geometry) {
+      const hit = getFragmentAtPosition(interactionLayout, context.blocks, context.measures, pos);
+      const usesPaintedDomCaret =
+        hit?.fragment.kind === 'table' ||
+        (hit?.fragment.kind === 'drawing' && hit.block?.kind === 'drawing' && hit.block.drawingKind === 'textboxShape');
+
+      if (usesPaintedDomCaret) {
+        return {
+          pageIndex: region.pageIndex,
+          x: geometry.x,
+          y: region.pageIndex * bodyPageHeight + geometry.y,
+          width: 1,
+          height: geometry.height,
+        };
+      }
+
       return {
         pageIndex: region.pageIndex,
         x: region.localX + geometry.x,

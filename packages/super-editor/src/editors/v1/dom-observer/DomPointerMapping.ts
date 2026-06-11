@@ -130,7 +130,7 @@ function isStructuredContentChromeLabel(el: HTMLElement): boolean {
  * SDT wrappers and labels carry PM ranges for highlighting/drag affordances,
  * but only child content spans should drive body-text caret placement.
  */
-function getClickableSpans(lineEl: HTMLElement): HTMLElement[] {
+export function getClickableSpansFromLine(lineEl: HTMLElement): HTMLElement[] {
   return (Array.from(lineEl.querySelectorAll('span, a')) as HTMLElement[]).filter(
     (el) =>
       el.dataset.pmStart !== undefined &&
@@ -138,6 +138,57 @@ function getClickableSpans(lineEl: HTMLElement): HTMLElement[] {
       !el.classList.contains(CLASS.inlineSdtWrapper) &&
       !isStructuredContentChromeLabel(el),
   );
+}
+
+function getClickableSpans(lineEl: HTMLElement): HTMLElement[] {
+  return getClickableSpansFromLine(lineEl);
+}
+
+/**
+ * Maps a ProseMirror position to a DOM text-node offset for caret placement.
+ * Inverse of {@link mapCharIndexToPm} for the common 1:1 visible-text case.
+ */
+export function mapPmPosToDomTextOffset(
+  pos: number,
+  spanStart: number,
+  spanEnd: number,
+  textLength: number,
+  rightCaretBoundary?: number,
+): number {
+  if (!Number.isFinite(pos) || !Number.isFinite(spanStart) || !Number.isFinite(spanEnd) || textLength <= 0) {
+    return 0;
+  }
+  if (pos <= spanStart) {
+    return 0;
+  }
+
+  const safeRightBoundary =
+    Number.isFinite(rightCaretBoundary) && (rightCaretBoundary as number) >= spanEnd
+      ? (rightCaretBoundary as number)
+      : spanEnd;
+
+  if (pos >= safeRightBoundary) {
+    return textLength;
+  }
+  if (pos > spanEnd) {
+    return textLength;
+  }
+
+  const pmRange = spanEnd - spanStart;
+  if (!Number.isFinite(pmRange) || pmRange <= 0) {
+    return 0;
+  }
+
+  if (pmRange === textLength) {
+    return Math.min(textLength, Math.max(0, pos - spanStart));
+  }
+
+  const directOffset = pos - spanStart;
+  if (directOffset >= 0 && directOffset <= textLength) {
+    return directOffset;
+  }
+
+  return textLength;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +382,7 @@ function resolveFromLines(lineEls: HTMLElement[], viewX: number, viewY: number):
     return null;
   }
 
-  const lineEl = findLineAtY(lineEls, viewY);
+  const lineEl = findLineAtPoint(lineEls, viewX, viewY);
   if (!lineEl) return null;
 
   return resolveLineAtX(lineEl, viewX);
@@ -356,7 +407,7 @@ export function resolveTextBoundaryWithinFragmentDom(
     return null;
   }
 
-  const lineEl = findLineAtY(lineEls, clientY);
+  const lineEl = findLineAtPoint(lineEls, clientX, clientY);
   if (!lineEl) {
     return null;
   }
@@ -539,6 +590,164 @@ function findFirstTextNode(element: HTMLElement): Text | null {
   return node instanceof Text ? node : null;
 }
 
+function resolveDescendantTextBoundary(
+  element: HTMLElement,
+  targetOffset: number,
+  affinity: 'forward' | 'backward',
+): { node: Text; offset: number } | null {
+  const doc = getNodeDocument(element) ?? document;
+  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let consumed = 0;
+  let previous: { node: Text; offset: number } | null = null;
+  let current = walker.nextNode();
+
+  while (current) {
+    const textNode = current as Text;
+    const textLength = textNode.textContent?.length ?? 0;
+    if (textLength <= 0) {
+      current = walker.nextNode();
+      continue;
+    }
+
+    const segmentEnd = consumed + textLength;
+    if (targetOffset < segmentEnd) {
+      return {
+        node: textNode,
+        offset: Math.max(0, targetOffset - consumed),
+      };
+    }
+
+    if (targetOffset === segmentEnd) {
+      if (affinity === 'backward') {
+        return {
+          node: textNode,
+          offset: textLength,
+        };
+      }
+      previous = { node: textNode, offset: textLength };
+      consumed = segmentEnd;
+      current = walker.nextNode();
+      continue;
+    }
+
+    previous = { node: textNode, offset: textLength };
+    consumed = segmentEnd;
+    current = walker.nextNode();
+  }
+
+  return previous;
+}
+
+function resolveCaretTextBoundaryInSpan(
+  spanEl: HTMLElement,
+  pos: number,
+  spanStart: number,
+  spanEnd: number,
+): { node: Text; offset: number } | null {
+  const textLength = spanEl.textContent?.length ?? 0;
+  if (textLength <= 0) {
+    return null;
+  }
+
+  const charIndex = mapPmPosToDomTextOffset(pos, spanStart, spanEnd, textLength);
+  return resolveDescendantTextBoundary(spanEl, charIndex, 'forward');
+}
+
+function findClickableSpanAtPos(spanEls: HTMLElement[], pos: number): HTMLElement | null {
+  for (let spanIdx = 0; spanIdx < spanEls.length; spanIdx += 1) {
+    const spanEl = spanEls[spanIdx];
+    const spanStart = Number(spanEl.dataset.pmStart ?? 'NaN');
+    const spanEnd = Number(spanEl.dataset.pmEnd ?? 'NaN');
+    if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) continue;
+    const isLastSpan = spanIdx === spanEls.length - 1;
+    if (pos < spanStart) continue;
+    if (isLastSpan ? pos > spanEnd : pos >= spanEnd) continue;
+    return spanEl;
+  }
+
+  return (
+    spanEls.find((spanEl) => {
+      const spanStart = Number(spanEl.dataset.pmStart ?? 'NaN');
+      const spanEnd = Number(spanEl.dataset.pmEnd ?? 'NaN');
+      return Number.isFinite(spanStart) && Number.isFinite(spanEnd) && pos >= spanStart && pos <= spanEnd;
+    }) ?? null
+  );
+}
+
+/**
+ * Computes caret geometry in page-local coordinates from painted DOM under the
+ * given search roots (header surface, textbox fragment, table fragment, etc.).
+ */
+export function computePaintedCaretPageLocalFromRoots(
+  pageElement: HTMLElement,
+  searchRoots: HTMLElement[],
+  pos: number,
+  zoom: number,
+): { x: number; y: number; height: number } | null {
+  if (!Number.isFinite(pos) || searchRoots.length === 0) {
+    return null;
+  }
+
+  const pageRect = pageElement.getBoundingClientRect();
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const lineEls: HTMLElement[] = [];
+  for (const root of searchRoots) {
+    lineEls.push(...Array.from(root.querySelectorAll<HTMLElement>('.superdoc-line[data-pm-start][data-pm-end]')));
+  }
+
+  for (let lineIdx = 0; lineIdx < lineEls.length; lineIdx += 1) {
+    const lineEl = lineEls[lineIdx];
+    const pmStart = Number(lineEl.dataset.pmStart ?? 'NaN');
+    const pmEnd = Number(lineEl.dataset.pmEnd ?? 'NaN');
+    if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) continue;
+    const isLastLine = lineIdx === lineEls.length - 1;
+    if (pos < pmStart || (isLastLine ? pos > pmEnd : pos >= pmEnd)) continue;
+
+    const spanEls = getClickableSpansFromLine(lineEl);
+    const spanEl = findClickableSpanAtPos(spanEls, pos);
+    if (!spanEl) {
+      const lineRect = lineEl.getBoundingClientRect();
+      if (!Number.isFinite(lineRect.height) || lineRect.height <= 0) continue;
+      return {
+        x: (lineRect.left - pageRect.left) / safeZoom,
+        y: (lineRect.top - pageRect.top) / safeZoom,
+        height: lineRect.height / safeZoom,
+      };
+    }
+
+    const spanStart = Number(spanEl.dataset.pmStart ?? 'NaN');
+    const spanEnd = Number(spanEl.dataset.pmEnd ?? 'NaN');
+    const boundary = resolveCaretTextBoundaryInSpan(spanEl, pos, spanStart, spanEnd);
+    if (!boundary) {
+      const spanRect = spanEl.getBoundingClientRect();
+      const closerToLeft = pos <= spanStart + (spanEnd - spanStart) / 2;
+      return {
+        x: ((closerToLeft ? spanRect.left : spanRect.right) - pageRect.left) / safeZoom,
+        y: (spanRect.top - pageRect.top) / safeZoom,
+        height: spanRect.height / safeZoom,
+      };
+    }
+
+    const doc = getNodeDocument(pageElement) ?? document;
+    const range = doc.createRange();
+    range.setStart(boundary.node, boundary.offset);
+    range.setEnd(boundary.node, boundary.offset);
+    const rangeRect = range.getBoundingClientRect();
+    const lineRect = lineEl.getBoundingClientRect();
+    if (!Number.isFinite(rangeRect.left) || !Number.isFinite(rangeRect.top) || rangeRect.height <= 0) {
+      continue;
+    }
+
+    return {
+      x: (rangeRect.left - pageRect.left) / safeZoom,
+      y: (lineRect.top - pageRect.top) / safeZoom,
+      height: lineRect.height / safeZoom,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Visible text can be split across adjacent PM wrapper nodes, which creates
  * hidden structural gaps between consecutive rendered spans. The caret the user
@@ -569,9 +778,100 @@ function resolveRightCaretBoundary(
 // Spatial lookup helpers
 // ---------------------------------------------------------------------------
 
+function clampToRange(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
+function getLineVerticalBounds(lineEl: HTMLElement): { top: number; bottom: number } {
+  const lineRect = lineEl.getBoundingClientRect();
+  const spanRects = getClickableSpans(lineEl)
+    .map((span) => span.getBoundingClientRect())
+    .filter(isVisibleRect);
+  if (spanRects.length === 0) {
+    return { top: lineRect.top, bottom: lineRect.bottom };
+  }
+
+  return {
+    top: Math.min(lineRect.top, ...spanRects.map((rect) => rect.top)),
+    bottom: Math.max(lineRect.bottom, ...spanRects.map((rect) => rect.bottom)),
+  };
+}
+
+function lineContainsPoint(lineEl: HTMLElement, viewX: number, viewY: number): boolean {
+  for (const span of getClickableSpans(lineEl)) {
+    const rect = span.getBoundingClientRect();
+    if (!isVisibleRect(rect)) continue;
+    if (viewX >= rect.left && viewX <= rect.right && viewY >= rect.top && viewY <= rect.bottom) {
+      return true;
+    }
+  }
+
+  const { top, bottom } = getLineVerticalBounds(lineEl);
+  const lineRect = lineEl.getBoundingClientRect();
+  return viewY >= top && viewY <= bottom && viewX >= lineRect.left && viewX <= lineRect.right;
+}
+
+function distanceToLine(lineEl: HTMLElement, viewX: number, viewY: number): number {
+  let best = Infinity;
+
+  for (const span of getClickableSpans(lineEl)) {
+    const rect = span.getBoundingClientRect();
+    if (!isVisibleRect(rect)) continue;
+    const closestX = clampToRange(viewX, rect.left, rect.right);
+    const closestY = clampToRange(viewY, rect.top, rect.bottom);
+    const dx = viewX - closestX;
+    const dy = viewY - closestY;
+    best = Math.min(best, dx * dx + dy * dy);
+  }
+
+  if (Number.isFinite(best) && best < Infinity) {
+    return best;
+  }
+
+  const lineRect = lineEl.getBoundingClientRect();
+  const closestX = clampToRange(viewX, lineRect.left, lineRect.right);
+  const closestY = clampToRange(viewY, lineRect.top, lineRect.bottom);
+  return (viewX - closestX) ** 2 + (viewY - closestY) ** 2;
+}
+
 /**
- * Finds the line element at a given Y coordinate. Returns the last line as
- * a fallback when Y is below all lines (clicking below content).
+ * Finds the line element at a viewport point. When multiple lines share the
+ * same Y band (for example table columns on the same row), prefers the line
+ * whose rendered spans are closest to the click instead of the first DOM match.
+ */
+export function findLineAtClientPoint(lineEls: HTMLElement[], viewX: number, viewY: number): HTMLElement | null {
+  return findLineAtPoint(lineEls, viewX, viewY);
+}
+
+function findLineAtPoint(lineEls: HTMLElement[], viewX: number, viewY: number): HTMLElement | null {
+  if (lineEls.length === 0) return null;
+  if (lineEls.length === 1) return lineEls[0];
+
+  const containing = lineEls.filter((line) => lineContainsPoint(line, viewX, viewY));
+  if (containing.length === 1) return containing[0];
+  if (containing.length > 1) {
+    return containing.reduce((best, line) =>
+      distanceToLine(line, viewX, viewY) < distanceToLine(best, viewX, viewY) ? line : best,
+    );
+  }
+
+  const yMatches = lineEls.filter((line) => {
+    const { top, bottom } = getLineVerticalBounds(line);
+    return viewY >= top && viewY <= bottom;
+  });
+  if (yMatches.length === 1) return yMatches[0];
+  if (yMatches.length > 1) {
+    return yMatches.reduce((best, line) =>
+      distanceToLine(line, viewX, viewY) < distanceToLine(best, viewX, viewY) ? line : best,
+    );
+  }
+
+  return findLineAtY(lineEls, viewY);
+}
+
+/**
+ * Finds the line element at a given Y coordinate. Returns the nearest line as
+ * a fallback when Y is outside all lines (clicking below content).
  */
 function findLineAtY(lineEls: HTMLElement[], viewY: number): HTMLElement | null {
   if (lineEls.length === 0) return null;
@@ -580,10 +880,10 @@ function findLineAtY(lineEls: HTMLElement[], viewY: number): HTMLElement | null 
   let minDistance = Infinity;
 
   for (const lineEl of lineEls) {
-    const r = lineEl.getBoundingClientRect();
-    if (viewY >= r.top && viewY <= r.bottom) return lineEl;
+    const { top, bottom } = getLineVerticalBounds(lineEl);
+    if (viewY >= top && viewY <= bottom) return lineEl;
 
-    const distance = viewY < r.top ? r.top - viewY : Math.max(0, viewY - r.bottom);
+    const distance = viewY < top ? top - viewY : Math.max(0, viewY - bottom);
     if (distance < minDistance) {
       minDistance = distance;
       nearest = lineEl;

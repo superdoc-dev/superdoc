@@ -2,7 +2,14 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clickToPositionDom, findPageElement, readLayoutEpochFromDom } from './DomPointerMapping.ts';
+import {
+  clickToPositionDom,
+  computePaintedCaretPageLocalFromRoots,
+  findPageElement,
+  mapPmPosToDomTextOffset,
+  readLayoutEpochFromDom,
+  resolvePositionWithinFragmentDom,
+} from './DomPointerMapping.ts';
 
 // ---------------------------------------------------------------------------
 // Test utilities
@@ -479,6 +486,40 @@ describe('DomPointerMapping', () => {
       );
     });
 
+    it('picks the line in the clicked table column when sibling cells share the same Y band', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-line" data-pm-start="1" data-pm-end="5">
+              <span data-pm-start="1" data-pm-end="5">Left</span>
+            </div>
+            <div class="superdoc-line" data-pm-start="20" data-pm-end="35">
+              <span data-pm-start="20" data-pm-end="23">KvK</span>
+              <span data-pm-start="30" data-pm-end="35">number</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const leftLine = container.querySelector('.superdoc-line[data-pm-start="1"]') as HTMLElement;
+      const rightLine = container.querySelector('.superdoc-line[data-pm-start="20"]') as HTMLElement;
+      const leftSpan = leftLine.querySelector('span') as HTMLElement;
+      const kvkSpan = rightLine.querySelector('span[data-pm-start="20"]') as HTMLElement;
+      const numberSpan = rightLine.querySelector('span[data-pm-start="30"]') as HTMLElement;
+
+      mockRect(leftLine, { left: 20, top: 40, width: 80, height: 14 });
+      mockRect(leftSpan, { left: 20, top: 40, width: 40, height: 14 });
+      mockRect(rightLine, { left: 120, top: 40, width: 200, height: 14 });
+      mockRect(kvkSpan, { left: 120, top: 40, width: 30, height: 14 });
+      mockRect(numberSpan, { left: 220, top: 40, width: 50, height: 14 });
+
+      const result = resolvePositionWithinFragmentDom(tableFragment, 271, 47);
+      expect(result).toBeGreaterThanOrEqual(30);
+      expect(result).toBeLessThanOrEqual(35);
+    });
+
     it('returns a position when a line IS in the hit chain', () => {
       container.innerHTML = `
         <div class="superdoc-page" data-page-index="0">
@@ -753,6 +794,67 @@ describe('DomPointerMapping', () => {
           delete (document as MutableElementsFromPointDocument).elementsFromPoint;
         }
       }
+    });
+  });
+
+  describe('computePaintedCaretPageLocalFromRoots', () => {
+    it('resolves caret inside nested text nodes within a PM span', () => {
+      const page = buildPageDom([
+        {
+          pmStart: '10',
+          pmEnd: '14',
+          spans: [{ pmStart: '10', pmEnd: '14', text: '' }],
+        },
+      ]);
+      const outerSpan = page.querySelector('span[data-pm-start="10"]') as HTMLElement;
+      const inner = document.createElement('span');
+      inner.textContent = 'KvK';
+      outerSpan.appendChild(inner);
+
+      mockRect(page, { left: 0, top: 0, width: 400, height: 800 });
+      mockRect(page.querySelector('.superdoc-line')!, { left: 100, top: 50, width: 200, height: 20 });
+      mockRect(outerSpan, { left: 120, top: 50, width: 60, height: 20 });
+
+      const original = Range.prototype.getBoundingClientRect;
+      Range.prototype.getBoundingClientRect = function () {
+        const offset = this.startOffset ?? 0;
+        return {
+          left: 120 + offset * 10,
+          top: 50,
+          width: 1,
+          height: 16,
+          right: 121 + offset * 10,
+          bottom: 66,
+          x: 120 + offset * 10,
+          y: 50,
+          toJSON() {
+            return this;
+          },
+        } as DOMRect;
+      };
+
+      try {
+        const painted = computePaintedCaretPageLocalFromRoots(page, [page], 12, 1);
+        expect(painted).not.toBeNull();
+        expect(painted!.x).toBe(140);
+        expect(painted!.y).toBe(50);
+      } finally {
+        Range.prototype.getBoundingClientRect = original;
+      }
+    });
+  });
+
+  describe('mapPmPosToDomTextOffset', () => {
+    it('maps 1:1 when the PM range matches visible text length', () => {
+      expect(mapPmPosToDomTextOffset(33, 30, 40, 10)).toBe(3);
+    });
+
+    it('maps mid-span positions when PM range has a trailing structural gap', () => {
+      expect(mapPmPosToDomTextOffset(33, 30, 42, 10)).toBe(3);
+    });
+
+    it('does not snap to span start/end via midpoint heuristic', () => {
+      expect(mapPmPosToDomTextOffset(31, 30, 42, 10)).toBe(1);
     });
   });
 });

@@ -2,6 +2,7 @@ import { Extension } from '@core/Extension.js';
 import { Plugin, PluginKey, TextSelection, NodeSelection } from 'prosemirror-state';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { CellSelection } from 'prosemirror-tables';
+import { findLineAtClientPoint } from '../../dom-observer/index.js';
 
 export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
 
@@ -27,7 +28,6 @@ export const VerticalNavigation = Extension.create({
    * @returns {import('prosemirror-state').Plugin[]} Plugin list, empty when disabled.
    */
   addPmPlugins() {
-    if (this.editor.options?.isHeaderOrFooter) return [];
     if (this.editor.options?.isHeadless) return [];
 
     const editor = this.editor;
@@ -259,7 +259,7 @@ function resolveLineBoundaryPosition(editor, selection, key) {
   const doc = editor.presentationEditor?.visibleHost?.ownerDocument ?? document;
   const caretX = coords.clientX;
   const caretY = coords.clientY + coords.height / 2;
-  const lineEl = findLineElementAtPoint(doc, caretX, caretY);
+  const lineEl = findLineElementAtPoint(doc, caretX, caretY, editor);
   if (!lineEl) return null;
 
   const pmStart = Number(lineEl.dataset?.pmStart);
@@ -285,9 +285,9 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const doc = presentationEditor.visibleHost?.ownerDocument ?? document;
   const caretX = coords.clientX;
   const caretY = coords.clientY + coords.height / 2;
-  const currentLine = findLineElementAtPoint(doc, caretX, caretY);
+  const currentLine = findLineElementAtPoint(doc, caretX, caretY, editor);
   if (!currentLine) return null;
-  const adjacentLine = findAdjacentLineElement(currentLine, direction, caretX);
+  const adjacentLine = findAdjacentLineElement(currentLine, direction, caretX, editor);
   if (!adjacentLine) return null;
   const pageEl = adjacentLine.closest?.(`.${DOM_CLASS_NAMES.PAGE}`);
   const pageIndex = pageEl ? Number(pageEl.dataset.pageIndex ?? 'NaN') : null;
@@ -356,12 +356,55 @@ function buildSelection(state, pos, extend) {
  * @param {number} y
  * @returns {Element | null}
  */
-function findLineElementAtPoint(doc, x, y) {
-  if (typeof doc?.elementsFromPoint !== 'function') return null;
-  const chain = doc.elementsFromPoint(x, y) ?? [];
-  for (const el of chain) {
-    if (el?.classList?.contains?.(DOM_CLASS_NAMES.LINE)) return el;
+function resolveHeaderFooterSurface(editor) {
+  if (!editor?.options?.isHeaderOrFooter) {
+    return null;
   }
+
+  const presentationEditor = editor.presentationEditor;
+  const visibleHost = presentationEditor?.visibleHost;
+  if (!visibleHost) {
+    return null;
+  }
+
+  const session = presentationEditor?.getHeaderFooterSession?.()?.session;
+  const pageIndex = session?.pageIndex ?? 0;
+  const page = visibleHost.querySelector(`[data-page-index="${pageIndex}"]`);
+  if (!page) {
+    return null;
+  }
+
+  const surfaceSelector =
+    editor.options?.headerFooterType === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+  const surface = page.querySelector(surfaceSelector);
+  return surface instanceof HTMLElement ? surface : null;
+}
+
+function collectLineElementsForEditor(editor, page) {
+  const headerFooterSurface = resolveHeaderFooterSurface(editor);
+  if (headerFooterSurface) {
+    return Array.from(headerFooterSurface.querySelectorAll(`.${DOM_CLASS_NAMES.LINE}`));
+  }
+
+  return getPageLineElements(page);
+}
+
+function findLineElementAtPoint(doc, x, y, editor) {
+  if (typeof doc?.elementsFromPoint === 'function') {
+    const chain = doc.elementsFromPoint(x, y) ?? [];
+    for (const el of chain) {
+      if (el?.classList?.contains?.(DOM_CLASS_NAMES.LINE)) return el;
+    }
+  }
+
+  // Header/footer surfaces are painted with pointer-events:none, so
+  // elementsFromPoint often misses nested textbox/table lines.
+  const headerFooterSurface = resolveHeaderFooterSurface(editor);
+  if (headerFooterSurface) {
+    const lineEls = Array.from(headerFooterSurface.querySelectorAll(`.${DOM_CLASS_NAMES.LINE}`));
+    return findLineAtClientPoint(lineEls, x, y);
+  }
+
   return null;
 }
 
@@ -372,7 +415,7 @@ function findLineElementAtPoint(doc, x, y) {
  * @param {number} caretX
  * @returns {Element | null}
  */
-function findAdjacentLineElement(currentLine, direction, caretX) {
+function findAdjacentLineElement(currentLine, direction, caretX, editor) {
   const pageClass = DOM_CLASS_NAMES.PAGE;
   const page = currentLine.closest?.(`.${pageClass}`);
   if (!page) return null;
@@ -380,7 +423,7 @@ function findAdjacentLineElement(currentLine, direction, caretX) {
   const currentLineMetrics = getLineMetrics(currentLine);
   if (!currentLineMetrics) return null;
 
-  const currentPageLines = getPageLineElements(page);
+  const currentPageLines = collectLineElementsForEditor(editor, page);
   const adjacentOnCurrentPage = findClosestLineInDirection(
     currentPageLines,
     currentLine,
@@ -395,7 +438,7 @@ function findAdjacentLineElement(currentLine, direction, caretX) {
   if (pageIndex === -1) return null;
   const nextPage = pages[pageIndex + direction];
   if (!nextPage) return null;
-  const nextPageLines = getPageLineElements(nextPage);
+  const nextPageLines = collectLineElementsForEditor(editor, nextPage);
   return findEdgeLineForPage(nextPageLines, direction, caretX);
 }
 

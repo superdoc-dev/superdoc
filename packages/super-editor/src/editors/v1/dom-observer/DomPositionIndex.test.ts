@@ -40,4 +40,37 @@ describe('DomPositionIndex', () => {
 
     expect(index.findEntryAtPosition(16)?.el).toBe(span);
   });
+
+  it('excludes behindDoc header/footer textbox spans from body caret lookup', () => {
+    const container = document.createElement('div');
+    container.className = DOM_CLASS_NAMES.PAGE;
+    container.dataset.pageIndex = '0';
+
+    const bodyLine = document.createElement('div');
+    bodyLine.className = DOM_CLASS_NAMES.LINE;
+    const bodySpan = document.createElement('span');
+    bodySpan.dataset.pmStart = '10';
+    bodySpan.dataset.pmEnd = '14';
+    bodySpan.textContent = 'body';
+    bodyLine.appendChild(bodySpan);
+
+    const behindDoc = document.createElement('div');
+    behindDoc.dataset.behindDocSection = 'header';
+    const hfLine = document.createElement('div');
+    hfLine.className = DOM_CLASS_NAMES.LINE;
+    const hfSpan = document.createElement('span');
+    hfSpan.dataset.pmStart = '10';
+    hfSpan.dataset.pmEnd = '14';
+    hfSpan.textContent = 'header';
+    hfLine.appendChild(hfSpan);
+    behindDoc.appendChild(hfLine);
+
+    container.append(bodyLine, behindDoc);
+
+    const index = new DomPositionIndex();
+    index.rebuild(container);
+
+    expect(index.findEntryAtPosition(12)?.el).toBe(bodySpan);
+    expect(index.findEntryAtPosition(12)?.el.textContent).toBe('body');
+  });
 });

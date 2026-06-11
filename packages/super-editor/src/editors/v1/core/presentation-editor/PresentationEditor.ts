@@ -8978,6 +8978,17 @@ export class PresentationEditor extends EventEmitter {
         if (hit) return hit;
       }
 
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        const behindDocSection = (
+          element instanceof Element ? element.closest<HTMLElement>('[data-behind-doc-section]') : null
+        )?.dataset.behindDocSection;
+        if (behindDocSection !== context.region.kind) {
+          continue;
+        }
+        const hit = tryResolve(element, false);
+        if (hit) return hit;
+      }
+
       // Fallback: when rendered block IDs differ from context block IDs (e.g. split/derived
       // header/footer fragments), still resolve from the visible fragment under pointer.
       // Scope to the header/footer surface to avoid matching body fragments at the same
@@ -9006,6 +9017,20 @@ export class PresentationEditor extends EventEmitter {
         const hit = tryResolve(fragment, false);
         if (hit) return hit;
       }
+    }
+
+    // behindDoc header/footer textboxes are siblings of the surface container on the page.
+    const behindDocSection = context.region.kind;
+    const behindDocFragments = Array.from(
+      pageElement?.querySelectorAll<HTMLElement>(`[data-behind-doc-section="${behindDocSection}"]`) ?? [],
+    );
+    for (const fragment of behindDocFragments) {
+      const rect = fragment.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        continue;
+      }
+      const hit = tryResolve(fragment, false);
+      if (hit) return hit;
     }
 
     return null;
@@ -10871,6 +10896,21 @@ export class PresentationEditor extends EventEmitter {
    * navigation binary search) must not get the local rect substituted in.
    */
   #computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const hfRect = this.#computeHeaderFooterCaretRect(pos);
+      if (!hfRect) {
+        return null;
+      }
+      const bodyPageHeight = this.#getBodyPageHeight();
+      return {
+        pageIndex: hfRect.pageIndex,
+        x: hfRect.x,
+        y: hfRect.y - hfRect.pageIndex * bodyPageHeight,
+        height: hfRect.height,
+      };
+    }
+
     const useNativeFallback = shouldUseNativeCaretFallback(this.editor?.state?.selection, pos);
     const geometry = this.#computeCaretLayoutRectGeometry(pos, useNativeFallback);
     let dom: { pageIndex: number; x: number; y: number } | null = null;

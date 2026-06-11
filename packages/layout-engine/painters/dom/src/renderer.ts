@@ -2228,11 +2228,16 @@ export class DomPainter {
     const behindDocSelector = `[data-behind-doc-section="${kind}"]`;
     pageEl.querySelectorAll(behindDocSelector).forEach((el) => el.remove());
 
-    // Render behindDoc fragments directly on the page with z-index: 0
-    // and insert them at the beginning of the page so they render behind body content.
-    // We can't use z-index: -1 because that goes behind the page's white background.
-    // By inserting at the beginning and using z-index: 0, they render below body content
-    // which also has z-index values but comes later in DOM order.
+    // Paint decorative letterheads first, editable textboxes last. Each insertBefore(pageEl.firstChild)
+    // pushes earlier inserts down, so the last loop item ends up on top among behindDoc siblings.
+    behindDocFragments.sort(
+      (a, b) => this.behindDocFragmentPaintOrder(a.fragment) - this.behindDocFragmentPaintOrder(b.fragment),
+    );
+
+    // Render behindDoc fragments directly on the page and insert them at the beginning of the page
+    // so they render behind body content. We can't use z-index: -1 because that goes behind the
+    // page's white background. Decorative images stay at z-index 0 with pointer-events: none so
+    // they never steal clicks or show grab cursors; editable textboxes sit above them at z-index 1.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
       const resolvedItem = data.items?.[originalIndex];
       const fragEl = this.renderFragment(
@@ -2258,7 +2263,9 @@ export class DomPainter {
 
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
-      fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
+      const isEditableBehindDoc = this.isBehindDocEditableFragment(fragment);
+      fragEl.style.zIndex = isEditableBehindDoc ? '1' : '0';
+      fragEl.style.pointerEvents = isEditableBehindDoc ? 'auto' : 'none';
       fragEl.dataset.behindDocSection = kind; // Track for cleanup on re-render
       // Insert at beginning of page so it renders behind body content due to DOM order
       pageEl.insertBefore(fragEl, pageEl.firstChild);
@@ -4251,6 +4258,14 @@ export class DomPainter {
    */
   private isAnchoredMediaFragment(fragment: Fragment): fragment is ImageFragment | DrawingFragment {
     return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
+  }
+
+  private behindDocFragmentPaintOrder(fragment: Fragment): number {
+    return this.isBehindDocEditableFragment(fragment) ? 1 : 0;
+  }
+
+  private isBehindDocEditableFragment(fragment: Fragment): boolean {
+    return fragment.kind === 'drawing' && fragment.drawingKind === 'textboxShape';
   }
 
   private shouldRenderBehindPageContent(

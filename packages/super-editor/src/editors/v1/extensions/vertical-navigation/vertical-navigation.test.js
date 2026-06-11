@@ -107,6 +107,7 @@ const createEnvironment = ({ presenting = true, selection = null, overrides = {}
   const presentationEditor = {
     visibleHost,
     getActiveEditor: vi.fn(() => (presenting ? editor : null)),
+    getHeaderFooterSession: vi.fn(() => null),
     computeCaretLayoutRect: vi.fn(() => ({ x: 75, y: 40, height: 10, pageIndex: 0 })),
     denormalizeClientPoint: vi.fn((x, y) => ({ x: x + 1, y: y + 2 })),
     hitTest: vi.fn(() => ({ pos: 5 })),
@@ -215,6 +216,86 @@ describe('VerticalNavigation', () => {
     const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
     expect(handled).toBe(false);
     expect(view.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('moves selection on ArrowDown in header/footer surfaces when pointer hit testing misses', () => {
+    const page = document.createElement('div');
+    page.className = DOM_CLASS_NAMES.PAGE;
+    page.dataset.pageIndex = '0';
+
+    const headerSurface = document.createElement('div');
+    headerSurface.className = 'superdoc-page-header';
+    page.appendChild(headerSurface);
+
+    const fragment = document.createElement('div');
+    fragment.className = DOM_CLASS_NAMES.FRAGMENT;
+    headerSurface.appendChild(fragment);
+
+    const line1 = document.createElement('div');
+    line1.className = DOM_CLASS_NAMES.LINE;
+    line1.dataset.pmStart = '1';
+    line1.dataset.pmEnd = '6';
+    fragment.appendChild(line1);
+
+    const line2 = document.createElement('div');
+    line2.className = DOM_CLASS_NAMES.LINE;
+    line2.dataset.pmStart = '10';
+    line2.dataset.pmEnd = '14';
+    fragment.appendChild(line2);
+
+    vi.spyOn(line1, 'getBoundingClientRect').mockReturnValue({
+      top: 10,
+      bottom: 30,
+      left: 20,
+      right: 220,
+      width: 200,
+      height: 20,
+      x: 20,
+      y: 10,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(line2, 'getBoundingClientRect').mockReturnValue({
+      top: 40,
+      bottom: 60,
+      left: 20,
+      right: 220,
+      width: 200,
+      height: 20,
+      x: 20,
+      y: 40,
+      toJSON: () => ({}),
+    });
+
+    document.elementsFromPoint = vi.fn(() => []);
+
+    const visibleHost = document.createElement('div');
+    visibleHost.appendChild(page);
+    document.body.appendChild(visibleHost);
+
+    const { plugin, view, presentationEditor } = createEnvironment({
+      overrides: {
+        presentationEditor: {
+          visibleHost,
+          getHeaderFooterSession: vi.fn(() => ({ session: { mode: 'header', pageIndex: 0 } })),
+          hitTest: vi.fn(() => ({ pos: 12 })),
+          denormalizeClientPoint: vi.fn((x, y, _pageIndex, height) => ({
+            x: x + 1,
+            y: y + 2,
+            height: height ?? 10,
+          })),
+          computeCaretLayoutRect: vi.fn(() => ({ x: 75, y: 20, height: 10, pageIndex: 0 })),
+        },
+        editor: {
+          options: { isHeaderOrFooter: true, headerFooterType: 'header', isHeadless: false },
+        },
+      },
+    });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(presentationEditor.hitTest).toHaveBeenCalled();
+    expect(view.state.selection.head).toBe(12);
   });
 
   it('moves selection on ArrowDown and sets goalX on first move', () => {

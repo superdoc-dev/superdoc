@@ -5196,6 +5196,12 @@ describe('DomPainter', () => {
       }
     });
     expect(foundBehindDoc).toBe(true);
+
+    const behindDocEl = Array.from(pageEl?.querySelectorAll(':scope > .superdoc-fragment') ?? []).find(
+      (frag) => (frag as HTMLElement).dataset.behindDocSection === 'header',
+    ) as HTMLElement | undefined;
+    expect(behindDocEl?.style.pointerEvents).toBe('none');
+    expect(behindDocEl?.style.zIndex).toBe('0');
   });
 
   it('renders header WordArt watermarks behind page content even when behindDoc is false in OOXML', () => {

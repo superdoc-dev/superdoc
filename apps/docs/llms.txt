@@ -46,8 +46,8 @@ npm install @superdoc-dev/sdk
 ## Layer model (use the right surface)
 
 - **Document API** (`editor.doc.*`): request/response document operations: comments, tracked changes, formatting, insert/replace. Same shape on server, client, and AI agents. Use for any document mutation.
-- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, review panel, selection, viewport, document controls. **Use for custom React UI**: not `superdoc.activeEditor.commands.*`.
-- **Built-in modules** (`modules/*`): SuperDoc renders the UI. Use when the built-in look is fine.
+- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, review panel, selection, viewport, document controls. For font controls, use `useSuperDocCommand`, `useSuperDocFontOptions`, `useSuperDocFontSizeOptions`, and `ui.toolbar.execute(...)`. **Use for custom React UI**: not `superdoc.activeEditor.commands.*`.
+- **Built-in modules** (`modules/*`): SuperDoc renders the UI. Use when the built-in look is fine. The built-in font family control is editable and preserves custom typed font names.
 
 ## Packages
 

@@ -209,7 +209,7 @@ describe('DocumentFontController', () => {
     flushMicrotasks();
 
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
-    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Verdana');
+    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(onDocumentFontConfigApplied).not.toHaveBeenCalled();
     expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
   });

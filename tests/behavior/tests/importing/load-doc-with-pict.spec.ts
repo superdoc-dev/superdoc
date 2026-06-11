@@ -7,7 +7,7 @@ import { assertDocumentApiReady, getDocumentText } from '../../helpers/document-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/fldchar/sd-1558-fld-char-issue.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test.use({ config: { toolbar: 'full', comments: 'off' } });
 

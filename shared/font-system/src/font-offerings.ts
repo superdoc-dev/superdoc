@@ -26,7 +26,8 @@ export type OfferingClass =
   | 'default' // metric_safe + bundled: safe to advertise as a normal default toolbar option
   | 'qualified' // bundled and renderable, but with fidelity caveats (visual_only / near_metric), e.g. Georgia
   | 'category_fallback' // a usable family fallback, not a faithful clone, e.g. Calibri Light -> Carlito
-  | 'requires_asset' // a candidate exists, but SuperDoc does not bundle its asset yet, e.g. Arial Narrow
+  | 'supported_alias' // renderable duplicate name, but not a built-in picker choice, e.g. Arial MT -> Arial
+  | 'requires_asset' // a candidate exists, but SuperDoc does not bundle its asset yet, e.g. Arial Rounded MT Bold
   | 'customer_supplied' // no open substitute; the real font must come from the customer, e.g. Aptos
   | 'preserve_only'; // keep the name, never a default option, e.g. Cambria Math
 
@@ -51,20 +52,30 @@ export interface FontOffering {
 }
 
 const BUNDLED_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
+const SUPPORTED_ALIAS_FAMILIES: ReadonlySet<string> = new Set(['Arial MT', 'Courier', 'Times']);
 const ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES: ReadonlySet<string> = new Set([
+  'Arial Black',
+  'Arial Narrow',
   'Baskerville Old Face',
+  'Bookman Old Style',
   'Brush Script MT',
+  'Century',
+  'Century Gothic',
   'Cooper Black',
   'Comic Sans MS',
   'Garamond',
   'Georgia',
+  'Gill Sans MT Condensed',
   'Lucida Console',
+  'Segoe UI',
   'Tahoma',
   'Trebuchet MS',
+  'Verdana',
 ]);
 
 /** Classify one evidence row by its policy action, verdict, and whether its target is bundled. */
 function classifyOffering(
+  logicalFamily: string,
   policyAction: (typeof SUBSTITUTION_EVIDENCE)[number]['policyAction'],
   verdict: SubstituteVerdict,
   physicalFamily: string | null,
@@ -72,6 +83,7 @@ function classifyOffering(
 ): OfferingClass {
   if (policyAction === 'preserve_only') return 'preserve_only';
   if (policyAction === 'customer_supplied' || physicalFamily == null) return 'customer_supplied';
+  if (bundled && SUPPORTED_ALIAS_FAMILIES.has(logicalFamily)) return 'supported_alias';
   if (policyAction === 'category_fallback') return 'category_fallback';
   // policyAction === 'substitute' from here.
   if (!bundled) return 'requires_asset'; // a clone exists but SuperDoc does not ship it yet
@@ -85,7 +97,7 @@ function deriveOfferings(): readonly FontOffering[] {
       logicalFamily: row.logicalFamily,
       physicalFamily: row.physicalFamily,
       generic: row.generic,
-      offering: classifyOffering(row.policyAction, row.verdict, row.physicalFamily, bundled),
+      offering: classifyOffering(row.logicalFamily, row.policyAction, row.verdict, row.physicalFamily, bundled),
       bundled,
       verdict: row.verdict,
       evidenceId: row.evidenceId,
@@ -102,10 +114,14 @@ function compareLogicalFamily(a: FontOffering, b: FontOffering): number {
 }
 
 /**
- * The metric-safe, bundled-backed offerings safe to treat as clean defaults, sorted by logical family.
- * Excludes qualified rows (Cambria, Cooper Black, Georgia, Baskerville Old Face), category fallbacks
- * (Calibri Light, Tahoma, Trebuchet MS, Garamond, Comic Sans MS, Brush Script MT, Lucida Console),
- * and not-yet-bundled candidates.
+ * The metric-safe, bundled-backed offerings safe to treat as clean defaults, sorted by logical
+ * family. Excludes redundant aliases even when they are renderable; those still resolve for
+ * documents through the resolver.
+ * Excludes qualified rows (Arial Black, Arial Narrow, Cambria, Century, Century Gothic,
+ * Century Schoolbook, Cooper Black, Georgia, Baskerville Old Face, Bookman Old Style, ITC Bookman),
+ * category fallbacks (Calibri Light, Tahoma, Trebuchet MS, Garamond, Comic Sans MS, Brush Script MT,
+ * Gill Sans MT Condensed, Lucida Console, Consolas, Verdana, Segoe UI), supported aliases
+ * (Arial MT, Courier, Times), and not-yet-bundled candidates.
  */
 export function getDefaultFontOfferings(): FontOffering[] {
   return FONT_OFFERINGS.filter((o) => o.offering === 'default').sort(compareLogicalFamily);

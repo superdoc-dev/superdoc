@@ -6,7 +6,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/layout/toc-with-heading2.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 /**
  * Reads every TOC entry's title text from the document.

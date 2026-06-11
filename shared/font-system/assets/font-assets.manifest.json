@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "spdxExpression": "OFL-1.1 AND Apache-2.0",
-  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09",
+  "spdxExpression": "OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0",
+  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09; C059 and Liberation Sans Narrow added from legal-reviewed asset package, 2026-06-09; Arial Black and PT Sans Narrow added from DocFonts Google Fonts provenance, 2026-06-10; TeX Gyre Bonum added from CTAN TeX Gyre provenance, 2026-06-10; Inconsolata SemiExpanded added from DocFonts Google Fonts provenance, 2026-06-10; URW Gothic and Selawik added from DocFonts corpus provenance, 2026-06-10",
   "families": [
     {
       "family": "Carlito",
@@ -116,6 +116,43 @@
       ]
     },
     {
+      "family": "Liberation Sans Narrow",
+      "replaces": ["Arial Narrow"],
+      "license": "GPL-2.0-only WITH Font-exception-2.0",
+      "licenseFiles": ["GPL-2.0.txt"],
+      "version": "Version 1.07.4",
+      "upstreamSource": "github.com/liberationfonts/liberation-fonts 1.07.4 (Narrow faces; not present in OFL 2.x); Corresponding Source per GPL-2.0 sec. 3",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2010 Oracle and/or its affiliates",
+      "trademarkNotice": "Liberation is a trademark of Red Hat, Inc. registered in the U.S. and other countries",
+      "faces": [
+        {
+          "file": "LiberationSansNarrow-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "3bf69ce90bb6f70b4fdf1eb3bbd927e25a24793b1a5834d8b642385b4cc5692f"
+        },
+        {
+          "file": "LiberationSansNarrow-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "2237549e3a7cb3ab5c269047c74a7d33dc7157d6caca088f1546d7252e9aafb7"
+        },
+        {
+          "file": "LiberationSansNarrow-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "16333c2b5d676a039373ee9f62103e6ed2a39b57c535d8a51451f674c8732a5e"
+        },
+        {
+          "file": "LiberationSansNarrow-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "005a0668a28be4d2a7d5661d70daab614c9a929dd567fd71c0fbe78fd735bdc6"
+        }
+      ]
+    },
+    {
       "family": "Liberation Serif",
       "replaces": ["Times New Roman"],
       "license": "OFL-1.1",
@@ -209,6 +246,121 @@
           "weight": "normal",
           "style": "normal",
           "sha256": "66c6d1e052b6553371f29d21bfee798bb3c2238f51b54a89fe50d4234db348b1"
+        }
+      ]
+    },
+    {
+      "family": "Archivo Black",
+      "replaces": ["Arial Black"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.006",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/archivoblack",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2017 The Archivo Black Project Authors (https://github.com/Omnibus-Type/ArchivoBlack).",
+      "trademarkNotice": null,
+      "sourceFile": {
+        "file": "ArchivoBlack-Regular.ttf",
+        "sha256": "dd9a89a019b4849f66ab75455fe7bdf931311042cbb0f0f97acc061539703180"
+      },
+      "faces": [
+        {
+          "file": "ArchivoBlack-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "a4db2d9e20b4f660e37d512dc63b733c094c8a241f012dee2d54aea8dbb78f54"
+        }
+      ]
+    },
+    {
+      "family": "C059",
+      "replaces": ["Century", "Century Schoolbook"],
+      "license": "AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817",
+      "licenseFiles": ["AGPL-3.0.txt"],
+      "version": "Version 1.00",
+      "upstreamSource": "github.com/ArtifexSoftware/urw-base35-fonts (C059, unmodified); Corresponding Source per AGPL-3.0 sec. 6(d)",
+      "reservedFontName": null,
+      "copyrightNotice": "(URW)++,Copyright 2014 by (URW)++ Design & Development",
+      "trademarkNotice": null,
+      "faces": [
+        {
+          "file": "C059-Roman.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "98d7ad51c9cd4d3b99b5f2db5c1f0b2b5d001f0602ef217cc8f92e579ea14945"
+        },
+        {
+          "file": "C059-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "bc1f06f00e81f2220dbe9350ae1229bc56245783b15766e5a58c1f1635614139"
+        },
+        {
+          "file": "C059-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "66c0bf50135076be52166c79cd84d9cde97a8949ba21a16ac9495d0d4b2f3113"
+        },
+        {
+          "file": "C059-BdIta.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "6a5c6137882467b1f59ecabcceeec1c027942dfe6470c547e799551587c43bb3"
+        }
+      ]
+    },
+    {
+      "family": "URW Gothic",
+      "replaces": ["Century Gothic"],
+      "license": "AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817",
+      "licenseFiles": ["AGPL-3.0.txt"],
+      "version": "Version 1.00",
+      "upstreamSource": "github.com/ArtifexSoftware/urw-base35-fonts (URW Gothic, unmodified); Corresponding Source per AGPL-3.0 sec. 6(d)",
+      "reservedFontName": null,
+      "copyrightNotice": "(URW)++,Copyright 2014 by (URW)++ Design & Development",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "URWGothic-Book.otf",
+          "sha256": "04318316cee29950805110c9c8949eea189ef5575132881f4d4d7e03e5299903"
+        },
+        {
+          "file": "URWGothic-Demi.otf",
+          "sha256": "5b009410cf5231dcb1e45b155c1afedcfc63d82042fd8c414d0dd7705c9fbbae"
+        },
+        {
+          "file": "URWGothic-BookOblique.otf",
+          "sha256": "ec4e947734950fd344918e560bc8ad0c5d8b17d0ab4853988824f13b9f77e53f"
+        },
+        {
+          "file": "URWGothic-DemiOblique.otf",
+          "sha256": "d57abaa6d40718cfbf735ad50080d0b095e7194e451992e02786a7c0113db35c"
+        }
+      ],
+      "faces": [
+        {
+          "file": "URWGothic-Book.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "27afe1c2d046a74797ff436c7162c9c64d7ed888af550b20ce6d36bc8cd69258"
+        },
+        {
+          "file": "URWGothic-Demi.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "9258ca6eae59d3df23a4f34af9abd806b15b962ac11b546a9bafac733c3e492a"
+        },
+        {
+          "file": "URWGothic-BookOblique.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "c843b8fe2b56948c366335b8bff1c3180b0c9bf2ffa7e21903458432d39ff806"
+        },
+        {
+          "file": "URWGothic-DemiOblique.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "fb292fed0e0d8005c99826be1967c278f7ad2bea0d31735e16f3ccb2b2ed51e8"
         }
       ]
     },
@@ -439,6 +591,41 @@
       ]
     },
     {
+      "family": "Selawik",
+      "replaces": ["Segoe UI"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.01",
+      "upstreamSource": "github.com/microsoft/Selawik release 1.01",
+      "reservedFontName": "Selawik",
+      "copyrightNotice": "© 2015 Microsoft Corporation (www.microsoft.com), with Reserved Font Name \"Selawik\". Selawik is a trademark of Microsoft Corporation in the United States and/or other countries.",
+      "trademarkNotice": "Selawik is a trademark of the Microsoft group of companies.",
+      "sourceFiles": [
+        {
+          "file": "selawk.ttf",
+          "sha256": "e9d98518d8ac2817782a9a382430463a2e0793ea68350b695bb727d9a830ee1c"
+        },
+        {
+          "file": "selawkb.ttf",
+          "sha256": "f0db5e174a90e0956ad7d2844bdca1d5e6da92ec65b2c04e57ba9b180668c904"
+        }
+      ],
+      "faces": [
+        {
+          "file": "Selawik-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "12fe84efc16ae0d3196ccf0f6a84bcc916a05c6fc1a9d5ff9d710a384c525a93"
+        },
+        {
+          "file": "Selawik-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "946fc97e8d2fec1d4b183b5e8653e506bd4d045b529d797a7e3d56cd6a7ee744"
+        }
+      ]
+    },
+    {
       "family": "Noto Sans Mono",
       "replaces": ["Lucida Console"],
       "license": "OFL-1.1",
@@ -468,6 +655,41 @@
           "weight": "bold",
           "style": "normal",
           "sha256": "2f1dd33ccc68b2c455479ef2f09920b9d7728b3abacc591c8481f9c7472664b4"
+        }
+      ]
+    },
+    {
+      "family": "Inconsolata SemiExpanded",
+      "replaces": ["Consolas"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "3.001",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/inconsolata/static",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "Inconsolata-SemiExpandedRegular.ttf",
+          "sha256": "067b9f8aa2f00e301513f92e80e31c5ba670b4b401273d0ae9c0078dd83bc354"
+        },
+        {
+          "file": "Inconsolata-SemiExpandedBold.ttf",
+          "sha256": "05ba7a06a4da343ebad20a46c290202494c39d41c83b9acd941306722c6528b0"
+        }
+      ],
+      "faces": [
+        {
+          "file": "InconsolataSemiExpanded-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "168feaeacc8c08f9c7b0b70d57e93d9cfa960c5b295dbf4f7c25d136b9bd2a9a"
+        },
+        {
+          "file": "InconsolataSemiExpanded-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "a42613d2889857b5ac5b5f3ce8876f63991d695269fbeb3f38ffebbb4ed18d33"
         }
       ]
     },
@@ -523,6 +745,96 @@
           "weight": "bold",
           "style": "italic",
           "sha256": "9c2d39693376aee4d0f93f51ba2e720c69441d1b66fdd2f6a77f13600c5f6691"
+        }
+      ]
+    },
+    {
+      "family": "PT Sans Narrow",
+      "replaces": ["Gill Sans MT Condensed"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "2.003W OFL",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsansnarrow",
+      "reservedFontName": "PT Sans, PT Serif, ParaType",
+      "copyrightNotice": "Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names \"PT Sans\", \"PT Serif\" and \"ParaType\".",
+      "trademarkNotice": "PT Sans is a trademark of the ParaType Ltd.",
+      "sourceFiles": [
+        {
+          "file": "PT_Sans-Narrow-Web-Regular.ttf",
+          "sha256": "4102edda03059163771869d258df54ac8563c408fa6e9ef75b2ddc85eabea6f4"
+        },
+        {
+          "file": "PT_Sans-Narrow-Web-Bold.ttf",
+          "sha256": "e69d83bcf5bd647892b4e2b22f5098dabd55c989413513197722fc156fb9f00e"
+        }
+      ],
+      "faces": [
+        {
+          "file": "PTSansNarrow-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "f15f7662587d575f0aafa4b987c37f925a897d416b801857f0a2c03dfd2a8d92"
+        },
+        {
+          "file": "PTSansNarrow-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "db2d67222555640591ce4a38ce8483c96ac310b70e195a6c279d99a09de34e8d"
+        }
+      ]
+    },
+    {
+      "family": "TeX Gyre Bonum",
+      "replaces": ["Bookman Old Style"],
+      "license": "LicenseRef-GUST-Font-License-1.0",
+      "licenseFiles": ["GUST-Font-License-1.0.txt"],
+      "version": "2.004",
+      "upstreamSource": "CTAN fonts/tex-gyre/opentype, TeX Gyre Bonum OTF sources",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2006, 2009 for TeX Gyre extensions by B. Jackowski and J.M. Nowacki (on behalf of TeX users groups).",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "texgyrebonum-regular.otf",
+          "sha256": "8ad5a53ae61d710fe1773f4ecc7fdf6dde7df1df59faa4492a24def95077d6b3"
+        },
+        {
+          "file": "texgyrebonum-bold.otf",
+          "sha256": "173710158270252ec1ddd5e69a07fc71853680c7188d67a84d794a465a4dff81"
+        },
+        {
+          "file": "texgyrebonum-italic.otf",
+          "sha256": "518836a0e5bd71f644ae131185be53b04fadb30ef7dbdc483deb5f69bd1fe47d"
+        },
+        {
+          "file": "texgyrebonum-bolditalic.otf",
+          "sha256": "bd037941d21149ea0d650286537a3266fadfb03f91b4a5a78848ea5781befac9"
+        }
+      ],
+      "faces": [
+        {
+          "file": "TeXGyreBonum-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "290ac608070a4733a7a2965696d0ef109b28052ca213e806b61b835e9f35d00c"
+        },
+        {
+          "file": "TeXGyreBonum-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "54875112cd57f25497802cc3b6b180b565ce5ce82e439f12db1dade7dbc2b20e"
+        },
+        {
+          "file": "TeXGyreBonum-Italic.woff2",
+          "weight": "normal",
+          "style": "italic",
+          "sha256": "89a9f0e2dbdeb2c3f08d8069fc52ea8147ca2b98e33e0c197d4455cf7e9be6fe"
+        },
+        {
+          "file": "TeXGyreBonum-BoldItalic.woff2",
+          "weight": "bold",
+          "style": "italic",
+          "sha256": "a1fc783990dc854f94e72aae17cc11f39612cbf3a88a33b1f6553fd2f7e4205d"
         }
       ]
     }

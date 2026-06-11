@@ -198,6 +198,25 @@ const hashDrawingBlock = (block: DrawingBlock): string => {
     ].join(':');
   }
 
+  if (block.drawingKind === 'textboxShape') {
+    return [
+      'drawing:textbox',
+      hashDrawingGeometry(block.geometry),
+      block.shapeKind ?? '',
+      JSON.stringify(block.fillColor ?? null),
+      JSON.stringify(block.strokeColor ?? null),
+      block.strokeWidth ?? '',
+      JSON.stringify(block.customGeometry ?? null),
+      JSON.stringify(block.lineEnds ?? null),
+      JSON.stringify(block.effectExtent ?? null),
+      JSON.stringify(block.textContent ?? null),
+      block.textAlign ?? '',
+      block.textVerticalAlign ?? '',
+      JSON.stringify(block.textInsets ?? null),
+      block.contentBlocks.map((contentBlock) => `${contentBlock.id}:${hashRuns(contentBlock)}`).join('|'),
+    ].join(':');
+  }
+
   if (block.drawingKind === 'shapeGroup') {
     return [
       'drawing:shapeGroup',

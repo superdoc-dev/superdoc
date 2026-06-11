@@ -918,6 +918,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingWrapper.style.flexShrink = '0';
         drawingWrapper.style.maxWidth = '100%';
         drawingWrapper.style.boxSizing = 'border-box';
+        drawingWrapper.dataset.blockId = (block as DrawingBlock).id;
         applySdtDataset(drawingWrapper, (block as DrawingBlock).attrs as SdtMetadata | undefined);
 
         const drawingInner = doc.createElement('div');
@@ -1134,6 +1135,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingWrapper.style.maxWidth = '100%';
         drawingWrapper.style.boxSizing = 'border-box';
         drawingWrapper.style.zIndex = String(zIndex);
+        drawingWrapper.dataset.blockId = anchoredBlock.id;
         applySdtDataset(drawingWrapper, anchoredBlock.attrs as SdtMetadata | undefined);
 
         const drawingInner = doc.createElement('div');

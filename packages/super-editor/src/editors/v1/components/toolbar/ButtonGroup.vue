@@ -1,14 +1,17 @@
 <script setup>
-import { computed, getCurrentInstance, ref, watch, onBeforeUnmount } from 'vue';
+import { computed, getCurrentInstance, nextTick, ref, watch, onBeforeUnmount } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
 import ToolbarSeparator from './ToolbarSeparator.vue';
 import OverflowMenu from './OverflowMenu.vue';
 import ToolbarDropdown from './ToolbarDropdown.vue';
+import FontFamilyCombobox from './FontFamilyCombobox.vue';
 import SdTooltip from './SdTooltip.vue';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
+import { prepareSelectionForTextInputHandoff } from '@core/selection-state.js';
 
 const emit = defineEmits(['command', 'item-clicked', 'dropdown-update-show']);
 const { proxy } = getCurrentInstance();
+const TOOLBAR_TOOLTIP_AUTO_HIDE_MS = 3000;
 
 const toolbarItemRefs = ref([]);
 const buttonGroupRef = ref(null);
@@ -74,8 +77,10 @@ const getPositionStyle = computed(() => {
 
 const isButton = (item) => item.type === 'button';
 const isDropdown = (item) => item.type === 'dropdown';
+const isFontFamily = (item) => item.type === 'dropdown' && item.name?.value === 'fontFamily';
 const isSeparator = (item) => item.type === 'separator';
 const isOverflow = (item) => item.type === 'overflow';
+const hasNestedOptions = (item) => Boolean(item.nestedOptions?.value?.length);
 
 const getExpanded = (item) => {
   if (!item) return false;
@@ -142,19 +147,22 @@ const handleSplitButtonMainClick = (item) => {
   emit('command', { item: commandItem, argument: null });
 };
 
-const closeDropdowns = () => {
+const closeDropdowns = (exceptItem = null) => {
   const toolbarItems = proxy?.$toolbar?.toolbarItems || [];
   const overflowItems = proxy?.$toolbar?.overflowItems || [];
   const allItems = [...toolbarItems, ...overflowItems];
 
   const itemsToClose = allItems.length ? allItems : props.toolbarItems;
   itemsToClose.forEach((toolbarItem) => {
+    if (toolbarItem === exceptItem) return;
     const shouldCloseOverflow = isOverflow(toolbarItem) && !props.fromOverflow;
     if (isDropdown(toolbarItem) || shouldCloseOverflow) {
       setExpanded(toolbarItem, false);
     }
   });
-  currentItem.value = null;
+  if (!exceptItem || currentItem.value !== exceptItem) {
+    currentItem.value = null;
+  }
 };
 
 const handleSelect = (item, option) => {
@@ -162,6 +170,48 @@ const handleSelect = (item, option) => {
   const value = item.dropdownValueKey.value ? option[item.dropdownValueKey.value] : option.label;
   emit('command', { item, argument: value, option });
   item.selectedValue.value = option.key;
+};
+
+const handleComboboxItemClicked = (item) => {
+  closeDropdowns(item);
+  emit('item-clicked');
+};
+
+const handleComboboxCommand = (payload) => {
+  emit('command', payload);
+};
+
+const waitForFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+const flushPendingToolbarMarks = () => Boolean(proxy?.$toolbar?.flushPendingMarkCommands?.());
+
+const handleEditorTextInputHandoff = () => {
+  flushPendingToolbarMarks();
+  prepareSelectionForTextInputHandoff(proxy?.$toolbar?.activeEditor);
+  focusEditor();
+};
+
+const handleComboboxTabOut = (startIndex, event) => {
+  closeDropdowns();
+  flushPendingToolbarMarks();
+  if (event.shiftKey) {
+    focusAdjacentToolbarControlAfterUpdate(startIndex, -1, () => focusPreviousButtonGroup() || focusEditor());
+  } else {
+    focusAdjacentToolbarControlAfterUpdate(startIndex, 1, true);
+  }
+};
+
+const handleToolbarButtonTabOut = (item, event) => {
+  closeDropdowns();
+  if (item.name.value === 'fontSize' && !event.shiftKey) {
+    handleEditorTextInputHandoff();
+    return;
+  }
+  if (event.shiftKey) {
+    moveToAdjacentToolbarControl(event, -1);
+  } else {
+    moveToAdjacentToolbarControl(event, 1) || focusEditor();
+  }
 };
 
 const dropdownOptions = (item) => {
@@ -205,17 +255,110 @@ const moveToPreviousButton = (e) => {
   }
 };
 
+const focusEditor = () => {
+  const editor = proxy?.$toolbar?.activeEditor;
+  if (editor && typeof editor.focus === 'function') {
+    editor.focus();
+    return true;
+  }
+
+  const editorDom = editor?.view?.dom;
+  if (editorDom instanceof HTMLElement) {
+    editorDom.focus();
+    return true;
+  }
+  return false;
+};
+
+const getToolbarItemFocusTarget = (container) => {
+  if (!(container instanceof HTMLElement)) return null;
+  if (container.classList.contains('sd-disabled')) return null;
+  const target =
+    container.querySelector('input:not([disabled]), textarea:not([disabled]), select:not([disabled])') ||
+    container.querySelector(
+      'button:not([disabled]), [role="button"]:not(.sd-disabled), [tabindex]:not([tabindex="-1"])',
+    );
+  return target;
+};
+
+const getCurrentToolbarItemContainers = () => {
+  if (toolbarItemRefs.value.length) return toolbarItemRefs.value;
+  const group = document.querySelector(`.button-group[data-toolbar-position="${props.position}"]`);
+  if (!group) return [];
+  return Array.from(group.querySelectorAll(':scope > .sd-toolbar-item-ctn'));
+};
+
+const focusToolbarControlFromIndex = (startIndex, direction) => {
+  if (startIndex < 0) return false;
+  const containers = getCurrentToolbarItemContainers();
+
+  let index = startIndex + direction;
+  while (index >= 0 && index < containers.length) {
+    const container = containers[index];
+    const target = getToolbarItemFocusTarget(container);
+    if (target instanceof HTMLElement) {
+      containers[startIndex]?.setAttribute('tabindex', '-1');
+      container.setAttribute('tabindex', '0');
+      target.focus();
+      return true;
+    }
+    index += direction;
+  }
+
+  return false;
+};
+
+const focusPreviousButtonGroup = () => {
+  const previousButtonGroup = buttonGroupRef.value?.previousElementSibling;
+  if (previousButtonGroup instanceof HTMLElement) {
+    previousButtonGroup.setAttribute('tabindex', '0');
+    previousButtonGroup.focus();
+    return true;
+  }
+  return false;
+};
+
+const focusAdjacentToolbarControlAfterUpdate = async (startIndex, direction, fallback = false) => {
+  await nextTick();
+  await waitForFrame();
+  if (focusToolbarControlFromIndex(startIndex, direction)) {
+    return;
+  }
+  if (typeof fallback === 'function') {
+    fallback();
+    return;
+  }
+  if (fallback) {
+    focusEditor();
+  }
+};
+
+const moveToAdjacentToolbarControl = (event, direction) => {
+  const current = event.target.closest('.sd-toolbar-item-ctn');
+  if (!(current instanceof HTMLElement)) return false;
+
+  let candidate = direction > 0 ? current.nextElementSibling : current.previousElementSibling;
+  while (candidate) {
+    const target = getToolbarItemFocusTarget(candidate);
+    if (target instanceof HTMLElement) {
+      current.setAttribute('tabindex', '-1');
+      candidate.setAttribute('tabindex', '0');
+      target.focus();
+      return true;
+    }
+    candidate = direction > 0 ? candidate.nextElementSibling : candidate.previousElementSibling;
+  }
+
+  return false;
+};
+
 const moveToNextButtonGroup = (e) => {
   const nextButtonGroup = e.target.closest('.button-group').nextElementSibling;
   if (nextButtonGroup) {
     nextButtonGroup.setAttribute('tabindex', '0');
     nextButtonGroup.focus();
   } else {
-    // Move to the editor
-    const editor = document.querySelector('.ProseMirror');
-    if (editor) {
-      editor.focus();
-    }
+    focusEditor();
   }
 };
 
@@ -244,9 +387,9 @@ const activateToolbarItem = (item) => {
 // Set tabindex to -1 for all other buttons
 const handleKeyDown = (e, item) => {
   const isTypingField = e.target.nodeName === 'INPUT' || e.target.nodeName === 'TEXTAREA';
-  const isTypingToolbarItem = item.name.value === 'fontSize';
-  // If the user is typing in a field or textarea, and the toolbar item is a font size,
-  // don't prevent the default behavior. Allow normal typing behavior.
+  const isTypingToolbarItem = item.name.value === 'fontSize' || item.name.value === 'fontFamily';
+  // When typing in a font input (size or the family combobox), let the field own its
+  // keyboard (Enter/Tab/Escape/Space/arrows) instead of the roving-tabindex handler.
   if (isTypingField && isTypingToolbarItem) {
     return;
   }
@@ -316,7 +459,7 @@ const handleDocumentPointerDown = (event) => {
 
   // Dropdown content is teleported outside the toolbar group.
   // Treat menu clicks as "inside" so option clicks do not close before selection.
-  if (target.closest('.sd-toolbar-dropdown-menu')) return;
+  if (target.closest('.sd-toolbar-dropdown-menu, .sd-font-combobox__listbox')) return;
   if (buttonGroupRef.value?.contains(target)) return;
 
   closeDropdowns();
@@ -344,7 +487,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div :style="getPositionStyle" class="button-group" role="group" @focus="handleFocus" ref="buttonGroupRef">
+  <div
+    :style="getPositionStyle"
+    class="button-group"
+    role="group"
+    @focus="handleFocus"
+    ref="buttonGroupRef"
+    :data-toolbar-position="props.position"
+  >
     <div
       v-for="(item, index) in toolbarItems"
       :key="item.id.value"
@@ -362,9 +512,33 @@ onBeforeUnmount(() => {
       <!-- toolbar separator -->
       <ToolbarSeparator v-if="isSeparator(item)" style="width: 20px" />
 
+      <SdTooltip
+        v-if="isFontFamily(item) && hasNestedOptions(item)"
+        trigger="hover"
+        :disabled="!item.tooltip?.value"
+        :auto-hide-duration="TOOLBAR_TOOLTIP_AUTO_HIDE_MS"
+        :content-style="{ fontFamily: props.uiFontFamily }"
+      >
+        <template #trigger>
+          <FontFamilyCombobox
+            :item="item"
+            :ui-font-family="props.uiFontFamily"
+            class="sd-toolbar-button sd-editor-toolbar-dropdown"
+            @command="handleComboboxCommand"
+            @item-clicked="handleComboboxItemClicked(item)"
+            @tab-out="handleComboboxTabOut(index, $event)"
+            @editor-handoff="handleEditorTextInputHandoff"
+          />
+        </template>
+        <div>
+          {{ item.tooltip }}
+          <span v-if="item.disabled.value">(disabled)</span>
+        </div>
+      </SdTooltip>
+
       <!-- Toolbar button -->
       <ToolbarDropdown
-        v-if="isDropdown(item) && item.nestedOptions?.value?.length"
+        v-else-if="isDropdown(item) && hasNestedOptions(item)"
         :options="dropdownOptions(item)"
         :disabled="item.disabled.value"
         :show="getExpanded(item)"
@@ -387,6 +561,7 @@ onBeforeUnmount(() => {
           <SdTooltip
             trigger="hover"
             :disabled="!item.tooltip?.value"
+            :auto-hide-duration="TOOLBAR_TOOLTIP_AUTO_HIDE_MS"
             :content-style="{ fontFamily: props.uiFontFamily }"
           >
             <template #trigger>
@@ -396,6 +571,7 @@ onBeforeUnmount(() => {
                 :allow-enter-propagation="true"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
                 @mainClick="handleSplitButtonMainClick(item)"
+                @tabOut="handleToolbarButtonTabOut(item, $event)"
               />
             </template>
             <div>
@@ -410,6 +586,7 @@ onBeforeUnmount(() => {
         trigger="hover"
         v-else-if="isButton(item)"
         class="sd-editor-toolbar-tooltip"
+        :auto-hide-duration="TOOLBAR_TOOLTIP_AUTO_HIDE_MS"
         :content-style="{ fontFamily: props.uiFontFamily }"
       >
         <template #trigger>

@@ -5,6 +5,7 @@ import type {
   ContentControlsSlice,
   DocumentSlice,
   FontFamilyOption,
+  FontSizeOption,
   TrackChangesSlice,
   SelectionSlice,
   ToolbarSnapshotSlice,
@@ -35,6 +36,7 @@ const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
 const EMPTY_DOCUMENT: DocumentSlice = { ready: false, mode: null, dirty: false };
 
 const EMPTY_FONT_OPTIONS: FontFamilyOption[] = [];
+const EMPTY_FONT_SIZE_OPTIONS: FontSizeOption[] = [];
 
 /**
  * Subscribe to the current selection slice.
@@ -150,6 +152,11 @@ export function useSuperDocZoom(): ZoomSlice & {
 /** Subscribe to the final font-family picker options for custom toolbar UIs. */
 export function useSuperDocFontOptions(): FontFamilyOption[] {
   return useSuperDocSlice((ui) => ui.select((state) => state.fonts.options, shallowEqual), EMPTY_FONT_OPTIONS);
+}
+
+/** Subscribe to default font-size picker options for custom toolbar UIs. */
+export function useSuperDocFontSizeOptions(): FontSizeOption[] {
+  return useSuperDocSlice((ui) => ui.select((state) => state.fonts.sizeOptions, shallowEqual), EMPTY_FONT_SIZE_OPTIONS);
 }
 
 const FALLBACK_COMMAND_STATE: UIToolbarCommandState = {

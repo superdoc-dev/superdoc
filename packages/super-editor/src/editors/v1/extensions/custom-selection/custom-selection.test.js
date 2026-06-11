@@ -337,6 +337,26 @@ describe('CustomSelection plugin', () => {
     expect(view.state.doc.textBetween(firstDeco.from, firstDeco.to)).toBe('planet');
   });
 
+  it('clears preserved selection when the editor selection moves without custom selection metadata', () => {
+    const { view } = createEnvironment();
+
+    view.dispatch(
+      view.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection: view.state.selection,
+        showVisualSelection: true,
+      }),
+    );
+
+    expect(CustomSelectionPluginKey.getState(view.state).preservedSelection).not.toBeNull();
+
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 7)));
+
+    const focusState = CustomSelectionPluginKey.getState(view.state);
+    expect(focusState.preservedSelection).toBeNull();
+    expect(focusState.showVisualSelection).toBe(false);
+  });
+
   it('keeps preserved text selections inclusive when inserting exactly at the left edge', () => {
     const { plugin, view } = createEnvironment();
 

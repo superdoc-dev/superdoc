@@ -1,5 +1,5 @@
 /**
- * One-shot screenshot capture for a single .docx, mirroring layout:export-one.
+ * One-shot screenshot capture for a single .docx.
  *
  * Boots the visual harness vite server, drives chromium directly (no test
  * runner), writes one PNG per rendered page plus a metadata.json alongside.
@@ -36,7 +36,7 @@ function printHelp(): void {
   console.log(
     [
       'Usage:',
-      '  pnpm layout:screenshot-one -- --input <path> --output <dir> [options]',
+      '  pnpm --dir tests/visual screenshot-one -- --input <path> --output <dir> [options]',
       '',
       'Options:',
       '  --input <path>      Absolute or relative path to a single .docx file',
@@ -327,7 +327,7 @@ async function main(): Promise<void> {
 
     await fs.writeFile(path.join(outputDir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 
-    console.log(`[layout:screenshot-one] ${inputPath} -> ${outputDir} (${captured} page${captured === 1 ? '' : 's'})`);
+    console.log(`[screenshot-one] ${inputPath} -> ${outputDir} (${captured} page${captured === 1 ? '' : 's'})`);
   } finally {
     await browser.close().catch(() => {});
     await killHarness(harness);
@@ -336,6 +336,6 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[layout:screenshot-one] ${message}`);
+  console.error(`[screenshot-one] ${message}`);
   process.exitCode = 1;
 });

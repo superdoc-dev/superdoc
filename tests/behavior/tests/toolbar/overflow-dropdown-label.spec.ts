@@ -34,7 +34,7 @@ test('font family applies and label updates when selected from overflow menu', a
   if (!(await overflowFontFamilyBtn.isVisible())) {
     test.skip();
   }
-  await overflowFontFamilyBtn.click();
+  await overflowFontFamilyBtn.locator('[data-item="btn-fontFamily-toggle"]').click();
 
   await superdoc.waitForStable();
   // Wait for the dropdown options to appear

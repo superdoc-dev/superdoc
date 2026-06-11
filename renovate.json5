@@ -17,8 +17,7 @@
     "**/tests/**",
     "**/__fixtures__/**",
     "demos/**",
-    "examples/**",
-    "devtools/visual-testing/**"
+    "examples/**"
   ],
   "ignoreDeps": [
     "pdfjs-dist",

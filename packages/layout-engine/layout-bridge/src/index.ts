@@ -106,6 +106,8 @@ export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionLogger } from './instrumentation';
+export { hitTestTextboxFragment, resolveTextboxContentHit } from './position-hit.js';
+export type { TextboxHitResult } from './position-hit.js';
 
 // Font Metrics Cache
 export { FontMetricsCache } from './font-metrics-cache';

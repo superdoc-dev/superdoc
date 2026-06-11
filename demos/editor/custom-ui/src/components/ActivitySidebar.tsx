@@ -10,6 +10,7 @@ import { CommentComposer } from './CommentComposer';
 import type { DecidedChange, DecidedChangesState } from './useDecidedChanges';
 
 type CommentItem = CommentsListResult['items'][number];
+type SuperDocUIHandle = NonNullable<ReturnType<typeof useSuperDocUI>>;
 
 /**
  * Local merged-feed item. The controller exposes comments and tracked
@@ -20,6 +21,53 @@ type CommentItem = CommentsListResult['items'][number];
 type ActivityItem =
   | { kind: 'comment'; id: string; comment: CommentItem }
   | { kind: 'change'; id: string; change: TrackChangeInfo };
+
+function getEditorScrollContainer(): HTMLElement | null {
+  const canvas = document.querySelector<HTMLElement>('.editor-canvas');
+  let el = canvas?.parentElement ?? null;
+
+  while (el && el !== document.body) {
+    const style = getComputedStyle(el);
+    const overflow = `${style.overflow}${style.overflowY}${style.overflowX}`;
+    if (/(auto|scroll)/.test(overflow) && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+
+  return null;
+}
+
+function scrollRectIntoEditorView(rect: { top: number; height: number }) {
+  const scroller = getEditorScrollContainer();
+  if (!scroller) {
+    window.scrollBy({
+      top: rect.top - window.innerHeight / 2 + rect.height / 2,
+      behavior: 'smooth',
+    });
+    return;
+  }
+
+  const host = scroller.getBoundingClientRect();
+  scroller.scrollTo({
+    top: scroller.scrollTop + rect.top - host.top - host.height / 2 + rect.height / 2,
+    behavior: 'smooth',
+  });
+}
+
+function activateCommentFromSidebar(ui: SuperDocUIHandle, commentId: string) {
+  const rect = ui.viewport.getRect({
+    target: { kind: 'entity', entityType: 'comment', entityId: commentId },
+  });
+
+  if (rect.success) {
+    scrollRectIntoEditorView(rect.rect);
+    ui.comments.setActive(commentId);
+    return;
+  }
+
+  ui.comments.scrollTo(commentId);
+}
 
 interface Props {
   /** When true, render the inline composer at the top of the panel. */
@@ -184,7 +232,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
               replies={item.kind === 'comment' ? repliesByParent.get(item.id) : undefined}
               onDecideChange={decideChange}
               onClick={() => {
-                if (item.kind === 'comment') ui.comments.scrollTo(item.id);
+                if (item.kind === 'comment') activateCommentFromSidebar(ui, item.id);
                 else ui.trackChanges.scrollTo(item.id);
               }}
             />
@@ -203,7 +251,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
               resolved
               replies={repliesByParent.get(item.id)}
               onDecideChange={decideChange}
-              onClick={() => ui.comments.scrollTo(item.id)}
+              onClick={() => activateCommentFromSidebar(ui, item.id)}
             />
           ))}
           {decidedList.map((entry) => (
@@ -248,7 +296,7 @@ function CommentBody({
   comment: CommentItem;
   resolved: boolean;
   replies?: ActivityItem[];
-  ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
+  ui: SuperDocUIHandle;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');

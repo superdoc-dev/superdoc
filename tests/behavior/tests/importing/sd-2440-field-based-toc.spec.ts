@@ -10,7 +10,7 @@ const DOC_PATH = path.resolve(
   '../../test-data/rendering/sd-2440-field-based-toc-list-of-tables-figures.docx',
 );
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test.use({ config: { toolbar: 'full', comments: 'off' } });
 

@@ -98,7 +98,7 @@ function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
 
 /**
  * Asset gate: a docfonts fallback activates only when SuperDoc actually ships its physical clone. The
- * evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Narrow), so
+ * evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Rounded MT Bold), so
  * `canRenderFamily` keeps an un-shipped candidate OUT of the resolver until its `.woff2` lands. The
  * predicate checks the SUBSTITUTE (physical) family against `bundled-manifest`, matching the package's
  * `getRenderableFallback` contract.
@@ -192,7 +192,7 @@ const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubst
  * `category_fallback`, never `bundled_substitute`. A SEPARATE map and reason keep a lower-fidelity
  * fallback from being mistaken for a clean clone. Same asset gate as {@link deriveBundledSubstitutes};
  * the two partition the renderable fallbacks by `policyAction` (an un-bundled category target, e.g.
- * Consolas -> Inconsolata SemiExpanded, stays inert).
+ * Arial Rounded MT Bold -> Ubuntu, stays inert).
  */
 function deriveCategoryFallbacks(): Readonly<Record<string, string>> {
   const fallbacks: Record<string, string> = {};

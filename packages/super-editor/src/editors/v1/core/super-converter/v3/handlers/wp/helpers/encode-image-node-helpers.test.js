@@ -1268,13 +1268,30 @@ describe('handleImageNode', () => {
     expect(result.attrs.lum).toEqual({ bright: 70000, contrast: -70000 });
   });
 
-  it('does not set grayscale when effect is not present', () => {
+  it('extracts fixed alpha adjustment from a:blip element', () => {
+    const node = makeNode();
+    const graphic = node.elements.find((el) => el.name === 'a:graphic');
+    const graphicData = graphic.elements[0];
+    const pic = graphicData.elements[0];
+    const blipFill = pic.elements[0];
+    const blip = blipFill.elements[0];
+
+    blip.elements = [{ name: 'a:alphaModFix', attributes: { amt: '9000' } }];
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.alphaModFix).toEqual({ amt: 9000 });
+  });
+
+  it('does not set image effects when they are not present', () => {
     const node = makeNode();
     const result = handleImageNode(node, makeParams(), false);
 
     expect(result).not.toBeNull();
     expect(result.attrs.grayscale).toBeUndefined();
     expect(result.attrs.lum).toBeUndefined();
+    expect(result.attrs.alphaModFix).toBeUndefined();
   });
 
   describe('lockAspectRatio / noChangeAspect import defaults', () => {
@@ -2215,7 +2232,7 @@ describe('getVectorShape', () => {
       ],
     });
 
-    it('emits an image part in textContent for an inline w:drawing inside the textbox', () => {
+    it('emits an inline image node inside the textbox paragraph content', () => {
       const graphicData = makeShape();
       const result = getVectorShape({
         params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: docxFixture, filename: 'header1.xml' },
@@ -2224,12 +2241,85 @@ describe('getVectorShape', () => {
         size: { width: 374, height: 41 },
       });
 
+      expect(result?.type).toBe('shapeContainer');
+      const paragraphNodes = result?.content?.[0]?.content || [];
+      const inlineNodes = paragraphNodes.flatMap((paragraph) => paragraph?.content || []);
+      const imageNode = inlineNodes.find((node) => node?.type === 'image');
+      expect(imageNode).toBeTruthy();
+      expect(typeof imageNode?.attrs?.src).toBe('string');
+      expect(imageNode?.attrs?.src.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('DrawingML textbox routing', () => {
+    const makeTxBoxGraphicData = (withTxbxContent) => ({
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            { name: 'wps:spPr', elements: [{ name: 'a:prstGeom', attributes: { prst: 'rect' } }] },
+            { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+            ...(withTxbxContent
+              ? [
+                  {
+                    name: 'wps:txbx',
+                    elements: [{ name: 'w:txbxContent', elements: [{ name: 'w:p', elements: [] }] }],
+                  },
+                ]
+              : []),
+            { name: 'wps:bodyPr', attributes: {} },
+          ],
+        },
+      ],
+    });
+
+    it('routes txBox=1 shape WITH w:txbxContent to shapeContainer', () => {
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData: makeTxBoxGraphicData(true),
+        size: { width: 100, height: 50 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      expect(result?.content?.[0]?.type).toBe('shapeTextbox');
+    });
+
+    it('routes txBox=1 shape WITHOUT prstGeom but WITH w:txbxContent to shapeContainer', () => {
+      const graphicData = {
+        elements: [
+          {
+            name: 'wps:wsp',
+            elements: [
+              { name: 'wps:spPr', elements: [] }, // no prstGeom, no custGeom
+              { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+              { name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [{ name: 'w:p', elements: [] }] }] },
+              { name: 'wps:bodyPr', attributes: {} },
+            ],
+          },
+        ],
+      };
+
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData,
+        size: { width: 100, height: 50 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      expect(result?.content?.[0]?.type).toBe('shapeTextbox');
+    });
+
+    it('routes txBox=1 shape WITHOUT w:txbxContent to vectorShape', () => {
+      const result = getVectorShape({
+        params: { nodes: [], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData: makeTxBoxGraphicData(false),
+        size: { width: 100, height: 50 },
+      });
+
       expect(result?.type).toBe('vectorShape');
-      const parts = result?.attrs?.textContent?.parts || [];
-      const imagePart = parts.find((p) => p.kind === 'image');
-      expect(imagePart).toBeTruthy();
-      expect(typeof imagePart?.src).toBe('string');
-      expect(imagePart?.src.length).toBeGreaterThan(0);
     });
   });
 });

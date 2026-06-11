@@ -26,6 +26,7 @@ import {
   rewindPreviousParagraphTrailing,
   computeParagraphLayoutStartY,
 } from './layout-utils.js';
+import { layoutTextboxContent } from './layout-textbox.js';
 import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, getFragmentZIndex } from '@superdoc/contracts';
 import { createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import type { AnchoredTable } from './anchors.js';
@@ -595,6 +596,10 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
         state.page.fragments.push(fragment);
       } else if (entry.block.kind === 'drawing' && entry.measure.kind === 'drawing') {
+        const contentMeasures =
+          entry.block.drawingKind === 'textboxShape' && typeof remeasureParagraph === 'function'
+            ? layoutTextboxContent(entry.block, remeasureParagraph)
+            : undefined;
         const fragment: DrawingFragment = {
           kind: 'drawing',
           blockId: entry.block.id,
@@ -611,6 +616,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           drawingContentId: entry.block.drawingContentId,
           sourceAnchor: entry.block.sourceAnchor,
         };
+        if (contentMeasures) {
+          (fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] }).contentMeasures = contentMeasures;
+        }
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
         if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
         state.page.fragments.push(fragment);

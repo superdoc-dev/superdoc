@@ -39,6 +39,7 @@ import type {
   FontAssetUrlResolver,
   ListDefinitionsPayload,
   ProofingProvider,
+  SelectionInfo,
   User,
 } from '@superdoc/super-editor';
 
@@ -1558,6 +1559,22 @@ export interface SuperDocCommentsUpdatePayload {
   comment?: Comment;
   /** Per-field change set when the update is a mutation. */
   changes?: Array<{ key: string; commentId: string; fileId?: string | null }>;
+  /**
+   * The Document API selection snapshot captured at the moment a
+   * `'pending'` comment was started, before the pending mark is
+   * inserted (which clears the live DOM selection). Present only on the
+   * `'pending'` event. When it has a `target`, forward it straight to
+   * `ui.comments.createFromCapture(pendingSelection, { text })` to build
+   * the comment from a custom composer without tracking the selection
+   * yourself ahead of the floating-bubble click.
+   *
+   * `null` means the pending comment did not start from an addressable
+   * SuperEditor text selection, or the active editor/selection API was
+   * unavailable. PDF and other non-SuperEditor selections emit `null`.
+   * Empty SuperEditor selections can still yield a `SelectionInfo` with
+   * `target: null`.
+   */
+  pendingSelection?: SelectionInfo | null;
 }
 
 export interface EditorTransactionEvent {

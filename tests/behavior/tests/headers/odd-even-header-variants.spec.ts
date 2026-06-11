@@ -18,7 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 //   - No titlePg, so page 1 uses the default (odd) header.
 const DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/h_f-normal-odd-even.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('odd/even pages render the correct header variant per document page number', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

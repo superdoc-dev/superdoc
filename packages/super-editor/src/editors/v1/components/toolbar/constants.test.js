@@ -5,25 +5,33 @@ describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering 
   it('advertises bundled defaults and selected bundled fallback choices, in alphabetical order', () => {
     expect(TOOLBAR_FONTS.map((f) => f.label)).toEqual([
       'Arial',
+      'Arial Black',
+      'Arial Narrow',
       'Baskerville Old Face',
+      'Bookman Old Style',
       'Brush Script MT',
       'Calibri',
+      'Century',
+      'Century Gothic',
       'Comic Sans MS',
       'Cooper Black',
       'Courier New',
       'Garamond',
       'Georgia',
+      'Gill Sans MT Condensed',
       'Helvetica',
       'Lucida Console',
+      'Segoe UI',
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
   });
 
   it('does not leak non-advertised fonts into the default dropdown', () => {
     const labels = new Set(TOOLBAR_FONTS.map((f) => f.label));
-    for (const name of ['Aptos', 'Cambria', 'Calibri Light', 'Arial Narrow']) {
+    for (const name of ['Aptos', 'Cambria', 'Calibri Light', 'Century Schoolbook', 'Arial MT', 'Courier', 'Times']) {
       expect(labels.has(name)).toBe(false);
     }
   });
@@ -73,20 +81,28 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
       'Apple Chancery',
       'Aptos',
       'Arial',
+      'Arial Black',
+      'Arial Narrow',
       'Bangla MN',
       'Baskerville Old Face',
+      'Bookman Old Style',
       'Brush Script MT',
       'Calibri',
+      'Century',
+      'Century Gothic',
       'Comic Sans MS',
       'Cooper Black',
       'Courier New',
       'Garamond',
       'Georgia',
+      'Gill Sans MT Condensed',
       'Helvetica',
       'Lucida Console',
+      'Segoe UI',
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.filter((o) => o.label === 'Calibri')).toHaveLength(1);
   });

@@ -3,6 +3,46 @@ import { translator, config } from './r-translator.js';
 import * as converterStyles from '../../../../styles.js';
 import * as runPropertiesExport from '../../../../export-helpers/run-properties-export.js';
 
+describe('w:r block hoist', () => {
+  it('hoists shapeContainer block node out of run when all run children are block types', () => {
+    const shapeContainer = {
+      type: 'shapeContainer',
+      attrs: { drawingContent: { name: 'w:drawing' } },
+      content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      marks: [],
+    };
+
+    const runNode = { name: 'w:r', elements: [{ name: 'w:drawing', elements: [] }] };
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [shapeContainer]) },
+      docx: {},
+    };
+
+    const result = translator.encode(params);
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('shapeContainer');
+  });
+
+  it('does not hoist when run children are mixed block and inline', () => {
+    const shapeContainer = { type: 'shapeContainer', attrs: {}, content: [], marks: [] };
+    const textNode = { type: 'text', text: 'hello', marks: [] };
+
+    const runNode = { name: 'w:r', elements: [] };
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [shapeContainer, textNode]) },
+      docx: {},
+    };
+
+    const result = translator.encode(params);
+
+    expect(result?.type).toBe('run');
+  });
+});
+
 describe('w:r r-translator (node)', () => {
   it('exposes correct metadata', () => {
     expect(config.xmlName).toBe('w:r');

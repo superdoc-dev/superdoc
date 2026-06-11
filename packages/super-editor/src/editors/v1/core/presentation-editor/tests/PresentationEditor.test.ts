@@ -1623,6 +1623,17 @@ describe('PresentationEditor', () => {
         document.body.appendChild(container);
       }
     });
+
+    it('returns null for scrollContainer when the window scrolls', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-window-scroll-container',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      expect(editor.scrollContainer).toBeNull();
+    });
   });
 
   describe('setDocumentMode', () => {

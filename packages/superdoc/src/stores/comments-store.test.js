@@ -149,6 +149,11 @@ describe('comments-store', () => {
     setActivePinia(createPinia());
     store = useCommentsStore();
     __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    Object.assign(__mockSuperdoc.activeSelection, {
+      documentId: 'doc-1',
+      source: 'super-editor',
+      selectionBounds: {},
+    });
     groupChangesMock.mockReturnValue([]);
     trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
     trackChangesHelpersMock.enumerateStructuralRowChanges?.mockReturnValue([]);
@@ -280,6 +285,176 @@ describe('comments-store', () => {
     store.setActiveComment(superdoc, null);
     expect(store.activeComment).toBeNull();
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
+  });
+
+  describe('showAddComment pendingSelection (IT-1113)', () => {
+    const makePendingSuperdoc = (
+      selectionInfo,
+      {
+        activeSelection = { documentId: 'doc-1', source: 'super-editor', selectionBounds: {} },
+        editorDocumentId = 'doc-1',
+      } = {},
+    ) => {
+      const insertComment = vi.fn();
+      const current = vi.fn(() => selectionInfo);
+      Object.assign(__mockSuperdoc.activeSelection, activeSelection);
+      return {
+        superdoc: {
+          emit: vi.fn(),
+          config: { isInternal: false },
+          activeEditor: {
+            options: { documentId: editorDocumentId },
+            doc: { selection: { current } },
+            commands: { insertComment },
+          },
+        },
+        insertComment,
+        current,
+      };
+    };
+
+    it('emits the pre-mutation Document API selection snapshot on the pending event', () => {
+      const selectionInfo = {
+        empty: false,
+        target: { kind: 'text', segments: [{ blockId: 'b1', range: { start: 0, end: 5 } }] },
+        activeMarks: [],
+        activeCommentIds: [],
+        activeChangeIds: [],
+      };
+      const { superdoc, current } = makePendingSuperdoc(selectionInfo);
+
+      store.showAddComment(superdoc);
+
+      expect(current).toHaveBeenCalledWith();
+      expect(superdoc.emit).toHaveBeenCalledWith('comments-update', {
+        type: comments_module_events.PENDING,
+        pendingSelection: selectionInfo,
+      });
+    });
+
+    it('emits the pending event before inserting the pending mark', () => {
+      const { superdoc, insertComment } = makePendingSuperdoc({
+        empty: false,
+        target: { kind: 'text', segments: [{ blockId: 'b1', range: { start: 0, end: 1 } }] },
+        activeMarks: [],
+        activeCommentIds: [],
+        activeChangeIds: [],
+      });
+
+      store.showAddComment(superdoc);
+
+      // The snapshot is taken (and emitted) before the pending mark is
+      // inserted — otherwise the captured target could shift.
+      expect(insertComment).toHaveBeenCalled();
+      expect(superdoc.emit.mock.invocationCallOrder[0]).toBeLessThan(insertComment.mock.invocationCallOrder[0]);
+    });
+
+    it('carries a null-target snapshot when the selection has no addressable target', () => {
+      const selectionInfo = { empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] };
+      const { superdoc } = makePendingSuperdoc(selectionInfo);
+
+      store.showAddComment(superdoc);
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toEqual(selectionInfo);
+      expect(payload.pendingSelection.target).toBeNull();
+    });
+
+    it('emits pendingSelection null for a PDF selection even when a DOCX editor is active', () => {
+      const { superdoc, current } = makePendingSuperdoc(
+        {
+          empty: false,
+          target: { kind: 'text', segments: [{ blockId: 'docx-block', range: { start: 0, end: 4 } }] },
+          activeMarks: [],
+          activeCommentIds: [],
+          activeChangeIds: [],
+        },
+        { activeSelection: { documentId: 'pdf-1', source: 'pdf', selectionBounds: {} } },
+      );
+
+      store.showAddComment(superdoc);
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toBeNull();
+      expect(current).not.toHaveBeenCalled();
+    });
+
+    it('emits pendingSelection null when the active editor belongs to a different document', () => {
+      const { superdoc, current } = makePendingSuperdoc(
+        {
+          empty: false,
+          target: { kind: 'text', segments: [{ blockId: 'doc-1-block', range: { start: 0, end: 4 } }] },
+          activeMarks: [],
+          activeCommentIds: [],
+          activeChangeIds: [],
+        },
+        {
+          activeSelection: { documentId: 'doc-2', source: 'super-editor', selectionBounds: {} },
+          editorDocumentId: 'doc-1',
+        },
+      );
+
+      store.showAddComment(superdoc);
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toBeNull();
+      expect(current).not.toHaveBeenCalled();
+    });
+
+    it('emits pendingSelection null when the active editor has no document id', () => {
+      const { superdoc, current } = makePendingSuperdoc(
+        {
+          empty: false,
+          target: { kind: 'text', segments: [{ blockId: 'doc-1-block', range: { start: 0, end: 4 } }] },
+          activeMarks: [],
+          activeCommentIds: [],
+          activeChangeIds: [],
+        },
+        { editorDocumentId: null },
+      );
+
+      store.showAddComment(superdoc);
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toBeNull();
+      expect(current).not.toHaveBeenCalled();
+    });
+
+    it('emits pendingSelection null when the editor doc getter throws', () => {
+      const insertComment = vi.fn();
+      const superdoc = {
+        emit: vi.fn(),
+        config: { isInternal: false },
+        activeEditor: {
+          options: { documentId: 'doc-1' },
+          commands: { insertComment },
+          get doc() {
+            throw new Error('not ready');
+          },
+        },
+      };
+
+      expect(() => store.showAddComment(superdoc)).not.toThrow();
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toBeNull();
+      expect(insertComment).toHaveBeenCalled();
+    });
+
+    it('emits pendingSelection null when there is no active editor', () => {
+      const superdoc = { emit: vi.fn(), config: { isInternal: false }, activeEditor: undefined };
+
+      store.showAddComment(superdoc);
+
+      const [, payload] = superdoc.emit.mock.calls[0];
+      expect(payload.type).toBe(comments_module_events.PENDING);
+      expect(payload.pendingSelection).toBeNull();
+    });
   });
 
   it('preserves the active floating instance when it belongs to the activated thread', () => {

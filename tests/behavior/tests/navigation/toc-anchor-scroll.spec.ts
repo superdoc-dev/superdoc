@@ -6,7 +6,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/layout/toc-with-heading2.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('@behavior SD-2186: clicking TOC link scrolls to heading position', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

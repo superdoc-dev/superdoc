@@ -774,16 +774,58 @@ export interface SmartTagAttrs extends InlineNodeAttributes {
 
 /** Shape container node attributes */
 export interface ShapeContainerAttrs extends BlockNodeAttributes {
-  /** Background color for the shape */
+  /** Background color for the shape (VML fillcolor) */
   fillcolor?: string;
-  /** CSS style string */
+  /** CSS style string (VML geometry) */
   style?: string;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
-  /** @internal Wrapper attributes */
+  /** @internal VML wrapper attributes */
   wrapAttributes?: Record<string, unknown>;
-  /** @internal Attributes storage */
+  /** @internal Anchor positioning data */
+  anchorData?: Record<string, unknown> | null;
+  /** @internal Margin offset for positioned shapes */
+  marginOffset?: { horizontal?: number; top?: number } | null;
+  /** @internal Raw XML attributes storage */
   attributes?: Record<string, unknown>;
+
+  // DrawingML shape geometry
+  /** Preset geometry kind (e.g. 'rect', 'ellipse') */
+  kind?: string | null;
+  /** Display width in pixels */
+  width?: number | null;
+  /** Display height in pixels */
+  height?: number | null;
+  /** Fill color (DrawingML) */
+  fillColor?: string | null;
+  /** Stroke color */
+  strokeColor?: string | null;
+  /** Stroke width in pixels */
+  strokeWidth?: number | null;
+  /** Rotation in degrees */
+  rotation?: number;
+  /** Horizontal flip */
+  flipH?: boolean;
+  /** Vertical flip */
+  flipV?: boolean;
+  /** Text wrap configuration */
+  wrap?: Record<string, unknown> | null;
+  /** Whether the shape is anchored (not inline) */
+  isAnchor?: boolean;
+  /** @internal Original w:drawing XML blob for round-trip export */
+  drawingContent?: Record<string, unknown> | null;
+  /** @internal Original anchor XML attributes */
+  originalAttributes?: Record<string, unknown> | null;
+  /** @internal Effect extent padding */
+  effectExtent?: Record<string, unknown> | null;
+  /** @internal Line end markers */
+  lineEnds?: Record<string, unknown> | null;
+  /** Whether the shape is hidden */
+  hidden?: boolean;
+  /** Whether this shape is a textbox (txBox="1") */
+  isTextBox?: boolean;
+  /** Whether this shape is WordArt */
+  isWordArt?: boolean;
 }
 
 // ============================================

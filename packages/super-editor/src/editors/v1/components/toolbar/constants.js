@@ -3,8 +3,8 @@ import { fontOfferingRenderStack, fontOfferingStack, getBuiltInToolbarFontOfferi
 /**
  * Built-in toolbar font dropdown options, DERIVED from the shared font-offering registry
  * (`@superdoc/font-system`) instead of a hand-maintained list. Bundled clean defaults and explicit
- * qualified choices are advertised; category fallbacks and unbundled candidates are intentionally
- * absent from the static defaults.
+ * qualified/category fallback choices are advertised; unbundled candidates are intentionally absent
+ * from the static defaults.
  *
  * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
  * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that

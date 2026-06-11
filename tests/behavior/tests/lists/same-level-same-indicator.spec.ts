@@ -7,7 +7,7 @@ import { assertDocumentApiReady, listItems } from '../../helpers/document-api.js
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/lists/sd-1658-lists-same-level.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('same-level list indicators remain preserved instead of auto-sequencing (SD-1658)', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

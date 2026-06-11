@@ -26,6 +26,7 @@ const FALLBACK_MAX_DIMENSION = 1000;
 const MIN_IMAGE_DIMENSION = 20;
 
 type ImageFilterSource = Pick<ImageBlock, 'grayscale' | 'gain' | 'blacklevel' | 'lum'>;
+type ImageOpacitySource = Pick<ImageBlock, 'alphaModFix'>;
 
 const clampLumUnit = (value: number): number => {
   return Math.max(-100000, Math.min(100000, value));
@@ -98,6 +99,16 @@ export const buildImageFilters = (source: ImageFilterSource): string[] => {
   }
 
   return filters;
+};
+
+export const resolveImageOpacity = (source: ImageOpacitySource): string | null => {
+  const amt = source.alphaModFix?.amt;
+  if (typeof amt !== 'number' || !Number.isFinite(amt)) {
+    return null;
+  }
+
+  const opacity = Math.max(0, Math.min(100000, amt)) / 100000;
+  return opacity === 1 ? null : String(opacity);
 };
 
 /**
@@ -261,6 +272,10 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
   const filters = buildImageFilters(run);
   if (filters.length > 0) {
     img.style.filter = filters.join(' ');
+  }
+  const opacity = resolveImageOpacity(run);
+  if (opacity != null) {
+    img.style.opacity = opacity;
   }
 
   // Assert PM positions are present for cursor fallback

@@ -42,7 +42,7 @@ const TEXT_BUTTONS = [
 
 export function Toolbar() {
   return (
-    <div role="toolbar">
+    <div role='toolbar'>
       {TEXT_BUTTONS.map((b) => (
         <ToolbarButton key={b.id} id={b.id} label={b.label} title={b.title} />
       ))}
@@ -74,9 +74,12 @@ See the [configurable toolbar example](https://github.com/superdoc-dev/superdoc/
 Some commands take a value. Pass it to `execute()`.
 
 ```tsx
+import { useSuperDocCommand, useSuperDocFontSizeOptions, useSuperDocUI } from 'superdoc/ui/react';
+
 function FontSizePicker() {
   const ui = useSuperDocUI();
   const size = useSuperDocCommand('font-size');
+  const options = useSuperDocFontSizeOptions();
 
   return (
     <select
@@ -84,14 +87,17 @@ function FontSizePicker() {
       disabled={size.disabled}
       onChange={(e) => ui?.commands.get('font-size')?.execute(e.target.value)}
     >
-      <option value="12">12</option>
-      <option value="14">14</option>
-      <option value="16">16</option>
-      <option value="18">18</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
     </select>
   );
 }
 ```
+
+`useSuperDocCommand('font-size').value` is the current value for the active selection. The same pattern works for `font-family`, `text-color`, and other value commands.
 
 ## Font family picker
 
@@ -105,7 +111,12 @@ import type { SelectionCapture } from 'superdoc/ui';
 import { useSuperDocCommand, useSuperDocFontOptions, useSuperDocUI } from 'superdoc/ui/react';
 
 function firstFontName(value: unknown) {
-  return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
+  return typeof value === 'string'
+    ? value
+        .split(',')[0]
+        ?.trim()
+        .replace(/^["']|["']$/g, '') || ''
+    : '';
 }
 
 function FontFamilyPicker() {
@@ -151,7 +162,7 @@ function FontFamilyPicker() {
   return (
     <div ref={menuRef}>
       <button
-        type="button"
+        type='button'
         disabled={font.disabled}
         onMouseDown={(event) => {
           event.preventDefault();
@@ -162,12 +173,12 @@ function FontFamilyPicker() {
         {selectedOption?.label ?? 'Font'}
       </button>
       {open && (
-        <div role="listbox">
+        <div role='listbox'>
           {options.map((option) => (
             <button
               key={option.value}
-              type="button"
-              role="option"
+              type='button'
+              role='option'
               aria-selected={option.value === selectedOption?.value}
               style={{ fontFamily: option.previewFamily }}
               onMouseDown={(event) => {
@@ -190,14 +201,35 @@ When a user picks Calibri, SuperDoc stores and exports Calibri. The preview can 
 
 Avoid native selects for this control. They take browser focus and visually clear the editor selection while the menu is open.
 
+## Interactive UI vs explicit document edits
+
+Use command execution for a toolbar. It preserves the active editor selection and matches the built-in toolbar behavior.
+
+```tsx
+ui?.toolbar.execute('font-family', option.value);
+ui?.toolbar.execute('font-size', option.value);
+```
+
+Use the Document API when your code already has a target and wants one explicit document mutation. Batch related formatting in one `format.apply` call.
+
+```ts
+editor.doc.format.apply({
+  target,
+  inline: {
+    fontFamily: 'Inter',
+    fontSize: 15,
+  },
+});
+```
+
 ## What the hook returns
 
-| Field | Type | Meaning |
-|---|---|---|
-| `active` | `boolean` | The command is "on" for the current selection (cursor is inside bold text). |
-| `disabled` | `boolean` | The command can't run right now (no selection, wrong document mode). |
-| `value` | `unknown` | The command's current value when applicable (font name, size, color). |
-| `source` | `'built-in' \| 'custom'` | Where the command came from. |
+| Field      | Type                     | Meaning                                                                     |
+| ---------- | ------------------------ | --------------------------------------------------------------------------- |
+| `active`   | `boolean`                | The command is "on" for the current selection (cursor is inside bold text). |
+| `disabled` | `boolean`                | The command can't run right now (no selection, wrong document mode).        |
+| `value`    | `unknown`                | The command's current value when applicable (font name, size, color).       |
+| `source`   | `'built-in' \| 'custom'` | Where the command came from.                                                |
 
 `useSuperDocCommand` returns a fallback `{ active: false, disabled: true, source: 'built-in' }` while the editor is initializing, so your buttons render disabled with no flicker.
 
@@ -205,18 +237,18 @@ Avoid native selects for this control. They take browser focus and visually clea
 
 Common ids you'll wire to buttons:
 
-| Group | Ids |
-|---|---|
-| Text | `bold`, `italic`, `underline`, `strikethrough` |
-| Inline | `link`, `font-family`, `font-size`, `text-color`, `highlight-color` |
-| Layout | `text-align`, `line-height`, `indent-increase`, `indent-decrease` |
-| Lists | `bullet-list`, `numbered-list` |
-| Style | `linked-style`, `clear-formatting`, `copy-format` |
-| History | `undo`, `redo` |
-| Tracked changes | `track-changes-accept-selection`, `track-changes-reject-selection` |
-| View | `ruler`, `zoom`, `zoom-fit-width`, `document-mode` |
-| Tables | `table-insert`, `table-add-row-before`, `table-add-row-after`, `table-delete-row`, `table-add-column-before`, `table-add-column-after`, `table-delete-column`, `table-merge-cells`, `table-split-cell`, `table-delete` |
-| Insert | `image` |
+| Group           | Ids                                                                                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Text            | `bold`, `italic`, `underline`, `strikethrough`                                                                                                                                                                         |
+| Inline          | `link`, `font-family`, `font-size`, `text-color`, `highlight-color`                                                                                                                                                    |
+| Layout          | `text-align`, `line-height`, `indent-increase`, `indent-decrease`                                                                                                                                                      |
+| Lists           | `bullet-list`, `numbered-list`                                                                                                                                                                                         |
+| Style           | `linked-style`, `clear-formatting`, `copy-format`                                                                                                                                                                      |
+| History         | `undo`, `redo`                                                                                                                                                                                                         |
+| Tracked changes | `track-changes-accept-selection`, `track-changes-reject-selection`                                                                                                                                                     |
+| View            | `ruler`, `zoom`, `zoom-fit-width`, `document-mode`                                                                                                                                                                     |
+| Tables          | `table-insert`, `table-add-row-before`, `table-add-row-after`, `table-delete-row`, `table-add-column-before`, `table-add-column-after`, `table-delete-column`, `table-merge-cells`, `table-split-cell`, `table-delete` |
+| Insert          | `image`                                                                                                                                                                                                                |
 
 `PublicToolbarItemId` in `superdoc/ui` is the source of truth. Anything you can pass to `createHeadlessToolbar({ commands })` works as a `useSuperDocCommand` id.
 

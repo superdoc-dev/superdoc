@@ -96,6 +96,20 @@ describe('image converter', () => {
       expect(result.title).toBe('Image title');
     });
 
+    it('includes DrawingML fixed alpha adjustment when provided', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          alphaModFix: { amt: 9000 },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.alphaModFix).toEqual({ amt: 9000 });
+    });
+
     it('sets display to inline when inline attribute is true', () => {
       const node: PMNode = {
         type: 'image',

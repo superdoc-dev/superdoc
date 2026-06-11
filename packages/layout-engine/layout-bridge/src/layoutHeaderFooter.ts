@@ -7,6 +7,7 @@ import type {
   PageNumberChapterSeparator,
   PageNumberFormat,
   ParagraphBlock,
+  ParagraphMeasure,
   TableBlock,
   TextRun,
 } from '@superdoc/contracts';
@@ -499,6 +500,7 @@ export async function layoutHeaderFooterWithCache(
   // The calling document's font-mapping signature, forwarded to the (cross-document) measure cache
   // so header/footer measures cannot leak between documents with different mappings. '' = default.
   fontSignature: string = '',
+  remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure,
 ): Promise<HeaderFooterBatchResult> {
   const result: HeaderFooterBatchResult = {};
 
@@ -516,7 +518,7 @@ export async function layoutHeaderFooterWithCache(
       resolveHeaderFooterTokens(clonedBlocks, 1, numPages);
 
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock, fontSignature);
-      const layout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
+      const layout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind, remeasureParagraph);
 
       result[type] = { blocks: clonedBlocks, measures, layout };
     }
@@ -539,7 +541,7 @@ export async function layoutHeaderFooterWithCache(
     const hasTokens = hasPageTokens(blocks);
     if (!hasTokens) {
       const measures = await cache.measureBlocks(blocks, constraints, measureBlock, fontSignature);
-      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
+      const layout = layoutHeaderFooter(blocks, measures, constraints, kind, remeasureParagraph);
       result[type] = { blocks, measures, layout };
       continue;
     }
@@ -615,7 +617,7 @@ export async function layoutHeaderFooterWithCache(
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock, fontSignature);
-      const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
+      const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind, remeasureParagraph);
       const measuresById = new Map<string, Measure>();
       for (let i = 0; i < clonedBlocks.length; i += 1) {
         measuresById.set(clonedBlocks[i].id, measures[i]);

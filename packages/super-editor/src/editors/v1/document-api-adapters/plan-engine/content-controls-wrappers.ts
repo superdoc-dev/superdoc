@@ -385,6 +385,30 @@ function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, tex
 }
 
 // ---------------------------------------------------------------------------
+// Tag matching helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Match a tag value against a query, handling both plain strings and JSON-encoded
+ * tags from the StructuredContent extension (which stores `{group: "..."}` format).
+ */
+function matchesTag(storedTag: string | undefined, queryTag: string): boolean {
+  if (!storedTag) return false;
+  // Direct match (Document API style)
+  if (storedTag === queryTag) return true;
+  // JSON fallback (StructuredContent extension style)
+  if (storedTag.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(storedTag) as Record<string, unknown>;
+      return parsed?.group === queryTag;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // A. Core CRUD + Discovery — Read operations
 // ---------------------------------------------------------------------------
 
@@ -396,7 +420,7 @@ function listWrapper(editor: Editor, query?: ContentControlsListQuery): ContentC
     infos = infos.filter((info) => info.controlType === query.controlType);
   }
   if (query?.tag) {
-    infos = infos.filter((info) => info.properties.tag === query.tag);
+    infos = infos.filter((info) => matchesTag(info.properties.tag, query.tag!));
   }
 
   return applyPagination(infos, query);
@@ -438,7 +462,9 @@ function listInRangeWrapper(editor: Editor, input: ContentControlsListInRangeInp
 
 function selectByTagWrapper(editor: Editor, input: ContentControlsSelectByTagInput): ContentControlsListResult {
   const allSdts = findAllSdtNodes(editor.state.doc);
-  const infos = allSdts.map(buildContentControlInfoFromNode).filter((info) => info.properties.tag === input.tag);
+  const infos = allSdts
+    .map(buildContentControlInfoFromNode)
+    .filter((info) => matchesTag(info.properties.tag, input.tag));
   return applyPagination(infos, input);
 }
 

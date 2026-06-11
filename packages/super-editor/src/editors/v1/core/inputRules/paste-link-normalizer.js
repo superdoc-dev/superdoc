@@ -17,6 +17,19 @@ export function maybeAddProtocol(text) {
 }
 
 /**
+ * Detect explicit intent to paste a URL and checks for common URL patterns:
+ * - Starts with `www.`
+ * - Starts with `http://` or `https://`
+ * - Starts with `mailto:`, `tel:`, or `sms:`
+ */
+function hasExplicitUrlIntent(text) {
+  if (/^www\./i.test(text)) return true;
+  if (/^(mailto|tel|sms):/i.test(text)) return true;
+
+  return /^https?:\/\//i.test(text);
+}
+
+/**
  * Detect whether a pasted plain-text string is a single URL.
  *
  * Rejects strings with internal whitespace (not a bare URL).
@@ -33,8 +46,10 @@ export function detectPasteUrl(text, protocols = []) {
   // A bare URL has no internal whitespace
   if (/\s/.test(trimmed)) return null;
 
-  const withProtocol = maybeAddProtocol(trimmed);
   const allowedProtocols = buildAllowedProtocols(protocols);
+  if (!hasExplicitUrlIntent(trimmed)) return null;
+
+  const withProtocol = maybeAddProtocol(trimmed);
   const result = sanitizeHref(withProtocol, { allowedProtocols });
 
   return result ? { href: result.href } : null;

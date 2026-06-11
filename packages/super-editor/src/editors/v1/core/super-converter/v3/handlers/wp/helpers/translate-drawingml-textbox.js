@@ -1,6 +1,7 @@
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { pixelsToEmu } from '@converter/helpers.js';
 
 export function translateDrawingMLTextbox(params) {
   const { node } = params;
@@ -19,8 +20,8 @@ export function translateDrawingMLTextbox(params) {
   //   <a:ext cx cy>      — shape transform geometry (inside wps:spPr/a:xfrm)
   const { width: pxWidth, height: pxHeight, marginOffset } = node.attrs ?? {};
   if (pxWidth != null || pxHeight != null) {
-    const emuCx = pxWidth != null ? String(Math.round(pxWidth * 9525)) : null;
-    const emuCy = pxHeight != null ? String(Math.round(pxHeight * 9525)) : null;
+    const emuCx = pxWidth != null ? String(pixelsToEmu(pxWidth)) : null;
+    const emuCy = pxHeight != null ? String(pixelsToEmu(pxHeight)) : null;
     patchNodeAttributes(drawing, 'wp:extent', emuCx, emuCy);
     patchNodeAttributes(drawing, 'a:ext', emuCx, emuCy);
   }
@@ -28,10 +29,10 @@ export function translateDrawingMLTextbox(params) {
   // Patch position when the user moved the textbox (marginOffset.horizontal/top are in px).
   // wp:positionH > wp:posOffset and wp:positionV > wp:posOffset carry the offset in EMU.
   if (marginOffset?.horizontal != null) {
-    patchPositionOffset(drawing, 'wp:positionH', String(Math.round(marginOffset.horizontal * 9525)));
+    patchPositionOffset(drawing, 'wp:positionH', String(pixelsToEmu(marginOffset.horizontal)));
   }
   if (marginOffset?.top != null) {
-    patchPositionOffset(drawing, 'wp:positionV', String(Math.round(marginOffset.top * 9525)));
+    patchPositionOffset(drawing, 'wp:positionV', String(pixelsToEmu(marginOffset.top)));
   }
 
   const liveParagraphs = translateChildNodes({

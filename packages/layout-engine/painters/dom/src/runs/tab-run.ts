@@ -176,8 +176,14 @@ export const renderPositionedTabRun = (
  * scales with font size (capped by the descent). This is geometry derived from
  * the resolved line metrics. The painter never measures the DOM (SD-2957).
  */
+/** Half-leading above the text content box within a measured line. */
+export const lineContentTopPx = (line: Line): number => Math.max(0, (line.lineHeight - line.ascent - line.descent) / 2);
+
+/** Ascent + descent of the text content box (excludes half-leading). */
+export const lineTextContentHeightPx = (line: Line): number => line.ascent + line.descent;
+
 export const underlineOffsetFromLineTop = (line: Line): number => {
-  const halfLeading = Math.max(0, (line.lineHeight - line.ascent - line.descent) / 2);
+  const halfLeading = lineContentTopPx(line);
   const baselineFromTop = halfLeading + line.ascent;
   const underlineGap = Math.min(line.descent, line.lineHeight * 0.08);
   return baselineFromTop + underlineGap;

@@ -2,9 +2,10 @@ import { parseInlineStyles } from './parse-inline-styles';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
 import {
-  collectTextBoxParagraphs,
+  collectTextBoxBlockElements,
   preProcessTextBoxContent,
 } from '@converter/v3/handlers/wp/helpers/textbox-content-helpers.js';
+import { tableNodeHandlerEntity } from '@converter/v2/importer/tableImporter.js';
 
 /**
  * @param {Object} options
@@ -52,16 +53,26 @@ export function handleShapeTextboxImport({ params, pict }) {
 
   const textboxContent = textbox?.elements?.find((el) => el.name === 'w:txbxContent');
   const processedContent = preProcessTextBoxContent(textboxContent, params);
-  const textboxParagraphs = collectTextBoxParagraphs(processedContent?.elements || []);
+  const textboxBlocks = collectTextBoxBlockElements(processedContent?.elements || []);
+  const nodeListHandler = defaultNodeListHandler();
 
-  const content = textboxParagraphs.map((elem) =>
-    handleParagraphNode({
-      nodes: [elem],
-      docx: params.docx,
-      nodeListHandler: defaultNodeListHandler(),
-    }),
-  );
-  const contentNodes = content.reduce((acc, current) => [...acc, ...current.nodes], []);
+  const contentNodes = textboxBlocks.flatMap((block) => {
+    if (block.kind === 'paragraph') {
+      return handleParagraphNode({
+        nodes: [block.node],
+        docx: params.docx,
+        nodeListHandler,
+      }).nodes;
+    }
+    if (block.kind === 'table') {
+      return tableNodeHandlerEntity.handler({
+        ...params,
+        nodes: [block.node],
+        nodeListHandler,
+      }).nodes;
+    }
+    return [];
+  });
 
   const shapeTextbox = {
     type: 'shapeTextbox',

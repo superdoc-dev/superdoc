@@ -44,6 +44,7 @@ import {
   resolveColumnCount,
   resolveColumnLayout,
   resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
   resolveEffectiveHeaderFooterRef,
   selectHeaderFooterVariantForPage,
 } from '@superdoc/contracts';
@@ -57,7 +58,7 @@ import {
 } from './section-breaks.js';
 import { layoutParagraphBlock, type FootnoteAnchorRef } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
-import { layoutDrawingBlock } from './layout-drawing.js';
+import { createAnchoredDrawingFragment, layoutDrawingBlock } from './layout-drawing.js';
 import { layoutTextboxContent } from './layout-textbox.js';
 import { layoutTableBlock, createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import {
@@ -69,7 +70,7 @@ import {
 import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
-import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
+import { extractBlockPmRange, shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import {
   balanceSectionOnPage,
   type BalancingFragment,
@@ -599,6 +600,14 @@ export type LayoutOptions = {
    */
   allowParagraphlessAnchoredTableFallback?: boolean;
   /**
+   * Allow layout to synthesize page 1 for anchored images/drawings when a region has
+   * no anchor paragraphs and would otherwise render zero pages.
+   *
+   * Header/footer layout enables this for paragraph-free letterhead textboxes while
+   * keeping the table-specific fallback disabled.
+   */
+  allowParagraphlessAnchoredDrawingFallback?: boolean;
+  /**
    * Allow body layout to synthesize page 1 when section metadata exists but no
    * renderable body blocks survive conversion.
    *
@@ -945,6 +954,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
   const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowParagraphlessAnchoredDrawingFallback = options.allowParagraphlessAnchoredDrawingFallback !== false;
   const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
@@ -1984,7 +1994,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   });
 
   // Collect anchored drawings mapped to their anchor paragraphs
-  const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
+  const anchoredDrawings = collectAnchoredDrawings(blocks, measures);
+  const anchoredByParagraph = anchoredDrawings.byParagraph;
+  const paragraphlessAnchoredDrawings = anchoredDrawings.withoutParagraph;
   // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
   // Tables without any anchor paragraph need explicit fallback placement so
   // floating-only documents still produce a page and render their content.
@@ -2828,6 +2840,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   if (
     pages.length === 0 &&
     ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowParagraphlessAnchoredDrawingFallback && paragraphlessAnchoredDrawings.length > 0) ||
       (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
   ) {
     resetPaginationStateForBlankPageFallback();
@@ -2855,6 +2868,96 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
     paginator.ensurePage();
+  }
+
+  if (allowParagraphlessAnchoredDrawingFallback && pages.length === 0 && paragraphlessAnchoredDrawings.length > 0) {
+    const state = paginator.ensurePage();
+    const contentTop = state.topMargin;
+    const contentBottom = state.contentBottom;
+    const cols = getCurrentColumns();
+
+    for (const entry of paragraphlessAnchoredDrawings) {
+      if (placedAnchoredIds.has(entry.block.id)) continue;
+
+      const anchorY = resolveAnchoredGraphicY({
+        anchor: entry.block.anchor,
+        objectHeight: entry.measure.height ?? 0,
+        contentTop,
+        contentBottom,
+        pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
+        preRegisteredFallbackToContentTop: true,
+      });
+
+      const anchorX = entry.block.anchor
+        ? resolveAnchoredGraphicX(
+            entry.block.anchor,
+            state.columnIndex,
+            cols,
+            entry.measure.width,
+            { left: activeLeftMargin, right: activeRightMargin },
+            activePageSize.w,
+          )
+        : columnX(state);
+
+      if (entry.block.kind === 'image' && entry.measure.kind === 'image') {
+        const imgBlock = entry.block;
+        const imgMeasure = entry.measure;
+        const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
+        const relativeFrom = imgBlock.anchor?.hRelativeFrom ?? 'column';
+        let maxWidth: number;
+        if (relativeFrom === 'page') {
+          maxWidth = cols.count === 1 ? activePageSize.w - (activeLeftMargin + activeRightMargin) : activePageSize.w;
+        } else if (relativeFrom === 'margin') {
+          maxWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
+        } else {
+          maxWidth = cols.width;
+        }
+
+        const aspectRatio = imgMeasure.width > 0 && imgMeasure.height > 0 ? imgMeasure.width / imgMeasure.height : 1.0;
+        const minWidth = 20;
+        const minHeight = minWidth / aspectRatio;
+
+        const metadata: ImageFragmentMetadata = {
+          originalWidth: imgMeasure.width,
+          originalHeight: imgMeasure.height,
+          maxWidth,
+          maxHeight: pageContentHeight,
+          aspectRatio,
+          minWidth,
+          minHeight,
+        };
+
+        const pmRange = extractBlockPmRange(imgBlock);
+        const fragment: ImageFragment = {
+          kind: 'image',
+          blockId: imgBlock.id,
+          x: anchorX,
+          y: anchorY,
+          width: imgMeasure.width,
+          height: imgMeasure.height,
+          isAnchored: true,
+          behindDoc: imgBlock.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(imgBlock),
+          metadata,
+          sourceAnchor: imgBlock.sourceAnchor,
+        };
+        if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
+        if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
+        state.page.fragments.push(fragment);
+      } else if (entry.block.kind === 'drawing' && entry.measure.kind === 'drawing') {
+        const drawBlock = entry.block;
+        const drawMeasure = entry.measure;
+        const contentMeasures =
+          drawBlock.drawingKind === 'textboxShape' && typeof options.remeasureParagraph === 'function'
+            ? layoutTextboxContent(drawBlock, options.remeasureParagraph)
+            : undefined;
+        state.page.fragments.push(
+          createAnchoredDrawingFragment(drawBlock, drawMeasure, anchorX, anchorY, contentMeasures),
+        );
+      }
+
+      placedAnchoredIds.add(entry.block.id);
+    }
   }
 
   // Post-process pages with vertical alignment (center, bottom, both)
@@ -3392,21 +3495,15 @@ export function layoutHeaderFooter(
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
     allowParagraphlessAnchoredTableFallback: false,
+    allowParagraphlessAnchoredDrawingFallback: true,
     allowSectionBreakOnlyPageFallback: false,
     remeasureParagraph,
   });
 
-  // Post-normalize page-relative anchored fragment Y positions for footers.
-  //
-  // The inner layoutDocument() uses the body content height as its page height,
-  // but page-relative anchors need the REAL physical page height to resolve
-  // bottom/center alignment correctly. This post-correction rewrites their Y
-  // to footer-band-local coordinates using the real page geometry.
-  //
-  // Headers don't need this: the inner layout's page-relative Y is already
-  // correct relative to the header container, and the painter handles the
-  // container-to-page offset via effectiveOffset subtraction.
-  if (kind === 'footer' && constraints.pageHeight != null) {
+  // Post-normalize page-relative anchored fragment positions using physical page
+  // geometry. The inner layoutDocument() canvas is body-sized, which misplaces
+  // bottom/right page-relative letterheads and watermarks in headers/footers.
+  if (kind && constraints.pageHeight != null) {
     normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
   }
 

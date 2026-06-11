@@ -466,6 +466,15 @@ export class HeaderFooterLayoutCache {
 const sharedHeaderFooterCache = new HeaderFooterLayoutCache();
 
 /**
+ * Drop cached header/footer block measures so the next layout pass re-runs
+ * measurement (including shape textbox table hydration) on fresh FlowBlocks.
+ */
+export function invalidateHeaderFooterMeasures(blockIds: string[]): void {
+  if (!blockIds.length) return;
+  sharedHeaderFooterCache.invalidate(blockIds);
+}
+
+/**
  * Layouts header/footer variants with intelligent caching and page number resolution.
  *
  * Features:

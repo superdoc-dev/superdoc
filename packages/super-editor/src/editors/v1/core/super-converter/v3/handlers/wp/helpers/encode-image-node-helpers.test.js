@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
+import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
+import { initTestEditor } from '@tests/helpers/helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
 import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
 import { convertTiffToPng } from './tiff-converter.js';
@@ -2320,6 +2322,193 @@ describe('getVectorShape', () => {
       });
 
       expect(result?.type).toBe('vectorShape');
+    });
+  });
+
+  // SD-2745: ECMA-376 §20.4.2.38 — w:txbxContent can contain block-level
+  // w:tbl elements (not only paragraphs). DrawingML textboxes import as
+  // shapeContainer/shapeTextbox with table PM nodes preserved for adapter hydration.
+  describe('SD-2745: table inside textbox content', () => {
+    let editor;
+
+    beforeEach(() => {
+      ({ editor } = initTestEditor({
+        isHeadless: true,
+        loadFromSchema: true,
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      }));
+    });
+
+    afterEach(() => {
+      editor?.destroy();
+      editor = null;
+    });
+
+    const makeTextboxTableShape = () => ({
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+            {
+              name: 'wps:spPr',
+              elements: [
+                { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+                { name: 'a:xfrm', elements: [{ name: 'a:ext', attributes: { cx: '3200400', cy: '914400' } }] },
+              ],
+            },
+            {
+              name: 'wps:txbx',
+              elements: [
+                {
+                  name: 'w:txbxContent',
+                  elements: [
+                    {
+                      name: 'w:tbl',
+                      elements: [
+                        {
+                          name: 'w:tblPr',
+                          elements: [{ name: 'w:tblW', attributes: { 'w:w': '2400', 'w:type': 'dxa' } }],
+                        },
+                        {
+                          name: 'w:tblGrid',
+                          elements: [{ name: 'w:gridCol', attributes: { 'w:w': '2400' } }],
+                        },
+                        {
+                          name: 'w:tr',
+                          elements: [
+                            {
+                              name: 'w:tc',
+                              elements: [
+                                {
+                                  name: 'w:tcPr',
+                                  elements: [{ name: 'w:tcW', attributes: { 'w:w': '2400', 'w:type': 'dxa' } }],
+                                },
+                                {
+                                  name: 'w:p',
+                                  elements: [
+                                    {
+                                      name: 'w:r',
+                                      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Header cell' }] }],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            { name: 'wps:bodyPr', attributes: {} },
+          ],
+        },
+      ],
+    });
+
+    it('imports tabbed paragraph textboxes as shapeContainer (tabs render via contentBlocks)', () => {
+      const graphicData = {
+        elements: [
+          {
+            name: 'wps:wsp',
+            elements: [
+              { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+              {
+                name: 'wps:spPr',
+                elements: [
+                  { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+                  { name: 'a:xfrm', elements: [{ name: 'a:ext', attributes: { cx: '3200400', cy: '914400' } }] },
+                ],
+              },
+              {
+                name: 'wps:txbx',
+                elements: [
+                  {
+                    name: 'w:txbxContent',
+                    elements: [
+                      {
+                        name: 'w:p',
+                        elements: [
+                          {
+                            name: 'w:pPr',
+                            elements: [
+                              {
+                                name: 'w:tabs',
+                                elements: [
+                                  {
+                                    name: 'w:tab',
+                                    attributes: { 'w:val': 'right', 'w:pos': '8640', 'w:leader': 'dot' },
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                          {
+                            name: 'w:r',
+                            elements: [
+                              { name: 'w:t', elements: [{ type: 'text', text: 'Label' }] },
+                              { name: 'w:tab' },
+                              { name: 'w:t', elements: [{ type: 'text', text: 'Value' }] },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              { name: 'wps:bodyPr', attributes: {} },
+            ],
+          },
+        ],
+      };
+
+      const result = getVectorShape({
+        params: {
+          nodes: [{ name: 'w:drawing', elements: [] }],
+          docx: {},
+          filename: 'header1.xml',
+          nodeListHandler: defaultNodeListHandler(),
+          editor,
+        },
+        node: { name: 'wp:anchor', elements: [] },
+        graphicData,
+        size: { width: 252, height: 72 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      const shapeTextbox = result?.content?.[0];
+      expect(shapeTextbox?.type).toBe('shapeTextbox');
+      const paragraph = shapeTextbox?.content?.[0];
+      expect(paragraph?.type).toBe('paragraph');
+      expect(JSON.stringify(shapeTextbox?.content ?? [])).toContain('"type":"tab"');
+    });
+
+    it('imports table nodes into shapeTextbox for w:tbl inside the textbox', () => {
+      const graphicData = makeTextboxTableShape();
+      const result = getVectorShape({
+        params: {
+          nodes: [{ name: 'w:drawing', elements: [] }],
+          docx: {},
+          filename: 'header1.xml',
+          nodeListHandler: defaultNodeListHandler(),
+          editor,
+        },
+        node: { name: 'wp:anchor', elements: [] },
+        graphicData,
+        size: { width: 252, height: 72 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      const shapeTextbox = result?.content?.[0];
+      expect(shapeTextbox?.type).toBe('shapeTextbox');
+      const tableNode = shapeTextbox?.content?.[0];
+      expect(tableNode?.type).toBe('table');
+      expect(Array.isArray(tableNode?.content)).toBe(true);
+      expect(tableNode?.content?.length).toBeGreaterThan(0);
     });
   });
 });

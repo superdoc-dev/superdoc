@@ -10,6 +10,7 @@ import {
   type TrackedChangesMode,
 } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
+import { invalidateHeaderFooterMeasures } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
@@ -181,6 +182,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * reachable global undo/redo entries alive.
    */
   #pinnedIds: Set<string> = new Set();
+  #contentSyncSuppressCount = 0;
 
   /**
    * Creates a new HeaderFooterEditorManager for managing header and footer editors.
@@ -653,22 +655,60 @@ export class HeaderFooterEditorManager extends EventEmitter {
     if (!descriptor?.id) {
       return null;
     }
+    const collections = this.#collections;
+    const snapshot =
+      collections == null
+        ? null
+        : descriptor.kind === 'header'
+          ? ((collections.headers?.[descriptor.id] as HeaderFooterDocument) ?? null)
+          : ((collections.footers?.[descriptor.id] as HeaderFooterDocument) ?? null);
+
+    // Prefer the converter snapshot when the cached editor has no pending edits.
+    // Mode-only PM mutations (tracked-changes toggles) can make live getJSON() lossy
+    // for shape textbox tables; the snapshot is updated via getJSON on real edits.
     const liveEntry = this.#editorEntries.get(descriptor.id);
     if (liveEntry) {
       try {
+        if (!liveEntry.editor.docChanged && snapshot) {
+          return snapshot;
+        }
         return liveEntry.editor.getJSON?.() as HeaderFooterDocument | null;
       } catch {
-        // fallback to converter snapshot
+        if (snapshot) {
+          return snapshot;
+        }
       }
     }
-    const collections = this.#collections;
     if (!collections) {
       return null;
     }
-    if (descriptor.kind === 'header') {
-      return (collections.headers?.[descriptor.id] as HeaderFooterDocument) ?? null;
+    return snapshot;
+  }
+
+  /**
+   * Push the live header/footer editor JSON into the converter layout cache.
+   * Call on session exit after real edits so the following rerender reads the
+   * same shape/textbox table data as the sub-editor, not a stale snapshot.
+   */
+  syncLayoutDocumentJson(editor: Editor, descriptor: HeaderFooterDescriptor): void {
+    if (!descriptor?.id) return;
+    const converter = this.#hasConverter(this.#editor) ? this.#editor.converter : null;
+    if (!converter) return;
+
+    try {
+      const json = editor.getJSON?.() as HeaderFooterDocument | null;
+      if (!json) return;
+
+      if (descriptor.kind === 'header') {
+        if (!converter.headers) converter.headers = {};
+        converter.headers[descriptor.id] = json;
+      } else {
+        if (!converter.footers) converter.footers = {};
+        converter.footers[descriptor.id] = json;
+      }
+    } catch (error) {
+      console.warn('[HeaderFooterEditorManager] Failed to sync layout document JSON', { descriptor, error });
     }
-    return (collections.footers?.[descriptor.id] as HeaderFooterDocument) ?? null;
   }
 
   /**
@@ -678,6 +718,32 @@ export class HeaderFooterEditorManager extends EventEmitter {
    */
   get rootEditor(): Editor {
     return this.#editor;
+  }
+
+  /**
+   * Block header/footer export + contentChanged while applying document-mode
+   * commands. Tracked-changes visibility toggles emit doc-changing transactions
+   * that would otherwise overwrite converter snapshots with lossy getJSON().
+   */
+  runWithoutContentSync<T>(fn: () => T): T {
+    this.#contentSyncSuppressCount += 1;
+    try {
+      return fn();
+    } finally {
+      this.#contentSyncSuppressCount = Math.max(0, this.#contentSyncSuppressCount - 1);
+    }
+  }
+
+  /**
+   * Re-baseline after mode-only PM mutations so layout reads the converter
+   * snapshot until the user edits the header/footer again.
+   */
+  syncEditorChangeBaseline(editor: Editor): void {
+    try {
+      (editor.options as { initialState?: typeof editor.state }).initialState = editor.state;
+    } catch {
+      // best-effort
+    }
   }
 
   /**
@@ -858,7 +924,15 @@ export class HeaderFooterEditorManager extends EventEmitter {
       return null;
     }
 
-    const handleUpdate = async ({ transaction }: { transaction?: unknown }) => {
+    const handleUpdate = async ({ transaction }: { transaction?: { docChanged?: boolean } }) => {
+      if (this.#contentSyncSuppressCount > 0) {
+        return;
+      }
+      const docChanged = transaction?.docChanged === true || editor.docChanged === true;
+      if (!docChanged) {
+        return;
+      }
+
       this.emit('contentChanged', { descriptor } as ContentChangedPayload);
       try {
         // Update the converter data structures with the latest content.
@@ -1423,6 +1497,10 @@ export class HeaderFooterLayoutAdapter {
    * ```
    */
   invalidate(rId: string): void {
+    const entry = this.#blockCache.get(rId);
+    if (entry?.blocks?.length) {
+      invalidateHeaderFooterMeasures(entry.blocks.map((block) => block.id));
+    }
     this.#blockCache.delete(rId);
   }
 
@@ -1441,6 +1519,11 @@ export class HeaderFooterLayoutAdapter {
    * ```
    */
   invalidateAll(): void {
+    for (const entry of this.#blockCache.values()) {
+      if (entry.blocks?.length) {
+        invalidateHeaderFooterMeasures(entry.blocks.map((block) => block.id));
+      }
+    }
     this.#blockCache.clear();
   }
 
@@ -1450,7 +1533,7 @@ export class HeaderFooterLayoutAdapter {
    * Alias for invalidateAll(). Useful for cleanup operations.
    */
   clear(): void {
-    this.#blockCache.clear();
+    this.invalidateAll();
   }
 
   #getBlocks(descriptor: HeaderFooterDescriptor): FlowBlock[] | undefined {

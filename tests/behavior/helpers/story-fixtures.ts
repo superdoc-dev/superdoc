@@ -434,6 +434,82 @@ function storyOnlyTrackedChangeDocumentXml(): string {
 `;
 }
 
+function headerTextboxTableDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Body paragraph for header textbox exit test.</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:headerReference w:type="default" r:id="rId8"/>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
+function headerTextboxTableHeaderXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="${NS_W}" xmlns:r="${NS_R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">
+  <w:p>
+    <w:pPr><w:pStyle w:val="Header"/></w:pPr>
+    <w:r>
+      <w:drawing>
+        <wp:anchor distT="45720" distB="45720" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
+          <wp:simplePos x="0" y="0"/>
+          <wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>
+          <wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>
+          <wp:extent cx="5448300" cy="1143000"/>
+          <wp:effectExtent l="0" t="0" r="0" b="0"/>
+          <wp:wrapSquare wrapText="bothSides"/>
+          <wp:docPr id="1" name="Header Textbox"/>
+          <wp:cNvGraphicFramePr><a:graphicFrameLocks/></wp:cNvGraphicFramePr>
+          <a:graphic>
+            <a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">
+              <wps:wsp>
+                <wps:cNvSpPr txBox="1"><a:spLocks noChangeArrowheads="1"/></wps:cNvSpPr>
+                <wps:spPr>
+                  <a:xfrm><a:off x="0" y="0"/><a:ext cx="5448300" cy="1143000"/></a:xfrm>
+                  <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  <a:noFill/>
+                  <a:ln w="9525"><a:noFill/></a:ln>
+                </wps:spPr>
+                <wps:txbx>
+                  <w:txbxContent>
+                    <w:tbl>
+                      <w:tblPr>
+                        <w:tblStyle w:val="TableGrid"/>
+                        <w:tblW w:w="5000" w:type="dxa"/>
+                      </w:tblPr>
+                      <w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid>
+                      <w:tr>
+                        <w:tc>
+                          <w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr>
+                          <w:p><w:r><w:t>Test Name</w:t></w:r></w:p>
+                          <w:p><w:r><w:t>Utrecht</w:t></w:r></w:p>
+                        </w:tc>
+                      </w:tr>
+                    </w:tbl>
+                  </w:txbxContent>
+                </wps:txbx>
+                <wps:bodyPr/>
+              </wps:wsp>
+            </a:graphicData>
+          </a:graphic>
+        </wp:anchor>
+      </w:drawing>
+    </w:r>
+  </w:p>
+</w:hdr>
+`;
+}
+
 function trackedHeaderXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:hdr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -742,6 +818,10 @@ export const RTL_PATTERN1_HEADER_FOOTER_DOC_PATH = ensureGeneratedFixture(
     'word/footer2.xml': rtlPattern1FooterXml(),
   },
 );
+export const HEADER_TEXTBOX_TABLE_DOC_PATH = ensureGeneratedFixture('header-textbox-table.docx', 'h_f-normal.docx', {
+  'word/document.xml': headerTextboxTableDocumentXml(),
+  'word/header2.xml': headerTextboxTableHeaderXml(),
+});
 
 export type StoryTrackedChangeFixtureEntry = {
   surface: 'header' | 'footer' | 'footnote' | 'endnote';

@@ -561,6 +561,23 @@ export const Image = Node.create({
     const isBehindDocAnchor = wrap?.type === 'None' && (isWrapBehindDoc || isAnchorBehindDoc);
     const isAbsolutelyPositioned = style.includes('position: absolute;');
 
+    // Header/footer story editors are hidden PM hosts; DomPainter paints behindDoc
+    // letterheads on the page. Collapse PM footprint so caret/selection geometry
+    // is not inflated by full-page background images.
+    if (this.editor?.options?.isHeaderOrFooter && isBehindDocAnchor) {
+      return [
+        'img',
+        Attribute.mergeAttributes(this.options.htmlAttributes, {
+          src: this.storage.media[node.attrs.src] ?? node.attrs.src,
+          alt: node.attrs.alt ?? 'Uploaded picture',
+          title: node.attrs.title ?? undefined,
+          'aria-hidden': 'true',
+          style:
+            'display:inline-block;position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none;margin:0;border:0;z-index:-1;',
+        }),
+      ];
+    }
+
     if (hasAnchorData) {
       switch (anchorData.hRelativeFrom) {
         case 'page':

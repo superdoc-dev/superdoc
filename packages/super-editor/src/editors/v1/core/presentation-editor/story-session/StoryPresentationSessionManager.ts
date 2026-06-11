@@ -164,10 +164,15 @@ export class StoryPresentationSessionManager {
       hostWrapper = hidden.wrapper;
     }
 
-    if (commitPolicy === 'continuous' && typeof editor.on === 'function') {
+    let hasDocChangedDuringSession = typeof editor.on !== 'function';
+
+    if ((commitPolicy === 'continuous' || commitPolicy === 'onExit') && typeof editor.on === 'function') {
       const handleTransaction = ({ transaction }: { transaction?: { docChanged?: boolean } }) => {
         if (transaction?.docChanged) {
-          session.commit();
+          hasDocChangedDuringSession = true;
+          if (commitPolicy === 'continuous') {
+            session.commit();
+          }
         }
       };
       editor.on('transaction', handleTransaction);
@@ -188,6 +193,7 @@ export class StoryPresentationSessionManager {
       hostWrapper,
       domTarget,
       commitPolicy,
+      shouldCommitOnDispose: () => hasDocChangedDuringSession,
       shouldDisposeRuntime: runtime.cacheable === false,
       beforeDispose: sessionBeforeDispose,
       unregisterRuntime,
@@ -243,6 +249,7 @@ interface MutableStorySessionInit {
   hostWrapper: HTMLElement | null;
   domTarget: HTMLElement | null;
   commitPolicy: StoryCommitPolicy;
+  shouldCommitOnDispose: () => boolean;
   shouldDisposeRuntime: boolean;
   afterActivate?: () => void;
   beforeDispose?: () => void;
@@ -261,6 +268,7 @@ class MutableStorySession implements StoryPresentationSession {
 
   #disposed = false;
   #shouldDisposeRuntime: boolean;
+  #shouldCommitOnDispose: () => boolean;
   #beforeDispose?: () => void;
   #unregisterRuntime: () => void;
   #teardown: () => void;
@@ -274,6 +282,7 @@ class MutableStorySession implements StoryPresentationSession {
     this.domTarget = init.domTarget;
     this.commitPolicy = init.commitPolicy;
     this.#shouldDisposeRuntime = init.shouldDisposeRuntime;
+    this.#shouldCommitOnDispose = init.shouldCommitOnDispose;
     this.#beforeDispose = init.beforeDispose;
     this.#unregisterRuntime = init.unregisterRuntime;
     this.#teardown = init.teardown;
@@ -297,7 +306,7 @@ class MutableStorySession implements StoryPresentationSession {
   dispose(): void {
     if (this.#disposed) return;
     try {
-      if (this.commitPolicy === 'onExit') this.commit();
+      if (this.commitPolicy === 'onExit' && this.#shouldCommitOnDispose()) this.commit();
     } finally {
       this.#disposed = true;
       try {

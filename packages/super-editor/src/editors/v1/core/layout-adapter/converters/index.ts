@@ -35,4 +35,4 @@ export {
 export { tableNodeToBlock, handleTableNode } from './table.js';
 
 // Block node utilities
-export { hydrateImageBlocks } from '../utilities.js';
+export { hydrateImageBlocks, hydrateTextboxTableParts } from '../utilities.js';

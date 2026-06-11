@@ -44,7 +44,11 @@ export type RunRenderContext = {
   applyTrackedChangeDecorations: (elem: HTMLElement, run: Run, config: TrackedChangesRenderConfig) => void;
   resolveRunSdtId: (run: Run) => { sdtId: string; sdt: SdtMetadata } | null;
   createInlineSdtWrapper: (sdt: SdtMetadata) => HTMLElement;
-  syncInlineSdtWrapperTypography: (wrapper: HTMLElement, runForSizing?: Run) => void;
+  syncInlineSdtWrapperTypography: (
+    wrapper: HTMLElement,
+    runForSizing?: Run,
+    options?: { lineHeightPx?: number },
+  ) => void;
   expandSdtWrapperPmRange: (wrapper: HTMLElement, pmStart?: number | null, pmEnd?: number | null) => void;
 };
 

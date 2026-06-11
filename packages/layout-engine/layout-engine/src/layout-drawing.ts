@@ -150,3 +150,37 @@ export function layoutDrawingBlock({
   state.cursorY += requiredHeight;
   state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
 }
+
+export function createAnchoredDrawingFragment(
+  block: DrawingBlock,
+  measure: DrawingMeasure,
+  anchorX: number,
+  anchorY: number,
+  textboxContentMeasures?: ParagraphMeasure[],
+): DrawingFragment {
+  const pmRange = extractBlockPmRange(block);
+  const fragment: DrawingFragment = {
+    kind: 'drawing',
+    blockId: block.id,
+    drawingKind: block.drawingKind,
+    x: anchorX,
+    y: anchorY,
+    width: measure.width,
+    height: measure.height,
+    geometry: measure.geometry,
+    scale: measure.scale,
+    isAnchored: true,
+    behindDoc: block.anchor?.behindDoc === true,
+    zIndex: getFragmentZIndex(block),
+    drawingContentId: block.drawingContentId,
+    sourceAnchor: block.sourceAnchor,
+  };
+
+  if (textboxContentMeasures) {
+    (fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] }).contentMeasures = textboxContentMeasures;
+  }
+  if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
+  if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
+
+  return fragment;
+}

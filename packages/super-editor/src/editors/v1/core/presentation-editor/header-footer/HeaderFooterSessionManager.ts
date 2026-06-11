@@ -432,6 +432,36 @@ function isExplicitBehindDocMediaFragment(fragment: Fragment): boolean {
   return (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true;
 }
 
+function isBehindDocMediaBlock(block: FlowBlock): boolean {
+  if (block.kind !== 'image' && block.kind !== 'drawing') {
+    return false;
+  }
+  return block.anchor?.behindDoc === true;
+}
+
+function layoutWithoutBehindDocMedia(layout: Layout, blocks: FlowBlock[]): Layout {
+  const hiddenBlockIds = new Set(blocks.filter(isBehindDocMediaBlock).map((block) => block.id));
+  if (hiddenBlockIds.size === 0) {
+    return layout;
+  }
+
+  return {
+    ...layout,
+    pages: layout.pages.map((page) => ({
+      ...page,
+      fragments: page.fragments.filter((fragment) => !hiddenBlockIds.has(fragment.blockId)),
+    })),
+  };
+}
+
+function clampSuspiciousHeaderFooterCaretHeight(height: number, context: HeaderFooterLayoutContext): number {
+  const regionCap = Math.max(12, context.region.contentHeight ?? context.region.height ?? 48);
+  if (!Number.isFinite(height) || height <= regionCap) {
+    return Math.max(1, height);
+  }
+  return regionCap;
+}
+
 function getDecorationNormalizationMinY(fragments: Fragment[], layoutMinY: number): number {
   if (!Number.isFinite(layoutMinY) || layoutMinY >= 0) {
     return 0;
@@ -517,6 +547,8 @@ export class HeaderFooterSessionManager {
   #session: HeaderFooterSession = { mode: 'body' };
   #activeEditor: Editor | null = null;
   #activeEditorEventCleanup: (() => void) | null = null;
+  #headerFooterDocChangedDuringSession = false;
+  #suppressDecorationRerenderUntil = 0;
 
   // Hover UI elements (passed in, not owned)
   #hoverOverlay: HTMLElement | null = null;
@@ -553,6 +585,11 @@ export class HeaderFooterSessionManager {
   /** Whether currently editing a header/footer */
   get isEditing(): boolean {
     return this.#session.mode !== 'body';
+  }
+
+  /** Skip decoration-only body rerenders briefly after a no-op header/footer exit. */
+  shouldSuppressDecorationRerender(): boolean {
+    return this.#suppressDecorationRerenderUntil > performance.now();
   }
 
   /** The active header/footer editor (null if in body mode) */
@@ -1113,10 +1150,24 @@ export class HeaderFooterSessionManager {
 
     // Capture headerFooterRefId before clearing session - needed for cache invalidation
     const editedHeaderId = this.#session.headerFooterRefId;
-    if (this.#activeEditor) {
-      this.#applyChildEditorDocumentMode(this.#activeEditor, 'viewing');
-    }
+    const activeEditor = this.#activeEditor;
+    const headerFooterChanged = this.#headerFooterDocChangedDuringSession;
     this.#teardownActiveEditorEventBridge();
+
+    if (activeEditor && editedHeaderId && headerFooterChanged) {
+      const descriptor = this.#headerFooterManager?.getDescriptorById(editedHeaderId);
+      if (descriptor) {
+        this.#headerFooterManager?.syncLayoutDocumentJson(activeEditor, descriptor);
+      }
+    }
+
+    if (activeEditor) {
+      this.#headerFooterManager?.runWithoutContentSync(() => {
+        this.#applyChildEditorDocumentMode(activeEditor, 'viewing');
+        this.#headerFooterManager?.syncEditorChangeBaseline(activeEditor);
+      });
+    }
+
     this.#deps?.getStorySessionManager?.()?.exit();
 
     this.#activeEditor = null;
@@ -1126,13 +1177,24 @@ export class HeaderFooterSessionManager {
     this.#emitEditingContext(this.#options.editor);
     this.#deps?.notifyInputBridgeTargetChanged();
 
-    // Invalidate layout cache and trigger re-render
-    if (editedHeaderId) {
+    // Invalidate layout cache and trigger re-render only when the story changed.
+    if (editedHeaderId && headerFooterChanged) {
       this.#headerFooterAdapter?.invalidate(editedHeaderId);
+      this.#headerFooterManager?.refresh();
     }
-    this.#headerFooterManager?.refresh();
-    this.#deps?.setPendingDocChange();
-    this.#deps?.scheduleRerender();
+    this.#headerFooterDocChangedDuringSession = false;
+
+    if (headerFooterChanged) {
+      this.#deps?.setPendingDocChange();
+      this.#deps?.scheduleRerender();
+    } else {
+      this.#suppressDecorationRerenderUntil = performance.now() + 1000;
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          this.#suppressDecorationRerenderUntil = 0;
+        });
+      });
+    }
 
     this.#options.editor?.view?.focus();
   }
@@ -1163,11 +1225,11 @@ export class HeaderFooterSessionManager {
 
     const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
     const session = storySessionManager.activate(locator, {
-      // Presentation-mode header/footer sessions now reuse the manager-backed
-      // per-refId editor, which already exports on update. Commit once on exit
-      // to avoid double-syncing every keystroke while still flushing the final
-      // state if the session closes mid-batch.
-      commitPolicy: 'onExit',
+      // Manager-backed header/footer editors already export on doc-changing
+      // updates. Avoid a second exit export/re-import for open/close sessions:
+      // that path can replace import-preserved drawing/textbox data with a
+      // lossy exported snapshot.
+      commitPolicy: 'manual',
       preferHiddenHost: true,
       hostWidthPx: Math.max(1, region.width),
       editorContext: {
@@ -1312,7 +1374,10 @@ export class HeaderFooterSessionManager {
       const shouldRestoreInitialSelection = options?.initialSelection !== 'defer';
 
       try {
-        this.#applyChildEditorDocumentMode(editor, this.#documentMode);
+        this.#headerFooterManager?.runWithoutContentSync(() => {
+          this.#applyChildEditorDocumentMode(editor, this.#documentMode);
+          this.#headerFooterManager?.syncEditorChangeBaseline(editor);
+        });
 
         if (shouldRestoreInitialSelection) {
           this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not set cursor to end');
@@ -1328,6 +1393,7 @@ export class HeaderFooterSessionManager {
       }
 
       this.#activeEditor = editor;
+      this.#headerFooterDocChangedDuringSession = false;
       this.#setupActiveEditorEventBridge(editor);
       this.#session = {
         mode: region.kind,
@@ -1362,8 +1428,6 @@ export class HeaderFooterSessionManager {
       this.#emitModeChanged();
       this.#emitEditingContext(editor);
       this.#deps?.notifyInputBridgeTargetChanged();
-      this.#deps?.setPendingDocChange();
-      this.#deps?.scheduleRerender();
       return editor;
     } catch (error) {
       console.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
@@ -1534,6 +1598,9 @@ export class HeaderFooterSessionManager {
     };
 
     const emitSurfaceTransaction = ({ transaction, duration }: { transaction: unknown; duration?: number }) => {
+      if (transaction && typeof transaction === 'object' && (transaction as { docChanged?: boolean }).docChanged) {
+        this.#headerFooterDocChangedDuringSession = true;
+      }
       if (this.#session.mode !== 'header' && this.#session.mode !== 'footer') return;
       this.#callbacks.onSurfaceTransaction?.({
         sourceEditor: editor,
@@ -2023,7 +2090,8 @@ export class HeaderFooterSessionManager {
       return visibleSurfaceRects;
     }
 
-    const localRects = selectionToRects(context.layout, context.blocks, context.measures, from, to) ?? [];
+    const interactionLayout = layoutWithoutBehindDocMedia(context.layout, context.blocks);
+    const localRects = selectionToRects(interactionLayout, context.blocks, context.measures, from, to) ?? [];
     if (localRects.length) {
       return localRects.map((rect) => ({
         pageIndex: context.region.pageIndex,
@@ -2196,7 +2264,7 @@ export class HeaderFooterSessionManager {
         x: (rangeRect.left - pageRect.left) / zoom,
         y: context.region.pageIndex * bodyPageHeight + (rangeRect.top - pageRect.top) / zoom,
         width: 1,
-        height: Math.max(1, rangeRect.height / zoom),
+        height: clampSuspiciousHeaderFooterCaretHeight(Math.max(1, rangeRect.height / zoom), context),
       };
     }
 
@@ -2211,7 +2279,7 @@ export class HeaderFooterSessionManager {
       x: localX / zoom,
       y: context.region.pageIndex * bodyPageHeight + (elementRect.top - pageRect.top) / zoom,
       width: 1,
-      height: Math.max(1, elementRect.height / zoom),
+      height: clampSuspiciousHeaderFooterCaretHeight(Math.max(1, elementRect.height / zoom), context),
     };
   }
 
@@ -2265,7 +2333,7 @@ export class HeaderFooterSessionManager {
         x: context.region.localX + localX,
         y: context.region.pageIndex * bodyPageHeight + context.region.localY + localY,
         width,
-        height,
+        height: clampSuspiciousHeaderFooterCaretHeight(height, context),
       };
     } catch {
       return null;
@@ -2325,9 +2393,10 @@ export class HeaderFooterSessionManager {
     }
 
     const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const interactionLayout = layoutWithoutBehindDocMedia(context.layout, context.blocks);
     const geometry = computeCaretLayoutRectGeometryFromHelper(
       {
-        layout: context.layout,
+        layout: interactionLayout,
         blocks: context.blocks,
         measures: context.measures,
         painterHost: null,
@@ -2358,7 +2427,7 @@ export class HeaderFooterSessionManager {
         x: liveRect.x,
         y: liveRect.y,
         width: 1,
-        height: liveRect.height,
+        height: clampSuspiciousHeaderFooterCaretHeight(liveRect.height, context),
       };
     }
 

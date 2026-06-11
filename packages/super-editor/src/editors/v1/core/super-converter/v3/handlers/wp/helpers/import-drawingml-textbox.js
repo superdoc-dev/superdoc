@@ -1,9 +1,10 @@
 import {
-  collectTextBoxParagraphs,
+  collectTextBoxBlockElements,
   preProcessTextBoxContent,
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
+import { tableNodeHandlerEntity } from '@converter/v2/importer/tableImporter.js';
 
 /**
  * Builds a shapeContainer/shapeTextbox model from a DrawingML textbox payload.
@@ -49,7 +50,7 @@ export function importDrawingMLTextbox({
   }
 
   const processedContent = preProcessTextBoxContent(textBoxContent, params);
-  const textboxParagraphs = collectTextBoxParagraphs(processedContent?.elements || []);
+  const textboxBlocks = collectTextBoxBlockElements(processedContent?.elements || []);
 
   const importParagraph =
     typeof paragraphImporter === 'function'
@@ -62,9 +63,19 @@ export function importDrawingMLTextbox({
           return imported?.nodes || [];
         };
 
-  const rawNodes = textboxParagraphs.flatMap((paragraph) => {
-    const imported = importParagraph(paragraph);
-    return Array.isArray(imported) ? imported : imported ? [imported] : [];
+  const rawNodes = textboxBlocks.flatMap((block) => {
+    if (block.kind === 'paragraph') {
+      const imported = importParagraph(block.node);
+      return Array.isArray(imported) ? imported : imported ? [imported] : [];
+    }
+    if (block.kind === 'table') {
+      const imported = tableNodeHandlerEntity.handler({
+        ...params,
+        nodes: [block.node],
+      });
+      return imported?.nodes || [];
+    }
+    return [];
   });
 
   // r-translator puts runLevelMarks on run nodes AND on their text children.

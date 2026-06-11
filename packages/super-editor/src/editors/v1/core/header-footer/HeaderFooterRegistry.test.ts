@@ -416,6 +416,25 @@ describe('HeaderFooterEditorManager', () => {
     );
   });
 
+  it('suppresses contentChanged while runWithoutContentSync is active', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const handler = vi.fn();
+    manager.on('contentChanged', handler);
+
+    await manager.ensureEditor(descriptor);
+    const sectionEditor = createdEditors.at(-1)?.editor;
+    expect(sectionEditor).toBeDefined();
+
+    manager.runWithoutContentSync(() => {
+      sectionEditor?.emit('update', { transaction: { docChanged: true } });
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(mockOnHeaderFooterDataUpdate).not.toHaveBeenCalled();
+  });
+
   it('tears down editors on destroy without throwing', async () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);
@@ -960,6 +979,40 @@ describe('HeaderFooterEditorManager error scenarios', () => {
     expect(manager.getDescriptors()).toHaveLength(3); // 2 headers + 1 footer
   });
 
+  it('prefers converter snapshot when cached editor has no pending edits', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+
+    await manager.ensureEditor(descriptor);
+    const createdEditor = createdEditors[createdEditors.length - 1]?.editor;
+    expect(createdEditor).toBeDefined();
+
+    const staleLiveDoc = { type: 'doc', content: [] };
+    createdEditor!.getJSON = vi.fn(() => staleLiveDoc);
+    Object.defineProperty(createdEditor!, 'docChanged', { get: () => false, configurable: true });
+
+    const snapshotDoc = editor.converter.headers?.['rId-header-default'];
+    expect(manager.getDocumentJson(descriptor)).toEqual(snapshotDoc);
+    expect(createdEditor!.getJSON).not.toHaveBeenCalled();
+  });
+
+  it('prefers live getJSON when cached editor has pending edits', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+
+    await manager.ensureEditor(descriptor);
+    const createdEditor = createdEditors[createdEditors.length - 1]?.editor;
+    expect(createdEditor).toBeDefined();
+
+    const liveDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'live' }] }] };
+    createdEditor!.getJSON = vi.fn(() => liveDoc);
+    Object.defineProperty(createdEditor!, 'docChanged', { get: () => true, configurable: true });
+
+    expect(manager.getDocumentJson(descriptor)).toEqual(liveDoc);
+  });
+
   it('refresh({ purgeCachedEditors: true }) drops live editors so getDocumentJson reads the new converter snapshot', async () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);
@@ -974,7 +1027,7 @@ describe('HeaderFooterEditorManager error scenarios', () => {
     const freshDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'fresh' }] }] };
     editor.converter.headers!['rId-header-default'] = freshDoc;
 
-    expect(manager.getDocumentJson(descriptor)).toEqual(staleDoc);
+    expect(manager.getDocumentJson(descriptor)).toEqual(freshDoc);
 
     manager.refresh({ purgeCachedEditors: true });
 

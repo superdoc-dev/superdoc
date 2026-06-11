@@ -100,6 +100,25 @@ export class VectorShapeView {
     element.classList.add('sd-vector-shape');
     element.setAttribute('data-vector-shape', '');
 
+    const wrap = attrs.wrap;
+    const anchorData = attrs.anchorData;
+    const isBehindDocAnchor =
+      wrap?.type === 'None' && (wrap?.attrs?.behindDoc === true || anchorData?.behindDoc === true);
+    if (this.editor?.options?.isHeaderOrFooter && isBehindDocAnchor) {
+      Object.assign(element.style, {
+        position: 'absolute',
+        width: '0',
+        height: '0',
+        overflow: 'hidden',
+        opacity: '0',
+        pointerEvents: 'none',
+        margin: '0',
+        border: '0',
+        zIndex: '-1',
+      });
+      return element;
+    }
+
     const effectExtent = attrs.effectExtent || null;
     const extentLeft = effectExtent?.left ?? 0;
     const extentTop = effectExtent?.top ?? 0;

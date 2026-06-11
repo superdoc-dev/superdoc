@@ -10,6 +10,7 @@ import type {
   FlowBlock,
   ImageBlock,
   ParagraphBlock,
+  TableBlock,
   TextboxDrawing,
   VectorShapeDrawing,
   ShapeGroupDrawing,
@@ -44,8 +45,10 @@ import {
   resolveFloatingZIndex,
   mergeWrapDistancesFromPadding,
   ptToPx,
+  buildPositionMap,
 } from '../utilities.js';
 import { getLastParagraphFont } from './paragraph.js';
+import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
 // Constants
@@ -220,6 +223,41 @@ const extractTextboxTextContent = (node: PMNode): ShapeTextContent | undefined =
 };
 
 const isParagraphNode = (node: PMNode | undefined): node is PMNode => node?.type === 'paragraph';
+const isTableNode = (node: PMNode | undefined): node is PMNode => node?.type === 'table';
+
+const tableNodeToTextboxTableBlock = (tableNode: PMNode, context: NodeHandlerContext): TableBlock | null => {
+  const tableBlock = tableNodeToBlock(tableNode, {
+    nextBlockId: context.nextBlockId,
+    positions: buildPositionMap(tableNode),
+    storyKey: context.storyKey,
+    trackedChangesConfig: context.trackedChangesConfig,
+    bookmarks: context.bookmarks,
+    hyperlinkConfig: context.hyperlinkConfig,
+    themeColors: context.themeColors,
+    converterContext: context.converterContext,
+    converters: context.converters,
+    enableComments: context.enableComments,
+  });
+  return tableBlock?.kind === 'table' ? tableBlock : null;
+};
+
+const extractTextboxTableTextContent = (node: PMNode, context: NodeHandlerContext): ShapeTextContent | undefined => {
+  const shapeTextboxNode = node.type === 'shapeTextbox' ? node : resolveNestedShapeTextboxNode(node);
+  if (!shapeTextboxNode || !Array.isArray(shapeTextboxNode.content)) {
+    return undefined;
+  }
+
+  const parts: TextPart[] = [];
+  for (const child of shapeTextboxNode.content) {
+    if (!isTableNode(child)) continue;
+    const tableBlock = tableNodeToTextboxTableBlock(child, context);
+    if (tableBlock) {
+      parts.push({ kind: 'table', text: '', tableBlock });
+    }
+  }
+
+  return parts.length > 0 ? { parts } : undefined;
+};
 
 const toTextboxParagraphBlocks = (node: PMNode, context: NodeHandlerContext): ParagraphBlock[] => {
   const shapeTextboxNode = node.type === 'shapeTextbox' ? node : resolveNestedShapeTextboxNode(node);
@@ -230,6 +268,10 @@ const toTextboxParagraphBlocks = (node: PMNode, context: NodeHandlerContext): Pa
 
   const textboxBlocks: FlowBlock[] = [];
   for (const child of shapeTextboxNode.content) {
+    if (isTableNode(child)) {
+      continue;
+    }
+
     if (!isParagraphNode(child)) continue;
 
     const convertedBlocks = paragraphToFlowBlocks({
@@ -266,6 +308,15 @@ export function hydrateTextboxDrawingContent(
 ): DrawingBlock {
   if (drawingBlock.drawingKind !== 'textboxShape') {
     return drawingBlock;
+  }
+
+  const tableTextContent = extractTextboxTableTextContent(node, context as NodeHandlerContext);
+  if (tableTextContent) {
+    return {
+      ...drawingBlock,
+      textContent: tableTextContent,
+      contentBlocks: [],
+    };
   }
 
   return {

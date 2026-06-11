@@ -5264,7 +5264,7 @@ export class PresentationEditor extends EventEmitter {
         // No immediate sync; schedule coalesced sync on next frame.
         this.#scheduleDecorationSync();
       }
-      if (decorationChanged) {
+      if (decorationChanged && !this.#headerFooterSession?.shouldSuppressDecorationRerender()) {
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();
@@ -8599,10 +8599,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #exitHeaderFooterMode() {
-    // Delegate to session manager
+    // Delegate to session manager (schedules rerender only when header/footer content changed).
     this.#headerFooterSession?.exitMode();
-    this.#pendingDocChange = true;
-    this.#scheduleRerender();
 
     this.#editor.view?.focus();
   }

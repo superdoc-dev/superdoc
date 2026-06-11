@@ -4141,7 +4141,7 @@ describe('layoutHeaderFooter', () => {
     expect(imgFragWithout!.y).not.toBe(imgFragFooter!.y);
   });
 
-  it('does NOT post-normalize page-relative anchors in header layout', () => {
+  it('post-normalizes page-relative bottom-aligned header anchors to physical page Y', () => {
     const imageBlock: FlowBlock = {
       kind: 'image',
       id: 'img-page',
@@ -4149,8 +4149,12 @@ describe('layoutHeaderFooter', () => {
       anchor: {
         isAnchored: true,
         vRelativeFrom: 'page',
-        alignV: 'top',
-        offsetV: 10,
+        hRelativeFrom: 'page',
+        alignV: 'bottom',
+        alignH: 'right',
+        offsetV: 0,
+        offsetH: 0,
+        behindDoc: true,
       },
     };
     const imageMeasure: Measure = {
@@ -4162,22 +4166,21 @@ describe('layoutHeaderFooter', () => {
     const constraints = {
       width: 200,
       height: 800,
+      pageWidth: 300,
       pageHeight: 1056,
       margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
     };
 
-    // With kind='header': no normalization — Y stays as inner-layout computed it
     const withHeader = layoutHeaderFooter([imageBlock], [imageMeasure], constraints, 'header');
     const imgFrag = withHeader.pages[0]?.fragments.find((f) => f.kind === 'image');
-
-    // Without kind: same behavior (no normalization)
     const withoutKind = layoutHeaderFooter([imageBlock], [imageMeasure], constraints);
     const imgFragNoKind = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
 
-    // Both should have the same Y — inner-layout raw position
     expect(imgFrag).toBeDefined();
     expect(imgFragNoKind).toBeDefined();
-    expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+    expect(imgFrag!.y).toBe(1056 - 30);
+    expect(imgFrag!.x).toBe(300 - 72 - 50);
+    expect(imgFrag!.y).not.toBe(imgFragNoKind!.y);
   });
 
   it('keeps paragraph-relative tall non-page-covering header anchors in measurement height', () => {
@@ -4431,6 +4434,62 @@ describe('layoutHeaderFooter', () => {
     expect(fragment.drawingKind).toBe('textboxShape');
     expect(Array.isArray(fragment.contentMeasures)).toBe(true);
     expect(fragment.contentMeasures).toHaveLength(1);
+  });
+
+  it('lays out paragraphless anchored textboxShape headers with contentMeasures', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-textbox-only',
+      drawingKind: 'textboxShape',
+      geometry: { width: 200, height: 80, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'header-textbox-para-1',
+          runs: [{ text: 'Test Name', pmStart: 1, pmEnd: 10 }],
+        },
+      ],
+      textInsets: { top: 4, right: 8, bottom: 4, left: 8 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: -17,
+        offsetV: -7,
+      },
+    };
+    const textboxMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 200,
+      height: 80,
+      scale: 1,
+      naturalWidth: 200,
+      naturalHeight: 80,
+      geometry: { width: 200, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [textboxBlock],
+      [textboxMeasure],
+      {
+        width: 624,
+        height: 48,
+        pageWidth: 816,
+        pageHeight: 1056,
+        margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+      },
+      'header',
+      (_block, _maxWidth) => makeMeasure([16]),
+    );
+
+    const fragment = layout.pages[0]?.fragments.find(
+      (entry) => entry.kind === 'drawing' && entry.drawingKind === 'textboxShape',
+    ) as DrawingFragment | undefined;
+
+    expect(fragment).toBeDefined();
+    expect(fragment?.contentMeasures).toHaveLength(1);
+    expect(layout.height).toBeGreaterThanOrEqual(0);
   });
 });
 

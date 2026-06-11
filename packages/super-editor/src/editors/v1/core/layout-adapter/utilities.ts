@@ -13,17 +13,21 @@ import type {
   ImageHyperlink,
   ShapeGroupChild,
   ShapeGroupDrawing,
+  ShapeGroupVectorChild,
   ShapeGroupImageChild,
   ShapeGroupTransform,
   TextPart,
+  ShapeTextContent,
   VectorShapeDrawing,
+  TextboxDrawing,
   FlowBlock,
   ImageRun,
   ParagraphBlock,
   Run,
   TableBlock,
 } from '@superdoc/contracts';
-import type { PMNode, PositionMap, BlockIdGenerator } from './types.js';
+import type { PMNode, PositionMap, BlockIdGenerator, TableNodeToBlockParams } from './types.js';
+import { tableNodeToBlock } from './converters/table.js';
 import { TWIPS_PER_INCH, PX_PER_INCH, PX_PER_PT, ATOMIC_INLINE_TYPES } from './constants.js';
 
 export type LineEnd = {
@@ -1101,7 +1105,37 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
   };
 
   return blocks.map((block) => {
-    const hydrateBlock = (blk: FlowBlock): FlowBlock => {
+    function hydrateTextContentMediaParts(textContent?: ShapeTextContent): ShapeTextContent | undefined {
+      if (!textContent?.parts?.length) return textContent;
+
+      let partsChanged = false;
+      const hydratedParts = textContent.parts.map((part: TextPart) => {
+        if (part?.kind === 'table' && part.tableBlock) {
+          const hydratedTable = hydrateBlock(part.tableBlock);
+          if (hydratedTable !== part.tableBlock) {
+            partsChanged = true;
+            return { ...part, tableBlock: hydratedTable as TableBlock };
+          }
+          return part;
+        }
+
+        if (part?.kind !== 'image' || !part.src || part.src.startsWith('data:')) {
+          return part;
+        }
+
+        const resolvedSrc = resolveImageSrc(part.src, part.rId, undefined, part.extension);
+        if (resolvedSrc) {
+          partsChanged = true;
+          return { ...part, src: resolvedSrc };
+        }
+        return part;
+      });
+
+      if (!partsChanged) return textContent;
+      return { ...textContent, parts: hydratedParts };
+    }
+
+    function hydrateBlock(blk: FlowBlock): FlowBlock {
       // Handle ImageBlocks (top-level images)
       if (blk.kind === 'image') {
         if (!blk.src || blk.src.startsWith('data:')) {
@@ -1197,27 +1231,31 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
         // for w:drawing inside textbox runs). Hydrate the same way as
         // ImageRuns so Uint8Array (Y.js binary) and string (zip) media
         // alike resolve to a data URI.
-        if (drawingBlock.drawingKind === 'vectorShape' || drawingBlock.drawingKind === 'textboxShape') {
-          const parts = (drawingBlock as VectorShapeDrawing).textContent?.parts;
-          if (!parts || parts.length === 0) return blk;
-          let partsChanged = false;
-          const hydratedParts = parts.map((part: TextPart) => {
-            if (part?.kind !== 'image' || !part.src || part.src.startsWith('data:')) {
-              return part;
+        if (drawingBlock.drawingKind === 'vectorShape') {
+          const vectorShapeBlock = drawingBlock as VectorShapeDrawing;
+          const hydratedTextContent = hydrateTextContentMediaParts(vectorShapeBlock.textContent);
+          if (hydratedTextContent !== vectorShapeBlock.textContent) {
+            return { ...vectorShapeBlock, textContent: hydratedTextContent };
+          }
+          return blk;
+        }
+
+        if (drawingBlock.drawingKind === 'textboxShape') {
+          const textboxBlock = drawingBlock as TextboxDrawing;
+          if (!textboxBlock.contentBlocks?.length) {
+            return blk;
+          }
+          let contentChanged = false;
+          const hydratedContentBlocks = textboxBlock.contentBlocks.map((paragraph) => {
+            const hydrated = hydrateBlock(paragraph as FlowBlock);
+            if (hydrated !== paragraph) {
+              contentChanged = true;
+              return hydrated as ParagraphBlock;
             }
-            const resolvedSrc = resolveImageSrc(part.src, part.rId, undefined, part.extension);
-            if (resolvedSrc) {
-              partsChanged = true;
-              return { ...part, src: resolvedSrc };
-            }
-            return part;
+            return paragraph;
           });
-          if (partsChanged) {
-            const vectorShapeBlock = drawingBlock as VectorShapeDrawing;
-            return {
-              ...vectorShapeBlock,
-              textContent: { ...vectorShapeBlock.textContent, parts: hydratedParts },
-            };
+          if (contentChanged) {
+            return { ...textboxBlock, contentBlocks: hydratedContentBlocks };
           }
           return blk;
         }
@@ -1233,6 +1271,22 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
 
         let shapesChanged = false;
         const hydratedShapes = shapeGroupBlock.shapes.map((shape) => {
+          if (shape.shapeType === 'vectorShape' && shape.attrs?.textContent) {
+            const vectorChild = shape as ShapeGroupVectorChild;
+            const hydratedTextContent = hydrateTextContentMediaParts(vectorChild.attrs.textContent);
+            if (hydratedTextContent !== vectorChild.attrs.textContent) {
+              shapesChanged = true;
+              return {
+                ...shape,
+                attrs: {
+                  ...shape.attrs,
+                  textContent: hydratedTextContent,
+                },
+              };
+            }
+            return shape;
+          }
+
           // Only process image children
           if (shape.shapeType !== 'image') {
             return shape;
@@ -1262,10 +1316,140 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
       }
 
       return blk;
-    };
+    }
 
     return hydrateBlock(block);
   });
+}
+
+function isShapeTablePart(part: unknown): part is TextPart {
+  if (!isPlainObject(part)) return false;
+  const candidate = part as TextPart;
+  return (
+    candidate.kind === 'table' &&
+    (isPlainObject(candidate.tablePm) || isPlainObject((candidate as TextPart & { tableBlock?: unknown }).tableBlock))
+  );
+}
+
+function isTextboxTablePart(part: unknown): part is TextPart {
+  if (!isPlainObject(part)) return false;
+  const candidate = part as TextPart;
+  return candidate.kind === 'table' && isPlainObject(candidate.tablePm);
+}
+
+function hydrateShapeTextContentParts(
+  textContent: ShapeTextContent | undefined,
+  tableContext: TableNodeToBlockParams,
+): ShapeTextContent | undefined {
+  if (!textContent?.parts?.length) return textContent;
+
+  let partsChanged = false;
+  const hydratedParts = textContent.parts.map((part) => {
+    if (!isTextboxTablePart(part) || part.tableBlock) {
+      return part;
+    }
+
+    const tableNode = part.tablePm as unknown as PMNode;
+    if (tableNode.type !== 'table') {
+      return part;
+    }
+
+    const tableBlock = tableNodeToBlock(tableNode, {
+      ...tableContext,
+      // tablePm lives outside the header PM tree used to build tableContext.positions.
+      // Rebuild positions on the detached table subtree so inline atoms (tabs, breaks)
+      // resolve during cell paragraph conversion.
+      positions: buildPositionMap(tableNode),
+    });
+    if (!tableBlock || tableBlock.kind !== 'table') {
+      return part;
+    }
+
+    partsChanged = true;
+    return { ...part, tableBlock: tableBlock as TableBlock };
+  });
+
+  if (!partsChanged) {
+    return textContent;
+  }
+
+  return { ...textContent, parts: hydratedParts };
+}
+
+/**
+ * Converts encoded PM table nodes inside shape textbox parts to TableBlocks.
+ */
+export function hydrateTextboxTableParts(blocks: FlowBlock[], tableContext: TableNodeToBlockParams): FlowBlock[] {
+  let blocksChanged = false;
+
+  const hydrateDrawingBlock = (blk: DrawingBlock): DrawingBlock => {
+    if (blk.drawingKind === 'vectorShape') {
+      const vectorShape = blk as VectorShapeDrawing;
+      const hydratedTextContent = hydrateShapeTextContentParts(vectorShape.textContent, tableContext);
+      if (hydratedTextContent !== vectorShape.textContent) {
+        blocksChanged = true;
+        return { ...vectorShape, textContent: hydratedTextContent };
+      }
+      return blk;
+    }
+
+    if (blk.drawingKind === 'textboxShape') {
+      const textboxShape = blk as TextboxDrawing;
+      const hydratedTextContent = hydrateShapeTextContentParts(textboxShape.textContent, tableContext);
+      if (hydratedTextContent !== textboxShape.textContent) {
+        blocksChanged = true;
+        return { ...textboxShape, textContent: hydratedTextContent };
+      }
+      return blk;
+    }
+
+    if (blk.drawingKind !== 'shapeGroup') {
+      return blk;
+    }
+
+    const shapeGroup = blk as ShapeGroupDrawing;
+    if (!shapeGroup.shapes?.length) {
+      return blk;
+    }
+
+    let shapesChanged = false;
+    const hydratedShapes = shapeGroup.shapes.map((shape) => {
+      if (shape.shapeType !== 'vectorShape' || !shape.attrs?.textContent) {
+        return shape;
+      }
+
+      const vectorChild = shape as ShapeGroupVectorChild;
+      const hydratedTextContent = hydrateShapeTextContentParts(vectorChild.attrs.textContent, tableContext);
+      if (hydratedTextContent === vectorChild.attrs.textContent) {
+        return shape;
+      }
+
+      shapesChanged = true;
+      return {
+        ...shape,
+        attrs: {
+          ...vectorChild.attrs,
+          textContent: hydratedTextContent,
+        },
+      };
+    });
+
+    if (!shapesChanged) {
+      return blk;
+    }
+
+    blocksChanged = true;
+    return { ...shapeGroup, shapes: hydratedShapes };
+  };
+
+  const hydrated = blocks.map((block) => {
+    if (block.kind !== 'drawing') {
+      return block;
+    }
+    return hydrateDrawingBlock(block);
+  });
+
+  return blocksChanged ? hydrated : blocks;
 }
 
 // ============================================================================
@@ -1451,8 +1635,21 @@ export function normalizeTextContent(value: unknown): import('@superdoc/contract
   if (!Array.isArray(value.parts)) return undefined;
   if (value.parts.length === 0) return undefined;
 
-  // Filter valid text parts
-  const validParts = value.parts.filter((p: unknown) => isPlainObject(p) && typeof p.text === 'string');
+  // Filter valid text parts (text runs, images, and block-level tables).
+  const validParts = value.parts.filter((p: unknown) => {
+    if (!isPlainObject(p)) return false;
+    const part = p as TextPart;
+    if (part.kind === 'table') {
+      return isShapeTablePart(part);
+    }
+    if (part.kind === 'tab') {
+      return true;
+    }
+    if (part.kind === 'image') {
+      return typeof part.src === 'string';
+    }
+    return typeof part.text === 'string';
+  });
 
   if (validParts.length === 0) return undefined;
 

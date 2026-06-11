@@ -63,6 +63,7 @@ export {
   type HeaderFooterBatchResult,
   getBucketForPageNumber,
   getBucketRepresentative,
+  invalidateHeaderFooterMeasures,
 } from './layoutHeaderFooter';
 export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';

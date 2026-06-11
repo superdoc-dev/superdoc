@@ -34,14 +34,22 @@ export const createInlineSdtWrapper = (sdt: SdtMetadata, context: RunRenderConte
   return wrapper;
 };
 
-export const syncInlineSdtWrapperTypography = (wrapper: HTMLElement, runForSizing?: Run): void => {
+export const syncInlineSdtWrapperTypography = (
+  wrapper: HTMLElement,
+  runForSizing?: Run,
+  options?: { lineHeightPx?: number },
+): void => {
   // The line container sets fontSize:0; keep wrapper chrome aligned with the run text size.
   const runFontSize =
     runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
       ? `${runForSizing.fontSize}px`
       : BROWSER_DEFAULT_FONT_SIZE;
   wrapper.style.fontSize = runFontSize;
-  wrapper.style.lineHeight = 'normal';
+  if (options?.lineHeightPx != null) {
+    wrapper.style.lineHeight = `${options.lineHeightPx}px`;
+  } else {
+    wrapper.style.lineHeight = 'normal';
+  }
 };
 
 export const expandSdtWrapperPmRange = (wrapper: HTMLElement, pmStart?: number | null, pmEnd?: number | null): void => {

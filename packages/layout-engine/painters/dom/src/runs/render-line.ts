@@ -22,6 +22,8 @@ import { textRunMergeSignature } from './hash.js';
 import { isBreakRun, isFieldAnnotationRun, isImageRun, isLineBreakRun, isMathRun, renderRun } from './render-run.js';
 import {
   canPaintUnderlineOverlay,
+  lineContentTopPx,
+  lineTextContentHeightPx,
   renderInlineTabRun,
   renderPositionedTabRun,
   underlineBorderForRun,
@@ -70,6 +72,20 @@ const alignNormalTextBesideInlineImage = (element: HTMLElement, run: Run, lineCo
 
   element.style.lineHeight = 'normal';
   element.style.verticalAlign = 'bottom';
+};
+
+const applySegmentPositionedTextMetrics = (
+  element: HTMLElement,
+  run: Run,
+  line: import('@superdoc/contracts').Line,
+  topPx: number,
+): void => {
+  if ((run.kind !== 'text' && run.kind !== undefined) || !('text' in run)) return;
+  const textRun = run as TextRun;
+  if (normalizeBaselineShift(textRun.baselineShift) != null || textRun.vertAlign != null) return;
+
+  element.style.top = `${topPx}px`;
+  element.style.lineHeight = `${lineTextContentHeightPx(line)}px`;
 };
 
 const cloneTextRun = (run: TextRun): TextRun => ({
@@ -596,6 +612,8 @@ const renderExplicitlyPositionedRuns = ({
   useLineUnderlineOverlay: boolean;
   underlineSpanCollector?: UnderlineOverlaySpan[];
 }): void => {
+  const contentTopPx = lineContentTopPx(line);
+  const textContentHeightPx = lineTextContentHeightPx(line);
   // Use segment-based rendering with absolute positioning for tab-aligned text.
   // shouldUseSegmentPositioning returns false for RTL because the layout engine
   // computes tab positions in LTR order; RTL lines fall through to inline-flow
@@ -687,6 +705,10 @@ const renderExplicitlyPositionedRuns = ({
     if (resolved) {
       if (!geoSdtWrapper) {
         geoSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
+        geoSdtWrapper.dataset.segmentPositioned = 'true';
+        geoSdtWrapper.style.padding = '0';
+        geoSdtWrapper.style.border = '0';
+        geoSdtWrapper.style.backgroundColor = 'transparent';
         if (isEmptyInlineSdtPlaceholderRun(runForSdt)) {
           geoSdtWrapper.dataset.empty = 'true';
         }
@@ -695,18 +717,22 @@ const renderExplicitlyPositionedRuns = ({
         geoSdtMaxRight = elemLeftPx;
         geoSdtWrapper.style.position = 'absolute';
         geoSdtWrapper.style.left = `${elemLeftPx}px`;
-        geoSdtWrapper.style.top = '0px';
-        geoSdtWrapper.style.height = `${line.lineHeight}px`;
+        geoSdtWrapper.style.top = `${contentTopPx}px`;
+        geoSdtWrapper.style.height = `${textContentHeightPx}px`;
       }
       if (isImageRun(runForSdt)) {
         geoSdtWrapper.dataset.containsInlineImage = 'true';
       }
-      runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
+      runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt, {
+        lineHeightPx: textContentHeightPx,
+      });
       elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
       geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
       runContext.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
       geoSdtWrapper.appendChild(elem);
+      applySegmentPositionedTextMetrics(elem, runForSdt, line, 0);
     } else {
+      applySegmentPositionedTextMetrics(elem, runForSdt, line, contentTopPx);
       el.appendChild(elem);
     }
   };
@@ -739,6 +765,7 @@ const renderExplicitlyPositionedRuns = ({
         !coveredByOverlay,
       );
       appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
+      tabEl.style.top = `${contentTopPx}px`;
       if (coveredByOverlay && underlineSpanCollector) {
         appendUnderlineOverlaySpan(
           underlineSpanCollector,

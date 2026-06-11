@@ -1072,14 +1072,27 @@ export type TextPart = {
    * hydrateImageBlocks resolves it to a data URI alongside ImageRuns so
    * binary (Y.js) and string (zip) media files share the same path
    * candidates and Uint8Array decoding.
+   *
+   * SD-2745: the same textbox container can also hold block-level
+   * `w:tbl` elements. Import stamps `kind: 'table'` with the encoded PM
+   * table node; pm-adapter hydrates it to a TableBlock and the drawing
+   * measure pass attaches a TableMeasure for DomPainter.
    */
-  kind?: 'image';
+  kind?: 'image' | 'table' | 'tab';
+  /** Tab stops for the containing paragraph (twips), used when painting shape textbox tabs. */
+  paragraphTabs?: TabStop[];
   src?: string;
   extension?: string;
   rId?: string;
   width?: number;
   height?: number;
   alt?: string;
+  /** Encoded PM table node captured at import (export round-trip). */
+  tablePm?: Record<string, unknown>;
+  /** Hydrated table block for nested shape textbox rendering. */
+  tableBlock?: TableBlock;
+  /** Measured during the drawing measure pass before paint. */
+  tableMeasure?: TableMeasure;
 };
 
 /** Text content configuration for shapes. */

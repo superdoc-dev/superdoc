@@ -140,7 +140,7 @@ describe('StoryPresentationSessionManager', () => {
     expect(first.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('commits on exit when commitPolicy is onExit (default)', () => {
+  it('does not commit unchanged onExit sessions', () => {
     const commit = vi.fn();
     const editor = makeStubEditor(document.createElement('div'));
     const runtime = makeStubRuntime(editor, { commit });
@@ -152,6 +152,24 @@ describe('StoryPresentationSessionManager', () => {
 
     manager.activate(makeStubLocator());
     expect(commit).not.toHaveBeenCalled();
+
+    manager.exit();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('commits changed onExit sessions', () => {
+    const commit = vi.fn();
+    const editor = makeStubEditor(document.createElement('div'));
+    const runtime = makeStubRuntime(editor, { commit });
+
+    const manager = new StoryPresentationSessionManager({
+      resolveRuntime: () => runtime,
+      getMountContainer: () => container,
+    });
+
+    manager.activate(makeStubLocator());
+    editor.emitTransaction?.(true);
+    editor.emitTransaction?.(false);
 
     manager.exit();
     expect(commit).toHaveBeenCalledTimes(1);

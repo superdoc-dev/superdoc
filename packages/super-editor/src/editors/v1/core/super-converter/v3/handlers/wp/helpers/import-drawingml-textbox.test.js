@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { importDrawingMLTextbox } from './import-drawingml-textbox.js';
 
 vi.mock('./textbox-content-helpers.js', async (importOriginal) => {
@@ -107,6 +108,61 @@ describe('importDrawingMLTextbox', () => {
     const text = run?.content?.[0];
     expect(text?.type).toBe('text');
     expect(text?.marks).toEqual([{ type: 'textStyle', attrs: { fontSize: '10pt' } }]);
+  });
+
+  it('imports table content from txbxContent into shapeTextbox', () => {
+    const textBoxContent = {
+      name: 'w:txbxContent',
+      elements: [
+        {
+          name: 'w:tbl',
+          elements: [
+            { name: 'w:tblPr', elements: [{ name: 'w:tblW', attributes: { 'w:w': '5000', 'w:type': 'dxa' } }] },
+            { name: 'w:tblGrid', elements: [{ name: 'w:gridCol', attributes: { 'w:w': '5000' } }] },
+            {
+              name: 'w:tr',
+              elements: [
+                {
+                  name: 'w:tc',
+                  elements: [
+                    { name: 'w:tcPr', elements: [{ name: 'w:tcW', attributes: { 'w:w': '5000', 'w:type': 'dxa' } }] },
+                    {
+                      name: 'w:p',
+                      elements: [
+                        {
+                          name: 'w:r',
+                          elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Test Name' }] }],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'w:p',
+                      elements: [
+                        {
+                          name: 'w:r',
+                          elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Utrecht' }] }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = importDrawingMLTextbox({
+      params: { docx: {}, filename: 'header1.xml', nodeListHandler: defaultNodeListHandler() },
+      drawingNode: { name: 'w:drawing' },
+      textBoxContent,
+      baseAttrs: { width: 100, height: 50 },
+    });
+
+    const serialized = JSON.stringify(result?.content?.[0]?.content ?? []);
+    expect(serialized).toContain('Test Name');
+    expect(serialized).toContain('Utrecht');
   });
 
   it('stores drawingNode in shapeContainer attrs', () => {

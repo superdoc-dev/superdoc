@@ -108,6 +108,14 @@ import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './
 import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
+import { renderShapeTextboxTable, shapeTextContentHasTableParts } from './shape-textbox-table.js';
+import {
+  appendShapeTextboxTabElement,
+  createShapeTextboxTabState,
+  isShapeTextboxTabPart,
+  measureShapeTextPartWidth,
+  type ShapeTextboxTabState,
+} from './shape-textbox-tabs.js';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
@@ -3029,6 +3037,9 @@ export class DomPainter {
       );
     }
 
+    const insets = block.textInsets ?? { top: 10, right: 10, bottom: 10, left: 10 };
+    const innerWidth = Math.max(1, width - insets.left - insets.right);
+
     return this.createFallbackTextElement(
       textContent,
       block.textAlign ?? 'center',
@@ -3037,6 +3048,7 @@ export class DomPainter {
       groupScaleX,
       groupScaleY,
       context,
+      innerWidth,
     );
   }
 
@@ -3047,6 +3059,10 @@ export class DomPainter {
     height: number,
     context?: FragmentRenderContext,
   ): Element {
+    if (shapeTextContentHasTableParts(block.textContent)) {
+      return this.createShapeTextElement(block, width, height, 1, 1, context);
+    }
+
     const contentMeasures = fragment?.contentMeasures ?? block.contentMeasures;
     if (!Array.isArray(contentMeasures) || contentMeasures.length === 0) {
       return this.hasShapeTextContent(block.textContent)
@@ -3274,6 +3290,7 @@ export class DomPainter {
     groupScaleX = 1,
     groupScaleY = 1,
     context?: FragmentRenderContext,
+    contentWidth?: number,
   ): HTMLElement {
     const textDiv = this.doc!.createElement('div');
     textDiv.style.position = 'absolute';
@@ -3323,32 +3340,126 @@ export class DomPainter {
       textDiv.style.textAlign = 'left';
     }
 
-    // Create paragraphs by splitting on line breaks
-    let currentParagraph = this.doc!.createElement('div');
-    // Set width to 100% to enable text wrapping within the shape bounds
-    currentParagraph.style.width = '100%';
-    // min-width: 0 prevents flex item from overflowing (flexbox default is min-width: auto)
-    currentParagraph.style.minWidth = '0';
-    // Override inherited white-space: pre from parent fragment to allow text wrapping
-    currentParagraph.style.whiteSpace = 'normal';
+    const paragraphInnerWidth = typeof contentWidth === 'number' && contentWidth > 0 ? contentWidth : 200;
 
-    textContent.parts.forEach((part) => {
+    const resetParagraphElement = (): HTMLDivElement => {
+      const paragraph = this.doc!.createElement('div');
+      paragraph.style.width = '100%';
+      paragraph.style.minWidth = '0';
+      paragraph.style.whiteSpace = 'normal';
+      return paragraph;
+    };
+
+    const getFollowingText = (startIndex: number): string => {
+      let following = '';
+      for (let index = startIndex + 1; index < textContent.parts.length; index += 1) {
+        const nextPart = textContent.parts[index];
+        if (nextPart.isLineBreak) break;
+        if (isShapeTextboxTabPart(nextPart)) continue;
+        if (nextPart.kind === 'image' || nextPart.kind === 'table') break;
+        following += this.resolveShapeTextPartText(nextPart, context);
+      }
+      return following;
+    };
+
+    // Create paragraphs by splitting on line breaks
+    let currentParagraph = resetParagraphElement();
+    let tabState: ShapeTextboxTabState = createShapeTextboxTabState(paragraphInnerWidth);
+
+    textContent.parts.forEach((part, partIndex) => {
       if (part.isLineBreak) {
         // Finish current paragraph and start a new one
         textDiv.appendChild(currentParagraph);
-        currentParagraph = this.doc!.createElement('div');
-        currentParagraph.style.width = '100%';
-        currentParagraph.style.minWidth = '0';
-        currentParagraph.style.whiteSpace = 'normal';
+        currentParagraph = resetParagraphElement();
+        tabState = createShapeTextboxTabState(paragraphInnerWidth);
         // Empty paragraphs create extra spacing (blank line)
         if (part.isEmptyParagraph) {
           currentParagraph.style.minHeight = '1em';
         }
       } else if (part.kind === 'image' && part.src) {
         currentParagraph.appendChild(createShapeTextImageElement(this.doc!, part));
+      } else if (isShapeTextboxTabPart(part)) {
+        if (part.paragraphTabs?.length) {
+          tabState = createShapeTextboxTabState(paragraphInnerWidth, part.paragraphTabs);
+        }
+        appendShapeTextboxTabElement(this.doc!, currentParagraph, part, tabState, getFollowingText(partIndex));
+      } else if (part.kind === 'table' && part.tableBlock && part.tableMeasure) {
+        if (currentParagraph.childNodes.length > 0) {
+          textDiv.appendChild(currentParagraph);
+          currentParagraph = resetParagraphElement();
+          tabState = createShapeTextboxTabState(paragraphInnerWidth, part.paragraphTabs);
+        }
+
+        const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
+        const renderLineForTableCell = (
+          block: ParagraphBlock,
+          line: Line,
+          ctx: FragmentRenderContext,
+          lineIndex: number,
+          isLastLine: boolean,
+          resolvedListTextStartPx?: number,
+        ): HTMLElement => {
+          const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
+          const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
+          const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
+
+          let expandedRuns = tableCellExpandedRunsCache.get(block);
+          if (!expandedRuns) {
+            expandedRuns = expandRunsForInlineNewlines(block.runs);
+            tableCellExpandedRunsCache.set(block, expandedRuns);
+          }
+
+          return this.renderLine(
+            block,
+            line,
+            ctx,
+            undefined,
+            lineIndex,
+            shouldSkipJustify,
+            expandedRuns,
+            resolvedListTextStartPx,
+          );
+        };
+
+        const tableWrapper = this.doc!.createElement('div');
+        tableWrapper.style.position = 'relative';
+        tableWrapper.style.width = '100%';
+        const tableEl = renderShapeTextboxTable({
+          doc: this.doc!,
+          part,
+          context,
+          renderLine: renderLineForTableCell,
+          captureLineSnapshot: (lineEl, lineContext, options) => {
+            this.capturePaintSnapshotLine(lineEl, lineContext, {
+              inTableFragment: true,
+              inTableParagraph: options?.inTableParagraph ?? false,
+              wrapperEl: options?.wrapperEl,
+            });
+          },
+          renderDrawingContent: (drawingBlock) => {
+            if (drawingBlock.drawingKind === 'image') {
+              return createDrawingImageElement(this.doc!, drawingBlock, this.buildImageHyperlinkAnchor.bind(this));
+            }
+            if (drawingBlock.drawingKind === 'vectorShape') {
+              return this.createVectorShapeElement(drawingBlock, drawingBlock.geometry, false, 1, 1, context);
+            }
+            return this.createDrawingPlaceholder();
+          },
+          applySdtDataset,
+          applyContainerSdtDataset,
+          applyStyles,
+        });
+        if (tableEl) {
+          tableWrapper.appendChild(tableEl);
+          textDiv.appendChild(tableWrapper);
+        }
       } else {
+        if (part.paragraphTabs?.length) {
+          tabState = createShapeTextboxTabState(paragraphInnerWidth, part.paragraphTabs);
+        }
         const span = this.doc!.createElement('span');
-        span.textContent = this.resolveShapeTextPartText(part, context);
+        const resolvedText = this.resolveShapeTextPartText(part, context);
+        span.textContent = resolvedText;
         if (part.formatting) {
           if (part.formatting.bold) {
             span.style.fontWeight = 'bold';
@@ -3374,6 +3485,7 @@ export class DomPainter {
           }
         }
         currentParagraph.appendChild(span);
+        tabState.currentX += measureShapeTextPartWidth(resolvedText, part.formatting);
       }
     });
 

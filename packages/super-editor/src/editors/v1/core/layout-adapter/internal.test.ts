@@ -29,6 +29,7 @@ vi.mock('./converters/index.js', () => ({
   tableNodeToBlock: vi.fn(),
   handleTableNode: vi.fn(),
   hydrateImageBlocks: vi.fn((blocks) => blocks),
+  hydrateTextboxTableParts: vi.fn((blocks) => blocks),
 }));
 
 vi.mock('./sdt/index.js', () => ({
@@ -96,6 +97,7 @@ import {
   handleShapeTextboxNode,
   paragraphToFlowBlocks,
   hydrateImageBlocks,
+  hydrateTextboxTableParts,
 } from './converters/index.js';
 import {
   handleTableOfContentsNode,

@@ -38,6 +38,11 @@ export type AnchoredTableCollection = {
   withoutParagraph: AnchoredTable[];
 };
 
+export type AnchoredDrawingCollection = {
+  byParagraph: Map<number, AnchoredDrawing[]>;
+  withoutParagraph: AnchoredDrawing[];
+};
+
 function buildParagraphIndexById(blocks: FlowBlock[], len: number): Map<string, number> {
   const paragraphIndexById = new Map<string, number>();
 
@@ -130,8 +135,9 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
  * Collect anchored drawings (images/drawings) mapped to their anchor paragraph index.
  * Map of paragraph block index -> anchored images/drawings associated with that paragraph.
  */
-export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredDrawing[]> {
-  const map = new Map<number, AnchoredDrawing[]>();
+export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): AnchoredDrawingCollection {
+  const byParagraph = new Map<number, AnchoredDrawing[]>();
+  const withoutParagraph: AnchoredDrawing[] = [];
   const len = Math.min(blocks.length, measures.length);
   const paragraphIndexById = buildParagraphIndexById(blocks, len);
 
@@ -160,14 +166,17 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
         ? (drawingBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
         : undefined;
     const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
-    if (anchorParaIndex == null) continue; // no paragraphs at all
+    if (anchorParaIndex == null) {
+      withoutParagraph.push({ block: drawingBlock, measure: drawingMeasure });
+      continue;
+    }
 
-    const list = map.get(anchorParaIndex) ?? [];
+    const list = byParagraph.get(anchorParaIndex) ?? [];
     list.push({ block: drawingBlock, measure: drawingMeasure });
-    map.set(anchorParaIndex, list);
+    byParagraph.set(anchorParaIndex, list);
   }
 
-  return map;
+  return { byParagraph, withoutParagraph };
 }
 
 /**

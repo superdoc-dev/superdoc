@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { FlowBlock, ParagraphIndent } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphIndent, TableBlock, VectorShapeDrawing } from '@superdoc/contracts';
 import {
   twipsToPx,
   ptToPx,
@@ -1187,6 +1187,58 @@ describe('Media Utilities', () => {
 
       // Fourth shape should be hydrated
       expect(drawingBlock.shapes[3].attrs?.src).toBe('data:image/png;base64,base64data2');
+    });
+  });
+
+  describe('hydrateImageBlocks - textbox table cell images', () => {
+    it('hydrates ImageRuns inside nested textbox table blocks', () => {
+      const tableBlock: TableBlock = {
+        kind: 'table',
+        id: 'textbox-table',
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'cell-para',
+                    runs: [
+                      {
+                        kind: 'image',
+                        src: 'word/media/logo.png',
+                        width: 40,
+                        height: 20,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'drawing',
+          id: 'textbox-shape',
+          drawingKind: 'vectorShape',
+          geometry: { width: 200, height: 80, rotation: 0, flipH: false, flipV: false },
+          textContent: {
+            parts: [{ kind: 'table', text: '', tableBlock }],
+          },
+        } as FlowBlock,
+      ];
+
+      const mediaFiles = { 'word/media/logo.png': 'nestedTableImageData' };
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      const shape = result[0] as VectorShapeDrawing;
+      const hydratedTable = shape.textContent?.parts?.[0]?.tableBlock as TableBlock;
+      const imageRun = hydratedTable.rows[0]?.cells[0]?.blocks?.[0]?.runs?.[0];
+
+      expect(imageRun?.kind).toBe('image');
+      expect((imageRun as { src?: string }).src).toBe('data:image/png;base64,nestedTableImageData');
     });
   });
 });

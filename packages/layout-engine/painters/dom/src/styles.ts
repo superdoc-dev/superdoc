@@ -760,6 +760,15 @@ const SDT_CONTAINER_STYLES = `
   z-index: 10;
 }
 
+/* Tab-aligned segment positioning supplies its own absolute geometry; drop chrome padding
+   so SDT values share the same baseline as adjacent label runs (letterhead textboxes). */
+.superdoc-structured-content-inline[data-segment-positioned='true'] {
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  border-radius: 0;
+}
+
 .superdoc-structured-content-inline[data-contains-inline-image='true']:not([data-appearance='hidden']) {
   display: inline-block;
   vertical-align: top;

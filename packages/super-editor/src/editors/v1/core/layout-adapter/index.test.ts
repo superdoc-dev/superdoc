@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { toFlowBlocks as baseToFlowBlocks } from './index.js';
 import type { PMNode, PMMark, AdapterOptions } from './index.js';
-import type { FlowBlock, ImageBlock, TableBlock } from '@superdoc/contracts';
+import type { FlowBlock, ImageBlock, TableBlock, TextboxDrawing } from '@superdoc/contracts';
+import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
+import { importDrawingMLTextbox } from '@converter/v3/handlers/wp/helpers/import-drawingml-textbox.js';
 import basicParagraphFixture from './fixtures/basic-paragraph.json';
 import edgeCasesFixture from './fixtures/edge-cases.json';
 import tabsDecimalFixture from './fixtures/tabs-decimal.json';
@@ -5375,6 +5377,80 @@ describe('toFlowBlocks', () => {
         scope: 'block',
         id: 'scb-inner',
       });
+    });
+  });
+
+  describe('textboxShape table content (SD-2745)', () => {
+    it('projects table cell paragraphs from shapeContainer into contentBlocks', () => {
+      const shapeContainer = importDrawingMLTextbox({
+        params: { docx: {}, filename: 'header1.xml', nodeListHandler: defaultNodeListHandler() },
+        drawingNode: { name: 'w:drawing', elements: [] },
+        textBoxContent: {
+          name: 'w:txbxContent',
+          elements: [
+            {
+              name: 'w:tbl',
+              elements: [
+                { name: 'w:tblPr', elements: [{ name: 'w:tblW', attributes: { 'w:w': '5000', 'w:type': 'dxa' } }] },
+                { name: 'w:tblGrid', elements: [{ name: 'w:gridCol', attributes: { 'w:w': '5000' } }] },
+                {
+                  name: 'w:tr',
+                  elements: [
+                    {
+                      name: 'w:tc',
+                      elements: [
+                        {
+                          name: 'w:tcPr',
+                          elements: [{ name: 'w:tcW', attributes: { 'w:w': '5000', 'w:type': 'dxa' } }],
+                        },
+                        {
+                          name: 'w:p',
+                          elements: [
+                            {
+                              name: 'w:r',
+                              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Test Name' }] }],
+                            },
+                          ],
+                        },
+                        {
+                          name: 'w:p',
+                          elements: [
+                            {
+                              name: 'w:r',
+                              elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Utrecht' }] }],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        baseAttrs: { width: 400, height: 80 },
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [shapeContainer as unknown as PMNode],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      const drawing = blocks.find((block) => block.kind === 'drawing') as TextboxDrawing | undefined;
+
+      expect(drawing?.drawingKind).toBe('textboxShape');
+      const tablePart = drawing?.textContent?.parts?.find((part) => part.kind === 'table');
+      expect(tablePart?.tableBlock?.kind).toBe('table');
+      const renderedText = JSON.stringify(tablePart?.tableBlock ?? {});
+      expect(renderedText).toContain('Test Name');
+      expect(renderedText).toContain('Utrecht');
     });
   });
 });

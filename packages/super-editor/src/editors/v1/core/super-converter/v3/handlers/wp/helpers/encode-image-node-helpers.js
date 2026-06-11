@@ -11,13 +11,16 @@ import {
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
 import {
+  collectTextBoxBlockElements,
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
   resolveParagraphPropertiesForTextBox,
   extractRunFormatting,
   extractParagraphAlignment,
   extractBodyPrProperties,
+  extractParagraphTabStops,
 } from './textbox-content-helpers.js';
+import { translator as tblTranslator } from '@converter/v3/handlers/w/tbl/tbl-translator.js';
 import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 import { findChildByLocalName, someChildHasLocalName, hasLocalName } from './drawingml-utils.js';
@@ -1094,9 +1097,17 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   if (!textBoxContent || !textBoxContent.elements) return null;
 
   const processedContent = preProcessTextBoxContent(textBoxContent, params);
-  const paragraphs = collectTextBoxParagraphs(processedContent?.elements || []);
+  const blockElements = collectTextBoxBlockElements(processedContent?.elements || []);
   const textParts = [];
   let horizontalAlign = null;
+  let currentParagraphTabs = null;
+
+  const appendTextPart = (part) => {
+    if (currentParagraphTabs?.length) {
+      part.paragraphTabs = currentParagraphTabs;
+    }
+    textParts.push(part);
+  };
 
   /**
    * Appends a field part (PAGE, NUMPAGES, or SECTIONPAGES) to textParts with formatting.
@@ -1111,7 +1122,7 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       fieldType === 'SECTIONPAGES'
         ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '')
         : '';
-    textParts.push({
+    appendTextPart({
       text: cachedText,
       formatting,
       fieldType,
@@ -1138,14 +1149,14 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
           hasText = true;
           const cleanedText =
             typeof textNode.text === 'string' ? textNode.text.replace(/\[\[sdspace\]\]/g, ' ') : textNode.text;
-          textParts.push({ text: cleanedText, formatting });
+          appendTextPart({ text: cleanedText, formatting });
         }
       } else if (el.name === 'w:tab') {
         hasText = true;
-        textParts.push({ text: '\t', formatting });
+        appendTextPart({ text: '', kind: 'tab', formatting });
       } else if (el.name === 'w:br') {
         hasText = true;
-        textParts.push({ text: '\n', formatting: {}, isLineBreak: true });
+        appendTextPart({ text: '\n', formatting: {}, isLineBreak: true });
       } else if (el.name === 'sd:autoPageNumber') {
         hasText = true;
         appendFieldPart('PAGE', el, paragraphProperties);
@@ -1172,7 +1183,7 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
           if (imagePm?.attrs?.src && imagePm.attrs.hidden !== true) {
             hasText = true;
             const sizeAttr = imagePm.attrs.size || imagePm.attrs;
-            textParts.push({
+            appendTextPart({
               text: '',
               formatting,
               kind: 'image',
@@ -1227,9 +1238,27 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
     return false;
   };
 
-  // Process each paragraph
-  paragraphs.forEach((paragraph, paragraphIndex) => {
+  // Process block-level content in document order (paragraphs and tables).
+  blockElements.forEach((blockElement, blockIndex) => {
+    if (blockElement.kind === 'table') {
+      if (!params?.nodeListHandler) {
+        return;
+      }
+      const tablePm = tblTranslator.encode({ ...params, nodes: [blockElement.node] });
+      if (tablePm?.type === 'table') {
+        textParts.push({
+          text: '',
+          formatting: {},
+          kind: 'table',
+          tablePm,
+        });
+      }
+      return;
+    }
+
+    const paragraph = blockElement.node;
     const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraph, params);
+    currentParagraphTabs = extractParagraphTabStops(paragraphProperties) ?? null;
 
     // Extract horizontal alignment from first paragraph that has it
     if (!horizontalAlign) {
@@ -1245,9 +1274,9 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       }
     });
 
-    // Add line break marker after each paragraph except the last one
-    // Empty paragraphs (no text) create blank lines with extra spacing
-    if (paragraphIndex < paragraphs.length - 1) {
+    // Add line break marker after each block except the last one.
+    // Empty paragraphs create blank lines with extra spacing.
+    if (blockIndex < blockElements.length - 1) {
       textParts.push({
         text: '\n',
         formatting: {},

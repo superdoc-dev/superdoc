@@ -48,7 +48,12 @@ vi.mock('@core/parts/adapters/header-footer-sync.js', () => ({
   exportSubEditorToPart: vi.fn(),
 }));
 
-import { createHeaderFooterEditor, toggleHeaderFooterEditMode } from './pagination-helpers.js';
+import {
+  createHeaderFooterEditor,
+  onHeaderFooterDataUpdate,
+  toggleHeaderFooterEditMode,
+} from './pagination-helpers.js';
+import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.js';
 
 function createParentEditor() {
   return {
@@ -148,5 +153,30 @@ describe('createHeaderFooterEditor', () => {
     expect(footerEditor.setEditable).toHaveBeenCalledWith(true, false);
     expect(footerEditor.view.dom.getAttribute('documentmode')).toBe('suggesting');
     expect(focusedSectionEditor.view.focus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('onHeaderFooterDataUpdate', () => {
+  beforeEach(() => {
+    exportSubEditorToPart.mockClear();
+  });
+
+  it('skips export when the sub-editor document did not change', () => {
+    const mainEditor = {
+      converter: {
+        headers: { rId1: {} },
+        headerEditors: [],
+      },
+      setOptions: vi.fn(),
+    };
+    const subEditor = {
+      docChanged: false,
+      getUpdatedJson: vi.fn(),
+    };
+
+    onHeaderFooterDataUpdate({ editor: subEditor, transaction: { docChanged: false } }, mainEditor, 'rId1', 'header');
+
+    expect(exportSubEditorToPart).not.toHaveBeenCalled();
+    expect(subEditor.getUpdatedJson).not.toHaveBeenCalled();
   });
 });

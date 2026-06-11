@@ -147,6 +147,9 @@ describe('HeaderFooterSessionManager', () => {
       getDescriptorById: vi.fn(() => descriptor),
       getDescriptors: vi.fn(() => [descriptor]),
       ensureEditor: vi.fn(async () => headerFooterEditor),
+      runWithoutContentSync: vi.fn((fn: () => unknown) => fn()),
+      syncEditorChangeBaseline: vi.fn(),
+      syncLayoutDocumentJson: vi.fn(),
       refresh: vi.fn(),
       destroy: vi.fn(),
     };
@@ -359,6 +362,8 @@ describe('HeaderFooterSessionManager', () => {
         getDescriptorById: vi.fn(() => descriptor),
         getDescriptors: vi.fn(() => [descriptor]),
         ensureEditor: vi.fn(),
+        runWithoutContentSync: vi.fn((fn: () => unknown) => fn()),
+        syncEditorChangeBaseline: vi.fn(),
         refresh: vi.fn(),
         destroy: vi.fn(),
       },
@@ -425,7 +430,7 @@ describe('HeaderFooterSessionManager', () => {
         refId: 'rId-header-default',
       },
       expect.objectContaining({
-        commitPolicy: 'onExit',
+        commitPolicy: 'manual',
         preferHiddenHost: true,
         hostWidthPx: 480,
         editorContext: expect.objectContaining({
@@ -439,8 +444,8 @@ describe('HeaderFooterSessionManager', () => {
         }),
       }),
     );
-    expect(setPendingDocChange).toHaveBeenCalledTimes(1);
-    expect(scheduleRerender).toHaveBeenCalledTimes(1);
+    expect(setPendingDocChange).not.toHaveBeenCalled();
+    expect(scheduleRerender).not.toHaveBeenCalled();
   });
 
   it('enters header edit mode in suggesting mode and enables tracked changes', async () => {
@@ -536,6 +541,8 @@ describe('HeaderFooterSessionManager', () => {
         getDescriptorById: vi.fn(() => descriptor),
         getDescriptors: vi.fn(() => [descriptor]),
         ensureEditor: vi.fn(),
+        runWithoutContentSync: vi.fn((fn: () => unknown) => fn()),
+        syncEditorChangeBaseline: vi.fn(),
         refresh: vi.fn(),
         destroy: vi.fn(),
       },

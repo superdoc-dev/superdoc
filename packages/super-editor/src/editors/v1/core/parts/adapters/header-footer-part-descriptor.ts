@@ -136,16 +136,16 @@ export function ensureHeaderFooterDescriptor(partId: PartId, sectionId: string):
       const resolvedSectionId = ctx.sectionId ?? sectionId;
 
       // Local edits still emit SOURCE_HEADER_FOOTER_LOCAL as a coordination
-      // signal so we can suppress redundant live-editor fan-out, but the
-      // descriptor path is authoritative for rebuilding the PM cache from the
-      // committed OOXML. This avoids depending on UI callers to pre-update
-      // converter state before mutatePart runs.
+      // signal so we can suppress redundant live-editor fan-out. The local
+      // header/footer editor has already updated converter.headers/footers
+      // before mutatePart runs, so keep that PM cache intact. Re-importing the
+      // just-exported OOXML can drop importer-preserved shape/textbox data that
+      // the header/footer renderer still needs.
       const isLocalSync = ctx.source === SOURCE_HEADER_FOOTER_LOCAL;
 
-      // Rebuild the PM JSON cache from the updated OOXML for both local and
-      // remote applies. Local sync suppresses only the live-editor refresh
-      // fan-out below.
-      if (typeof converter.reimportHeaderFooterPart === 'function') {
+      // Rebuild the PM JSON cache from updated OOXML for remote/document-api
+      // applies. Local sync uses the live sub-editor cache instead.
+      if (!isLocalSync && typeof converter.reimportHeaderFooterPart === 'function') {
         try {
           const pmJson = converter.reimportHeaderFooterPart(ctx.partId);
           if (pmJson) {

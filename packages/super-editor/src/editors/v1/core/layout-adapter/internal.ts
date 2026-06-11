@@ -38,6 +38,7 @@ import {
   tableNodeToBlock,
   handleTableNode,
   hydrateImageBlocks,
+  hydrateTextboxTableParts,
   handleParagraphNode,
 } from './converters/index.js';
 import { chartNodeToDrawingBlock, handleChartNode } from './converters/chart.js';
@@ -282,7 +283,21 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   }
 
   instrumentation?.log?.({ totalBlocks: blocks.length, blockCounts, bookmarks: bookmarks.size });
-  const hydratedBlocks = hydrateImageBlocks(blocks, options?.mediaFiles);
+  // Hydrate textbox tables before image paths so nested cell ImageRuns exist when
+  // hydrateImageBlocks walks table blocks inside shape textContent.
+  const tableHydratedBlocks = hydrateTextboxTableParts(blocks, {
+    nextBlockId,
+    positions,
+    storyKey: options?.storyKey,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig,
+    themeColors,
+    converterContext,
+    converters,
+    enableComments,
+  });
+  const hydratedBlocks = hydrateImageBlocks(tableHydratedBlocks, options?.mediaFiles);
 
   // Post-process: Merge drop-cap paragraphs with their following text paragraphs
   const dropCapMergedBlocks = mergeDropCapParagraphs(hydratedBlocks);

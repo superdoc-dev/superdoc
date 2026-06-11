@@ -22,7 +22,11 @@ const PAGE_HEIGHT = 1056;
 const MARGIN_BOTTOM = 72;
 const FOOTER_DISTANCE = 36;
 
+const PAGE_WIDTH = 816;
+
 const fullConstraints = {
+  width: PAGE_WIDTH - 72 - 72,
+  pageWidth: PAGE_WIDTH,
   pageHeight: PAGE_HEIGHT,
   margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36, footer: FOOTER_DISTANCE },
 };
@@ -33,7 +37,35 @@ const FOOTER_BAND_ORIGIN = PAGE_HEIGHT - FOOTER_DISTANCE; // 1020
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
+describe('normalizeFragmentsForRegion', () => {
+  describe('page-relative anchors in header', () => {
+    it('uses absolute physical page Y and content-local X', () => {
+      const imgWidth = 120;
+      const imgHeight = 900;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'letterhead',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          vRelativeFrom: 'page',
+          hRelativeFrom: 'page',
+          alignV: 'bottom',
+          alignH: 'right',
+          behindDoc: true,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('letterhead', 0, imgHeight);
+      fragment.width = imgWidth;
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.y).toBe(PAGE_HEIGHT - imgHeight);
+      expect(fragment.x).toBe(PAGE_WIDTH - 72 - imgWidth);
+    });
+  });
+
   describe('page-relative anchors in footer', () => {
     it('normalizes a top-aligned anchor', () => {
       const block: FlowBlock = {

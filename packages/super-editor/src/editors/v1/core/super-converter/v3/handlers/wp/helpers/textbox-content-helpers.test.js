@@ -8,6 +8,7 @@ import {
   extractRunFormatting,
   extractParagraphAlignment,
   extractBodyPrProperties,
+  extractParagraphTabStops,
 } from './textbox-content-helpers.js';
 import { preProcessNodesForFldChar } from '@converter/field-references/preProcessNodesForFldChar.js';
 import { preProcessPageFieldsOnly } from '@converter/field-references/preProcessPageFieldsOnly.js';
@@ -356,6 +357,34 @@ describe('textbox-content-helpers', () => {
         ],
       };
       expect(extractParagraphAlignment(paragraph)).toBe('center');
+    });
+  });
+
+  describe('extractParagraphTabStops', () => {
+    it('converts flat SuperConverter px tab stops to twips', () => {
+      const result = extractParagraphTabStops({
+        tabStops: [{ pos: 96, align: 'right' }],
+      });
+      expect(result).toEqual([{ val: 'end', pos: 1440 }]);
+    });
+
+    it('prefers originalPos over flat px pos', () => {
+      const result = extractParagraphTabStops({
+        tabStops: [{ pos: 96, originalPos: 8640, val: 'right' }],
+      });
+      expect(result).toEqual([{ val: 'end', pos: 8640 }]);
+    });
+
+    it('preserves nested OOXML twips tab stops', () => {
+      const result = extractParagraphTabStops({
+        tabStops: [{ tab: { tabType: 'right', pos: 8640, leader: 'dot' } }],
+      });
+      expect(result).toEqual([{ val: 'end', pos: 8640, leader: 'dot' }]);
+    });
+
+    it('returns undefined for empty tab stops', () => {
+      expect(extractParagraphTabStops({ tabStops: [] })).toBeUndefined();
+      expect(extractParagraphTabStops(null)).toBeUndefined();
     });
   });
 

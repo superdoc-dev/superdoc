@@ -339,7 +339,13 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, he
     return;
   }
 
-  const updatedData = editor.getUpdatedJson();
+  const docChanged = transaction?.docChanged === true || editor.docChanged === true;
+  if (!docChanged) {
+    return;
+  }
+
+  const layoutJson = typeof editor.getJSON === 'function' ? editor.getJSON() : editor.getUpdatedJson?.();
+  const updatedData = layoutJson ?? editor.getUpdatedJson?.();
   const editorsList = mainEditor.converter[`${type}Editors`];
   if (Array.isArray(editorsList)) {
     editorsList.forEach((item) => {

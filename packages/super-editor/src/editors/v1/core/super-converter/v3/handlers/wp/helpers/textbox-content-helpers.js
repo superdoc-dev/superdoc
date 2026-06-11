@@ -7,6 +7,7 @@ import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
 import { translator as w_rPrTranslator } from '@converter/v3/handlers/w/rpr';
 import { resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
 import { SuperConverter } from '@converter/SuperConverter.js';
+import { normalizeOoxmlTabs } from '@core/layout-adapter/attributes/tabs.js';
 
 /**
  * Regex pattern to match header or footer XML filenames.
@@ -46,6 +47,40 @@ export function collectTextBoxParagraphs(nodes, paragraphs = []) {
     }
   });
   return paragraphs;
+}
+
+/**
+ * Collects top-level block elements from w:txbxContent in document order.
+ * Returns paragraphs (w:p) and tables (w:tbl), recursing into w:sdt/w:sdtContent.
+ *
+ * @param {Array<Object>} nodes - Array of XML element nodes to search
+ * @param {Array<{ kind: 'paragraph' | 'table', node: Object }>} [blocks=[]] - Accumulator
+ * @returns {Array<{ kind: 'paragraph' | 'table', node: Object }>}
+ */
+export function collectTextBoxBlockElements(nodes, blocks = []) {
+  if (!Array.isArray(nodes)) return blocks;
+  nodes.forEach((node) => {
+    if (!node) return;
+    if (node.name === 'w:p') {
+      blocks.push({ kind: 'paragraph', node });
+      return;
+    }
+    if (node.name === 'w:tbl') {
+      blocks.push({ kind: 'table', node });
+      return;
+    }
+    if (node.name === 'w:sdt' && Array.isArray(node.elements)) {
+      const sdtContent = node.elements.find((el) => el.name === 'w:sdtContent');
+      if (sdtContent?.elements) {
+        collectTextBoxBlockElements(sdtContent.elements, blocks);
+      }
+      return;
+    }
+    if (Array.isArray(node.elements)) {
+      collectTextBoxBlockElements(node.elements, blocks);
+    }
+  });
+  return blocks;
 }
 
 /**
@@ -186,6 +221,20 @@ export function extractParagraphAlignment(paragraph) {
  * @param {Object|null|undefined} bodyPr - The wps:bodyPr element
  * @returns {Object} Object containing verticalAlign, insets, and wrap properties
  */
+/**
+ * Normalizes paragraph tab stops from resolved paragraph properties.
+ *
+ * Reuses layout-adapter tab normalization so SuperConverter's flat tab-stop
+ * shape ({ pos in px, originalPos in twips }) is converted to twips before
+ * shape-textbox paint divides positions by 15.
+ *
+ * @param {Object|null|undefined} paragraphProperties - Resolved paragraph properties
+ * @returns {Array<{ val: string, pos: number, leader?: string }>|undefined}
+ */
+export function extractParagraphTabStops(paragraphProperties) {
+  return normalizeOoxmlTabs(paragraphProperties?.tabStops);
+}
+
 export function extractBodyPrProperties(bodyPr) {
   const bodyPrAttrs = bodyPr?.attributes || {};
 

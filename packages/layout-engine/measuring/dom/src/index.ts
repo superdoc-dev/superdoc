@@ -57,6 +57,12 @@ import {
   type DrawingBlock,
   type DrawingMeasure,
   type DrawingGeometry,
+  type VectorShapeDrawing,
+  type TextboxDrawing,
+  type ShapeGroupDrawing,
+  type ShapeGroupVectorChild,
+  type ShapeTextContent,
+  type TextPart,
   type DropCapDescriptor,
   type CellSpacing,
   type TableBorders,
@@ -857,7 +863,7 @@ export async function measureBlock(
   const normalized = normalizeConstraints(constraints);
 
   if (block.kind === 'drawing') {
-    return measureDrawingBlock(block as DrawingBlock, normalized);
+    return measureDrawingBlock(block as DrawingBlock, normalized, fontContext);
   }
 
   if (block.kind === 'image') {
@@ -1568,7 +1574,9 @@ async function measureParagraphBlock(
     // Handle explicit line breaks (e.g., DOCX <w:br/>)
     if (isLineBreakRun(run)) {
       // For leading line breaks (before any text), use fallback font info for accurate height calculation
-      const lineBreakFontInfo = hasSeenTextRun ? undefined : fallbackFontInfo;
+      // Keep paragraph font metrics for break-seeded lines even after text runs appear,
+      // so trailing explicit lineBreak empty lines match the preceding line height.
+      const lineBreakFontInfo = fallbackFontInfo;
       if (currentLine) {
         const metrics = finalizeLineMetrics(currentLine, spacing);
         const completedLine: Line = {
@@ -3363,7 +3371,110 @@ async function measureImageBlock(block: ImageBlock, constraints: MeasureConstrai
  * // (maxHeight bypassed due to negative offsetV)
  * ```
  */
-async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureConstraints): Promise<DrawingMeasure> {
+async function measureTextContentTableParts(
+  textContent: ShapeTextContent | undefined,
+  innerWidth: number,
+  fontContext: FontMeasureContext,
+): Promise<ShapeTextContent | undefined> {
+  if (!textContent?.parts?.some((part) => part.kind === 'table' && part.tableBlock && !part.tableMeasure)) {
+    return textContent;
+  }
+
+  const hydratedParts: TextPart[] = await Promise.all(
+    textContent.parts.map(async (part) => {
+      if (part.kind !== 'table' || !part.tableBlock || part.tableMeasure) {
+        return part;
+      }
+      const tableMeasure = await measureBlock(part.tableBlock, { maxWidth: innerWidth }, fontContext);
+      if (tableMeasure.kind !== 'table') {
+        return part;
+      }
+      return { ...part, tableMeasure };
+    }),
+  );
+
+  return { ...textContent, parts: hydratedParts };
+}
+
+async function measureNestedTextboxTableParts(
+  block: DrawingBlock,
+  geometry: DrawingGeometry,
+  fontContext: FontMeasureContext,
+): Promise<void> {
+  const defaultInsets = { top: 10, right: 10, bottom: 10, left: 10 };
+
+  if (block.drawingKind === 'vectorShape') {
+    const vectorShape = block as VectorShapeDrawing;
+    const insets = vectorShape.textInsets ?? defaultInsets;
+    const innerWidth = Math.max(1, geometry.width - insets.left - insets.right);
+    const hydratedTextContent = await measureTextContentTableParts(vectorShape.textContent, innerWidth, fontContext);
+    if (hydratedTextContent && hydratedTextContent !== vectorShape.textContent) {
+      vectorShape.textContent = hydratedTextContent;
+    }
+    return;
+  }
+
+  if (block.drawingKind === 'textboxShape') {
+    const textboxShape = block as TextboxDrawing;
+    const insets = textboxShape.textInsets ?? defaultInsets;
+    const innerWidth = Math.max(1, geometry.width - insets.left - insets.right);
+    const hydratedTextContent = await measureTextContentTableParts(textboxShape.textContent, innerWidth, fontContext);
+    if (hydratedTextContent && hydratedTextContent !== textboxShape.textContent) {
+      textboxShape.textContent = hydratedTextContent;
+    }
+    return;
+  }
+
+  if (block.drawingKind !== 'shapeGroup') {
+    return;
+  }
+
+  const shapeGroup = block as ShapeGroupDrawing;
+  if (!shapeGroup.shapes?.length) {
+    return;
+  }
+
+  let shapesChanged = false;
+  const hydratedShapes = await Promise.all(
+    shapeGroup.shapes.map(async (shape) => {
+      if (shape.shapeType !== 'vectorShape' || !shape.attrs?.textContent) {
+        return shape;
+      }
+
+      const vectorChild = shape as ShapeGroupVectorChild;
+      const shapeWidth = typeof vectorChild.attrs.width === 'number' ? vectorChild.attrs.width : geometry.width;
+      const insets = vectorChild.attrs.textInsets ?? defaultInsets;
+      const innerWidth = Math.max(1, shapeWidth - insets.left - insets.right);
+      const hydratedTextContent = await measureTextContentTableParts(
+        vectorChild.attrs.textContent,
+        innerWidth,
+        fontContext,
+      );
+      if (!hydratedTextContent || hydratedTextContent === vectorChild.attrs.textContent) {
+        return shape;
+      }
+
+      shapesChanged = true;
+      return {
+        ...shape,
+        attrs: {
+          ...vectorChild.attrs,
+          textContent: hydratedTextContent,
+        },
+      };
+    }),
+  );
+
+  if (shapesChanged) {
+    shapeGroup.shapes = hydratedShapes;
+  }
+}
+
+async function measureDrawingBlock(
+  block: DrawingBlock,
+  constraints: MeasureConstraints,
+  fontContext: FontMeasureContext = DEFAULT_FONT_MEASURE_CONTEXT,
+): Promise<DrawingMeasure> {
   if (block.drawingKind === 'image') {
     const intrinsic = getIntrinsicSizeFromDims(block.width, block.height, constraints.maxWidth);
 
@@ -3433,6 +3544,8 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
 
   const width = naturalWidth * scale;
   const height = naturalHeight * scale;
+
+  await measureNestedTextboxTableParts(block, geometry, fontContext);
 
   return {
     kind: 'drawing',

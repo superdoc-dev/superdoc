@@ -70,6 +70,30 @@ describe('createBlockImageContent', () => {
     expect(imgEl.style.clipPath).toBe('inset(6.7% 0% 15.436% 0%)');
     expect(imgEl.style.objectFit).toBe('fill');
   });
+
+  it('wraps the image in its own clip container when a shape mask has no caller container', () => {
+    const doc = createDoc();
+    const wrapper = createBlockImageContent({
+      doc,
+      block: {
+        kind: 'image',
+        id: 'masked-image-standalone',
+        src: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+        attrs: {
+          clipPath: 'inset(6.7% 0% 15.436% 0%)',
+          shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+        },
+      },
+    });
+
+    expect(wrapper.tagName).toBe('DIV');
+    expect(wrapper.style.clipPath).toBe('ellipse(50% 50% at 50% 50%)');
+    expect(wrapper.style.overflow).toBe('hidden');
+    expect(wrapper.style.width).toBe('100%');
+    expect(wrapper.style.height).toBe('100%');
+    const imgEl = wrapper.querySelector('img') as HTMLImageElement;
+    expect(imgEl.style.clipPath).toBe('inset(6.7% 0% 15.436% 0%)');
+  });
 });
 
 describe('createDrawingImageElement', () => {
@@ -93,6 +117,24 @@ describe('createDrawingImageElement', () => {
     expect(imgEl.style.filter).toContain('grayscale(100%)');
     expect(imgEl.style.filter).toContain('contrast(2)');
     expect(imgEl.style.opacity).toBe('0.09');
+  });
+
+  it('applies shape masks to drawing images without a caller-supplied clip container', () => {
+    const doc = createDoc();
+    const drawing = {
+      kind: 'drawing',
+      drawingKind: 'image',
+      id: 'drawing-image-shape-masked',
+      src: 'data:image/png;base64,AAA',
+      attrs: { shapeClipPath: 'ellipse(50% 50% at 50% 50%)' },
+    } as unknown as DrawingBlock;
+
+    const wrapper = createDrawingImageElement(doc, drawing, (imageEl) => imageEl);
+
+    expect(wrapper.tagName).toBe('DIV');
+    expect(wrapper.style.clipPath).toBe('ellipse(50% 50% at 50% 50%)');
+    expect(wrapper.style.overflow).toBe('hidden');
+    expect(wrapper.querySelector('img.superdoc-drawing-image')).toBeTruthy();
   });
 
   it('wraps drawing images with unified hyperlink anchors', () => {

@@ -57,11 +57,23 @@ export const createBlockImageContent = ({
   img.style.height = '100%';
   applyImageObjectFit(img, block.objectFit ?? 'contain');
   const shapeClipPath = resolveBlockImageShapeClipPath(block);
-  if (shapeClipPath && clipContainer) {
-    clipContainer.style.clipPath = shapeClipPath;
-    clipContainer.style.overflow = 'hidden';
+  // Without a caller-supplied clip container, the shape mask still needs an
+  // element distinct from the img so srcRect cropping keeps its own clip-path.
+  const ownShapeClipContainer = shapeClipPath && !clipContainer ? doc.createElement('div') : undefined;
+  if (ownShapeClipContainer) {
+    ownShapeClipContainer.style.width = '100%';
+    ownShapeClipContainer.style.height = '100%';
   }
-  applyImageClipPath(img, resolveBlockImageClipPath(block), clipContainer ? { clipContainer } : undefined);
+  const shapeClipContainer = clipContainer ?? ownShapeClipContainer;
+  if (shapeClipPath && shapeClipContainer) {
+    shapeClipContainer.style.clipPath = shapeClipPath;
+    shapeClipContainer.style.overflow = 'hidden';
+  }
+  applyImageClipPath(
+    img,
+    resolveBlockImageClipPath(block),
+    shapeClipContainer ? { clipContainer: shapeClipContainer } : undefined,
+  );
   img.style.display = imageDisplay ?? (block.display === 'inline' ? 'inline-block' : 'block');
 
   const filters = buildImageFilters(block);
@@ -73,5 +85,10 @@ export const createBlockImageContent = ({
     img.style.opacity = opacity;
   }
 
-  return buildImageHyperlinkAnchor?.(img, block.hyperlink, hyperlinkDisplay) ?? img;
+  const content = buildImageHyperlinkAnchor?.(img, block.hyperlink, hyperlinkDisplay) ?? img;
+  if (ownShapeClipContainer) {
+    ownShapeClipContainer.appendChild(content);
+    return ownShapeClipContainer;
+  }
+  return content;
 };

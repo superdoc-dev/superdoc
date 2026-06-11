@@ -235,6 +235,8 @@ export function handleImageNode(node, params, isAnchor) {
       )
     : null;
   const wrap = isAnchor ? { type: wrapNode?.name.slice(7) || 'None', attrs: {} } : { type: 'Inline' };
+  const hasBehindDocAttribute = isAnchor && attributes.behindDoc != null;
+  const isBehindDoc = attributes.behindDoc === '1' || attributes.behindDoc === 1 || attributes.behindDoc === true;
 
   switch (wrap.type) {
     case 'Square':
@@ -289,7 +291,7 @@ export function handleImageNode(node, params, isAnchor) {
       }
       break;
     case 'None':
-      wrap.attrs.behindDoc = node.attributes?.behindDoc === '1';
+      wrap.attrs.behindDoc = isBehindDoc;
       break;
     case 'Inline':
       break;
@@ -301,6 +303,9 @@ export function handleImageNode(node, params, isAnchor) {
   // may omit them. Merge into wrap.attrs for wrap modes that affect text flow.
   if (wrap.type === 'Square' || wrap.type === 'Tight' || wrap.type === 'Through' || wrap.type === 'TopAndBottom') {
     mergeAnchorPaddingIntoWrapDistances(wrap, padding);
+  }
+  if (hasBehindDocAttribute && wrap.attrs) {
+    wrap.attrs.behindDoc = isBehindDoc;
   }
 
   const docPr = node.elements.find((el) => el.name === 'wp:docPr');

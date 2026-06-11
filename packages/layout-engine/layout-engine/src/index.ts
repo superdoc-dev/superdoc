@@ -598,6 +598,7 @@ export type LayoutOptions = {
    * overlay behavior in paragraph-free header/footer regions.
    */
   allowParagraphlessAnchoredTableFallback?: boolean;
+  allowParagraphlessAnchoredDrawingFallback?: boolean;
   /**
    * Allow body layout to synthesize page 1 when section metadata exists but no
    * renderable body blocks survive conversion.
@@ -945,6 +946,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let activeColumns = cloneColumnLayout(options.columns);
   let pendingColumns: ColumnLayout | null = null;
   const allowParagraphlessAnchoredTableFallback = options.allowParagraphlessAnchoredTableFallback !== false;
+  const allowParagraphlessAnchoredDrawingFallback = options.allowParagraphlessAnchoredDrawingFallback !== false;
   const allowSectionBreakOnlyPageFallback = options.allowSectionBreakOnlyPageFallback !== false;
 
   // Track active and pending orientation
@@ -1984,7 +1986,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   });
 
   // Collect anchored drawings mapped to their anchor paragraphs
-  const anchoredByParagraph = collectAnchoredDrawings(blocks, measures);
+  const anchoredDrawings = collectAnchoredDrawings(blocks, measures);
+  const anchoredByParagraph = anchoredDrawings.byParagraph;
+  const paragraphlessAnchoredDrawings = anchoredDrawings.withoutParagraph;
   // PASS 1C: collect anchored/floating tables mapped to their anchor paragraphs.
   // Tables without any anchor paragraph need explicit fallback placement so
   // floating-only documents still produce a page and render their content.
@@ -2016,6 +2020,36 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       preRegisteredFallbackToContentTop: true,
     });
   };
+
+  const resolveParagraphlessAnchoredDrawingY = (
+    block: ImageBlock | DrawingBlock,
+    measure: ImageMeasure | DrawingMeasure,
+    state: PageState,
+  ): number =>
+    resolveAnchoredGraphicY({
+      anchor: block.anchor,
+      objectHeight: measure.height ?? 0,
+      contentTop: state.topMargin,
+      contentBottom: state.contentBottom,
+      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
+      preRegisteredFallbackToContentTop: true,
+    });
+
+  const resolveParagraphlessAnchoredDrawingX = (
+    block: ImageBlock | DrawingBlock,
+    measure: ImageMeasure | DrawingMeasure,
+    state: PageState,
+  ): number =>
+    block.anchor
+      ? computeAnchorX(
+          block.anchor,
+          state.columnIndex,
+          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
+          measure.width,
+          { left: activeLeftMargin, right: activeRightMargin },
+          activePageSize.w,
+        )
+      : columnX(state);
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -2828,9 +2862,86 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   if (
     pages.length === 0 &&
     ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
+      (allowParagraphlessAnchoredDrawingFallback && paragraphlessAnchoredDrawings.length > 0) ||
       (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
   ) {
     resetPaginationStateForBlankPageFallback();
+  }
+
+  if (allowParagraphlessAnchoredDrawingFallback && pages.length === 0 && paragraphlessAnchoredDrawings.length > 0) {
+    const state = paginator.ensurePage();
+
+    for (const { block, measure } of paragraphlessAnchoredDrawings) {
+      if (placedAnchoredIds.has(block.id)) continue;
+
+      const anchorX = resolveParagraphlessAnchoredDrawingX(block, measure, state);
+      const anchorY = resolveParagraphlessAnchoredDrawingY(block, measure, state);
+
+      if (block.kind === 'image' && measure.kind === 'image') {
+        const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
+        const aspectRatio = measure.width > 0 && measure.height > 0 ? measure.width / measure.height : 1.0;
+        const minWidth = 20;
+        const minHeight = minWidth / aspectRatio;
+        const fragment: ImageFragment = {
+          kind: 'image',
+          blockId: block.id,
+          x: anchorX,
+          y: anchorY,
+          width: measure.width,
+          height: measure.height,
+          isAnchored: true,
+          behindDoc: block.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(block),
+          metadata: {
+            originalWidth: measure.width,
+            originalHeight: measure.height,
+            maxWidth: activePageSize.w - (activeLeftMargin + activeRightMargin),
+            maxHeight: pageContentHeight,
+            aspectRatio,
+            minWidth,
+            minHeight,
+          },
+          sourceAnchor: block.sourceAnchor,
+        };
+        const attrs = block.attrs as Record<string, unknown> | undefined;
+        if (attrs?.pmStart != null) fragment.pmStart = attrs.pmStart as number;
+        if (attrs?.pmEnd != null) fragment.pmEnd = attrs.pmEnd as number;
+        state.page.fragments.push(fragment);
+        placedAnchoredIds.add(block.id);
+        continue;
+      }
+
+      if (block.kind === 'drawing' && measure.kind === 'drawing') {
+        const contentMeasures =
+          block.drawingKind === 'textboxShape' && typeof options.remeasureParagraph === 'function'
+            ? layoutTextboxContent(block, options.remeasureParagraph)
+            : undefined;
+        const fragment: DrawingFragment = {
+          kind: 'drawing',
+          blockId: block.id,
+          drawingKind: block.drawingKind,
+          x: anchorX,
+          y: anchorY,
+          width: measure.width,
+          height: measure.height,
+          geometry: measure.geometry,
+          scale: measure.scale,
+          isAnchored: true,
+          behindDoc: block.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(block),
+          drawingContentId: block.drawingContentId,
+          sourceAnchor: block.sourceAnchor,
+        };
+        if (contentMeasures) {
+          fragment.contentMeasures = contentMeasures;
+        }
+        const attrs = block.attrs as Record<string, unknown> | undefined;
+        if (attrs?.pmStart != null) fragment.pmStart = attrs.pmStart as number;
+        if (attrs?.pmEnd != null) fragment.pmEnd = attrs.pmEnd as number;
+        state.page.fragments.push(fragment);
+        placedAnchoredIds.add(block.id);
+      }
+    }
   }
 
   if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {

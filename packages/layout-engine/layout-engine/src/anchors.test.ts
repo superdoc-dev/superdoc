@@ -677,11 +677,14 @@ describe('anchors', () => {
 
       const result = collectAnchoredDrawings(blocks, measures);
       expect(result.size).toBe(0);
+      expect(result.withoutParagraph).toHaveLength(1);
+      expect(result.withoutParagraph[0]?.block.id).toBe('img-1');
     });
 
     it('should handle empty blocks array', () => {
       const result = collectAnchoredDrawings([], []);
       expect(result.size).toBe(0);
+      expect(result.withoutParagraph).toHaveLength(0);
     });
 
     it('should handle anchored images with undefined vRelativeFrom (defaults to paragraph)', () => {

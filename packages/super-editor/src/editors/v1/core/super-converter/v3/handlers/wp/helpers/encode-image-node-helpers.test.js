@@ -656,6 +656,19 @@ describe('handleImageNode', () => {
       expect(result.attrs.wrap.attrs.wrapText).toBe('bothSides');
     });
 
+    it('preserves anchor behindDoc for non-None wrap types', () => {
+      const node = makeNode({ attributes: { behindDoc: '1' } });
+      node.elements.push({
+        name: 'wp:wrapSquare',
+        attributes: { wrapText: 'bothSides' },
+      });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('Square');
+      expect(result.attrs.wrap.attrs.behindDoc).toBe(true);
+    });
+
     it('handles wrap type Square with distance attributes', () => {
       const node = makeNode();
       node.elements.push({

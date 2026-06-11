@@ -3703,6 +3703,93 @@ describe('DomPainter', () => {
     expect(wrapperAfter?.style.fontSize).toBe('10px');
   });
 
+  it('keeps segment-positioned inline SDT text aligned with adjacent plain runs', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'segment-positioned-inline-sdt-baseline',
+      runs: [
+        { text: 'KvK', fontFamily: 'Arial, sans-serif', fontSize: 16, pmStart: 0, pmEnd: 3 },
+        { kind: 'tab', text: '\t', width: 48, fontSize: 16 },
+        {
+          text: 'KvK_number',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 14,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'header-value-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Header value',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 10,
+          width: 140,
+          maxWidth: 300,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          segments: [
+            { runIndex: 0, fromChar: 0, toChar: 3, width: 28 },
+            { runIndex: 2, fromChar: 0, toChar: 10, width: 92, x: 80 },
+          ],
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'segment-positioned-inline-sdt-baseline',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="header-value-sdt"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.padding).toBe('0px');
+    expect(wrapper?.style.borderWidth).toBe('0px');
+    expect(wrapper?.style.lineHeight).toBe('20px');
+
+    const value = wrapper?.querySelector('[data-pm-start="4"]') as HTMLElement | null;
+    expect(value).toBeTruthy();
+    expect(value?.style.left).toBe('0px');
+    expect(value?.style.top).toBe('0px');
+  });
+
   it('uses first run font-size for inline SDT wrapper when a field has mixed run sizes', () => {
     const mixedSizeBlock: FlowBlock = {
       kind: 'paragraph',
@@ -6263,7 +6350,7 @@ describe('DomPainter', () => {
 
       expect(behindDocEl).toBeTruthy();
       expect(behindDocEl.style.top).toBe('40px');
-      expect(behindDocEl.style.left).toBe('42px');
+      expect(behindDocEl.style.left).toBe('12px');
     });
 
     it('renders footer page-relative media using normalized band-local coordinates', () => {

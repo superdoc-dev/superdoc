@@ -697,12 +697,17 @@ const renderExplicitlyPositionedRuns = ({
         geoSdtWrapper.style.left = `${elemLeftPx}px`;
         geoSdtWrapper.style.top = '0px';
         geoSdtWrapper.style.height = `${line.lineHeight}px`;
+        geoSdtWrapper.style.padding = '0px';
+        geoSdtWrapper.style.borderWidth = '0px';
+        geoSdtWrapper.style.lineHeight = `${line.lineHeight}px`;
       }
       if (isImageRun(runForSdt)) {
         geoSdtWrapper.dataset.containsInlineImage = 'true';
       }
       runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
+      geoSdtWrapper.style.lineHeight = `${line.lineHeight}px`;
       elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
+      elem.style.top = '0px';
       geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
       runContext.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
       geoSdtWrapper.appendChild(elem);

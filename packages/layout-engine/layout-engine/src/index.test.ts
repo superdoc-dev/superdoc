@@ -4432,6 +4432,104 @@ describe('layoutHeaderFooter', () => {
     expect(Array.isArray(fragment.contentMeasures)).toBe(true);
     expect(fragment.contentMeasures).toHaveLength(1);
   });
+
+  it('places paragraphless anchored textboxShape blocks in header/footer layout', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-textbox-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: -10,
+        offsetV: -6,
+      },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'header-textbox-para-1',
+          runs: [{ text: 'Header text', pmStart: 1, pmEnd: 12 }],
+        },
+      ],
+      textInsets: { top: 4, right: 8, bottom: 4, left: 8 },
+    };
+    const textboxMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 40,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 40,
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [textboxBlock],
+      [textboxMeasure],
+      { width: 400, height: 80 },
+      'header',
+      (_block, _maxWidth) => makeMeasure([16]),
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    const fragment = layout.pages[0].fragments[0] as DrawingFragment;
+    expect(fragment.kind).toBe('drawing');
+    expect(fragment.blockId).toBe('header-textbox-1');
+    expect(fragment.isAnchored).toBe(true);
+    expect(fragment.x).toBe(-10);
+    expect(fragment.y).toBe(-6);
+    expect(fragment.contentMeasures).toHaveLength(1);
+  });
+
+  it('places paragraphless page-relative behindDoc header images at page offsets', () => {
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-bg-image',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'page',
+        offsetH: 1387 * (96 / 914400),
+        offsetV: 254000 * (96 / 914400),
+        behindDoc: true,
+      },
+      wrap: { type: 'None', behindDoc: true },
+    };
+    const imageMeasure: ImageMeasure = {
+      kind: 'image',
+      width: 7557463 * (96 / 914400),
+      height: 10723880 * (96 / 914400),
+    };
+
+    const layout = layoutHeaderFooter(
+      [imageBlock],
+      [imageMeasure],
+      {
+        width: 602,
+        height: 648,
+        pageWidth: 816,
+        pageHeight: 1056,
+        margins: { left: 107, right: 107, top: 72, bottom: 72, header: 36 },
+      },
+      'header',
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    const fragment = layout.pages[0].fragments[0] as ImageFragment;
+    expect(fragment.kind).toBe('image');
+    expect(fragment.blockId).toBe('header-bg-image');
+    expect(fragment.isAnchored).toBe(true);
+    expect(fragment.behindDoc).toBe(true);
+    expect(fragment.zIndex).toBe(0);
+    expect(fragment.x).toBeCloseTo(0.15, 2);
+    expect(fragment.y).toBeCloseTo(26.67, 2);
+    expect(layout.height).toBe(0);
+    expect(layout.renderHeight).toBeGreaterThan(1000);
+  });
 });
 
 describe('requirePageBoundary edge cases', () => {

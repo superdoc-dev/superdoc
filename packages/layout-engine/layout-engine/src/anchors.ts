@@ -22,6 +22,14 @@ export type AnchoredDrawing = {
   measure: ImageMeasure | DrawingMeasure;
 };
 
+export type AnchoredDrawingCollection = {
+  byParagraph: Map<number, AnchoredDrawing[]>;
+  withoutParagraph: AnchoredDrawing[];
+  readonly size: number;
+  has(index: number): boolean;
+  get(index: number): AnchoredDrawing[] | undefined;
+};
+
 export type AnchoredTable = {
   block: TableBlock;
   measure: TableMeasure;
@@ -130,8 +138,9 @@ export function collectPreRegisteredAnchors(blocks: FlowBlock[], measures: Measu
  * Collect anchored drawings (images/drawings) mapped to their anchor paragraph index.
  * Map of paragraph block index -> anchored images/drawings associated with that paragraph.
  */
-export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): Map<number, AnchoredDrawing[]> {
-  const map = new Map<number, AnchoredDrawing[]>();
+export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]): AnchoredDrawingCollection {
+  const byParagraph = new Map<number, AnchoredDrawing[]>();
+  const withoutParagraph: AnchoredDrawing[] = [];
   const len = Math.min(blocks.length, measures.length);
   const paragraphIndexById = buildParagraphIndexById(blocks, len);
 
@@ -159,15 +168,27 @@ export function collectAnchoredDrawings(blocks: FlowBlock[], measures: Measure[]
       typeof drawingBlock.attrs === 'object' && drawingBlock.attrs
         ? (drawingBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
         : undefined;
+    const anchoredDrawing = { block: drawingBlock, measure: drawingMeasure };
     const anchorParaIndex = resolveAnchorParagraphIndex(blocks, len, paragraphIndexById, i, anchorParagraphId);
-    if (anchorParaIndex == null) continue; // no paragraphs at all
+    if (anchorParaIndex == null) {
+      withoutParagraph.push(anchoredDrawing);
+      continue;
+    }
 
-    const list = map.get(anchorParaIndex) ?? [];
-    list.push({ block: drawingBlock, measure: drawingMeasure });
-    map.set(anchorParaIndex, list);
+    const list = byParagraph.get(anchorParaIndex) ?? [];
+    list.push(anchoredDrawing);
+    byParagraph.set(anchorParaIndex, list);
   }
 
-  return map;
+  return {
+    byParagraph,
+    withoutParagraph,
+    get size() {
+      return byParagraph.size;
+    },
+    has: (index: number) => byParagraph.has(index),
+    get: (index: number) => byParagraph.get(index),
+  };
 }
 
 /**

@@ -5865,6 +5865,7 @@ export class PresentationEditor extends EventEmitter {
           pageIndex: session.pageIndex,
           pageNumber: session.pageNumber,
         });
+        this.#refreshEditorDomAugmentations();
         this.#updateAwarenessSession();
       },
       onEditingContext: (data) => {
@@ -7745,6 +7746,7 @@ export class PresentationEditor extends EventEmitter {
   #refreshEditorDomAugmentations(): void {
     this.#postPaintPipeline.refreshAfterPaint({
       layoutEpoch: this.#layoutEpoch,
+      activeHeaderFooterMode: this.#headerFooterSession?.session?.mode ?? 'body',
       editorState: this.#editor?.view?.state,
       domPositionIndex: this.#domPositionIndex,
       proofingAnnotations: this.#buildProofingAnnotations(),

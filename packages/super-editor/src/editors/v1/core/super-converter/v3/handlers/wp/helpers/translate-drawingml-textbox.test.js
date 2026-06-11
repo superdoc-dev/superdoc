@@ -152,6 +152,164 @@ describe('translateDrawingMLTextbox', () => {
     expect(posV.elements[0].elements[0].text).toBe('1905000');
   });
 
+  it('patches wp:extent and a:ext EMU values when width and height attrs are present', () => {
+    translateChildNodes.mockReturnValue([]);
+
+    const drawingContent = {
+      name: 'w:drawing',
+      elements: [
+        {
+          name: 'wp:anchor',
+          elements: [
+            { name: 'wp:extent', attributes: { cx: '457200', cy: '914400' } },
+            {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'wps:wsp',
+                      elements: [
+                        {
+                          name: 'wps:spPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              elements: [{ name: 'a:ext', attributes: { cx: '457200', cy: '914400' } }],
+                            },
+                          ],
+                        },
+                        { name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [] }] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateDrawingMLTextbox({
+      node: {
+        type: 'shapeContainer',
+        attrs: { drawingContent, width: 200, height: 100 },
+        content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      },
+    });
+
+    // 200px * 9525 = 1905000, 100px * 9525 = 952500
+    const resultDrawing = result?.elements?.[0]?.elements?.[0]?.elements?.[0];
+    const extent = findNodeByName(resultDrawing, 'wp:extent');
+    const ext = findNodeByName(resultDrawing, 'a:ext');
+    expect(extent.attributes.cx).toBe('1905000');
+    expect(extent.attributes.cy).toBe('952500');
+    expect(ext.attributes.cx).toBe('1905000');
+    expect(ext.attributes.cy).toBe('952500');
+  });
+
+  it('patches only cx when only width is changed', () => {
+    translateChildNodes.mockReturnValue([]);
+
+    const drawingContent = {
+      name: 'w:drawing',
+      elements: [
+        {
+          name: 'wp:anchor',
+          elements: [
+            { name: 'wp:extent', attributes: { cx: '457200', cy: '914400' } },
+            {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'wps:wsp',
+                      elements: [
+                        {
+                          name: 'wps:spPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              elements: [{ name: 'a:ext', attributes: { cx: '457200', cy: '914400' } }],
+                            },
+                          ],
+                        },
+                        { name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [] }] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateDrawingMLTextbox({
+      node: {
+        type: 'shapeContainer',
+        attrs: { drawingContent, width: 300, height: null },
+        content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      },
+    });
+
+    // 300px * 9525 = 2857500; cy must be unchanged
+    const resultDrawing = result?.elements?.[0]?.elements?.[0]?.elements?.[0];
+    const extent = findNodeByName(resultDrawing, 'wp:extent');
+    expect(extent.attributes.cx).toBe('2857500');
+    expect(extent.attributes.cy).toBe('914400');
+  });
+
+  it('does not patch posOffset when marginOffset is absent', () => {
+    translateChildNodes.mockReturnValue([]);
+
+    const drawingContent = {
+      name: 'w:drawing',
+      elements: [
+        {
+          name: 'wp:anchor',
+          elements: [
+            {
+              name: 'wp:positionH',
+              elements: [{ name: 'wp:posOffset', elements: [{ type: 'text', text: '123456' }] }],
+            },
+            {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'wps:wsp',
+                      elements: [{ name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [] }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateDrawingMLTextbox({
+      node: {
+        type: 'shapeContainer',
+        attrs: { drawingContent },
+        content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      },
+    });
+
+    const resultDrawing = result?.elements?.[0]?.elements?.[0]?.elements?.[0];
+    const posH = findNodeByName(resultDrawing, 'wp:positionH');
+    expect(posH.elements[0].elements[0].text).toBe('123456');
+  });
+
   it('returns null when drawingContent is missing', () => {
     const result = translateDrawingMLTextbox({
       node: {

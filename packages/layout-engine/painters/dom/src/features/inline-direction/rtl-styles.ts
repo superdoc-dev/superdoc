@@ -22,7 +22,7 @@ export const isRtlParagraph = (attrs: ParagraphAttrs | undefined): boolean =>
  * becomes 'left' (LTR) or 'right' (RTL) to align the last line correctly.
  * When no explicit alignment is set the default follows the paragraph direction.
  */
-export const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: boolean): string => {
+export const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: boolean, isAuto = false): string => {
   switch (alignment) {
     case 'center':
     case 'right':
@@ -30,6 +30,9 @@ export const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: 
       return alignment;
     case 'justify':
     default:
+      // For auto-direction paragraphs we don't know the resolved side at paint
+      // time — `start` follows the browser-resolved `dir="auto"`.
+      if (isAuto) return 'start';
       return isRtl ? 'right' : 'left';
   }
 };
@@ -40,15 +43,21 @@ export const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: 
  * (fragment wrappers) so the logic stays in one place.
  */
 export const applyRtlStyles = (element: HTMLElement, attrs: ParagraphAttrs | undefined): boolean => {
-  const rtl = isRtlParagraph(attrs);
-  if (rtl) {
+  const dir = getParagraphInlineDirection(attrs); // 'rtl' | 'ltr' | undefined
+  const rtl = dir === 'rtl';
+  if (dir === 'rtl') {
     element.setAttribute('dir', 'rtl');
     element.style.direction = 'rtl';
+  } else if (dir === 'ltr') {
+    element.setAttribute('dir', 'ltr');
+    element.style.direction = 'ltr';
   } else {
-    element.removeAttribute('dir');
+    // Unset: let the browser detect base direction from content (dir="auto").
+    // An absent dir would inherit the container direction instead.
+    element.setAttribute('dir', 'auto');
     element.style.direction = '';
   }
-  element.style.textAlign = resolveTextAlign(attrs?.alignment, rtl);
+  element.style.textAlign = resolveTextAlign(attrs?.alignment, rtl, dir === undefined);
   return rtl;
 };
 

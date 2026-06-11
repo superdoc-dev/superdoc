@@ -2,6 +2,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 import path from 'node:path';
 
 const TEXT_BOXES = path.resolve(import.meta.dirname, 'fixtures/text-boxes.docx');
+const TABLE_TEXTBOX = path.resolve(import.meta.dirname, 'fixtures/contract-acc-tbl-padding.docx');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -256,5 +257,66 @@ test.describe('Textbox object interaction — text-boxes', () => {
       return found;
     });
     expect(hasContent).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: table cell textbox — regression for versionSignature fix
+//
+// Drawings inside table cells are rendered inside the table fragment (not as
+// standalone DrawingFragment elements). Before the versionSignature fix, moving
+// a table-cell textbox did not bust the table fragment paint cache, so the
+// visual position only updated after a subsequent resize. This suite guards
+// against that regression.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the bounding box of the first textbox shape rendered inside a table
+ * (i.e. NOT inside a standalone .superdoc-drawing-fragment).
+ */
+async function getTableCellTextboxBox(page: any) {
+  const handle = await page.evaluateHandle(() => {
+    const all = Array.from(document.querySelectorAll<HTMLElement>('.superdoc-textbox-shape'));
+    return all.find((el) => !el.closest('.superdoc-drawing-fragment')) ?? null;
+  });
+  const el = handle.asElement();
+  if (!el) throw new Error('No table-cell textbox found');
+  const box = await el.boundingBox();
+  if (!box) throw new Error('Table-cell textbox not visible');
+  return box;
+}
+
+test.describe('Textbox object interaction — table cell', () => {
+  test.beforeEach(async ({ superdoc }) => {
+    await superdoc.loadDocument(TABLE_TEXTBOX);
+  });
+
+  test('@behavior textbox table-cell: move updates visual position immediately without requiring resize', async ({
+    superdoc,
+  }) => {
+    const before = await getTableCellTextboxBox(superdoc.page);
+
+    // Click the border of the table-cell textbox to get NodeSelection
+    await superdoc.page.mouse.click(before.x + 3, before.y + 3);
+    await superdoc.waitForStable();
+
+    const overlay = superdoc.page.locator('.superdoc-textbox-resize-overlay');
+    await expect(overlay).toBeAttached({ timeout: 5000 });
+
+    // Drag the overlay body to move the textbox
+    const overlayBox = await overlay.boundingBox();
+    if (!overlayBox) throw new Error('Overlay not visible');
+    const startX = overlayBox.x + overlayBox.width / 2;
+    const startY = overlayBox.y + overlayBox.height / 2;
+    await superdoc.page.mouse.move(startX, startY);
+    await superdoc.page.mouse.down();
+    await superdoc.page.mouse.move(startX + 30, startY + 20, { steps: 10 });
+    await superdoc.page.mouse.up();
+    await superdoc.waitForStable();
+
+    // Visual position must update without an additional resize
+    const after = await getTableCellTextboxBox(superdoc.page);
+    const moved = Math.abs(after.x - before.x) > 2 || Math.abs(after.y - before.y) > 2;
+    expect(moved).toBe(true);
   });
 });

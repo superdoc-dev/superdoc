@@ -2725,7 +2725,7 @@ export class EditorInputManager {
         ?.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null;
       const pageCandidates = pageElement?.querySelectorAll<HTMLElement>('[data-block-id]');
       if (pageCandidates) {
-        for (const candidate of pageCandidates) {
+        for (const candidate of Array.from(pageCandidates)) {
           const rect = candidate.getBoundingClientRect();
           if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
             addCandidate(candidate);

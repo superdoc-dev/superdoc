@@ -11,7 +11,7 @@
  * 4. Body measure cache for affected block IDs after token resolution
  */
 
-import type { FlowBlock, SectionMetadata } from '@superdoc/contracts';
+import type { DrawingBlock, FlowBlock, SectionMetadata } from '@superdoc/contracts';
 import type { HeaderFooterConstraints } from '@superdoc/layout-engine';
 import type { MeasureCache } from './cache';
 import type { HeaderFooterLayoutCache } from './layoutHeaderFooter';
@@ -57,9 +57,14 @@ export function computeHeaderFooterContentHash(blocks: FlowBlock[]): string {
       }
     }
 
-    if (block.kind === 'drawing' && 'geometry' in block) {
-      const g = (block as { geometry?: { width?: number; height?: number } }).geometry;
-      if (g) parts.push(`g:${g.width ?? 0}x${g.height ?? 0}`);
+    if (block.kind === 'drawing') {
+      const drawing = block as DrawingBlock;
+      if ('geometry' in drawing && drawing.geometry) {
+        parts.push(`g:${drawing.geometry.width ?? 0}x${drawing.geometry.height ?? 0}`);
+      }
+      if (drawing.anchor) {
+        parts.push(`a:${drawing.anchor.offsetH ?? 0},${drawing.anchor.offsetV ?? 0}`);
+      }
     }
   }
 

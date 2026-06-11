@@ -310,6 +310,84 @@ describe('translateDrawingMLTextbox', () => {
     expect(posH.elements[0].elements[0].text).toBe('123456');
   });
 
+  it('does not patch a:ext elements in extension lists — only patches wps:spPr > a:xfrm > a:ext', () => {
+    translateChildNodes.mockReturnValue([]);
+
+    // In real Word documents, wp:cNvGraphicFramePr > a:extLst > a:ext appears earlier in
+    // DFS order than wps:spPr > a:xfrm > a:ext. The old patchNodeAttributes DFS would
+    // wrongly add cx/cy to the extension-list a:ext. patchShapeGeometryExt uses a direct path.
+    const drawingContent = {
+      name: 'w:drawing',
+      elements: [
+        {
+          name: 'wp:anchor',
+          elements: [
+            { name: 'wp:extent', attributes: { cx: '457200', cy: '914400' } },
+            // Extension-list a:ext with uri appears BEFORE the shape geometry a:ext in DFS order
+            {
+              name: 'wp:cNvGraphicFramePr',
+              elements: [
+                {
+                  name: 'a:extLst',
+                  elements: [
+                    { name: 'a:ext', attributes: { uri: '{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}' }, elements: [] },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'a:graphic',
+              elements: [
+                {
+                  name: 'a:graphicData',
+                  elements: [
+                    {
+                      name: 'wps:wsp',
+                      elements: [
+                        {
+                          name: 'wps:spPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              elements: [{ name: 'a:ext', attributes: { cx: '457200', cy: '914400' } }],
+                            },
+                          ],
+                        },
+                        { name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [] }] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = translateDrawingMLTextbox({
+      node: {
+        type: 'shapeContainer',
+        attrs: { drawingContent, width: 200, height: 100 },
+        content: [{ type: 'shapeTextbox', attrs: {}, content: [] }],
+      },
+    });
+
+    // carbonCopy creates a deep copy — inspect the output, not the inputs.
+    const resultDrawing = result?.elements?.[0]?.elements?.[0]?.elements?.[0];
+
+    // DFS first match is the extension-list a:ext — it must NOT have cx/cy added.
+    const firstExt = findNodeByName(resultDrawing, 'a:ext');
+    expect(firstExt.attributes).toEqual({ uri: '{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}' });
+
+    // The shape geometry a:ext (inside wps:spPr > a:xfrm) must be patched.
+    // 200px * 9525 = 1905000, 100px * 9525 = 952500
+    const spPr = findNodeByName(resultDrawing, 'wps:spPr');
+    const shapeExt = findNodeByName(spPr, 'a:ext');
+    expect(shapeExt.attributes.cx).toBe('1905000');
+    expect(shapeExt.attributes.cy).toBe('952500');
+  });
+
   it('returns null when drawingContent is missing', () => {
     const result = translateDrawingMLTextbox({
       node: {

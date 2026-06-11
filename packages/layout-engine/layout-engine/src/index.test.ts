@@ -15,6 +15,7 @@ import type {
   ColumnBreakBlock,
   PageBreakBlock,
   TableBlock,
+  TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
 import { layoutDocument, layoutHeaderFooter, type LayoutOptions } from './index.js';
@@ -987,6 +988,47 @@ describe('layoutDocument', () => {
     expect(fragment).toBeTruthy();
     expect(fragment?.x).toBe(120);
     expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
+  it('renders paragraphless anchored drawings and floating tables on the same fallback page', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'paragraphless-floating-image',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 24,
+        offsetV: 36,
+      },
+      wrap: { type: 'Square' },
+    };
+    const imageMeasure: ImageMeasure = {
+      kind: 'image',
+      width: 80,
+      height: 40,
+    };
+    const floatingTable = makeParagraphlessFloatingTable('paragraphless-floating-table');
+    const floatingTableMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument([floatingTable, imageBlock], [floatingTableMeasure, imageMeasure], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const imageFragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'image' && candidate.blockId === 'paragraphless-floating-image',
+    ) as ImageFragment | undefined;
+    const tableFragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'paragraphless-floating-table',
+    ) as TableFragment | undefined;
+
+    expect(imageFragment).toBeTruthy();
+    expect(tableFragment).toBeTruthy();
+    expect(imageFragment?.x).toBe(DEFAULT_OPTIONS.margins!.left + 24);
+    expect(imageFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 36);
+    expect(tableFragment?.x).toBe(120);
+    expect(tableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
   });
 
   it('renders a floating table after pruning a leading empty page', () => {

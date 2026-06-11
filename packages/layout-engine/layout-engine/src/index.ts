@@ -2859,8 +2859,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     sectionFirstPageNumbers.clear();
   };
 
+  const shouldUseBlankPageFallback = pages.length === 0;
+
   if (
-    pages.length === 0 &&
+    shouldUseBlankPageFallback &&
     ((allowParagraphlessAnchoredTableFallback && paragraphlessAnchoredTables.length > 0) ||
       (allowParagraphlessAnchoredDrawingFallback && paragraphlessAnchoredDrawings.length > 0) ||
       (allowSectionBreakOnlyPageFallback && hasOnlySectionBreakBlocks(blocks)))
@@ -2868,7 +2870,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     resetPaginationStateForBlankPageFallback();
   }
 
-  if (allowParagraphlessAnchoredDrawingFallback && pages.length === 0 && paragraphlessAnchoredDrawings.length > 0) {
+  if (
+    allowParagraphlessAnchoredDrawingFallback &&
+    shouldUseBlankPageFallback &&
+    paragraphlessAnchoredDrawings.length > 0
+  ) {
     const state = paginator.ensurePage();
 
     for (const { block, measure } of paragraphlessAnchoredDrawings) {
@@ -2944,7 +2950,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
-  if (allowParagraphlessAnchoredTableFallback && pages.length === 0 && paragraphlessAnchoredTables.length > 0) {
+  if (allowParagraphlessAnchoredTableFallback && shouldUseBlankPageFallback && paragraphlessAnchoredTables.length > 0) {
     const state = paginator.ensurePage();
 
     for (const { block: tableBlock, measure: tableMeasure } of paragraphlessAnchoredTables) {
@@ -2964,7 +2970,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
-  if (allowSectionBreakOnlyPageFallback && pages.length === 0 && hasOnlySectionBreakBlocks(blocks)) {
+  if (allowSectionBreakOnlyPageFallback && shouldUseBlankPageFallback && hasOnlySectionBreakBlocks(blocks)) {
     paginator.ensurePage();
   }
 

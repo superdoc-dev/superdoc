@@ -327,6 +327,60 @@ describe('textbox-content-helpers', () => {
         ['4253', '4973'],
       ]);
     });
+
+    it('should advance textbox table column starts by merged cell grid spans', () => {
+      const p = (elements) => ({ name: 'w:p', elements });
+      const runText = (text) => ({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text }] }] });
+      const runTab = () => ({ name: 'w:r', elements: [{ name: 'w:tab' }] });
+      const table = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblGrid',
+            elements: [
+              { name: 'w:gridCol', attributes: { 'w:w': '1000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '2000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '3000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '4000' } },
+            ],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:tc',
+                elements: [
+                  {
+                    name: 'w:tcPr',
+                    elements: [{ name: 'w:gridSpan', attributes: { 'w:val': '2' } }],
+                  },
+                  p([runText('Merged')]),
+                ],
+              },
+              {
+                name: 'w:tc',
+                elements: [p([runText('Next'), runTab(), runText('Value')])],
+              },
+              {
+                name: 'w:tc',
+                elements: [p([runText('Last')])],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = collectTextBoxParagraphs([table]);
+
+      expect(result).toHaveLength(1);
+      expect(extractLineTokens(result[0])).toEqual(['Merged', '\t', 'Next', '\t', 'Value', '\t', 'Last']);
+
+      const tabPositions = result[0].elements
+        .find((node) => node.name === 'w:pPr')
+        .elements.find((node) => node.name === 'w:tabs')
+        .elements.map((tab) => tab.attributes['w:pos']);
+      expect(tabPositions).toEqual(['3000', '3720', '6000']);
+    });
   });
 
   describe('preProcessTextBoxContent', () => {

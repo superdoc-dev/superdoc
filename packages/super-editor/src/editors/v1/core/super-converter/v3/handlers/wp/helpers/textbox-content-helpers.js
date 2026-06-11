@@ -91,22 +91,46 @@ function extractTableGridWidths(table) {
 function buildColumnStarts(cells, gridWidths) {
   const starts = [];
   let cursor = 0;
+  let gridIndex = 0;
 
-  cells.forEach((cell, index) => {
+  cells.forEach((cell) => {
     starts.push(cursor);
-    cursor += resolveCellWidth(cell, gridWidths[index]);
+    const gridSpan = resolveCellGridSpan(cell);
+    cursor += resolveCellWidth(cell, gridWidths, gridIndex, gridSpan);
+    gridIndex += gridSpan;
   });
 
   return starts;
 }
 
-function resolveCellWidth(cell, gridWidth) {
-  if (gridWidth != null) return gridWidth;
+function resolveCellGridSpan(cell) {
+  const tcPr = cell.elements?.find((node) => node?.name === 'w:tcPr');
+  const gridSpan = tcPr?.elements?.find((node) => node?.name === 'w:gridSpan');
+  const value = toFiniteNumber(gridSpan?.attributes?.['w:val'] ?? gridSpan?.attributes?.val);
+  return value && value > 0 ? Math.max(1, Math.floor(value)) : 1;
+}
+
+function resolveCellWidth(cell, gridWidths, gridIndex, gridSpan) {
+  const gridWidth = sumGridWidths(gridWidths, gridIndex, gridSpan);
+  if (gridWidth > 0) return gridWidth;
 
   const tcPr = cell.elements?.find((node) => node?.name === 'w:tcPr');
   const tcW = tcPr?.elements?.find((node) => node?.name === 'w:tcW');
   const width = toFiniteNumber(tcW?.attributes?.['w:w'] ?? tcW?.attributes?.w);
   return width && width > 0 ? width : 0;
+}
+
+function sumGridWidths(gridWidths, gridIndex, gridSpan) {
+  if (!Array.isArray(gridWidths) || gridWidths.length === 0) return 0;
+
+  let width = 0;
+  for (let offset = 0; offset < gridSpan; offset += 1) {
+    const gridWidth = gridWidths[gridIndex + offset];
+    if (gridWidth != null && gridWidth > 0) {
+      width += gridWidth;
+    }
+  }
+  return width;
 }
 
 function collectTextBoxTableCellLines(cell) {

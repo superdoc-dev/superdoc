@@ -697,10 +697,17 @@ const isExplicitPageBreakBlock = (block: FlowBlock | undefined): boolean => {
   return block?.kind === 'pageBreak' && (block as PageBreakBlock).attrs?.source !== 'pageBreakBefore';
 };
 
-/** A paragraph that renders no content: every run is a text run with empty text. */
+/**
+ * A paragraph that renders no content: every run is a text run with empty
+ * text, and the paragraph paints no list marker. List markers ("1.", "•")
+ * come from paragraph attrs (`numberingProperties` / `wordLayout.marker`),
+ * not runs, so an empty-text list item is still visible page content.
+ */
 const isEmptyParagraphBlock = (block: FlowBlock | undefined): boolean => {
   if (block?.kind !== 'paragraph') return false;
-  const runs = (block as ParagraphBlock).runs ?? [];
+  const paragraph = block as ParagraphBlock;
+  if (paragraph.attrs?.numberingProperties || paragraph.attrs?.wordLayout?.marker) return false;
+  const runs = paragraph.runs ?? [];
   return runs.every((run) => (run.kind === undefined || run.kind === 'text') && run.text === '');
 };
 

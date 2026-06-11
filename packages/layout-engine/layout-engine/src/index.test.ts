@@ -2560,6 +2560,64 @@ describe('layoutDocument', () => {
         expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
       });
 
+      it('still fires pageBreakBefore when the remnant paragraph carries a list marker (numberingProperties)', () => {
+        // An empty list item renders a visible marker ("1.", "•") painted from
+        // paragraph attrs, not runs — that is page content, so the break re-arms.
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          {
+            kind: 'paragraph',
+            id: 'list-remnant',
+            runs: [{ text: '', fontFamily: 'Arial', fontSize: 16 }],
+            attrs: { numberingProperties: { numId: 1, ilvl: 0 } },
+          },
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([20]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(3);
+        expect(pageContainsBlock(layout.pages[1], 'list-remnant')).toBe(true);
+        expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      });
+
+      it('still fires pageBreakBefore when the remnant paragraph carries a wordLayout marker', () => {
+        const blocks: FlowBlock[] = [
+          textParagraph('p1'),
+          explicitBreak('pb-explicit'),
+          {
+            kind: 'paragraph',
+            id: 'marker-remnant',
+            runs: [{ text: '', fontFamily: 'Arial', fontSize: 16 }],
+            attrs: { wordLayout: { marker: { markerText: '1.' } } },
+          } as FlowBlock,
+          styleBreak('pb-style'),
+          textParagraph('p2'),
+        ];
+        const measures: Measure[] = [
+          makeMeasure([40]),
+          { kind: 'pageBreak' },
+          makeMeasure([20]),
+          { kind: 'pageBreak' },
+          makeMeasure([40]),
+        ];
+
+        const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+        expect(layout.pages).toHaveLength(3);
+        expect(pageContainsBlock(layout.pages[1], 'marker-remnant')).toBe(true);
+        expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      });
+
       it('does not suppress an explicit page break that follows another explicit page break', () => {
         // Two manual breaks in a row intentionally produce a blank page.
         const blocks: FlowBlock[] = [

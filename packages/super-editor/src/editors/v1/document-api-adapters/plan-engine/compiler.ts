@@ -1591,6 +1591,12 @@ function collectReferencedBlockIds(step: MutationStep): string[] {
   const where = step.where;
   const ids: string[] = [];
 
+  // `within` scoping (select/ref/assert wheres) carries a pre-minted
+  // BlockNodeAddress — a renamed duplicate would silently re-scope the
+  // selector to the surviving block, so it is just as stale as a direct ref.
+  const withinNodeId = (where as { within?: { nodeId?: string } }).within?.nodeId;
+  if (withinNodeId) ids.push(withinNodeId);
+
   if (isRefWhere(where)) {
     const ref = where.ref;
     if (ref.startsWith('text:')) {
@@ -1616,10 +1622,13 @@ function collectReferencedBlockIds(step: MutationStep): string[] {
 
   if (isTargetWhere(where)) {
     for (const point of [where.target?.start, where.target?.end]) {
+      // `kind: 'text'` points carry a top-level blockId.
       const blockId = (point as { blockId?: string } | undefined)?.blockId;
       if (blockId) ids.push(blockId);
-      const nodeId = (point as { nodeId?: string } | undefined)?.nodeId;
-      if (nodeId) ids.push(nodeId);
+      // `kind: 'nodeEdge'` points nest the id at `node.nodeId`
+      // (SelectionEdgeNodeAddress).
+      const edgeNodeId = (point as { node?: { nodeId?: string } } | undefined)?.node?.nodeId;
+      if (edgeNodeId) ids.push(edgeNodeId);
     }
   }
 

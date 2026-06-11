@@ -131,6 +131,51 @@ describe('refs naming a just-repaired block id are rejected, not mis-resolved', 
     }
   });
 
+  it('throws STALE_REF for a nodeEdge SelectionTarget anchored on the duplicated id', async () => {
+    // nodeEdge points nest the block id at `point.node.nodeId` — the guard
+    // must see through that shape too, or a pre-repair edge anchor silently
+    // retargets to the surviving duplicate.
+    editor = await makeEditorWithDuplicateParaId('DUPEDGE1');
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let thrown = null;
+      try {
+        compilePlan(editor, [
+          {
+            id: 'insert-1',
+            op: 'text.insert',
+            where: {
+              by: 'target',
+              target: {
+                kind: 'selection',
+                start: {
+                  kind: 'nodeEdge',
+                  node: { kind: 'block', nodeType: 'paragraph', nodeId: 'DUPEDGE1' },
+                  edge: 'before',
+                },
+                end: {
+                  kind: 'nodeEdge',
+                  node: { kind: 'block', nodeType: 'paragraph', nodeId: 'DUPEDGE1' },
+                  edge: 'before',
+                },
+              },
+            },
+            args: { position: 'before', content: { text: 'inserted' } },
+          },
+        ]);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).not.toBeNull();
+      expect(thrown.code).toBe('STALE_REF');
+      expect(thrown.message).toContain('DUPEDGE1');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('refs naming an UNAFFECTED block still resolve in the repairing compile', async () => {
     editor = await makeEditorWithDuplicateParaId('DUPSTALE');
 

@@ -6,7 +6,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/lists/sd-1543-empty-list-items.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('empty list items show markers and accept typed content', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

@@ -34,8 +34,16 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
   let evaluatedRevision = getRevision(editor);
 
   try {
-    // Phase 1: Compile — resolve selectors against pre-mutation snapshot
-    const compiled = compilePlan(editor, input.steps);
+    // Phase 1: Compile — resolve selectors against pre-mutation snapshot.
+    //
+    // Preview is documented as non-mutating, so we pass `skipIdentityRepair`
+    // to suppress the runtime paraId repair dispatch. If the doc has
+    // duplicate identities, `compilePlan` still throws
+    // `DOCUMENT_IDENTITY_CONFLICT` (caught below and surfaced as a
+    // PreviewFailure). The mutation path (`executeCompiledPlan`) does run
+    // the repair, so calling `mutations.apply` on the same state recovers
+    // automatically.
+    const compiled = compilePlan(editor, input.steps, { skipIdentityRepair: true });
     evaluatedRevision = compiled.compiledRevision;
     currentPhase = 'execute';
 

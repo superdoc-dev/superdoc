@@ -9,6 +9,7 @@ import { replaceAroundStep } from './replaceAroundStep.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import {
   getCurrentUserIdentity,
@@ -41,6 +42,7 @@ const TRACKABLE_META_KEYS = [
   'superdocSlicePaste',
   'forceTrackChanges',
   'protectTrackedReviewState',
+  CustomSelectionPluginKey.key,
 ];
 
 const PASSTHROUGH_META_KEYS = [
@@ -51,6 +53,7 @@ const PASSTHROUGH_META_KEYS = [
   'composition',
   'addToHistory',
   'superdocSlicePaste',
+  CustomSelectionPluginKey.key,
 ];
 
 const ALLOWED_META_KEYS = new Set([...TRACKABLE_META_KEYS, ySyncPluginKey.key]);
@@ -380,10 +383,21 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
   const pendingDeadKeyPlaceholder = TrackChangesBasePluginKey.getState(state)?.pendingDeadKeyPlaceholder ?? null;
   const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !ALLOWED_META_KEYS.has(meta));
+  // Runtime block-identity repair (`plan-engine/repair-block-identities.ts`)
+  // dispatches a metadata-only transaction that rewrites duplicate paraId /
+  // sdBlockId values via `tr.setNodeAttribute`. The repair is
+  // remediation — not a user edit — so it must bypass track-changes
+  // wrapping, exactly as Yjs and acceptReject do. Checked explicitly so the
+  // bypass is intentional at this call site rather than implicit via the
+  // disallowed-meta fall-through. The legacy `hasDisallowedMeta` branch
+  // would otherwise still catch this key; keeping the explicit check keeps
+  // the contract documented at both ends.
+  const isBlockIdentityRepair = Boolean(tr.getMeta('superdoc/block-identity-repair'));
 
   if (
     ySyncMeta?.isChangeOrigin || // Skip Yjs-origin transactions (remote/rehydration).
     !tr.steps.length ||
+    isBlockIdentityRepair || // Skip runtime paraId/sdBlockId repair.
     (hasDisallowedMeta && !isProgrammaticInput) ||
     notAllowedMeta.includes(tr.getMeta('inputType')) ||
     tr.getMeta(CommentsPluginKey) // Skip if it's a comment transaction.

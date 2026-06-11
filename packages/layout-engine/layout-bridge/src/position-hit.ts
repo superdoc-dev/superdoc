@@ -24,6 +24,7 @@ import type {
   TableMeasure,
   ParagraphBlock,
   ParagraphMeasure,
+  TextboxDrawing,
 } from '@superdoc/contracts';
 import {
   adjustAvailableWidthForTextIndent,
@@ -92,6 +93,29 @@ export type TableHitResult = {
    * `lineIndex === 0 && max(0, cellLineStart - blockStartGlobal) === 0`,
    * matching `renderTableCell.ts`'s `localStartLine` computation.
    */
+  blockStartGlobal: number;
+};
+
+export type TextboxHitResult = {
+  /** The textbox drawing fragment that was hit */
+  fragment: DrawingFragment;
+  /** The textbox drawing block from the document structure */
+  block: Extract<FlowBlock, { kind: 'drawing'; drawingKind: 'textboxShape' }>;
+  /** The drawing measurement data */
+  measure: Measure;
+  /** Index of the page containing the hit */
+  pageIndex: number;
+  /** The paragraph block inside the textbox */
+  contentBlock: ParagraphBlock;
+  /** Measurement data for the paragraph inside the textbox */
+  contentMeasure: ParagraphMeasure;
+  /** Paragraph index inside block.contentBlocks */
+  paragraphIndex: number;
+  /** X coordinate relative to the textbox content area */
+  localX: number;
+  /** Y coordinate relative to the paragraph content area */
+  localY: number;
+  /** Cumulative line count of preceding textbox paragraphs */
   blockStartGlobal: number;
 };
 
@@ -700,6 +724,148 @@ export const hitTestTableFragment = (
   return null;
 };
 
+/**
+ * Walk the paragraph content of an already-resolved textbox fragment and return the
+ * paragraph hit at `point`. Callers that already hold a resolved fragment/block should
+ * call this directly instead of {@link hitTestTextboxFragment}, which would otherwise
+ * re-scan every page fragment and could resolve a different textbox for overlapping shapes.
+ */
+export const resolveTextboxContentHit = (
+  fragment: DrawingFragment,
+  block: TextboxDrawing,
+  measure: Measure,
+  pageIndex: number,
+  point: Point,
+): TextboxHitResult | null => {
+  const fragmentWithContent = fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] };
+  const contentMeasures = Array.isArray(fragmentWithContent.contentMeasures)
+    ? fragmentWithContent.contentMeasures
+    : Array.isArray(block.contentMeasures)
+      ? block.contentMeasures
+      : [];
+  const contentBlocks = Array.isArray(block.contentBlocks) ? block.contentBlocks : [];
+  if (contentMeasures.length === 0 || contentBlocks.length === 0) return null;
+
+  const insets = block.textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const localX = Math.max(0, point.x - fragment.x - insets.left);
+  const rawLocalY = point.y - fragment.y - insets.top;
+
+  // Mirror the painter's flex justifyContent offset for center/bottom alignment
+  // (renderer.ts renderTextboxContent sets justifyContent on the inset container).
+  const totalContentHeight = contentMeasures.reduce(
+    (sum, m) => sum + (m?.kind === 'paragraph' ? (m.totalHeight ?? 0) : 0),
+    0,
+  );
+  const availableHeight = Math.max(0, fragment.height - insets.top - insets.bottom);
+  const verticalAlign = block.textVerticalAlign ?? 'top';
+  let contentOffset = 0;
+  if (verticalAlign === 'center') {
+    contentOffset = Math.max(0, (availableHeight - totalContentHeight) / 2);
+  } else if (verticalAlign === 'bottom') {
+    contentOffset = Math.max(0, availableHeight - totalContentHeight);
+  }
+  const localY = rawLocalY - contentOffset;
+
+  let paragraphStartY = 0;
+  let blockStartGlobal = 0;
+  let nearestParagraphHit:
+    | (Omit<TextboxHitResult, 'fragment' | 'block' | 'measure' | 'pageIndex'> & { distance: number })
+    | null = null;
+
+  for (let i = 0; i < contentBlocks.length && i < contentMeasures.length; i += 1) {
+    const contentBlock = contentBlocks[i];
+    const contentMeasure = contentMeasures[i];
+    if (contentBlock?.kind !== 'paragraph' || contentMeasure?.kind !== 'paragraph') {
+      continue;
+    }
+
+    const paragraphHeight = contentMeasure.totalHeight;
+    const paragraphEndY = paragraphStartY + paragraphHeight;
+    const isWithinParagraph = localY >= paragraphStartY && localY < paragraphEndY;
+
+    if (isWithinParagraph) {
+      return {
+        fragment,
+        block,
+        measure,
+        pageIndex,
+        contentBlock,
+        contentMeasure,
+        paragraphIndex: i,
+        localX,
+        localY: Math.max(0, Math.min(localY - paragraphStartY, Math.max(paragraphHeight, 0))),
+        blockStartGlobal,
+      };
+    }
+
+    const distanceToParagraph =
+      localY < paragraphStartY ? paragraphStartY - localY : Math.max(0, localY - paragraphEndY);
+    if (!nearestParagraphHit || distanceToParagraph < nearestParagraphHit.distance) {
+      nearestParagraphHit = {
+        contentBlock,
+        contentMeasure,
+        paragraphIndex: i,
+        localX,
+        localY: Math.max(0, Math.min(localY - paragraphStartY, Math.max(paragraphHeight, 0))),
+        blockStartGlobal,
+        distance: distanceToParagraph,
+      };
+    }
+
+    paragraphStartY = paragraphEndY;
+    blockStartGlobal += contentMeasure.lines.length;
+  }
+
+  if (nearestParagraphHit) {
+    return {
+      fragment,
+      block,
+      measure,
+      pageIndex,
+      contentBlock: nearestParagraphHit.contentBlock,
+      contentMeasure: nearestParagraphHit.contentMeasure,
+      paragraphIndex: nearestParagraphHit.paragraphIndex,
+      localX: nearestParagraphHit.localX,
+      localY: nearestParagraphHit.localY,
+      blockStartGlobal: nearestParagraphHit.blockStartGlobal,
+    };
+  }
+
+  return null;
+};
+
+/**
+ * Hit-test textbox drawing fragments to find the paragraph at a click point.
+ * Scans all page fragments by point — when the fragment and block are already resolved,
+ * call {@link resolveTextboxContentHit} directly to avoid resolving a different textbox
+ * for overlapping shapes.
+ */
+export const hitTestTextboxFragment = (
+  pageHit: PageHit,
+  blocks: FlowBlock[],
+  measures: Measure[],
+  point: Point,
+): TextboxHitResult | null => {
+  for (const fragment of pageHit.page.fragments) {
+    if (fragment.kind !== 'drawing' || fragment.drawingKind !== 'textboxShape') continue;
+
+    const withinX = point.x >= fragment.x && point.x <= fragment.x + fragment.width;
+    const withinY = point.y >= fragment.y && point.y <= fragment.y + fragment.height;
+    if (!withinX || !withinY) continue;
+
+    const blockIndex = findBlockIndexByFragmentId(blocks, fragment.blockId);
+    if (blockIndex === -1) continue;
+
+    const block = blocks[blockIndex];
+    const measure = measures[blockIndex];
+    if (!block || block.kind !== 'drawing' || block.drawingKind !== 'textboxShape' || !measure) continue;
+
+    return resolveTextboxContentHit(fragment as DrawingFragment, block, measure, pageHit.pageIndex, point);
+  }
+
+  return null;
+};
+
 // ---------------------------------------------------------------------------
 // New extracted functions
 // ---------------------------------------------------------------------------
@@ -902,6 +1068,82 @@ export function clickToPositionGeometry(
       };
     }
 
+    if (
+      fragment.kind === 'drawing' &&
+      fragment.drawingKind === 'textboxShape' &&
+      block.kind === 'drawing' &&
+      block.drawingKind === 'textboxShape'
+    ) {
+      // Use resolveTextboxContentHit directly — fragment and block are already resolved
+      // from fragmentHit, so re-scanning via hitTestTextboxFragment could pick a different
+      // textbox when shapes overlap.
+      const textboxHit = resolveTextboxContentHit(
+        fragment as DrawingFragment,
+        block,
+        measure,
+        pageIndex,
+        pageRelativePoint,
+      );
+      if (textboxHit) {
+        const { contentBlock, contentMeasure, localX, localY, pageIndex, paragraphIndex } = textboxHit;
+
+        const lineIndex = findLineIndexAtY(contentMeasure.lines, localY, 0, contentMeasure.lines.length);
+        if (lineIndex != null) {
+          const line = contentMeasure.lines[lineIndex];
+          const isRTL = isRtlBlock(contentBlock);
+          const indentLeft = typeof contentBlock.attrs?.indent?.left === 'number' ? contentBlock.attrs.indent.left : 0;
+          const indentRight =
+            typeof contentBlock.attrs?.indent?.right === 'number' ? contentBlock.attrs.indent.right : 0;
+          const paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
+          const paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
+          const totalIndent = paraIndentLeft + paraIndentRight;
+          const insets = textboxHit.block.textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+          let availableWidth = Math.max(0, textboxHit.fragment.width - insets.left - insets.right - totalIndent);
+
+          if (totalIndent > textboxHit.fragment.width) {
+            console.warn(
+              `[clickToPosition:textbox] Paragraph indents (${totalIndent}px) exceed fragment width (${textboxHit.fragment.width}px) ` +
+                `for block ${textboxHit.fragment.blockId}. This may indicate a layout miscalculation. ` +
+                `Available width clamped to 0.`,
+            );
+          }
+
+          // Textboxes are page-contained and never split across pages, so lineIndex === 0
+          // is sufficient — no continuesFromPrev guard needed (unlike body paragraphs).
+          const isFirstLineOfParagraph = lineIndex === 0;
+          if (isFirstLineOfParagraph) {
+            const suppressFLI = (contentBlock.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+            const firstLineOffset = getFirstLineIndentOffset(contentBlock.attrs?.indent, suppressFLI);
+            availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
+          }
+
+          const pos = mapPointToPm(contentBlock, line, localX, isRTL, availableWidth);
+          if (pos != null) {
+            return {
+              pos,
+              layoutEpoch,
+              blockId: textboxHit.fragment.blockId,
+              pageIndex,
+              column: determineColumn(layout, textboxHit.fragment.x, layout.pages[pageIndex], textboxHit.fragment.y),
+              lineIndex,
+            };
+          }
+        }
+
+        const firstRun = contentBlock.runs?.[0];
+        if (firstRun && firstRun.pmStart != null) {
+          return {
+            pos: firstRun.pmStart,
+            layoutEpoch,
+            blockId: textboxHit.fragment.blockId,
+            pageIndex,
+            column: determineColumn(layout, textboxHit.fragment.x, layout.pages[pageIndex], textboxHit.fragment.y),
+            lineIndex: 0,
+          };
+        }
+      }
+    }
+
     // Handle atomic fragments (drawing, image)
     if (isAtomicFragment(fragment)) {
       const pmRange = getAtomicPmRange(fragment, block);
@@ -981,11 +1223,18 @@ export function clickToPositionGeometry(
       }
     }
 
-    // Fallback: return first position in the cell
+    // Fallback: return first position in the cell.
+    // SD-3328: an EMPTY paragraph (blank line / spacer between bullets) has no runs,
+    // so `firstRun` is undefined and the old code fell through to `return null`. A null
+    // hit aborts the drag (EditorInputManager #handleDragSelectionAt early-return) and
+    // freezes/collapses the in-progress selection while the pointer is over the blank
+    // line. Derive the paragraph's own PM start from its attrs so an empty cell paragraph
+    // always resolves to a valid forward position inside the cell, never null.
     const firstRun = cellBlock.runs?.[0];
-    if (firstRun && firstRun.pmStart != null) {
+    const fallbackPos = firstRun?.pmStart ?? blockPmRangeFromAttrs(cellBlock).pmStart;
+    if (fallbackPos != null) {
       return {
-        pos: firstRun.pmStart,
+        pos: fallbackPos,
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,

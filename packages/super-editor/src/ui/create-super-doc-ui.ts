@@ -1,4 +1,5 @@
 import { createHeadlessToolbar } from '../headless-toolbar/index.js';
+import { DEFAULT_FONT_SIZE_OPTIONS } from '../headless-toolbar/constants.js';
 import { resolveToolbarSources } from '../headless-toolbar/resolve-toolbar-sources.js';
 import { createToolbarRegistry } from '../headless-toolbar/toolbar-registry.js';
 import type {
@@ -32,6 +33,7 @@ import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
 import { restoreSelection } from './selection-restore.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
 import { createScope } from './scope.js';
 import type {
   CommandHandle,
@@ -45,6 +47,7 @@ import type {
   DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
+  FontSizeOption,
   FontsHandle,
   MetadataHandle,
   TrackChangesHandle,
@@ -179,6 +182,30 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
  * `ui.comments.subscribe` even when nothing in the slice changed.
  */
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
+
+const FONT_SIZE_OPTIONS: FontSizeOption[] = DEFAULT_FONT_SIZE_OPTIONS.map(({ label, value }) => ({ label, value }));
+
+function resolveActiveCommentIdFromList(items: CommentsListResult['items'], commentId: string): string | null {
+  const matches = (item: CommentsListResult['items'][number], id: string) => {
+    const importedId = (item as { importedId?: string }).importedId;
+    return item.id === id || importedId === id;
+  };
+
+  let item = items.find((candidate) => matches(candidate, commentId));
+  const visited = new Set<string>();
+
+  while (item) {
+    if (visited.has(item.id)) return null;
+    visited.add(item.id);
+
+    const parentId = (item as { parentCommentId?: string }).parentCommentId;
+    if (!parentId) return item.id;
+
+    item = items.find((candidate) => matches(candidate, parentId));
+  }
+
+  return null;
+}
 
 /**
  * Recursive structural clone for `ui.selection.capture()` (SD-2821).
@@ -1024,7 +1051,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       document: documentSlice,
       selection: selectionSlice,
       zoom: computeZoomSlice(),
-      fonts: { options: fontOptionsCache },
+      fonts: { options: fontOptionsCache, sizeOptions: FONT_SIZE_OPTIONS },
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
         total: commentsListCache.total,
@@ -1149,6 +1176,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   const onWindowScrollGeometry = () => scheduleGeometry('scroll');
   const onWindowResizeGeometry = () => scheduleGeometry('resize');
+  // The comments rail toggling shifts/reflows document geometry but does
+  // not reliably emit a layout repaint on its own, so cached rects would
+  // silently go stale. Bridge the explicit sidebar-toggle signal into a
+  // geometry invalidation. Reuses the 'layout' reason; consumers only
+  // re-query on it, so no new public reason is warranted.
+  const onGeometrySidebar = () => scheduleGeometry('layout');
   let domGeometryAttached = false;
   const attachDomGeometryListeners = () => {
     if (domGeometryAttached || typeof window === 'undefined') return;
@@ -1183,10 +1216,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // from the slice recompute that SUPERDOC_EVENTS triggers.
     superdoc.on?.('zoomChange', onGeometryZoom);
     superdoc.on?.('fonts-changed', refreshFontOptionsAndNotify);
+    superdoc.on?.('sidebar-toggle', onGeometrySidebar);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
       superdoc.off?.('zoomChange', onGeometryZoom);
       superdoc.off?.('fonts-changed', refreshFontOptionsAndNotify);
+      superdoc.off?.('sidebar-toggle', onGeometrySidebar);
     });
   }
 
@@ -1909,6 +1944,28 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       refreshAndNotify();
       return receipt;
     },
+    setActive(commentId) {
+      const editor = resolveHostEditor(superdoc) as unknown as {
+        commands?: { setActiveComment?(input: { commentId: string | null }): boolean };
+        doc?: { comments?: { list?(): CommentsListResult } };
+      } | null;
+
+      try {
+        const setActiveComment = editor?.commands?.setActiveComment;
+        if (typeof setActiveComment !== 'function') return false;
+
+        let resolvedCommentId: string | null = null;
+        if (commentId !== null) {
+          const items = editor?.doc?.comments?.list?.().items ?? [];
+          resolvedCommentId = resolveActiveCommentIdFromList(items, commentId);
+          if (!resolvedCommentId) return false;
+        }
+
+        return setActiveComment({ commentId: resolvedCommentId }) === true;
+      } catch {
+        return false;
+      }
+    },
     async scrollTo(commentId) {
       // `CommentAddress` is body-scoped in the contract — it has no
       // `story` field today. Story-aware comment navigation lands as
@@ -2092,6 +2149,71 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     pageIndex: rect.pageIndex,
   });
 
+  // Text-target branch for `ui.viewport.getRect` (SD-3329). Resolves a
+  // Document API `TextAddress` (one block) or `TextTarget` (segments) to
+  // PM positions via `resolveTextTarget`, then to painted body rects via
+  // `getBodyRangeRects`. Body story only: a non-body `story` returns
+  // `unresolved` (valid target, story-aware text rects are a follow-up)
+  // rather than `invalid-target` (a caller-shape error). Multi-segment
+  // targets produce per-segment rects concatenated in document order, not
+  // a collapsed first→last range, so discontinuous / imported spans paint
+  // correctly.
+  const resolveTextTargetRects = (
+    hostEditor: SuperDocEditorLike,
+    presentation: NonNullable<SuperDocEditorLike['presentationEditor']>,
+    target: { story?: unknown; blockId?: unknown; range?: unknown; segments?: unknown },
+  ): ViewportRectResult => {
+    const story = target.story as { storyType?: unknown } | undefined;
+    if (story && story.storyType !== undefined && story.storyType !== 'body') {
+      return { success: false, reason: 'unresolved' };
+    }
+    if (typeof presentation.getBodyRangeRects !== 'function') {
+      return { success: false, reason: 'not-ready' };
+    }
+    const segments = Array.isArray(target.segments)
+      ? (target.segments as Array<{ blockId?: unknown; range?: unknown }>)
+      : [{ blockId: target.blockId, range: target.range }];
+    if (segments.length === 0) return { success: false, reason: 'invalid-target' };
+
+    const rects: ViewportRect[] = [];
+    for (const seg of segments) {
+      const blockId = seg?.blockId;
+      const range = seg?.range as { start?: unknown; end?: unknown } | undefined;
+      if (
+        typeof blockId !== 'string' ||
+        !blockId ||
+        !range ||
+        typeof range.start !== 'number' ||
+        typeof range.end !== 'number'
+      ) {
+        return { success: false, reason: 'invalid-target' };
+      }
+      let resolved: { from: number; to: number } | null;
+      try {
+        resolved = resolveTextTarget(hostEditor as unknown as Parameters<typeof resolveTextTarget>[0], {
+          kind: 'text',
+          blockId,
+          range: { start: range.start, end: range.end },
+        });
+      } catch {
+        // `resolveTextTarget` throws on ambiguous block ids (and other
+        // adapter/target errors). A public geometry read must never throw
+        // out — surface it as a structured failure. The target shape is
+        // valid; it just can't be resolved to a unique range.
+        return { success: false, reason: 'unresolved' };
+      }
+      if (!resolved) return { success: false, reason: 'unresolved' };
+      for (const r of presentation.getBodyRangeRects(resolved.from, resolved.to)) {
+        rects.push(toViewportRect(r));
+      }
+    }
+    // All segments resolved to model positions but nothing is painted —
+    // the page/story is virtualized or offscreen (same posture as the
+    // entity path's `not-mounted`).
+    if (rects.length === 0) return { success: false, reason: 'not-mounted' };
+    return { success: true, rect: rects[0], rects, pageIndex: rects[0].pageIndex };
+  };
+
   const viewport: ViewportHandle = {
     getRect(input: ViewportGetRectInput): ViewportRectResult {
       const target = input?.target;
@@ -2113,12 +2235,19 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         return { success: false, reason: 'not-ready' };
       }
 
-      // Entity-anchored path. Text-anchored paths are deferred — the
-      // resolver needs story-aware routing through the active routed
-      // editor (header/footer/note vs body) to avoid silently reading
-      // body coords for a non-body target. Until that lands, surface
-      // an explicit `invalid-target` so consumers don't quietly get
-      // wrong rects.
+      // Text-anchored path (SD-3329): a `TextAddress` / `TextTarget`
+      // resolves to painted body rects. Body story only for now; non-body
+      // text targets return `unresolved` (story-aware text rects are a
+      // follow-up). Entity targets stay story-aware below.
+      if ('kind' in target && (target as { kind?: unknown }).kind === 'text') {
+        return resolveTextTargetRects(
+          editor,
+          presentation,
+          target as { story?: unknown; blockId?: unknown; range?: unknown; segments?: unknown },
+        );
+      }
+
+      // Entity-anchored path. Any other `kind` is a caller-shape error.
       if (!('kind' in target) || (target as { kind?: unknown }).kind !== 'entity') {
         return { success: false, reason: 'invalid-target' };
       }
@@ -2211,6 +2340,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     getHost(): HTMLElement | null {
       const editor = resolveHostEditor(superdoc);
       return editor?.presentationEditor?.visibleHost ?? null;
+    },
+
+    getScrollContainer(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.scrollContainer ?? null;
     },
 
     positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
@@ -2473,7 +2607,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   const fonts: FontsHandle = {
-    getSnapshot: () => ({ options: fontOptionsCache }),
+    getSnapshot: () => ({ options: fontOptionsCache, sizeOptions: FONT_SIZE_OPTIONS }),
     subscribe(listener) {
       return select((state) => state.fonts, shallowEqual).subscribe((snapshot) => {
         try {
@@ -2493,6 +2627,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       });
     },
     getOptions: () => fontOptionsCache,
+    getSizeOptions: () => FONT_SIZE_OPTIONS,
   };
 
   // Live scopes created via `ui.createScope()`. The controller's

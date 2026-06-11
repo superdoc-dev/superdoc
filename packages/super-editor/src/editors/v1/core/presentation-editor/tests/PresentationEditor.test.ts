@@ -1623,6 +1623,17 @@ describe('PresentationEditor', () => {
         document.body.appendChild(container);
       }
     });
+
+    it('returns null for scrollContainer when the window scrolls', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-window-scroll-container',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      expect(editor.scrollContainer).toBeNull();
+    });
   });
 
   describe('setDocumentMode', () => {
@@ -5350,16 +5361,19 @@ describe('PresentationEditor', () => {
         ];
 
         try {
-          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
+          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted),
+          // pointerup drag update: page 1, pointerup DOM refine: page 1
           mockClickToPosition.mockReset();
           mockClickToPosition
             .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
             .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 })
             .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
           mockResolvePointerPositionHit.mockReset();
           mockResolvePointerPositionHit
             .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
             .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
             .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
           viewport.dispatchEvent(
@@ -5399,8 +5413,9 @@ describe('PresentationEditor', () => {
             }),
           );
 
-          // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+          // pointerup first updates the drag at the release point, then refines
+          // the fallback selection with one final DOM hit on the mounted page.
+          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(4);
         } finally {
           if (originalElementsFromPoint === undefined) {
             delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;

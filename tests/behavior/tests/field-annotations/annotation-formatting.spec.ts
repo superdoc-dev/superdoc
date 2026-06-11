@@ -70,11 +70,10 @@ test('field annotations render with bold, italic, underline formatting', async (
   // Italic: font-style italic
   await expect(annotation('field-italic')).toHaveCSS('font-style', 'italic');
 
-  // Underline: text-decoration includes underline
-  const underlineDecoration = await annotation('field-underline').evaluate(
-    (el: HTMLElement) => getComputedStyle(el).textDecorationLine || getComputedStyle(el).textDecoration,
-  );
-  expect(underlineDecoration).toContain('underline');
+  // Underline: text-decoration includes underline. Use the retrying toHaveCSS
+  // (one-shot evaluate() can read a node the painter has already replaced,
+  // where getComputedStyle returns empty strings).
+  await expect(annotation('field-underline')).toHaveCSS('text-decoration-line', /underline/);
 
   // Bold+Italic: both
   await expect(annotation('field-bi')).toHaveCSS('font-weight', /bold|700/);
@@ -83,10 +82,7 @@ test('field annotations render with bold, italic, underline formatting', async (
   // All formats: bold + italic + underline
   await expect(annotation('field-all')).toHaveCSS('font-weight', /bold|700/);
   await expect(annotation('field-all')).toHaveCSS('font-style', 'italic');
-  const allDecoration = await annotation('field-all').evaluate(
-    (el: HTMLElement) => getComputedStyle(el).textDecorationLine || getComputedStyle(el).textDecoration,
-  );
-  expect(allDecoration).toContain('underline');
+  await expect(annotation('field-all')).toHaveCSS('text-decoration-line', /underline/);
 
   // Verify PM nodes have correct attrs
   const pmNodes = await superdoc.page.evaluate(() => {

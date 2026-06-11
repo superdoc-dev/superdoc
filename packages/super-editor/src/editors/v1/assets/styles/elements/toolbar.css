@@ -15,3 +15,92 @@
   width: 12px;
   height: 12px;
 }
+
+.sd-toolbar-split-field {
+  padding: 0;
+  gap: 0;
+}
+
+.sd-toolbar-split-field .sd-toolbar-split-field__main,
+.sd-toolbar-split-field .sd-toolbar-split-field__caret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+
+.sd-toolbar-split-field .sd-toolbar-split-field__main {
+  padding: 0 3px 0 var(--sd-ui-toolbar-item-padding, 5px);
+  border-top-left-radius: var(--sd-ui-radius, 6px);
+  border-bottom-left-radius: var(--sd-ui-radius, 6px);
+  cursor: text;
+}
+
+.sd-toolbar-split-field .sd-toolbar-split-field__caret {
+  align-self: stretch;
+  width: 20px;
+  padding: 0 4px 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-top-right-radius: var(--sd-ui-radius, 6px);
+  border-bottom-right-radius: var(--sd-ui-radius, 6px);
+  cursor: pointer;
+}
+
+.sd-toolbar-split-field:hover {
+  background-color: var(--sd-ui-toolbar-button-hover-bg, var(--sd-ui-hover-bg, #dbdbdb));
+}
+
+.sd-toolbar-split-field.high-contrast:hover {
+  background-color: #000;
+  color: #fff;
+}
+
+.sd-toolbar-split-field .sd-toolbar-split-field__main:hover,
+.sd-toolbar-split-field .sd-toolbar-split-field__caret:hover {
+  background-color: var(--sd-ui-toolbar-button-active-bg, var(--sd-ui-active-bg, #c8d0d8));
+}
+
+.sd-toolbar-split-field.high-contrast .sd-toolbar-split-field__main:hover,
+.sd-toolbar-split-field.high-contrast .sd-toolbar-split-field__caret:hover {
+  background-color: #000;
+  color: #fff;
+}
+
+.sd-toolbar-split-field .sd-toolbar-split-field__caret::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background-color: transparent;
+  transition: background-color 0.15s ease-out;
+}
+
+.sd-toolbar-split-field:hover .sd-toolbar-split-field__caret::before {
+  background-color: var(--sd-ui-border, rgba(71, 72, 74, 0.2));
+}
+
+.sd-toolbar-split-field.sd-disabled,
+.sd-toolbar-split-field.sd-disabled:hover {
+  background-color: initial;
+}
+
+.sd-toolbar-split-field.sd-disabled .sd-toolbar-split-field__main,
+.sd-toolbar-split-field.sd-disabled .sd-toolbar-split-field__caret {
+  cursor: default;
+}
+
+.sd-toolbar-split-field.sd-disabled .sd-toolbar-split-field__main:hover,
+.sd-toolbar-split-field.sd-disabled .sd-toolbar-split-field__caret:hover {
+  background-color: initial;
+}
+
+.sd-toolbar-split-field.sd-disabled .sd-toolbar-split-field__caret::before {
+  background-color: transparent;
+}

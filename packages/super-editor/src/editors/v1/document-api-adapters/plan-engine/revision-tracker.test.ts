@@ -18,10 +18,10 @@ function makeEditor(): Editor & { _listeners: Map<string, Function[]> } {
   } as any;
 }
 
-function emitTransaction(editor: any, docChanged: boolean) {
+function emitTransaction(editor: any, docChanged: boolean, meta: Record<string, unknown> = {}) {
   const fns = editor._listeners.get('transaction') ?? [];
   for (const fn of fns) {
-    fn({ transaction: { docChanged } });
+    fn({ transaction: { docChanged, getMeta: (key: string) => meta[key] } });
   }
 }
 
@@ -142,6 +142,48 @@ describe('trackRevisions: transaction-based revision advancement', () => {
     // Selection-only (no increment)
     emitTransaction(editor, false);
     expect(getRevision(editor)).toBe('3');
+  });
+
+  it('does not increment revision for block-identity repair transactions', () => {
+    // the runtime identity repair pass dispatches a
+    // docChanged transaction tagged with `superdoc/block-identity-repair`.
+    // Bumping the revision on that tr would invalidate a caller's
+    // `expectedRevision` for a non-content remediation step.
+    const editor = makeEditor();
+    initRevision(editor);
+    trackRevisions(editor);
+
+    expect(getRevision(editor)).toBe('0');
+
+    // Repair tr: docChanged is true (AttrSteps land), but the meta tag is set.
+    emitTransaction(editor, true, { 'superdoc/block-identity-repair': { repairedBlockCount: 1 } });
+    expect(getRevision(editor)).toBe('0');
+
+    // Subsequent user edit (untagged) still advances normally.
+    emitTransaction(editor, true);
+    expect(getRevision(editor)).toBe('1');
+  });
+
+  it('does not increment for a metadata-only repair transaction (docChanged === false)', () => {
+    // Pins the defensive invariant: the meta short-circuit is checked BEFORE
+    // the docChanged gate. Today the only repair transactions in flight are
+    // doc-changing (so this case is vacuously skipped via the docChanged
+    // guard), but a future "metadata-only repair" tr — e.g. one that only
+    // rewrites a non-PM-tracked field — must still get the same treatment.
+    //
+    const editor = makeEditor();
+    initRevision(editor);
+    trackRevisions(editor);
+
+    expect(getRevision(editor)).toBe('0');
+
+    // Tagged repair tr with docChanged === false.
+    emitTransaction(editor, false, { 'superdoc/block-identity-repair': { repairedBlockCount: 0 } });
+    expect(getRevision(editor)).toBe('0');
+
+    // And an untagged doc-changing tr still advances.
+    emitTransaction(editor, true);
+    expect(getRevision(editor)).toBe('1');
   });
 
   it('makes expectedRevision guards reject stale refs after external edits', () => {

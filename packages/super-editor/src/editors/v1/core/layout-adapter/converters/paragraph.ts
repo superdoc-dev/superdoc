@@ -71,6 +71,7 @@ import { handleImageNode } from './image.js';
 import { generateOrderedListIndex } from '../list-helpers.js';
 import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import {
+  hydrateTextboxDrawingContent,
   shapeContainerNodeToDrawingBlock,
   shapeGroupNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
@@ -883,8 +884,14 @@ export function paragraphToFlowBlocks({
       const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
       const drawingBlock = converter(node, stableNextBlockId, positions);
       if (drawingBlock) {
-        attachInlineShapeGroupAlignment(drawingBlock);
-        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
+        const hydratedBlock = hydrateTextboxDrawingContent(node, drawingBlock, {
+          converterContext,
+          converters,
+          nextBlockId: stableNextBlockId,
+          positions,
+        });
+        attachInlineShapeGroupAlignment(hydratedBlock);
+        blocks.push(attachAnchorParagraphId(hydratedBlock, anchorParagraphId));
       }
       return;
     }

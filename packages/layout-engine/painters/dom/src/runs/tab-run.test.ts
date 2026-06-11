@@ -69,6 +69,8 @@ describe('tab underline alignment (SD-3330)', () => {
   it('does not draw a border on a plain (non-underlined) inline tab', () => {
     const el = renderInlineTabRun(plainTab(), LINE, document, 0);
     expect(el.style.borderBottom).toBe('');
+    expect(el.style.height).toBe(`${LINE.lineHeight}px`);
+    expect(el.style.verticalAlign).toBe('bottom');
   });
 
   it('keeps a plain positioned tab invisible with no border', () => {

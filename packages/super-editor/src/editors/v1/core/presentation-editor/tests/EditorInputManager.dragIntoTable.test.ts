@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
+import { CellSelection } from 'prosemirror-tables';
 
 import {
   EditorInputManager,
@@ -29,6 +30,8 @@ const resolverHits: Array<{
   lineIndex: number;
 }> = [];
 let resolverIndex = 0;
+const mockResolveCrossCellSelection = vi.fn(() => null);
+const mockResolveCellAnchorStateFromCellPos = vi.fn(() => null);
 
 vi.mock('../input/PositionHitResolver.js', () => ({
   resolvePointerPositionHit: vi.fn(() => {
@@ -43,6 +46,19 @@ vi.mock('@superdoc/layout-bridge', () => ({
   getFragmentAtPosition: vi.fn(() => null),
 }));
 
+vi.mock('../tables/TableSelectionUtilities.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../tables/TableSelectionUtilities.js')>();
+  return {
+    ...original,
+    resolveCrossCellSelection: vi.fn((...args: Parameters<typeof original.resolveCrossCellSelection>) =>
+      mockResolveCrossCellSelection(...args),
+    ),
+    resolveCellAnchorStateFromCellPos: vi.fn((...args: Parameters<typeof original.resolveCellAnchorStateFromCellPos>) =>
+      mockResolveCellAnchorStateFromCellPos(...args),
+    ),
+  };
+});
+
 vi.mock('prosemirror-state', async (importOriginal) => {
   const original = await importOriginal<typeof import('prosemirror-state')>();
   return {
@@ -53,6 +69,17 @@ vi.mock('prosemirror-state', async (importOriginal) => {
         $from: { parent: { inlineContent: true } },
         empty: true,
       })),
+    },
+  };
+});
+
+vi.mock('prosemirror-tables', async (importOriginal) => {
+  const original = await importOriginal<typeof import('prosemirror-tables')>();
+  return {
+    ...original,
+    CellSelection: {
+      ...original.CellSelection,
+      create: vi.fn(() => ({ type: 'cell-selection' })),
     },
   };
 });
@@ -79,6 +106,10 @@ describe('EditorInputManager - drag selection through a multi-row table (SD-2676
   beforeEach(() => {
     resolverHits.length = 0;
     resolverIndex = 0;
+    mockResolveCrossCellSelection.mockReset();
+    mockResolveCrossCellSelection.mockReturnValue(null);
+    mockResolveCellAnchorStateFromCellPos.mockReset();
+    mockResolveCellAnchorStateFromCellPos.mockReturnValue(null);
 
     scrollContainer = document.createElement('div');
     scrollContainer.style.overflowY = 'auto';
@@ -259,5 +290,57 @@ describe('EditorInputManager - drag selection through a multi-row table (SD-2676
     expect(new Set(dragHeads).size).toBe(dragHeads.length);
     expect(dragHeads).toEqual(dragHeads.slice().sort((a, b) => a - b));
     expect(dragHeads[dragHeads.length - 1]).toBeGreaterThan(dragHeads[0]);
+  });
+
+  it('applies the final pointer-up endpoint when the release lands beyond the last pointermove', () => {
+    pushHit(10); // pointerdown
+    pushHit(120); // last pointermove
+    pushHit(180); // pointerup finalization
+
+    dispatch('pointerdown', 100, 20);
+    dispatch('pointermove', 100, 80);
+    dispatch('pointerup', 100, 120);
+
+    const args = selectionCallArgs();
+    expect(args).toHaveLength(3);
+    expect(args[1]).toEqual([expect.anything(), 10, 120]);
+    expect(args[2]).toEqual([expect.anything(), 10, 180]);
+  });
+
+  it('caches cell-drag state when the fallback cross-cell path creates a CellSelection', () => {
+    pushHit(10); // pointerdown anchor
+    pushHit(20); // first pointermove creates cross-cell selection
+    pushHit(30); // second pointermove is outside the table
+
+    mockResolveCrossCellSelection.mockReturnValueOnce({
+      anchorCellPos: 40,
+      headCellPos: 80,
+    });
+    mockResolveCellAnchorStateFromCellPos.mockReturnValue({
+      tablePos: 30,
+      cellPos: 40,
+      tableBlockId: 'table-1',
+      cellRowIndex: 1,
+      cellColIndex: 0,
+    });
+
+    dispatch('pointerdown', 100, 20);
+    dispatch('pointermove', 100, 80);
+    dispatch('pointermove', 100, 140);
+
+    expect((CellSelection.create as unknown as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      [expect.anything(), 40, 80],
+    ]);
+    expect(manager.cellAnchor).toEqual({
+      tablePos: 30,
+      cellPos: 40,
+      tableBlockId: 'table-1',
+      cellRowIndex: 1,
+      cellColIndex: 0,
+    });
+
+    const args = selectionCallArgs();
+    expect(args).toHaveLength(1);
+    expect(args[0][1]).toBe(10);
   });
 });

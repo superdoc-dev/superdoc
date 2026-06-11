@@ -242,6 +242,16 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {{amt: number}} [alphaModFix] - DrawingML fixed alpha adjustment from a:alphaModFix
+       * @private
+       */
+      alphaModFix: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
        * @private
        */

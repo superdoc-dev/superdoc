@@ -20,6 +20,11 @@ export type SelectorFn<TState, TSlice> = (state: TState) => TSlice;
 
 export type { FontFamilyOption } from '@superdoc/font-system';
 
+export type FontSizeOption = {
+  label: string;
+  value: string;
+};
+
 /**
  * A read-only signal. `get()` is synchronous; `subscribe()` invokes the
  * listener once with the current value, then again whenever the value
@@ -41,14 +46,17 @@ export interface Subscribable<T> {
  * a SuperDoc-like host. Differs from `HeadlessToolbarSuperdocHostEvent`
  * (which adds `formatting-marks-change` but not `viewport-change`); a
  * custom UI host stub only has to support the events the UI
- * controller actually consumes.
+ * controller actually consumes. `sidebar-toggle` feeds the
+ * `ui.viewport.observe` geometry signal when the comments rail shifts
+ * layout.
  */
 export type SuperDocUIHostEvent =
   | 'editorCreate'
   | 'document-mode-change'
   | 'zoomChange'
   | 'viewport-change'
-  | 'fonts-changed';
+  | 'fonts-changed'
+  | 'sidebar-toggle';
 
 /**
  * Structural typing for the SuperDoc instance. Keeps the UI controller
@@ -272,6 +280,25 @@ export interface SuperDocEditorLike {
       height: number;
     }>;
     /**
+     * Body-surface variant of `getRangeRects`, consumed by
+     * `ui.viewport.getRect`'s text-target path so a body-anchored target
+     * returns body geometry even while a header/footer/note session is
+     * active. Optional in the structural typing for stub validity.
+     */
+    getBodyRangeRects?(
+      from: number,
+      to: number,
+      relativeTo?: HTMLElement,
+    ): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    /**
      * Painted-DOM host element. `ui.viewport.entityAt` reads it to
      * confirm the hit returned by `document.elementFromPoint` lives
      * inside this controller's editor — without that scope check, a
@@ -279,6 +306,12 @@ export interface SuperDocEditorLike {
      * from the wrong instance.
      */
     visibleHost?: HTMLElement;
+    /**
+     * Resolved scroll container (the scrollable ancestor of the host, or
+     * the host itself). Consumed by `ui.viewport.getScrollContainer`.
+     * `null` when the document/window scrolls instead of an element.
+     */
+    scrollContainer?: HTMLElement | null;
     /**
      * Coordinate-to-position helper. Consumed by
      * `ui.viewport.positionAt` to resolve a viewport `(x, y)` to a
@@ -369,6 +402,8 @@ export interface SuperDocUIState {
 export interface FontsSlice {
   /** Final font-family picker rows: bundled defaults plus active document fonts. */
   options: import('@superdoc/font-system').FontFamilyOption[];
+  /** Default font-size picker rows for custom toolbar UIs. */
+  sizeOptions: FontSizeOption[];
 }
 
 /**
@@ -1187,6 +1222,8 @@ export interface FontsHandle {
   observe(listener: (snapshot: FontsSlice) => void): () => void;
   /** Convenience read for `getSnapshot().options`. */
   getOptions(): import('@superdoc/font-system').FontFamilyOption[];
+  /** Convenience read for `getSnapshot().sizeOptions`. */
+  getSizeOptions(): FontSizeOption[];
 }
 
 /**
@@ -1361,6 +1398,19 @@ export interface SelectionAnchorRectOptions {
  * mutate" contract instead.
  */
 export type SelectionCapture = SelectionSlice;
+
+/**
+ * The minimal anchor `ui.comments.createFromCapture` needs: anything
+ * carrying a positional `target`. Both a full {@link SelectionCapture}
+ * (from `ui.selection.capture()`) and the Document API
+ * {@link import('@superdoc/document-api').SelectionInfo} satisfy it —
+ * the latter is what a pending `comments-update` event exposes as
+ * `pendingSelection`, so consumers can forward it straight to
+ * `createFromCapture` without first reconstructing a `SelectionCapture`.
+ */
+export type CommentAnchorCapture = {
+  target: import('@superdoc/document-api').TextTarget | null;
+};
 
 /**
  * Aggregate toolbar handle exposed on `ui.toolbar`. Compatible with
@@ -1822,9 +1872,13 @@ export type CustomCommandHandleState<TValue = unknown> = {
 };
 
 /**
- * Comments domain handle exposed on `ui.comments`. The execute
- * methods are convenience facades over `editor.doc.comments.*` —
- * they produce identical document mutations to direct doc-API calls.
+ * Comments domain handle exposed on `ui.comments`. The mutation
+ * methods (`createFromSelection`, `createFromCapture`, `reply`,
+ * `resolve`, `reopen`, `delete`) are convenience facades over
+ * `editor.doc.comments.*` - they produce identical document mutations
+ * to direct doc-API calls. `setActive` and `scrollTo` are UI-only
+ * helpers: they drive highlight / viewport state and do not mutate the
+ * document.
  */
 export interface CommentsHandle {
   /** Snapshot the current comments slice synchronously. */
@@ -1858,8 +1912,13 @@ export interface CommentsHandle {
    * pass it here. Routes through `editor.doc.comments.create` with
    * the captured `target`. Returns a `NO_OP` receipt when the capture
    * lacks a positional target.
+   *
+   * Accepts any {@link CommentAnchorCapture} (only `target` is read),
+   * so the `pendingSelection` from a pending `comments-update` event —
+   * a Document API `SelectionInfo` — can be passed directly without
+   * reconstructing a full `SelectionCapture`.
    */
-  createFromCapture(capture: SelectionCapture, input: { text: string }): import('@superdoc/document-api').Receipt;
+  createFromCapture(capture: CommentAnchorCapture, input: { text: string }): import('@superdoc/document-api').Receipt;
   /**
    * Post a reply to an existing thread. Routes through
    * `editor.doc.comments.create({ parentCommentId, text })`; the
@@ -1886,6 +1945,36 @@ export interface CommentsHandle {
   reopen(commentId: string): import('@superdoc/document-api').Receipt;
   /** Delete a comment via `editor.doc.comments.delete`. */
   delete(commentId: string): import('@superdoc/document-api').Receipt;
+  /**
+   * Activate (or clear) a comment's highlight in the document without
+   * scrolling or moving the selection. Pass a comment id to highlight
+   * it as active; pass `null` to clear the active highlight. Routes
+   * through the internal `setActiveComment` command, which the
+   * presentation layer repaints from.
+   *
+   * This is the activate-only counterpart to {@link scrollTo}: use it
+   * when you bring the comment into view yourself (e.g. `ui.viewport`
+   * rect + your own scroll) and only need to mark it active afterwards.
+   * Unlike `scrollTo`, it does not move the caret or scroll.
+   *
+   * It also does not change `getSnapshot().activeIds` - that set stays
+   * selection-derived, so the document highlight and the snapshot's
+   * active set are intentionally decoupled. (A future `focusedId` on
+   * the slice could expose this to subscribers if a consumer needs it.)
+   *
+   * The highlight follows the editor's active-comment state. Because
+   * this method intentionally does not move the caret into the comment,
+   * a later selection change can clear the highlight.
+   *
+   * Returns `true` when the activation request was accepted, including
+   * an idempotent call for an id that is already active. Returns `false`
+   * when no editor is mounted, when the editor is not ready, when the
+   * underlying operation reports failure, or when a non-null
+   * `commentId` matches no current comment - activating an unknown id
+   * would otherwise fade every other comment as if some other comment
+   * were active.
+   */
+  setActive(commentId: string | null): boolean;
   /**
    * Scroll the viewport to the comment's anchor via
    * `ui.viewport.scrollIntoView({ target: EntityAddress })`. Resolves
@@ -1985,17 +2074,24 @@ export type ViewportEntityAddress = import('@superdoc/document-api').EntityAddre
 
 export interface ViewportGetRectInput {
   /**
-   * Entity to look up — comment, tracked change, or content control
-   * (SDT) by id. Today `getRect` resolves rects via the painter's
-   * data attributes (`data-comment-ids`, `data-track-change-id`,
-   * `data-sdt-id`) which only stamp entity addresses, not
-   * text-anchored ranges. Text targets (`TextAddress` / `TextTarget`)
-   * are intentionally not in the union: surface should match real
-   * behavior so a typed call site isn't lying about what works at
-   * runtime. They land via a follow-up that adds story-aware text
-   * resolution to the rect helper.
+   * What to measure. Either:
+   * - an entity address (comment / tracked change / content control by
+   *   id), resolved via the painter's data attributes; or
+   * - a Document API text address/target (`TextAddress` single block, or
+   *   `TextTarget` multi-segment), resolved to document positions and
+   *   then to painted rects. A `TextTarget` yields one set of rects per
+   *   segment, concatenated in document order.
+   *
+   * Text targets are **body-story only** today: a target carrying a
+   * non-body `story` (header/footer/footnote/endnote) returns
+   * `{ success: false, reason: 'unresolved' }`. Story-aware text rects
+   * are a follow-up. Entity targets remain story-aware via their
+   * `story` field.
    */
-  target: ViewportEntityAddress;
+  target:
+    | ViewportEntityAddress
+    | import('@superdoc/document-api').TextAddress
+    | import('@superdoc/document-api').TextTarget;
 }
 
 export type ViewportRectResult =
@@ -2142,6 +2238,20 @@ export interface ViewportHandle {
    * which scope correctly across painted-DOM and hidden-DOM events.
    */
   getHost(): HTMLElement | null;
+  /**
+   * The element SuperDoc actually scrolls — the scrollable ancestor of
+   * the painted host (occasionally the host itself), resolved by walking
+   * up for `overflow: auto`/`scroll`. This is what overlay consumers
+   * attach scroll listeners to and measure against; {@link getHost} is
+   * the painted host and is often NOT the scroller.
+   *
+   * Returns `null` when no editor is mounted, or when the document /
+   * window scrolls rather than a dedicated element — fall back to
+   * `window` in that case. The scroller can change after the first
+   * layout, so read it when you need it rather than caching across
+   * layout changes (pair with {@link observe}).
+   */
+  getScrollContainer(): HTMLElement | null;
   /**
    * Resolve a viewport coordinate to a position in the editor's
    * document, or `null` when the point is outside the painted host or

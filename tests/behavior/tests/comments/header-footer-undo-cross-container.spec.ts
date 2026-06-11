@@ -54,14 +54,30 @@ function getSurfaceLocator(page: Page, surface: SurfaceKind) {
 }
 
 async function clickBodySurface(page: Page) {
-  const bodyLine = page.locator('.superdoc-line').first();
-  // After a tracked header/footer edit (plus the comments-panel update) the body
-  // lines keep repainting, so on WebKit the element can detach between grabbing it
-  // and the scroll/click. Retry the scroll+click as a unit — each attempt
-  // re-resolves a fresh element instead of failing on a stale, detached handle.
+  // Leave the active header/footer story with a real body click. We deliberately
+  // avoid targeting an individual `.superdoc-line`: those elements virtualize and
+  // repaint, so line locators can detach between scroll + click on slower runners
+  // (especially WebKit/CI). The first line is also unsafe — in large-header docs
+  // it abuts the header geometry region, so the click can still resolve inside the
+  // active header surface and never exit the session (see EditorInputManager's
+  // #handleClickInHeaderFooterMode: only a click on body content OR outside any
+  // H/F region exits the session).
+  //
+  // Instead click the middle of the page's on-screen region via the stable
+  // `.superdoc-page` container, and retry the whole sequence so each attempt
+  // re-resolves fresh geometry after any post-edit repaint.
   await expect(async () => {
-    await bodyLine.scrollIntoViewIfNeeded({ timeout: 2_000 });
-    await bodyLine.click({ timeout: 2_000 });
+    const pageSurface = page.locator('.superdoc-page').first();
+    await pageSurface.scrollIntoViewIfNeeded({ timeout: 2_000 });
+    const box = await pageSurface.boundingBox();
+    expect(box).toBeTruthy();
+
+    const viewport = page.viewportSize();
+    const clickX = box!.x + box!.width / 2;
+    const clickY = viewport
+      ? (Math.max(box!.y, 0) + Math.min(box!.y + box!.height, viewport.height)) / 2
+      : box!.y + box!.height / 2;
+    await page.mouse.click(clickX, clickY);
   }).toPass({ timeout: 15_000 });
 }
 

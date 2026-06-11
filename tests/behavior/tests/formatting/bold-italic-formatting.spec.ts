@@ -1,25 +1,37 @@
-import { test, expect } from '../../fixtures/superdoc.js';
+import { test, type SuperDocFixture } from '../../fixtures/superdoc.js';
+
+const BOLD_LINE = 'This text will be bold.';
+const ITALIC_LINE = 'This text will be italic.';
+const BOTH_LINE = 'This text will be both bold and italic.';
+
+// Selection is not the behavior under test, so select deterministically instead of
+// via triple-click (see behavior CLAUDE.md on click-based selection).
+async function selectExactText(superdoc: SuperDocFixture, text: string): Promise<void> {
+  const pos = await superdoc.findTextPos(text);
+  await superdoc.setTextSelection(pos, pos + text.length);
+  await superdoc.waitForStable();
+}
 
 test('bold and italic formatting applied per-line', async ({ superdoc }) => {
-  await superdoc.type('This text will be bold.');
+  await superdoc.type(BOLD_LINE);
   await superdoc.newLine();
-  await superdoc.type('This text will be italic.');
+  await superdoc.type(ITALIC_LINE);
   await superdoc.newLine();
-  await superdoc.type('This text will be both bold and italic.');
+  await superdoc.type(BOTH_LINE);
   await superdoc.waitForStable();
 
   // Select line 0 and apply bold
-  await superdoc.tripleClickLine(0);
+  await selectExactText(superdoc, BOLD_LINE);
   await superdoc.bold();
   await superdoc.waitForStable();
 
   // Select line 1 and apply italic
-  await superdoc.tripleClickLine(1);
+  await selectExactText(superdoc, ITALIC_LINE);
   await superdoc.italic();
   await superdoc.waitForStable();
 
   // Select line 2 and apply bold + italic
-  await superdoc.tripleClickLine(2);
+  await selectExactText(superdoc, BOTH_LINE);
   await superdoc.bold();
   await superdoc.italic();
   await superdoc.waitForStable();

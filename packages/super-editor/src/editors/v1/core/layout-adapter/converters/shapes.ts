@@ -7,12 +7,17 @@
 
 import type {
   DrawingBlock,
+  FlowBlock,
   ImageBlock,
+  ParagraphBlock,
+  TextboxDrawing,
   VectorShapeDrawing,
   ShapeGroupDrawing,
   ImageAnchor,
   CustomGeometryData,
   SourceAnchor,
+  ShapeTextContent,
+  TextPart,
 } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
@@ -38,7 +43,9 @@ import {
   normalizeZIndex,
   resolveFloatingZIndex,
   mergeWrapDistancesFromPadding,
+  ptToPx,
 } from '../utilities.js';
+import { getLastParagraphFont } from './paragraph.js';
 
 // ============================================================================
 // Constants
@@ -72,8 +79,260 @@ const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
 
-type ShapeDrawingBlock = VectorShapeDrawing | ShapeGroupDrawing;
+type ShapeDrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing;
 type ShapeDrawingGeometry = ShapeDrawingBlock['geometry'];
+
+type TextboxAttrsPayload = {
+  attributes?: Record<string, unknown>;
+};
+
+const TEXTBOX_CONTAINER_TYPES = new Set([
+  'run',
+  'link',
+  'hyperlink',
+  'structuredContent',
+  'fieldAnnotation',
+  'smartTag',
+]);
+
+const resolveTextFormattingFromMarks = (marks: PMNode['marks']): TextPart['formatting'] | undefined => {
+  if (!Array.isArray(marks) || marks.length === 0) return undefined;
+
+  const formatting: NonNullable<TextPart['formatting']> = {};
+
+  marks.forEach((mark) => {
+    if (!mark || typeof mark.type !== 'string') return;
+    const attrs = isPlainObject(mark.attrs) ? mark.attrs : {};
+    if (mark.type === 'bold') formatting.bold = true;
+    if (mark.type === 'italic') formatting.italic = true;
+
+    const color = typeof attrs.color === 'string' ? attrs.color.replace(/^#/, '') : undefined;
+    if (color) formatting.color = color;
+
+    const fontFamily = typeof attrs.fontFamily === 'string' ? attrs.fontFamily : undefined;
+    if (fontFamily) formatting.fontFamily = fontFamily;
+
+    const fontSize = pickNumber(attrs.fontSize);
+    if (fontSize != null) formatting.fontSize = fontSize;
+  });
+
+  return Object.keys(formatting).length > 0 ? formatting : undefined;
+};
+
+const pushTextPart = (parts: TextPart[], part: TextPart): void => {
+  if (!part.text && !part.fieldType && !part.isLineBreak) return;
+  parts.push(part);
+};
+
+const extractTextPartsFromTextboxInline = (node: PMNode | undefined, parts: TextPart[]): void => {
+  if (!node) return;
+  const formatting = resolveTextFormattingFromMarks(node.marks);
+
+  if (typeof node.text === 'string') {
+    pushTextPart(parts, {
+      text: node.text,
+      ...(formatting ? { formatting } : {}),
+    });
+    return;
+  }
+
+  switch (node.type) {
+    case 'text':
+      pushTextPart(parts, {
+        text: '',
+        ...(formatting ? { formatting } : {}),
+      });
+      return;
+    case 'tab':
+      pushTextPart(parts, { text: '\t', ...(formatting ? { formatting } : {}) });
+      return;
+    case 'lineBreak':
+      pushTextPart(parts, { text: '\n', isLineBreak: true, ...(formatting ? { formatting } : {}) });
+      return;
+    case 'page-number':
+      pushTextPart(parts, {
+        text: '',
+        fieldType: 'PAGE',
+        pageNumberFormat:
+          typeof node.attrs?.pageNumberFormat === 'string'
+            ? (node.attrs.pageNumberFormat as TextPart['pageNumberFormat'])
+            : undefined,
+        ...(formatting ? { formatting } : {}),
+      });
+      return;
+    case 'total-page-number':
+      pushTextPart(parts, {
+        text:
+          typeof node.attrs?.resolvedText === 'string'
+            ? node.attrs.resolvedText
+            : typeof node.attrs?.importedCachedText === 'string'
+              ? node.attrs.importedCachedText
+              : '',
+        fieldType: 'NUMPAGES',
+        pageNumberFormat:
+          typeof node.attrs?.pageNumberFormat === 'string'
+            ? (node.attrs.pageNumberFormat as TextPart['pageNumberFormat'])
+            : undefined,
+        ...(formatting ? { formatting } : {}),
+      });
+      return;
+    default:
+      break;
+  }
+
+  if (Array.isArray(node.content) && (TEXTBOX_CONTAINER_TYPES.has(node.type) || node.content.length > 0)) {
+    node.content.forEach((child) => extractTextPartsFromTextboxInline(child, parts));
+  }
+};
+
+const extractTextboxTextContent = (node: PMNode): ShapeTextContent | undefined => {
+  if (!Array.isArray(node.content) || node.content.length === 0) return undefined;
+
+  const parts: TextPart[] = [];
+  let horizontalAlign: ShapeTextContent['horizontalAlign'];
+
+  const paragraphs = node.content.filter((child) => child?.type === 'paragraph');
+  const paragraphHasRenderableContent = (paragraph: PMNode): boolean =>
+    Array.isArray(paragraph.content) && paragraph.content.length > 0;
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const justification = paragraph.attrs?.paragraphProperties;
+    if (!horizontalAlign && isPlainObject(justification)) {
+      const value = justification.justification;
+      if (value === 'left' || value === 'center' || value === 'right') {
+        horizontalAlign = value;
+      }
+    }
+
+    paragraph.content?.forEach((child) => extractTextPartsFromTextboxInline(child, parts));
+
+    if (paragraphIndex < paragraphs.length - 1) {
+      const nextParagraph = paragraphs[paragraphIndex + 1];
+      parts.push({
+        text: '\n',
+        isLineBreak: true,
+        isEmptyParagraph: !paragraphHasRenderableContent(paragraph) || !paragraphHasRenderableContent(nextParagraph),
+      });
+    }
+  });
+
+  return parts.length > 0 ? { parts, ...(horizontalAlign ? { horizontalAlign } : {}) } : undefined;
+};
+
+const isParagraphNode = (node: PMNode | undefined): node is PMNode => node?.type === 'paragraph';
+
+const toTextboxParagraphBlocks = (node: PMNode, context: NodeHandlerContext): ParagraphBlock[] => {
+  const shapeTextboxNode = node.type === 'shapeTextbox' ? node : resolveNestedShapeTextboxNode(node);
+  const paragraphToFlowBlocks = context.converters?.paragraphToFlowBlocks;
+  if (!shapeTextboxNode || !paragraphToFlowBlocks || !Array.isArray(shapeTextboxNode.content)) {
+    return [];
+  }
+
+  const textboxBlocks: FlowBlock[] = [];
+  for (const child of shapeTextboxNode.content) {
+    if (!isParagraphNode(child)) continue;
+
+    const convertedBlocks = paragraphToFlowBlocks({
+      para: child,
+      nextBlockId: context.nextBlockId,
+      positions: context.positions,
+      storyKey: context.storyKey,
+      trackedChangesConfig: context.trackedChangesConfig,
+      bookmarks: context.bookmarks,
+      hyperlinkConfig: context.hyperlinkConfig,
+      themeColors: context.themeColors,
+      converters: context.converters,
+      converterContext: context.converterContext,
+      enableComments: context.enableComments,
+      previousParagraphFont: getLastParagraphFont(textboxBlocks),
+    });
+
+    textboxBlocks.push(...convertedBlocks);
+  }
+
+  return textboxBlocks.filter((block): block is ParagraphBlock => block.kind === 'paragraph');
+};
+
+export function hydrateTextboxDrawingContent(
+  node: PMNode,
+  drawingBlock: DrawingBlock,
+  context: Pick<NodeHandlerContext, 'nextBlockId' | 'positions' | 'converters' | 'converterContext'> &
+    Partial<
+      Pick<
+        NodeHandlerContext,
+        'storyKey' | 'trackedChangesConfig' | 'bookmarks' | 'hyperlinkConfig' | 'themeColors' | 'enableComments'
+      >
+    >,
+): DrawingBlock {
+  if (drawingBlock.drawingKind !== 'textboxShape') {
+    return drawingBlock;
+  }
+
+  return {
+    ...drawingBlock,
+    contentBlocks: toTextboxParagraphBlocks(node, context as NodeHandlerContext),
+  };
+}
+
+const parseTextboxInsetValue = (value: string): number | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.endsWith('pt')) {
+    return ptToPx(parseFloat(trimmed.slice(0, -2)));
+  }
+  if (trimmed.endsWith('px')) {
+    return pickNumber(trimmed.slice(0, -2));
+  }
+  if (trimmed.endsWith('in')) {
+    const inches = parseFloat(trimmed.slice(0, -2));
+    return Number.isFinite(inches) ? inches * 96 : undefined;
+  }
+  return pickNumber(trimmed);
+};
+
+const resolveTextboxInsetsFromAttrs = (
+  attrs: Record<string, unknown>,
+): VectorShapeDrawing['textInsets'] | undefined => {
+  const explicitInsets = normalizeTextInsets(attrs.textInsets);
+  if (explicitInsets) return explicitInsets;
+
+  const textboxAttrs = isPlainObject(attrs.attributes)
+    ? (attrs.attributes as TextboxAttrsPayload['attributes'])
+    : undefined;
+  const inset = typeof textboxAttrs?.inset === 'string' ? textboxAttrs.inset : undefined;
+  if (!inset) return undefined;
+
+  const values = inset.split(',').map((entry) => parseTextboxInsetValue(entry));
+  if (values.length !== 4 || values.some((entry) => entry == null)) return undefined;
+
+  return {
+    top: values[1] as number,
+    right: values[2] as number,
+    bottom: values[3] as number,
+    left: values[0] as number,
+  };
+};
+
+const resolveTextboxVerticalAlignFromAttrs = (
+  attrs: Record<string, unknown>,
+): VectorShapeDrawing['textVerticalAlign'] | undefined => {
+  const explicitAlign = normalizeTextVerticalAlign(attrs.textVerticalAlign);
+  if (explicitAlign) return explicitAlign;
+
+  const textboxAttrs = isPlainObject(attrs.attributes)
+    ? (attrs.attributes as TextboxAttrsPayload['attributes'])
+    : undefined;
+  const style = typeof textboxAttrs?.style === 'string' ? textboxAttrs.style : undefined;
+  if (!style) return undefined;
+
+  const match = style.match(/v-text-anchor\s*:\s*(top|middle|bottom)/i);
+  if (!match) return undefined;
+  if (match[1].toLowerCase() === 'middle') return 'center';
+  return match[1].toLowerCase() as 'top' | 'bottom';
+};
+
+const resolveNestedShapeTextboxNode = (node: PMNode): PMNode | undefined =>
+  Array.isArray(node.content) ? node.content.find((child) => child?.type === 'shapeTextbox') : undefined;
 
 /**
  * Normalize wrap type value to a valid ImageBlock wrap type
@@ -491,7 +750,29 @@ export function shapeContainerNodeToDrawingBlock(
     flipV: coerceBoolean(rawAttrs.flipV) ?? false,
   };
 
-  return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'vectorShape');
+  const shapeTextboxNode = resolveNestedShapeTextboxNode(node);
+  const textboxAttrs = shapeTextboxNode ? getAttrs(shapeTextboxNode) : {};
+  const textContent = shapeTextboxNode ? extractTextboxTextContent(shapeTextboxNode) : undefined;
+
+  return buildDrawingBlock(
+    {
+      ...rawAttrs,
+      ...(textContent ? { textContent } : {}),
+      ...(rawAttrs.textAlign == null && textContent?.horizontalAlign ? { textAlign: textContent.horizontalAlign } : {}),
+      ...(rawAttrs.textInsets == null ? { textInsets: resolveTextboxInsetsFromAttrs(textboxAttrs) } : {}),
+      ...(rawAttrs.textVerticalAlign == null
+        ? { textVerticalAlign: resolveTextboxVerticalAlignFromAttrs(textboxAttrs) }
+        : {}),
+    },
+    nextBlockId,
+    positions,
+    node,
+    geometry,
+    'textboxShape',
+    {
+      contentBlocks: [],
+    },
+  );
 }
 
 /**
@@ -519,7 +800,27 @@ export function shapeTextboxNodeToDrawingBlock(
     flipV: coerceBoolean(rawAttrs.flipV) ?? false,
   };
 
-  return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'vectorShape');
+  const textContent = extractTextboxTextContent(node);
+
+  return buildDrawingBlock(
+    {
+      ...rawAttrs,
+      ...(textContent ? { textContent } : {}),
+      ...(rawAttrs.textAlign == null && textContent?.horizontalAlign ? { textAlign: textContent.horizontalAlign } : {}),
+      ...(rawAttrs.textInsets == null ? { textInsets: resolveTextboxInsetsFromAttrs(rawAttrs) } : {}),
+      ...(rawAttrs.textVerticalAlign == null
+        ? { textVerticalAlign: resolveTextboxVerticalAlignFromAttrs(rawAttrs) }
+        : {}),
+    },
+    nextBlockId,
+    positions,
+    node,
+    geometry,
+    'textboxShape',
+    {
+      contentBlocks: [],
+    },
+  );
 }
 
 // ============================================================================
@@ -572,7 +873,7 @@ export function handleShapeContainerNode(node: PMNode, context: NodeHandlerConte
 
   const drawingBlock = shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
-    blocks.push(drawingBlock);
+    blocks.push(hydrateTextboxDrawingContent(node, drawingBlock, context));
     recordBlockKind?.(drawingBlock.kind);
   }
 }
@@ -589,7 +890,7 @@ export function handleShapeTextboxNode(node: PMNode, context: NodeHandlerContext
 
   const drawingBlock = shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
-    blocks.push(drawingBlock);
+    blocks.push(hydrateTextboxDrawingContent(node, drawingBlock, context));
     recordBlockKind?.(drawingBlock.kind);
   }
 }

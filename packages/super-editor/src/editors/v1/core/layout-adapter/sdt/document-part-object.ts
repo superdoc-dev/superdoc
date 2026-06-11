@@ -52,11 +52,28 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
   const tocInstruction = getNodeInstruction(node);
   const docPartSdtMetadata = resolveNodeSdtMetadata(node, 'docPartObject');
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
+  // The SDT importer defaults the docPartObj id to '' when w:id is missing,
+  // and an empty tocId fails the truthiness guard in applyTocMetadata —
+  // collapsing group hover to per-entry. Fall back to the wrapping SDT's
+  // sdBlockId so TOCs without an explicit w:id still share a group key.
+  const sdBlockId = (node.attrs as { sdBlockId?: unknown } | undefined)?.sdBlockId;
+  const tocId =
+    docPartObjectId && docPartObjectId.length > 0
+      ? docPartObjectId
+      : typeof sdBlockId === 'string' && sdBlockId.length > 0
+        ? sdBlockId
+        : undefined;
 
   if (docPartGallery === 'Table of Contents') {
     processTocChildren(
       Array.from(node.content),
-      { docPartGallery, docPartObjectId, tocInstruction, sdtMetadata: docPartSdtMetadata },
+      {
+        docPartGallery,
+        docPartObjectId,
+        tocInstruction,
+        sdtMetadata: docPartSdtMetadata,
+        tocId,
+      },
       {
         nextBlockId,
         positions,
@@ -107,6 +124,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           docPartObjectId,
           tocInstruction: getNodeInstruction(child) ?? tocInstruction,
           sdtMetadata: docPartSdtMetadata,
+          tocId,
         };
         const tocContext = {
           nextBlockId,

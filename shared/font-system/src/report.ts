@@ -157,12 +157,12 @@ export interface UsedFace extends FaceKey {
 
 /**
  * Face-level resolution report: one row per (logical family, face) the document RENDERS, resolved
- * FACE-aware so a substitute that lacks a face is reported `fallback_face_absent` rather than
- * silently faux-styled. The caller passes the used faces (super-editor builds them from the load
- * planner, which carries logical family + weight/style); `registry.hasFace` is the face-availability
- * oracle. Unlike {@link buildFontReport} (one row per declared family), this explains per-face
- * fidelity, e.g. "Baskerville Regular -> Bacasime (custom_mapping); Baskerville Bold ->
- * fallback_face_absent". Deduped by logical family + weight + style.
+ * FACE-aware so a substitute that lacks a face is reported `fallback_face_absent` unless docfonts
+ * explicitly names a synthetic source face. The caller passes the used faces (super-editor builds them
+ * from the load planner, which carries logical family + weight/style); `registry.hasFace` is the
+ * face-availability oracle. Unlike {@link buildFontReport} (one row per declared family), this
+ * explains per-face fidelity, e.g. "Baskerville Regular -> Bacasime (custom_mapping); Baskerville Bold
+ * -> fallback_face_absent". Deduped by logical family + weight + style.
  */
 export function buildFaceReport(
   usedFaces: Iterable<UsedFace>,
@@ -181,13 +181,20 @@ export function buildFaceReport(
     const face: FaceKey = { weight, style };
     // Resolve through the document's resolver (so a per-document `fonts.map` is reflected); the
     // shared default for callers without one. Face-aware: a substitute that lacks this face yields
-    // `fallback_face_absent` with the logical family passed through.
-    const { physicalFamily, reason } = resolver
+    // `fallback_face_absent` with the logical family passed through unless docfonts authorizes a
+    // synthetic source face.
+    const resolution = resolver
       ? resolver.resolveFace(logicalFamily, face, hasFace)
       : resolveFace(logicalFamily, face, hasFace);
+    const { physicalFamily, reason } = resolution;
+    const statusFace = resolution.sourceFace ?? face;
     // Per-FACE load status (not the family rollup), so a failed/fallback bold face does not make a
     // loaded regular face row report missing, and vice versa.
-    const loadStatus = registry.getFaceStatus({ family: physicalFamily, weight, style });
+    const loadStatus = registry.getFaceStatus({
+      family: physicalFamily,
+      weight: statusFace.weight,
+      style: statusFace.style,
+    });
     // `missing` = SuperDoc did not faithfully render this face with a metric-compatible substitute.
     // - `fallback_face_absent` is ALWAYS missing: the substitute lacks this weight/style so the family
     //   passes through unsubstituted. That pass-through is not a registered FontFace, so it can never

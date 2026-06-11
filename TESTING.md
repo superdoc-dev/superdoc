@@ -9,8 +9,7 @@ How to verify your changes before pushing.
 | Logic works? | `pnpm test` | ~30s | Hard |
 | Document API smoke? | `pnpm test:document-api-smoke` | ~1 min | Hard |
 | Editing works? | `pnpm test:behavior` | ~3 min | Hard |
-| Layout regressed? | `pnpm test:layout` | ~10 min | Manual |
-| Visual pixel diff? | `pnpm test:visual` | ~5 min | Manual |
+| Visual pixel diff? | `pnpm --dir tests/visual test` | ~5 min | Soft |
 
 ## Unit Tests
 
@@ -65,80 +64,32 @@ These assert on **document state**, not pixels. Located in `tests/behavior/`. Se
 pnpm --filter @superdoc-testing/behavior setup   # install browser binaries
 ```
 
-## Layout Comparison
-
-Compare layout engine output (JSON structure) across ~382 real-world documents against a published npm version. This is the primary tool for catching rendering regressions.
-
-```bash
-pnpm test:layout                                    # interactive
-pnpm test:layout -- --reference 1.16.0              # specific version
-pnpm test:layout -- --match tables --limit 5        # filtered, faster
-```
-
-The command handles everything: corpus download, build, snapshot generation, comparison.
-
-**First-time setup:**
-
-```bash
-npx wrangler login    # Cloudflare auth for downloading test documents
-pnpm test:layout      # downloads corpus automatically on first run
-```
-
-After the first run, the corpus is cached locally — no auth needed for subsequent runs.
-
-**Reports** are written to `tests/layout/reports/`. Each report includes:
-
-- `summary.md` — overview with widespread changes and per-doc details
-- `summary.json` — machine-readable version of the summary
-- `docs/` — per-document `.diff.json` files with detailed diffs
-
-### Reading the Report
-
-The summary separates **unique changes** (diffs specific to a few docs) from **widespread-only** docs (every diff in the doc is a pattern that appears in 50%+ of all changed docs):
-
-```
-- Changed docs: 382
-  - Unique changes: 2
-  - Widespread-only: 380
-```
-
-**Widespread changes** are diff patterns appearing in 50%+ of changed docs. These typically represent schema evolution (e.g., a new `margins` field), not regressions. They're listed separately so you can focus on what matters.
-
-### Triage workflow
-
-1. Open `summary.md` — check the changed docs count
-2. Skip **Widespread-Only Docs** — these are schema evolution
-3. Focus on **Docs With Unique Changes** — open their `.diff.json` files
-4. Each diff has `path` (JSONPath), `kind`, `reference`/`candidate` values, and a `widespread` flag
-5. Decide if the change is intentional (your PR) or a regression
-
-**Advanced:** For lower-level access, use `pnpm layout:compare` directly. See `tests/layout/README.md`.
-
 ## Visual Comparison (Pixel Diff)
 
-After `pnpm test:layout` finds changes, it prints a hint to run pixel comparison. This generates an HTML before/after report showing exactly what changed visually.
+Playwright visual regression tests that screenshot rendered documents and compare them pixel-by-pixel against R2-stored baselines. Located in `tests/visual/`.
 
 ```bash
-pnpm test:visual    # reads latest layout report, compares changed docs
+cd tests/visual
+pnpm docs:download    # sync the shared test corpus from R2 (first time / new docs)
+pnpm test             # run the visual suite
+pnpm report           # view the HTML report
 ```
 
-The command automatically:
-- Reads the latest layout comparison report
-- Extracts documents with unique changes
-- Runs pixel-level comparison against the same reference version
-- Generates an interactive HTML report in `devtools/visual-testing/results/`
+Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux). See `tests/visual/README.md` for setup (R2 env vars, wrangler auth) and `tests/visual/AGENTS.md` for fixture details.
+
+Bulk layout regression comparison across the full corpus is maintainer-internal tooling and no longer lives in this repo.
 
 ## Uploading Test Documents
 
-Upload a `.docx` file to the shared test corpus (used by layout, visual, and behavior tests):
+Upload a `.docx` file to the shared test corpus (used by visual and behavior tests):
 
 ```bash
-pnpm corpus:upload ./path/to/my-file.docx
+pnpm --dir tests/visual docs:upload ./path/to/my-file.docx
 # Prompts for: issue ID or short description
 # -> uploads as rendering/paragraph-between-borders.docx
 ```
 
-After uploading, pull it locally with `pnpm corpus:pull` so it's available for all test suites.
+After uploading, pull it locally with `pnpm --dir tests/visual docs:download` so it's available for all test suites.
 
 ## When to Run What
 
@@ -146,11 +97,11 @@ After uploading, pull it locally with `pnpm corpus:pull` so it's available for a
 |---|---|
 | A utility function or algorithm | `pnpm test` |
 | An editing command or extension | `pnpm test` + `pnpm test:behavior` |
-| Layout engine or style resolution | `pnpm test` + `pnpm test:layout` |
-| DomPainter rendering | `pnpm test` + `pnpm test:layout` |
-| PM adapter (data conversion) | `pnpm test` + `pnpm test:layout` |
+| Layout engine or style resolution | `pnpm test` + `pnpm --dir tests/visual test` |
+| DomPainter rendering | `pnpm test` + `pnpm --dir tests/visual test` |
+| PM adapter (data conversion) | `pnpm test` + `pnpm --dir tests/visual test` |
 | Table rendering or spacing | All three |
-| Super-converter (import/export) | `pnpm test` + `pnpm test:layout` |
+| Super-converter (import/export) | `pnpm test` + `pnpm --dir tests/visual test` |
 
 ## CI Behavior
 
@@ -158,15 +109,17 @@ After uploading, pull it locally with `pnpm corpus:pull` so it's available for a
 |---|---|---|
 | Unit tests | Yes | Yes |
 | Behavior tests | Yes (sharded across 3 runners) | Yes |
-| Layout comparison | No (run manually) | No |
+| Visual tests | Yes (on rendering-related paths) | No (soft gate — diffs post a PR comment) |
 
 ## Troubleshooting
 
-**`pnpm test:layout` says auth expired:**
+**Corpus download (`pnpm docs:download` in `tests/visual`) says auth expired or missing:**
 
 ```bash
 npx wrangler login
 ```
+
+R2 account ids and bucket names must be set via env vars (see `tests/visual/.env.example`).
 
 **Behavior tests fail with port conflict:**
 
@@ -182,7 +135,3 @@ pnpm test:behavior:headed                          # see the browser
 pnpm test:behavior:ui                              # Playwright inspector
 pnpm test:behavior:trace                           # record traces
 ```
-
-**Layout comparison shows many diffs but none are from your PR:**
-
-You're probably comparing against an old npm version. The diffs include all changes on `main` since that release. Use `npm@next` (the default) for the closest baseline to current `main`.

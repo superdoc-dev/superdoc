@@ -871,6 +871,10 @@ import {
   type CommentsSlice,
   type EntityAddress as UIEntityAddress,
   type EqualityFn,
+  type FontFamilyOption as UIFontFamilyOption,
+  type FontsHandle,
+  type FontSizeOption as UIFontSizeOption,
+  type FontsSlice,
   type Receipt as UIReceipt,
   type ScrollIntoViewInput as UIScrollIntoViewInput,
   type ScrollIntoViewOutput as UIScrollIntoViewOutput,
@@ -908,6 +912,7 @@ function testSuperDocUISubEntry() {
     toolbar: SuperDocUI['toolbar'];
     commands: SuperDocUI['commands'];
     comments: CommentsHandle;
+    fonts: FontsHandle;
     trackChanges: TrackChangesHandle;
     viewport: ViewportHandle;
     state: SuperDocUIState;
@@ -915,6 +920,9 @@ function testSuperDocUISubEntry() {
   type AssertSlices = {
     selection: SelectionSlice;
     comments: CommentsSlice;
+    fonts: FontsSlice;
+    fontFamilyOption: UIFontFamilyOption;
+    fontSizeOption: UIFontSizeOption;
     trackChanges: TrackChangesSlice;
     trackChangesItem: TrackChangesItem;
   };

@@ -15,7 +15,7 @@
  *   shared state module ← other extensions
  */
 
-import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
+import { AllSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import type { EditorState, Selection, SelectionBookmark, Transaction } from 'prosemirror-state';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,23 @@ import type { EditorState, Selection, SelectionBookmark, Transaction } from 'pro
  * without importing from the extension module.
  */
 export const CustomSelectionPluginKey = new PluginKey('CustomSelection');
+
+export const DEFAULT_CUSTOM_SELECTION_STATE = Object.freeze({
+  focused: false,
+  preservedSelection: null,
+  showVisualSelection: false,
+  skipFocusReset: false,
+});
+
+type PreservedSelectionEditor = {
+  state?: EditorState;
+  view?: {
+    state?: EditorState;
+    dispatch?: (tr: Transaction) => void;
+  };
+  dispatch?: (tr: Transaction) => void;
+  setOptions?: (options: { preservedSelection: null; lastSelection: null }) => void;
+};
 
 /**
  * Reads the transaction-mapped preserved selection from the custom-selection
@@ -46,6 +63,53 @@ export const CustomSelectionPluginKey = new PluginKey('CustomSelection');
 export function getPreservedSelection(state: EditorState): Selection | null {
   const focusState = CustomSelectionPluginKey.getState(state);
   return focusState?.preservedSelection ?? null;
+}
+
+function getSelectedTextRange(state: EditorState): { from: number; to: number } | null {
+  const { selection } = state;
+  let from: number | null = null;
+  let to: number | null = null;
+
+  state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+    if (!node.isText || !node.text) return;
+    const start = pos;
+    const end = pos + node.nodeSize;
+    from = from == null ? start : Math.min(from, start);
+    to = to == null ? end : Math.max(to, end);
+  });
+
+  return from == null || to == null ? null : { from, to };
+}
+
+export function prepareSelectionForTextInputHandoff(editor: PreservedSelectionEditor | null | undefined): boolean {
+  const state = editor?.view?.state ?? editor?.state;
+  const dispatch =
+    typeof editor?.view?.dispatch === 'function'
+      ? editor.view.dispatch.bind(editor.view)
+      : typeof editor?.dispatch === 'function'
+        ? editor.dispatch.bind(editor)
+        : null;
+
+  if (!state || !dispatch) return false;
+
+  let tr = state.tr.setMeta(CustomSelectionPluginKey, DEFAULT_CUSTOM_SELECTION_STATE);
+  if (state.selection instanceof AllSelection) {
+    const range = getSelectedTextRange(state);
+    if (range) {
+      try {
+        tr = tr.setSelection(TextSelection.create(tr.doc, range.from, range.to));
+      } catch {
+        // Keep the original selection if the document no longer accepts that range.
+      }
+    }
+  }
+
+  dispatch(tr);
+  editor?.setOptions?.({
+    preservedSelection: null,
+    lastSelection: null,
+  });
+  return true;
 }
 
 // ---------------------------------------------------------------------------

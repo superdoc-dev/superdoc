@@ -11,7 +11,7 @@ const TEST_FILE = resolve(
   '../../test-data/tables/sd-2236-table-arrow-key-navigation.docx',
 );
 
-test.skip(!fs.existsSync(TEST_FILE), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(TEST_FILE), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('ArrowRight from the end of the bottom-right table cell exits to the paragraph after the table', async ({
   superdoc,

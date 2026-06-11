@@ -2417,6 +2417,13 @@ export function executePlan(editor: Editor, input: MutationsApplyInput): PlanRec
     throw planError('INVALID_INPUT', 'plan must contain at least one step');
   }
 
+  // Reject stale optimistic-concurrency requests BEFORE compilePlan can
+  // dispatch the identity-repair transaction. Without this, a caller's
+  // mismatched expectedRevision would surface as REVISION_MISMATCH *after*
+  // the repair already rewrote block identities on the doc — we'd reject
+  // the user's intent but still leave the document mutated.
+  checkRevision(editor, input.expectedRevision);
+
   const compiled = compilePlan(editor, input.steps, {
     selectTextModel: input.changeMode === 'tracked' ? 'raw' : 'visible',
   });

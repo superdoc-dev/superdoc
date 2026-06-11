@@ -8,7 +8,7 @@ test.use({ config: { toolbar: 'full', comments: 'off', trackChanges: true } });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/redline-full-paragraph.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 const snapshotTrackDeletesAndBookmarks = async (superdoc: any) =>
   superdoc.page.evaluate(() => {

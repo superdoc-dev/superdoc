@@ -108,8 +108,8 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
 
 ### Font controls
 
-<ResponseField name="fontFamily" type="dropdown">
-  Font family selector
+<ResponseField name="fontFamily" type="combobox">
+  Editable font family selector
 </ResponseField>
 
 <ResponseField name="fontSize" type="dropdown">
@@ -123,6 +123,12 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
 <ResponseField name="highlight" type="dropdown">
   Background highlight color picker
 </ResponseField>
+
+The font family control is editable. Type to autocomplete, press `Enter` to apply, `Tab` to move to font size, or `Esc` to revert. The caret opens the full list.
+
+If a typed name does not match an option, SuperDoc preserves that custom font name in the document. Load the font on the host page if you want it to render with its real glyphs.
+
+The font size control follows the same flow: click the value to type a size, use the caret to open the list, and press `Tab` to return to the editor.
 
 ### Paragraph
 
@@ -331,11 +337,11 @@ Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
 
 ## Font configuration
 
-By default, the font dropdown lists SuperDoc's bundled defaults plus fonts used by the active document. The list is sorted alphabetically.
+By default, the font family combobox lists SuperDoc's bundled defaults plus fonts used by the active document. The list is sorted alphabetically.
 
 Choosing a fallback-backed font keeps the Word-facing name in the document. For example, picking Calibri stores and exports Calibri, while the row preview can render with the bundled fallback that actually paints it.
 
-Use `fonts` only when you want to replace the default list with your own static options.
+Use `fonts` only when you want to replace the default and document-derived list with your own static options.
 
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">

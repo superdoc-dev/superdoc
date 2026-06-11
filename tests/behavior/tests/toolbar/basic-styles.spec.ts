@@ -82,12 +82,14 @@ test('font family dropdown changes font', async ({ superdoc }) => {
 
   // Open the font family dropdown
   const fontButton = superdoc.page.locator('[data-item="btn-fontFamily"]');
-  await fontButton.click();
+  await fontButton.locator('[data-item="btn-fontFamily-toggle"]').click();
   await superdoc.waitForStable();
   await superdoc.snapshot('font family dropdown open');
 
   // Select "Times New Roman" from the dropdown
-  const fontOption = superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Times New Roman' });
+  const fontOption = superdoc.page
+    .locator('[data-item="btn-fontFamily-option"]')
+    .filter({ hasText: 'Times New Roman' });
   await fontOption.click();
   await superdoc.waitForStable();
 
@@ -104,7 +106,7 @@ test('font size dropdown changes size', async ({ superdoc }) => {
 
   // Open the font size dropdown
   const sizeButton = superdoc.page.locator('[data-item="btn-fontSize"]');
-  await sizeButton.click();
+  await sizeButton.locator('.sd-dropdown-caret').click();
   await superdoc.waitForStable();
   await superdoc.snapshot('font size dropdown open');
 

@@ -347,6 +347,12 @@ export const translateImageNode = (params) => {
       },
     });
   }
+  if (attrs.alphaModFix && Number.isFinite(attrs.alphaModFix.amt)) {
+    blipEffects.push({
+      name: 'a:alphaModFix',
+      attributes: { amt: Math.round(attrs.alphaModFix.amt) },
+    });
+  }
 
   // Resolve hyperlink relationship once; shared by wp:docPr and pic:cNvPr.
   const hlinkRId = resolveHyperlinkRId(attrs, params);

@@ -1,7 +1,5 @@
 # Visual Testing
 
-> **Layout regression (JSON comparison):** Use `pnpm test:layout` from the repo root for layout snapshot comparison across all test documents. This file covers pixel-level visual regression tests.
-
 Playwright visual regression tests for SuperDoc. Screenshots and test documents are stored in R2.
 
 ## When to Add Visual Tests
@@ -22,6 +20,7 @@ scripts/
   upload-test-doc.ts     Upload rendering doc — prompts for issue ID and description
   download-baselines.ts  Download screenshot baselines from R2
   upload-baselines.ts    Upload screenshot baselines to R2
+  corpus/                Shared corpus R2 client (pull/push, registry.json)
 ```
 
 ## R2 Storage

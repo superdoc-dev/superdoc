@@ -19,16 +19,34 @@ async function clickToolbarButton(superdoc: SuperDocFixture, dataItem: string): 
 }
 
 async function selectDropdownOption(superdoc: SuperDocFixture, dataItem: string, optionText: string): Promise<void> {
-  await superdoc.page.locator(`[data-item="btn-${dataItem}"]`).click();
-  await superdoc.waitForStable();
-  await superdoc.page.locator(`[data-item="btn-${dataItem}-option"]`).filter({ hasText: optionText }).click();
+  const trigger =
+    dataItem === 'fontFamily'
+      ? superdoc.page.locator('[data-item="btn-fontFamily-toggle"]')
+      : dataItem === 'fontSize'
+        ? superdoc.page.locator('[data-item="btn-fontSize"] .sd-dropdown-caret')
+        : superdoc.page.locator(`[data-item="btn-${dataItem}"]`);
+  const option = superdoc.page.locator(`[data-item="btn-${dataItem}-option"]`).filter({ hasText: optionText }).first();
+
+  // Toolbar dropdowns animate open and can briefly close again under CI load.
+  // Keep the toggle click and bounded option click inside a retry so a missed
+  // frame re-opens the menu instead of timing out the whole test.
+  await expect(async () => {
+    await trigger.click();
+    await option.click({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
   await superdoc.waitForStable();
 }
 
 async function selectColorSwatch(superdoc: SuperDocFixture, dataItem: string, label: string): Promise<void> {
-  await superdoc.page.locator(`[data-item="btn-${dataItem}"]`).click();
-  await superdoc.waitForStable();
-  await superdoc.page.locator(`.sd-option[aria-label="${label}"]`).first().click();
+  const trigger = superdoc.page.locator(`[data-item="btn-${dataItem}"]`);
+  const option = superdoc.page.locator(`.sd-option[aria-label="${label}"]`).first();
+
+  await expect(async () => {
+    await trigger.click();
+    await option.click({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
   await superdoc.waitForStable();
 }
 

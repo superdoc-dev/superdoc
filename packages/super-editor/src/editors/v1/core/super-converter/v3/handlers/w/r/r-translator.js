@@ -25,6 +25,8 @@ const REFERENCE_RUN_STYLE_BY_XML_NAME = {
   'w:endnoteReference': 'EndnoteReference',
 };
 
+const BLOCK_HOIST_TYPES = new Set(['shapeContainer']);
+
 const hasXmlNodeNamed = (node, targetName) => {
   if (!node || typeof node !== 'object') return false;
   if (node.name === targetName) return true;
@@ -210,6 +212,13 @@ const encode = (params, encodedAttrs = {}) => {
   const contentElements = rPrNode ? elements.filter((el) => el !== rPrNode) : elements;
   const childParams = { ...params, nodes: contentElements };
   const content = nodeListHandler?.handler(childParams) || [];
+
+  if (Array.isArray(content) && content.length > 0 && content.every((child) => BLOCK_HOIST_TYPES.has(child?.type))) {
+    return content.filter(Boolean).map((child) => ({
+      ...child,
+      marks: Array.isArray(child?.marks) ? child.marks : [],
+    }));
+  }
 
   // Applying marks to child nodes
   const contentWithRunMarks = (Array.isArray(content) ? content : []).map((child) => {

@@ -4391,6 +4391,47 @@ describe('layoutHeaderFooter', () => {
     expect(paragraphFragment.x).toBe(0);
     expect(paragraphFragment.width).toBe(200);
   });
+
+  it('computes contentMeasures for textboxShape blocks when remeasureParagraph is provided', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'footer-textbox-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'footer-textbox-para-1',
+          runs: [{ text: 'Footer text', pmStart: 1, pmEnd: 12 }],
+        },
+      ],
+      textInsets: { top: 4, right: 8, bottom: 4, left: 8 },
+    };
+    const textboxMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 40,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 40,
+      geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [textboxBlock],
+      [textboxMeasure],
+      { width: 400, height: 80 },
+      'footer',
+      (_block, _maxWidth) => makeMeasure([16]),
+    );
+
+    const fragment = layout.pages[0].fragments[0] as DrawingFragment;
+    expect(fragment.kind).toBe('drawing');
+    expect(fragment.drawingKind).toBe('textboxShape');
+    expect(Array.isArray(fragment.contentMeasures)).toBe(true);
+    expect(fragment.contentMeasures).toHaveLength(1);
+  });
 });
 
 describe('requirePageBoundary edge cases', () => {
@@ -5130,6 +5171,126 @@ describe('requirePageBoundary edge cases', () => {
 
       expect(imageOnPage1).toBeUndefined();
       expect(imageOnPage2).toBeTruthy();
+    });
+  });
+
+  describe('textbox content measures', () => {
+    it('stores contentMeasures for inline textbox drawings when remeasureParagraph is available', () => {
+      const drawingBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'textbox-inline',
+        drawingKind: 'textboxShape',
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-1',
+            runs: [{ text: 'Textbox text', pmStart: 10, pmEnd: 22 }],
+          },
+        ],
+        textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      };
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+        width: 120,
+        height: 80,
+        scale: 1,
+        naturalWidth: 120,
+        naturalHeight: 80,
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      };
+
+      const remeasureParagraph: NonNullable<LayoutOptions['remeasureParagraph']> = (_block, maxWidth) => {
+        expect(maxWidth).toBe(100);
+        return makeMeasure([18]);
+      };
+
+      const layout = layoutDocument([drawingBlock], [drawingMeasure], {
+        ...DEFAULT_OPTIONS,
+        remeasureParagraph,
+      });
+
+      const fragment = layout.pages[0].fragments[0] as DrawingFragment;
+      expect(fragment.kind).toBe('drawing');
+      expect(fragment.drawingKind).toBe('textboxShape');
+      expect(fragment.contentMeasures).toHaveLength(1);
+      expect(fragment.contentMeasures?.[0]?.totalHeight).toBe(18);
+    });
+
+    it('stores contentMeasures for anchored textbox drawings on pre-registered pages', () => {
+      const firstPageParagraph: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para-page-1',
+        runs: [],
+      };
+      const forcedBreak: FlowBlock = {
+        kind: 'pageBreak',
+        id: 'pb-before-textbox',
+      };
+      const textboxBlock: FlowBlock = {
+        kind: 'drawing',
+        id: 'textbox-pre-reg-page',
+        drawingKind: 'textboxShape',
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-anchored',
+            runs: [{ text: 'Anchored textbox', pmStart: 30, pmEnd: 45 }],
+          },
+        ],
+        textInsets: { top: 0, right: 10, bottom: 0, left: 10 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          alignH: 'left',
+          alignV: 'top',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+          distLeft: 0,
+          distRight: 10,
+        },
+      };
+      const paragraphMeasure = makeMeasure([20]);
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'textboxShape',
+        width: 120,
+        height: 80,
+        scale: 1,
+        naturalWidth: 120,
+        naturalHeight: 80,
+        geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      };
+
+      const remeasureWidths: number[] = [];
+      const remeasureParagraph: NonNullable<LayoutOptions['remeasureParagraph']> = (_block, maxWidth) => {
+        remeasureWidths.push(maxWidth);
+        return makeMeasure([16, 16]);
+      };
+
+      const layout = layoutDocument(
+        [firstPageParagraph, forcedBreak, textboxBlock],
+        [paragraphMeasure, { kind: 'pageBreak' }, drawingMeasure],
+        {
+          ...DEFAULT_OPTIONS,
+          remeasureParagraph,
+        },
+      );
+
+      const page2 = layout.pages[1];
+      const fragment = page2.fragments.find((frag) => frag.blockId === 'textbox-pre-reg-page') as DrawingFragment;
+      expect(fragment).toBeTruthy();
+      expect(fragment.drawingKind).toBe('textboxShape');
+      expect(fragment.contentMeasures).toHaveLength(1);
+      expect(fragment.contentMeasures?.[0]?.lines).toHaveLength(2);
+      expect(remeasureWidths).toContain(100);
     });
   });
 

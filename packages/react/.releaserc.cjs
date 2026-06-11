@@ -74,7 +74,7 @@ if (!isPrerelease) {
 
 // Linear integration - labels issues with version on release
 config.plugins.push([
-  'semantic-release-linear-app',
+  '../../scripts/semantic-release/linear-commit-sync.cjs',
   { teamKeys: ['SD'], addComment: shouldCommentOnRelease, packageName: 'react' },
 ]);
 

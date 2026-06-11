@@ -148,14 +148,32 @@ describe('createSuperDocUI', () => {
     teardown.push(() => ui.destroy());
 
     const options = ui.fonts.getOptions();
+    const sizeOptions = ui.fonts.getSizeOptions();
     expect(options.map((option) => option.label)).toEqual([
       'Aptos',
       'Arial',
+      'Arial Black',
+      'Arial Narrow',
       'Bangla MN',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
       'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
       'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',
@@ -163,6 +181,23 @@ describe('createSuperDocUI', () => {
       previewFamily: 'Aptos',
     });
     expect(options.every((option) => !('status' in option))).toBe(true);
+    expect(sizeOptions.map((option) => option.value)).toEqual([
+      '8pt',
+      '9pt',
+      '10pt',
+      '11pt',
+      '12pt',
+      '14pt',
+      '18pt',
+      '24pt',
+      '30pt',
+      '36pt',
+      '48pt',
+      '60pt',
+      '72pt',
+      '96pt',
+    ]);
+    expect(ui.fonts.getSnapshot().sizeOptions).toBe(sizeOptions);
   });
 
   it('refreshes ui.fonts when fonts-changed fires', async () => {
@@ -179,8 +214,55 @@ describe('createSuperDocUI', () => {
     superdoc.fireSuperdoc('fonts-changed');
     await flushMicrotasks();
 
-    expect(observed.at(0)).toEqual(['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
-    expect(observed.at(-1)).toEqual(['Aptos', 'Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman']);
+    expect(observed.at(0)).toEqual([
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
+    expect(observed.at(-1)).toEqual([
+      'Aptos',
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
   });
 
   it('refreshes ui.fonts for delimiter-colliding font names', async () => {

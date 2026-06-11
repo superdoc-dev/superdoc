@@ -275,6 +275,8 @@ export function imageNodeToBlock(
   const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
   const lumBright = pickNumber(lum?.bright);
   const lumContrast = pickNumber(lum?.contrast);
+  const alphaModFix = isPlainObject(attrs.alphaModFix) ? attrs.alphaModFix : undefined;
+  const alphaModFixAmt = pickNumber(alphaModFix?.amt);
 
   const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
@@ -325,6 +327,7 @@ export function imageNodeToBlock(
             ...(lumContrast != null ? { contrast: lumContrast } : {}),
           }
         : undefined,
+    alphaModFix: alphaModFixAmt != null ? { amt: alphaModFixAmt } : undefined,
     // Image transformations from OOXML a:xfrm
     ...(rotation !== undefined && { rotation }),
     ...(flipH !== undefined && { flipH }),

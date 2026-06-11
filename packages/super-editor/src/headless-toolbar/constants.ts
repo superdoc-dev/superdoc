@@ -63,10 +63,10 @@ export const DEFAULT_FONT_SIZE_OPTIONS = [
 
 /**
  * Default headless-toolbar font options, DERIVED from the shared font-offering registry
- * (`@superdoc/font-system`) instead of a hand-maintained list. Only metric-safe, bundled-backed fonts
- * are advertised; previously-listed Aptos and Georgia are not bundled (so they cannot render
- * deterministically) and are intentionally dropped from defaults until they ship. `label` is the
- * Word-facing logical name (stored/exported); `value` is the logical CSS stack applied to the run.
+ * (`@superdoc/font-system`) instead of a hand-maintained list. Bundled clean defaults and explicit
+ * qualified choices are advertised; customer-supplied and category fallback rows stay absent.
+ * `label` is the Word-facing logical name (stored/exported); `value` is the logical CSS stack applied
+ * to the run.
  */
 export const DEFAULT_FONT_FAMILY_OPTIONS = getDefaultFontFamilyOptions();
 

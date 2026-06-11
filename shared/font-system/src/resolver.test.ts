@@ -1,20 +1,43 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  createFontResolver,
   resolveFontFamily,
+  resolvePhysicalFamilies,
   resolvePhysicalFamily,
   resolvePrimaryPhysicalFamily,
-  resolvePhysicalFamilies,
-  createFontResolver,
 } from './index';
 
 describe('font resolver', () => {
-  it('maps the verified clean clones (bare names)', () => {
+  it('maps bundled substitutions and category fallbacks (bare names)', () => {
     expect(resolvePhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolvePhysicalFamily('Cambria')).toBe('Caladea');
     expect(resolvePhysicalFamily('Arial')).toBe('Liberation Sans');
+    expect(resolvePhysicalFamily('Arial MT')).toBe('Liberation Sans');
+    expect(resolvePhysicalFamily('Arial Black')).toBe('Archivo Black');
+    expect(resolvePhysicalFamily('Times')).toBe('Liberation Serif');
     expect(resolvePhysicalFamily('Times New Roman')).toBe('Liberation Serif');
+    expect(resolvePhysicalFamily('Courier')).toBe('Liberation Mono');
     expect(resolvePhysicalFamily('Courier New')).toBe('Liberation Mono');
     expect(resolvePhysicalFamily('Helvetica')).toBe('Liberation Sans');
+    expect(resolvePhysicalFamily('Arial Narrow')).toBe('Liberation Sans Narrow');
+    expect(resolvePhysicalFamily('Century')).toBe('C059');
+    expect(resolvePhysicalFamily('Century Gothic')).toBe('URW Gothic');
+    expect(resolvePhysicalFamily('Century Schoolbook')).toBe('C059');
+    expect(resolvePhysicalFamily('Cooper Black')).toBe('Caprasimo');
+    expect(resolvePhysicalFamily('Baskerville Old Face')).toBe('Bacasime Antique');
+    expect(resolvePhysicalFamily('Bookman Old Style')).toBe('TeX Gyre Bonum');
+    expect(resolvePhysicalFamily('ITC Bookman')).toBe('TeX Gyre Bonum');
+    expect(resolvePhysicalFamily('Brush Script MT')).toBe('Oregano Italic');
+    expect(resolvePhysicalFamily('Georgia')).toBe('Gelasio');
+    expect(resolvePhysicalFamily('Garamond')).toBe('Cardo');
+    expect(resolvePhysicalFamily('Consolas')).toBe('Inconsolata SemiExpanded');
+    expect(resolvePhysicalFamily('Comic Sans MS')).toBe('Comic Relief');
+    expect(resolvePhysicalFamily('Lucida Console')).toBe('Noto Sans Mono');
+    expect(resolvePhysicalFamily('Segoe UI')).toBe('Selawik');
+    expect(resolvePhysicalFamily('Tahoma')).toBe('Noto Sans');
+    expect(resolvePhysicalFamily('Trebuchet MS')).toBe('PT Sans');
+    expect(resolvePhysicalFamily('Verdana')).toBe('Noto Sans');
+    expect(resolvePhysicalFamily('Gill Sans MT Condensed')).toBe('PT Sans Narrow');
   });
 
   it('resolves the PRIMARY family of a CSS stack and keeps the fallbacks', () => {
@@ -30,15 +53,13 @@ describe('font resolver', () => {
   });
 
   it('passes through a family with no known substitute', () => {
-    expect(resolvePhysicalFamily('Verdana, sans-serif')).toBe('Verdana, sans-serif');
-    expect(resolveFontFamily('Verdana')).toEqual({
-      logicalFamily: 'Verdana',
-      physicalFamily: 'Verdana',
+    // Aptos has no open clone, so it passes through unchanged.
+    expect(resolvePhysicalFamily('Aptos')).toBe('Aptos');
+    expect(resolveFontFamily('Aptos')).toEqual({
+      logicalFamily: 'Aptos',
+      physicalFamily: 'Aptos',
       reason: 'as_requested',
     });
-    // Aptos/Georgia have no clean clone yet -> not mapped.
-    expect(resolvePhysicalFamily('Aptos')).toBe('Aptos');
-    expect(resolvePhysicalFamily('Georgia')).toBe('Georgia');
   });
 
   it('reports the substitution reason + preserves the logical family', () => {
@@ -46,6 +67,101 @@ describe('font resolver', () => {
       logicalFamily: 'Cambria',
       physicalFamily: 'Caladea',
       reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Georgia')).toEqual({
+      logicalFamily: 'Georgia',
+      physicalFamily: 'Gelasio',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Baskerville Old Face')).toEqual({
+      logicalFamily: 'Baskerville Old Face',
+      physicalFamily: 'Bacasime Antique',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Bookman Old Style')).toEqual({
+      logicalFamily: 'Bookman Old Style',
+      physicalFamily: 'TeX Gyre Bonum',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('ITC Bookman')).toEqual({
+      logicalFamily: 'ITC Bookman',
+      physicalFamily: 'TeX Gyre Bonum',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Arial Narrow')).toEqual({
+      logicalFamily: 'Arial Narrow',
+      physicalFamily: 'Liberation Sans Narrow',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Arial Black')).toEqual({
+      logicalFamily: 'Arial Black',
+      physicalFamily: 'Archivo Black',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Arial MT')).toEqual({
+      logicalFamily: 'Arial MT',
+      physicalFamily: 'Liberation Sans',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Century')).toEqual({
+      logicalFamily: 'Century',
+      physicalFamily: 'C059',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Century Gothic')).toEqual({
+      logicalFamily: 'Century Gothic',
+      physicalFamily: 'URW Gothic',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Century Schoolbook')).toEqual({
+      logicalFamily: 'Century Schoolbook',
+      physicalFamily: 'C059',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Times')).toEqual({
+      logicalFamily: 'Times',
+      physicalFamily: 'Liberation Serif',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Courier')).toEqual({
+      logicalFamily: 'Courier',
+      physicalFamily: 'Liberation Mono',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Tahoma')).toEqual({
+      logicalFamily: 'Tahoma',
+      physicalFamily: 'Noto Sans',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Segoe UI')).toEqual({
+      logicalFamily: 'Segoe UI',
+      physicalFamily: 'Selawik',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Brush Script MT')).toEqual({
+      logicalFamily: 'Brush Script MT',
+      physicalFamily: 'Oregano Italic',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Consolas')).toEqual({
+      logicalFamily: 'Consolas',
+      physicalFamily: 'Inconsolata SemiExpanded',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Lucida Console')).toEqual({
+      logicalFamily: 'Lucida Console',
+      physicalFamily: 'Noto Sans Mono',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Gill Sans MT Condensed')).toEqual({
+      logicalFamily: 'Gill Sans MT Condensed',
+      physicalFamily: 'PT Sans Narrow',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Verdana')).toEqual({
+      logicalFamily: 'Verdana',
+      physicalFamily: 'Noto Sans',
+      reason: 'category_fallback',
     });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
   });
@@ -67,20 +183,20 @@ describe('font resolver', () => {
 
   it('extracts the bare physical face the gate must await', () => {
     expect(resolvePrimaryPhysicalFamily('Arial, sans-serif')).toBe('Liberation Sans');
-    expect(resolvePrimaryPhysicalFamily('Verdana, sans-serif')).toBe('Verdana');
+    expect(resolvePrimaryPhysicalFamily('Verdana, sans-serif')).toBe('Noto Sans');
   });
 
   it('resolvePhysicalFamilies dedupes to the loadable face names', () => {
     expect(resolvePhysicalFamilies(['Calibri, sans-serif', 'Cambria', 'Calibri', 'Verdana']).sort()).toEqual([
       'Caladea',
       'Carlito',
-      'Verdana',
+      'Noto Sans',
     ]);
   });
 });
 
 describe('FontResolver (per-document context)', () => {
-  it('is seeded with the bundled clean-clone map', () => {
+  it('is seeded with bundled DocFonts fallbacks', () => {
     const resolver = createFontResolver();
     expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolver.resolvePhysicalFamily('Arial, sans-serif')).toBe('Liberation Sans, sans-serif');
@@ -111,7 +227,7 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.version).toBe(2);
     resolver.unmap('Georgia'); // absent -> no bump
     expect(resolver.version).toBe(2);
-    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio'); // reverted to bundled default
   });
 
   it('identity self-map is a no-op, but an explicit pin to the bundled clone is a STORED override', () => {
@@ -156,7 +272,7 @@ describe('FontResolver (per-document context)', () => {
     expect(docA.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(docB.resolvePrimaryPhysicalFamily('Georgia')).toBe('Tinos');
     // A document with no override still gets the bundled default, unaffected by the others.
-    expect(createFontResolver().resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(createFontResolver().resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(docA.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito'); // bundled map intact
   });
 
@@ -195,7 +311,7 @@ describe('FontResolver (per-document context)', () => {
 
     resolver.reset();
     expect(resolver.signature).toBe(''); // back to default identity
-    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // override gone
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio'); // override gone, bundled default restored
     expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito'); // bundled default restored
     expect(resolver.version).toBe(3); // 2 maps + 1 reset
 
@@ -245,8 +361,8 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.version).toBe(1);
     resolver.map('Georgia', 'Gelasio'); // same after trim -> no bump
     expect(resolver.version).toBe(1);
-    resolver.map('Tahoma', '   '); // whitespace-only physical -> ignored
-    expect(resolver.resolvePrimaryPhysicalFamily('Tahoma')).toBe('Tahoma');
+    resolver.map('Verdana', '   '); // whitespace-only physical -> ignored
+    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(resolver.version).toBe(1);
   });
 });
@@ -337,9 +453,9 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
     });
   });
 
-  it('single-face substitute: maps the provided face, passes other faces through (fallback_face_absent)', () => {
+  it('custom map with one registered target face maps that face and passes other faces through', () => {
     const r = createFontResolver();
-    r.map('Georgia', 'Gelasio'); // a single-face clone, Regular-only registered (regularOnly)
+    r.map('Georgia', 'Gelasio'); // custom target with Regular only registered in this test
     expect(r.resolveFace('Georgia', { weight: '400', style: 'normal' }, regularOnly)).toEqual({
       logicalFamily: 'Georgia',
       physicalFamily: 'Gelasio',
@@ -362,6 +478,110 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
     expect(r.resolvePhysicalFamilyForFace('Georgia, serif', { weight: '700', style: 'normal' }, regularOnly)).toBe(
       'Georgia, serif',
     );
+  });
+
+  it('single-face bundled substitute: Cooper Black uses DocFonts-approved synthetic faces', () => {
+    const r = createFontResolver();
+    const caprasimoRegular = (f: string, w: '400' | '700', s: 'normal' | 'italic') =>
+      norm(f) === 'caprasimo' && w === '400' && s === 'normal';
+    expect(r.resolveFace('Cooper Black', { weight: '400', style: 'normal' }, caprasimoRegular)).toEqual({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+    });
+    expect(
+      r.resolvePhysicalFamilyForFace('Cooper Black, serif', { weight: '400', style: 'normal' }, caprasimoRegular),
+    ).toBe('Caprasimo, serif');
+    for (const face of [
+      { weight: '700' as const, style: 'normal' as const },
+      { weight: '400' as const, style: 'italic' as const },
+      { weight: '700' as const, style: 'italic' as const },
+    ]) {
+      expect(r.resolveFace('Cooper Black', face, caprasimoRegular)).toEqual({
+        logicalFamily: 'Cooper Black',
+        physicalFamily: 'Caprasimo',
+        reason: 'bundled_substitute',
+        sourceFace: { weight: '400', style: 'normal' },
+      });
+      expect(r.resolvePhysicalFamilyForFace('Cooper Black, serif', face, caprasimoRegular)).toBe('Caprasimo, serif');
+    }
+  });
+
+  it('new reviewed rows use their DocFonts face sources without inventing missing files', () => {
+    const r = createFontResolver();
+    const reviewedBatchFaces = (f: string, w: '400' | '700', s: 'normal' | 'italic') => {
+      if (norm(f) === 'bacasime antique') return w === '400' && s === 'normal';
+      if (norm(f) === 'oregano italic') return w === '400' && s === 'normal';
+      if (norm(f) === 'noto sans mono') return s === 'normal' && (w === '400' || w === '700');
+      if (norm(f) === 'pt sans narrow') return s === 'normal' && (w === '400' || w === '700');
+      return false;
+    };
+
+    expect(r.resolveFace('Baskerville Old Face', { weight: '700', style: 'italic' }, reviewedBatchFaces)).toMatchObject(
+      {
+        physicalFamily: 'Bacasime Antique',
+        reason: 'bundled_substitute',
+        sourceFace: { weight: '400', style: 'normal' },
+      },
+    );
+    expect(r.resolveFace('Brush Script MT', { weight: '700', style: 'normal' }, reviewedBatchFaces)).toMatchObject({
+      physicalFamily: 'Oregano Italic',
+      reason: 'category_fallback',
+      sourceFace: { weight: '400', style: 'normal' },
+    });
+    expect(r.resolveFace('Lucida Console', { weight: '700', style: 'normal' }, reviewedBatchFaces)).toMatchObject({
+      physicalFamily: 'Noto Sans Mono',
+      reason: 'category_fallback',
+    });
+    expect(r.resolveFace('Lucida Console', { weight: '700', style: 'italic' }, reviewedBatchFaces)).toMatchObject({
+      physicalFamily: 'Noto Sans Mono',
+      reason: 'category_fallback',
+      sourceFace: { weight: '700', style: 'normal' },
+    });
+    expect(
+      r.resolveFace('Arial Black', { weight: '400', style: 'italic' }, (f, w, s) => {
+        return norm(f) === 'archivo black' && w === '400' && s === 'normal';
+      }),
+    ).toMatchObject({
+      physicalFamily: 'Archivo Black',
+      reason: 'bundled_substitute',
+      sourceFace: { weight: '400', style: 'normal' },
+    });
+    expect(
+      r.resolveFace('Arial Black', { weight: '700', style: 'normal' }, (f, w, s) => {
+        return norm(f) === 'archivo black' && w === '400' && s === 'normal';
+      }),
+    ).toMatchObject({
+      logicalFamily: 'Arial Black',
+      physicalFamily: 'Arial Black',
+      reason: 'fallback_face_absent',
+    });
+    expect(
+      r.resolveFace('Gill Sans MT Condensed', { weight: '700', style: 'italic' }, reviewedBatchFaces),
+    ).toMatchObject({
+      physicalFamily: 'PT Sans Narrow',
+      reason: 'category_fallback',
+      sourceFace: { weight: '700', style: 'normal' },
+    });
+  });
+
+  it('single-face bundled substitute: a real requested substitute face beats a synthetic source face', () => {
+    const r = createFontResolver();
+    const caprasimoRegularAndBold = (f: string, w: '400' | '700', s: 'normal' | 'italic') =>
+      norm(f) === 'caprasimo' && (w === '400' || w === '700') && s === 'normal';
+
+    expect(r.resolveFace('Cooper Black', { weight: '700', style: 'normal' }, caprasimoRegularAndBold)).toEqual({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+    });
+    expect(
+      r.resolvePhysicalFamilyForFace(
+        'Cooper Black, serif',
+        { weight: '700', style: 'normal' },
+        caprasimoRegularAndBold,
+      ),
+    ).toBe('Caprasimo, serif');
   });
 
   it('map to an UNREGISTERED physical family passes through (fallback_face_absent), never faux-styled', () => {
@@ -559,7 +779,7 @@ describe('embedded provider identity (mapEmbedded / clearEmbedded)', () => {
     r.map('Georgia', 'Gelasio');
     r.reset();
     expect(r.resolveFace('Calibri', regular, registeredOf(PHYS, 'Carlito')).reason).toBe('bundled_substitute');
-    expect(r.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(r.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(r.signature).toBe('');
   });
 

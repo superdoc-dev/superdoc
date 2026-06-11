@@ -22,6 +22,10 @@ import type {
   CommandsHandle,
   ToolbarHandle,
   ToolbarSnapshotSlice,
+  FontsHandle,
+  FontsSlice,
+  FontFamilyOption,
+  FontSizeOption,
   CommentsHandle,
   CommentsSlice,
   TrackChangesHandle,
@@ -65,6 +69,10 @@ const _real_CommandHandle: AssertNotAny<CommandHandle<'bold'>> = true;
 const _real_CommandsHandle: AssertNotAny<CommandsHandle> = true;
 const _real_ToolbarHandle: AssertNotAny<ToolbarHandle> = true;
 const _real_ToolbarSnapshotSlice: AssertNotAny<ToolbarSnapshotSlice> = true;
+const _real_FontsHandle: AssertNotAny<FontsHandle> = true;
+const _real_FontsSlice: AssertNotAny<FontsSlice> = true;
+const _real_FontFamilyOption: AssertNotAny<FontFamilyOption> = true;
+const _real_FontSizeOption: AssertNotAny<FontSizeOption> = true;
 const _real_CommentsHandle: AssertNotAny<CommentsHandle> = true;
 const _real_CommentsSlice: AssertNotAny<CommentsSlice> = true;
 const _real_TrackChangesHandle: AssertNotAny<TrackChangesHandle> = true;
@@ -102,6 +110,10 @@ void _real_CommandHandle;
 void _real_CommandsHandle;
 void _real_ToolbarHandle;
 void _real_ToolbarSnapshotSlice;
+void _real_FontsHandle;
+void _real_FontsSlice;
+void _real_FontFamilyOption;
+void _real_FontSizeOption;
 void _real_CommentsHandle;
 void _real_CommentsSlice;
 void _real_TrackChangesHandle;

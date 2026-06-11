@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { CustomSelectionPluginKey } from '../selection-state.js';
 
 const findTextRange = (doc, text) => {
   let range = null;
@@ -15,6 +16,18 @@ const findTextRange = (doc, text) => {
     return true;
   });
   return range;
+};
+
+const findTextStyleAttrs = (doc, text) => {
+  let attrs = null;
+  doc.descendants((node) => {
+    if (node.isText && node.text === text) {
+      attrs = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs ?? null;
+      return false;
+    }
+    return true;
+  });
+  return attrs;
 };
 
 const findStructuredContent = (doc) => {
@@ -43,6 +56,24 @@ const inlineStructuredContentDoc = {
         },
         { type: 'run', content: [{ type: 'text', text: ' Z' }] },
       ],
+    },
+  ],
+};
+
+const paragraphRunPropertiesDoc = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      attrs: {
+        paragraphProperties: {
+          runProperties: {
+            fontFamily: 'Cambria',
+            fontSize: '24pt',
+          },
+        },
+      },
+      content: [{ type: 'run', content: [{ type: 'text', text: 'styled only' }] }],
     },
   ],
 };
@@ -128,6 +159,174 @@ describe('Editable extension insertText beforeinput handling', () => {
     editor.view.dom.dispatchEvent(beforeInputEvent);
 
     expect(editor.state.doc.textContent).toBe('Z');
+  });
+
+  it('preserves selected text marks when replacing selection on beforeinput insertText', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>seed text</p>',
+    }));
+
+    const range = findTextRange(editor.state.doc, 'seed text');
+    expect(range).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
+    editor.commands.setFontFamily('Courier New');
+    editor.commands.setFontSize('20');
+
+    const styledRange = findTextRange(editor.state.doc, 'seed text');
+    expect(styledRange).not.toBeNull();
+    editor.view.dispatch(
+      editor.state.tr.setSelection(TextSelection.create(editor.state.doc, styledRange.from, styledRange.to)),
+    );
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 't',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(true);
+    expect(editor.state.doc.textContent).toBe('t');
+    expect(findTextStyleAttrs(editor.state.doc, 't')).toMatchObject({
+      fontFamily: 'Courier New',
+      fontSize: '20pt',
+    });
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).toBeNull();
+
+    const nextInputEvent = new InputEvent('beforeinput', {
+      data: 'y',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const nextPrevented = !editor.view.dom.dispatchEvent(nextInputEvent);
+
+    expect(nextPrevented).toBe(false);
+  });
+
+  it('does not materialize style-derived formatting onto replacement text', () => {
+    ({ editor } = initTestEditor({
+      loadFromSchema: true,
+      content: structuredClone(paragraphRunPropertiesDoc),
+    }));
+
+    const range = findTextRange(editor.state.doc, 'styled only');
+    expect(range).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'typed',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(true);
+    expect(editor.state.doc.textContent).toBe('typed');
+    expect(findTextStyleAttrs(editor.state.doc, 'typed')).toBeNull();
+  });
+
+  it('uses the preserved toolbar selection when replacing selection on beforeinput insertText', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>seed text</p>',
+    }));
+
+    const range = findTextRange(editor.state.doc, 'seed text');
+    expect(range).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
+    editor.commands.setFontFamily('Courier New');
+    editor.commands.setFontSize('20');
+
+    const styledRange = findTextRange(editor.state.doc, 'seed text');
+    expect(styledRange).not.toBeNull();
+    const preservedSelection = TextSelection.create(editor.state.doc, styledRange.from, styledRange.to);
+    const collapsedSelection = TextSelection.create(editor.state.doc, styledRange.to);
+    editor.view.dispatch(
+      editor.state.tr.setSelection(collapsedSelection).setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection,
+        showVisualSelection: true,
+        skipFocusReset: false,
+      }),
+    );
+
+    expect(editor.state.selection.empty).toBe(true);
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 't',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(true);
+    expect(editor.state.doc.textContent).toBe('t');
+    expect(findTextStyleAttrs(editor.state.doc, 't')).toMatchObject({
+      fontFamily: 'Courier New',
+      fontSize: '20pt',
+    });
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).toBeNull();
+
+    const nextInputEvent = new InputEvent('beforeinput', {
+      data: 'y',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const nextPrevented = !editor.view.dom.dispatchEvent(nextInputEvent);
+
+    expect(nextPrevented).toBe(false);
+  });
+
+  it('does not use a preserved toolbar selection after the caret moves', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>seed text after</p>',
+    }));
+
+    // The paragraph is one text node and findTextRange matches whole nodes,
+    // so derive the sub-ranges by offset within the full node.
+    const fullRange = findTextRange(editor.state.doc, 'seed text after');
+    expect(fullRange).not.toBeNull();
+    const selectedRange = { from: fullRange.from, to: fullRange.from + 'seed text'.length };
+    const afterRange = { from: fullRange.to - 'after'.length, to: fullRange.to };
+
+    const preservedSelection = TextSelection.create(editor.state.doc, selectedRange.from, selectedRange.to);
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(TextSelection.create(editor.state.doc, selectedRange.to))
+        .setMeta(CustomSelectionPluginKey, {
+          focused: true,
+          preservedSelection,
+          showVisualSelection: true,
+          skipFocusReset: false,
+        }),
+    );
+
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).not.toBeNull();
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterRange.to)));
+
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).toBeNull();
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'X',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(false);
+    expect(editor.state.doc.textContent).toBe('seed text after');
   });
 
   it('does not intercept collapsed beforeinput insertText', () => {

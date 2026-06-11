@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  buildFontReport,
   buildFaceReport,
+  buildFontReport,
   createFontResolver,
   type FontFaceRequest,
-  type FontRegistry,
   type FontLoadStatus,
+  type FontRegistry,
 } from './index';
 
 class FakeRegistry {
@@ -51,8 +51,8 @@ describe('buildFontReport', () => {
 
   it('an as_requested font that did load is not missing', () => {
     const reg = new FakeRegistry();
-    reg.statuses.set('Verdana', 'loaded');
-    expect(buildFontReport(['Verdana'], reg.asRegistry())[0].missing).toBe(false);
+    reg.statuses.set('BrandSans', 'loaded');
+    expect(buildFontReport(['BrandSans'], reg.asRegistry())[0].missing).toBe(false);
   });
 
   it('does not mark a transient unloaded state as missing (no early-pull over-report)', () => {
@@ -73,23 +73,127 @@ describe('buildFontReport', () => {
     expect(rec.missing).toBe(true); // broadened: a failed substitute renders wrong, so it is missing
   });
 
-  it('covers all five mappings and dedupes', () => {
+  it('covers bundled mappings and dedupes', () => {
     const reg = new FakeRegistry();
-    ['Carlito', 'Caladea', 'Liberation Sans', 'Liberation Serif', 'Liberation Mono'].forEach((f) =>
-      reg.statuses.set(f, 'loaded'),
-    );
+    for (const family of [
+      'Carlito',
+      'Caladea',
+      'Liberation Sans',
+      'Liberation Serif',
+      'Liberation Mono',
+      'Caprasimo',
+      'Archivo Black',
+      'URW Gothic',
+      'Bacasime Antique',
+      'TeX Gyre Bonum',
+      'Oregano Italic',
+      'Gelasio',
+      'Inconsolata SemiExpanded',
+      'Noto Sans',
+      'Noto Sans Mono',
+      'Selawik',
+      'PT Sans Narrow',
+    ]) {
+      reg.statuses.set(family, 'loaded');
+    }
     const report = buildFontReport(
-      ['Calibri', 'Cambria', 'Arial', 'Times New Roman', 'Courier New', 'Calibri'],
+      [
+        'Calibri',
+        'Cambria',
+        'Arial',
+        'Arial Black',
+        'Century Gothic',
+        'Times New Roman',
+        'Courier New',
+        'Cooper Black',
+        'Baskerville Old Face',
+        'Bookman Old Style',
+        'ITC Bookman',
+        'Brush Script MT',
+        'Georgia',
+        'Segoe UI',
+        'Consolas',
+        'Lucida Console',
+        'Tahoma',
+        'Verdana',
+        'Gill Sans MT Condensed',
+        'Calibri',
+      ],
       reg.asRegistry(),
     );
     expect(report.map((r) => r.physicalFamily)).toEqual([
       'Carlito',
       'Caladea',
       'Liberation Sans',
+      'Archivo Black',
+      'URW Gothic',
       'Liberation Serif',
       'Liberation Mono',
+      'Caprasimo',
+      'Bacasime Antique',
+      'TeX Gyre Bonum',
+      'TeX Gyre Bonum',
+      'Oregano Italic',
+      'Gelasio',
+      'Selawik',
+      'Inconsolata SemiExpanded',
+      'Noto Sans Mono',
+      'Noto Sans',
+      'Noto Sans',
+      'PT Sans Narrow',
     ]);
-    expect(report.every((r) => r.reason === 'bundled_substitute' && !r.missing)).toBe(true);
+    expect(report.find((r) => r.logicalFamily === 'Georgia')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Baskerville Old Face')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Bookman Old Style')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'ITC Bookman')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Arial Black')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Century Gothic')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Segoe UI')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Brush Script MT')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Lucida Console')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Consolas')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Tahoma')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Verdana')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Gill Sans MT Condensed')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
   });
 
   it('reports Calibri Light as a non-metric category_fallback and marks it missing even when loaded', () => {
@@ -140,7 +244,7 @@ class FaceRegistry {
 describe('buildFaceReport (face-level)', () => {
   it('single-face substitute: Regular substituted (faithful), Bold fallback_face_absent + missing', () => {
     const reg = new FaceRegistry();
-    reg.setFace('Gelasio', '400', 'normal', 'loaded'); // only Regular registered + loaded
+    reg.setFace('Gelasio', '400', 'normal', 'loaded'); // custom target with only Regular registered
     // The planner adds the pass-through `Georgia 700` to requiredFaces, so the gate awaits it; an
     // unregistered family can never report `loaded` (document.fonts.load resolves only registered
     // faces, not system fonts), so in production it settles to `fallback_used` - model that, not the
@@ -323,6 +427,50 @@ describe('verdict-aware evidence (rendered substitutes only)', () => {
     expect(row.evidence?.verdict).toBe('visual_only');
     expect(row.evidence?.lineBreakSafe).toBe(false);
     expect(row.evidence?.glyphExceptions).toMatchObject([{ slot: 'boldItalic', codepoint: 0x60 }]);
+  });
+
+  it('Cooper Black Regular face: metric_safe Caprasimo substitute', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('Caprasimo', '400', 'normal', 'loaded');
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Cooper Black', weight: '400', style: 'normal' }],
+      reg.asRegistry(),
+    );
+    expect(row).toMatchObject({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(row.evidence).toEqual({
+      evidenceId: 'cooper-black',
+      policyAction: 'substitute',
+      verdict: 'metric_safe',
+      lineBreakSafe: true,
+    });
+  });
+
+  it('Cooper Black Bold face: loads Caprasimo Regular as a qualified synthetic face', () => {
+    const reg = new FaceRegistry();
+    reg.setFace('Caprasimo', '400', 'normal', 'loaded');
+    const [row] = buildFaceReport(
+      [{ logicalFamily: 'Cooper Black', weight: '700', style: 'normal' }],
+      reg.asRegistry(),
+    );
+    expect(row).toMatchObject({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+      loadStatus: 'loaded',
+      missing: false,
+      face: { weight: '700', style: 'normal' },
+    });
+    expect(row.evidence).toEqual({
+      evidenceId: 'cooper-black',
+      policyAction: 'substitute',
+      verdict: 'visual_only',
+      lineBreakSafe: false,
+    });
   });
 
   it('attaches NO evidence for as_requested / custom_mapping / registered_face / fallback_face_absent', () => {

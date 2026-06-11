@@ -1,13 +1,13 @@
 /**
  * Document-scoped font options for the toolbar: one option per logical family a loaded document
- * actually uses. Distinct from the static {@link ./font-offerings} (the bundled DEFAULTS): this is
+ * actually uses. Distinct from the static {@link ./font-offerings} (the bundled choices): this is
  * runtime and document-scoped because it needs the document's registry and resolver.
  *
  * Fallback diagnostics are intentionally not part of this surface. The toolbar lists document fonts as
  * plain picker rows; internal fallback/reporting details stay in SuperDoc's runtime font report.
  */
 import { buildFaceReport, type FontResolutionRecord, type UsedFace } from './report';
-import { getDefaultFontOfferings } from './font-offerings';
+import { getBuiltInToolbarFontOfferings } from './font-offerings';
 import type { FontRegistry } from './registry';
 import type { FontResolver } from './resolver';
 
@@ -84,13 +84,13 @@ function compareByLabel(a: FontFamilyOption, b: FontFamilyOption): number {
 }
 
 /**
- * Compose the final font-family picker list from bundled defaults plus active document fonts. The result
- * is sorted alphabetically and deduped by logical family.
+ * Compose the final font-family picker list from bundled toolbar choices plus active document fonts.
+ * The result is sorted alphabetically and deduped by logical family.
  */
 export function buildFontFamilyOptions(documentOptions: ReadonlyArray<DocumentFontOption>): FontFamilyOption[] {
   const seen = new Set<string>();
   const options: FontFamilyOption[] = [];
-  for (const offering of getDefaultFontOfferings()) {
+  for (const offering of getBuiltInToolbarFontOfferings()) {
     const key = normalizeKey(offering.logicalFamily);
     if (seen.has(key)) continue;
     seen.add(key);

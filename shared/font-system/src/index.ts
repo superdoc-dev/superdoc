@@ -71,6 +71,7 @@ export {
 export type { FontOffering, OfferingClass, FontGeneric } from './font-offerings';
 export {
   FONT_OFFERINGS,
+  getBuiltInToolbarFontOfferings,
   getDefaultFontOfferings,
   getDefaultFontFamilyOptions,
   fontOfferingStack,

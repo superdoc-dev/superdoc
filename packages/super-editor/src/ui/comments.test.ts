@@ -10,7 +10,14 @@ import type { SuperDocLike } from './types.js';
  */
 function makeStubs(
   initial: {
-    comments?: Array<{ id: string; commentId: string; text?: string; status?: 'open' | 'resolved' }>;
+    comments?: Array<{
+      id: string;
+      commentId: string;
+      importedId?: string;
+      parentCommentId?: string;
+      text?: string;
+      status?: 'open' | 'resolved';
+    }>;
     activeCommentIds?: string[];
     selectionTarget?: unknown;
   } = {},
@@ -37,17 +44,22 @@ function makeStubs(
       handle: { ref: `comment:${c.commentId}`, refStability: 'stable' as const, targetKind: 'comment' as const },
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: c.commentId },
       commentId: c.commentId,
+      importedId: c.importedId,
+      parentCommentId: c.parentCommentId,
       status: c.status ?? ('open' as const),
       text: c.text,
     })),
     page: { limit: 50, offset: 0, returned: commentsList.length },
   }));
   const navigateTo = vi.fn(async (_target: unknown) => true);
+  const setActiveComment = vi.fn((_input: { commentId: string | null }) => true);
+  const setCursorById = vi.fn((_id: string, _options?: unknown) => true);
 
   const editor: {
     on: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
     doc: unknown;
+    commands: { setActiveComment: typeof setActiveComment; setCursorById: typeof setCursorById };
     presentationEditor: {
       navigateTo: typeof navigateTo;
       getActiveEditor: () => unknown;
@@ -72,6 +84,7 @@ function makeStubs(
       },
       comments: { create, patch, delete: del, list },
     },
+    commands: { setActiveComment, setCursorById },
     // Self-reference assigned below so toolbar source resolution sees
     // the same routed editor as the rest of the stub.
     presentationEditor: undefined as never,
@@ -101,7 +114,11 @@ function makeStubs(
     },
   };
 
-  return { superdoc, editor, mocks: { create, patch, delete: del, list, navigateTo } };
+  return {
+    superdoc,
+    editor,
+    mocks: { create, patch, delete: del, list, navigateTo, setActiveComment, setCursorById },
+  };
 }
 
 const flushMicrotasks = () => Promise.resolve();
@@ -379,6 +396,31 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     ui.destroy();
   });
 
+  it('createFromCapture accepts a Document API SelectionInfo (the pending-event shape) without a cast', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Shape of `pendingSelection` on a pending `comments-update` event:
+    // a SelectionInfo (target-bearing), NOT a full SelectionCapture (no
+    // selectionTarget / quotedText). The widened CommentAnchorCapture
+    // input accepts it directly; no cast is needed at the call site.
+    const pendingSelection = {
+      empty: false,
+      target: { kind: 'text' as const, segments: [{ blockId: 'p1', range: { start: 0, end: 4 } }] },
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+      text: 'word',
+    };
+
+    const receipt = ui.comments.createFromCapture(pendingSelection, { text: 'from pending' });
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.create).toHaveBeenCalledWith({ target: pendingSelection.target, text: 'from pending' });
+
+    ui.destroy();
+  });
+
   it('reply forwards to comments.create with parentCommentId set and no target', () => {
     const { superdoc, mocks } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
@@ -491,6 +533,170 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
     const target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
     expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c-42' });
+
+    ui.destroy();
+  });
+});
+
+describe('ui.comments.setActive — activate-only highlight', () => {
+  it('routes a known comment id through the setActiveComment command', () => {
+    const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('c-1');
+
+    expect(ok).toBe(true);
+    expect(mocks.list).toHaveBeenCalled();
+    expect(mocks.setActiveComment).toHaveBeenCalledTimes(1);
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-1' });
+
+    ui.destroy();
+  });
+
+  it('clears the active highlight when passed null (no id validation)', () => {
+    const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+    mocks.list.mockClear();
+
+    const ok = ui.comments.setActive(null);
+
+    expect(ok).toBe(true);
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: null });
+
+    ui.destroy();
+  });
+
+  it('does not scroll or move the selection (no navigateTo, no setCursorById)', () => {
+    const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.setActive('c-1');
+
+    expect(mocks.navigateTo).not.toHaveBeenCalled();
+    expect(mocks.setCursorById).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns false for an unknown id and does not dispatch (avoids fading every comment)', () => {
+    const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('does-not-exist');
+
+    expect(ok).toBe(false);
+    expect(mocks.setActiveComment).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('validates against the imported Word id, not just the native id', () => {
+    // Imported Word comments carry a separate `importedId` that the
+    // highlight painter also keys on. The UI facade canonicalizes it
+    // before dispatching to the command path.
+    const { superdoc, mocks } = makeStubs({
+      comments: [{ id: 'native-1', commentId: 'native-1', importedId: 'imported-abc' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('imported-abc');
+
+    expect(ok).toBe(true);
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'native-1' });
+
+    ui.destroy();
+  });
+
+  it('uses the anchored thread root when passed a reply id', () => {
+    const { superdoc, mocks } = makeStubs({
+      comments: [
+        { id: 'c-root', commentId: 'c-root' },
+        { id: 'c-reply', commentId: 'c-reply', parentCommentId: 'c-root' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('c-reply');
+
+    expect(ok).toBe(true);
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-root' });
+
+    ui.destroy();
+  });
+
+  it('uses the anchored thread root when the parent is stored by imported id', () => {
+    const { superdoc, mocks } = makeStubs({
+      comments: [
+        { id: 'native-root', commentId: 'native-root', importedId: '0' },
+        { id: 'c-reply', commentId: 'c-reply', parentCommentId: '0' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('c-reply');
+
+    expect(ok).toBe(true);
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'native-root' });
+
+    ui.destroy();
+  });
+
+  it('passes through a false result from the underlying command', () => {
+    const { superdoc, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    mocks.setActiveComment.mockReturnValueOnce(false);
+    const ui = createSuperDocUI({ superdoc });
+
+    const ok = ui.comments.setActive('c-1');
+
+    expect(mocks.setActiveComment).toHaveBeenCalledWith({ commentId: 'c-1' });
+    expect(ok).toBe(false);
+
+    ui.destroy();
+  });
+
+  it('returns false when the editor doc getter throws', () => {
+    const { superdoc, editor, mocks } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    Object.defineProperty(editor, 'doc', {
+      get() {
+        throw new Error('not ready');
+      },
+    });
+
+    const ok = ui.comments.setActive('c-1');
+
+    expect(ok).toBe(false);
+    expect(mocks.setActiveComment).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('does not change getSnapshot().activeIds (the slice stays selection-derived)', () => {
+    const { superdoc } = makeStubs({ comments: [{ id: 'c-1', commentId: 'c-1' }], activeCommentIds: [] });
+    const ui = createSuperDocUI({ superdoc });
+
+    const before = ui.comments.getSnapshot().activeIds;
+    ui.comments.setActive('c-1');
+    const after = ui.comments.getSnapshot().activeIds;
+
+    expect(after).toEqual(before);
+    expect(after).toEqual([]);
+
+    ui.destroy();
+  });
+
+  it('returns false when no editor is mounted', () => {
+    const superdoc = {
+      activeEditor: null,
+      config: { documentMode: 'editing' },
+      on: vi.fn(),
+      off: vi.fn(),
+    } as unknown as SuperDocLike;
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.comments.setActive('c-1')).toBe(false);
 
     ui.destroy();
   });

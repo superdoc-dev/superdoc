@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TextRun } from '@superdoc/contracts';
 import type { FragmentRenderContext } from '../renderer.js';
 import { textRunMergeSignature } from './hash.js';
-import { resolveRunText } from './text-run.js';
+import { applyRunStyles, resolveRunText } from './text-run.js';
 
 describe('resolveRunText', () => {
   const context: FragmentRenderContext = {
@@ -79,5 +79,25 @@ describe('resolveRunText', () => {
     const formattedRun: TextRun = { ...baseRun, pageNumberFieldFormat: { format: 'upperRoman' } };
 
     expect(textRunMergeSignature(baseRun)).not.toBe(textRunMergeSignature(formattedRun));
+  });
+});
+
+describe('applyRunStyles', () => {
+  it('opts painted text into browser font synthesis for reviewed synthetic fallback faces', () => {
+    const element = document.createElement('span');
+    const run: TextRun = {
+      text: 'Bold text',
+      fontFamily: 'Cooper Black',
+      fontSize: 16,
+      bold: true,
+      italic: true,
+    };
+
+    applyRunStyles(element, run, false, () => 'Caprasimo');
+
+    expect(element.style.fontFamily).toBe('Caprasimo');
+    expect(element.style.fontWeight).toBe('bold');
+    expect(element.style.fontStyle).toBe('italic');
+    expect(element.style.getPropertyValue('font-synthesis')).toBe('weight style');
   });
 });

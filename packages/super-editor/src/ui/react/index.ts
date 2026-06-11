@@ -18,6 +18,7 @@
  *   useSuperDocToolbar,
  *   useSuperDocCommand,
  *   useSuperDocFontOptions,
+ *   useSuperDocFontSizeOptions,
  * } from 'superdoc/ui/react';
  * ```
  */
@@ -40,5 +41,6 @@ export {
   useSuperDocCommand,
   useSuperDocDocument,
   useSuperDocFontOptions,
+  useSuperDocFontSizeOptions,
   useSuperDocZoom,
 } from './hooks.js';

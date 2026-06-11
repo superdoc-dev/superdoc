@@ -7,7 +7,7 @@ import { assertDocumentApiReady } from '../../helpers/document-api.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/rendering/sd-3265-vml-text-watermark-solid.docx');
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('imports a Word-native solid VML watermark with full opacity (SD-3265)', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

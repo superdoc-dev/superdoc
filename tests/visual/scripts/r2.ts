@@ -10,8 +10,21 @@ const execFile = promisify(execFileCb);
 export const BASELINES_PREFIX = 'baselines';
 export const DOCUMENTS_PREFIX = 'documents';
 
-const ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
-const BUCKET = process.env.SD_VISUAL_TESTING_R2_BUCKET || 'superdoc-visual-testing';
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable ${name}. Set it in your environment or tests/visual/.env.`);
+  }
+  return value;
+}
+
+function getAccountId(): string {
+  return requireEnv('SD_VISUAL_TESTING_R2_ACCOUNT_ID');
+}
+
+function getBucket(): string {
+  return requireEnv('SD_VISUAL_TESTING_R2_BUCKET');
+}
 
 export interface R2Client {
   listObjects(prefix: string): Promise<string[]>;
@@ -30,6 +43,8 @@ async function createS3Client(): Promise<R2Client> {
 
   const accessKeyId = process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID!;
   const secretAccessKey = process.env.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY!;
+  const ACCOUNT_ID = getAccountId();
+  const BUCKET = getBucket();
 
   const s3 = new S3Client({
     region: 'auto',
@@ -110,7 +125,7 @@ function getWranglerOAuthToken(): string {
 
 async function wranglerExec(args: string[]): Promise<string> {
   const { stdout } = await execFile('npx', ['wrangler', ...args], {
-    env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID },
+    env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: getAccountId() },
     maxBuffer: 50 * 1024 * 1024,
   });
   return stdout;
@@ -118,6 +133,8 @@ async function wranglerExec(args: string[]): Promise<string> {
 
 async function createWranglerClient(): Promise<R2Client> {
   const token = getWranglerOAuthToken();
+  const ACCOUNT_ID = getAccountId();
+  const BUCKET = getBucket();
 
   return {
     async listObjects(prefix: string) {

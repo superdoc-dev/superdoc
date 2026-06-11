@@ -1,30 +1,41 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { getFallbackDecision, getRenderableFallback } from '@docfonts/fallbacks';
+import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { createFontResolver, resolveFontFamily } from './resolver';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
-import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /**
- * The six logical -> physical substitutions the resolver shipped before the evidence registry
- * existed. The registry must derive EXACTLY these - introducing the manifest is a no-behavior-change
- * refactor, not an expansion. Adding a substitute is a deliberate, reviewed edit to this list.
+ * The logical -> physical substitutions the resolver activates from DocFonts evidence and bundled
+ * assets. Adding a substitute is a deliberate, reviewed edit to this list.
  */
 const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: string]> = [
   ['Calibri', 'Carlito'],
   ['Cambria', 'Caladea'],
   ['Arial', 'Liberation Sans'],
+  ['Arial MT', 'Liberation Sans'],
+  ['Arial Black', 'Archivo Black'],
+  ['Arial Narrow', 'Liberation Sans Narrow'],
+  ['Times', 'Liberation Serif'],
   ['Times New Roman', 'Liberation Serif'],
   ['Courier New', 'Liberation Mono'],
   ['Helvetica', 'Liberation Sans'],
+  ['Cooper Black', 'Caprasimo'],
+  ['Century', 'C059'],
+  ['Century Schoolbook', 'C059'],
+  ['Georgia', 'Gelasio'],
+  ['Baskerville Old Face', 'Bacasime Antique'],
+  ['Bookman Old Style', 'TeX Gyre Bonum'],
+  ['ITC Bookman', 'TeX Gyre Bonum'],
 ];
 
 describe('substitution evidence -> resolver derivation', () => {
-  it("derives exactly today's six substitutions (no behavior change)", () => {
+  it('derives exactly the reviewed bundled substitutions', () => {
     const resolver = createFontResolver();
     for (const [logical, physical] of EXPECTED_SUBSTITUTES) {
       expect(resolver.resolvePrimaryPhysicalFamily(logical)).toBe(physical);
     }
     // Asset-gated input: the registry carries more substitute rows than SuperDoc ships, so count only
-    // the ones whose clone is bundled (the resolver's actual input). That set is exactly the six pairs.
+    // the ones whose clone is bundled (the resolver's actual input).
     const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
     const activeSubstitutes = SUBSTITUTION_EVIDENCE.filter(
       (r) => r.policyAction === 'substitute' && r.physicalFamily && bundled.has(r.physicalFamily),
@@ -62,16 +73,20 @@ describe('substitution evidence -> resolver derivation', () => {
   });
 
   it('keeps an un-bundled substitute inert until its asset ships (the asset gate, not just the policy)', () => {
-    // The registry recommends substitutes SuperDoc has not shipped a clone for (e.g. Georgia -> Gelasio).
-    // canRenderFamily must keep every such row OUT of the resolver: it resolves as_requested, not mapped.
-    const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
-    const unbundled = SUBSTITUTION_EVIDENCE.filter(
-      (r) => r.policyAction === 'substitute' && r.physicalFamily && !bundled.has(r.physicalFamily),
-    );
-    expect(unbundled.length).toBeGreaterThan(0); // the registry really does carry some (e.g. Georgia)
-    for (const row of unbundled) {
-      expect(resolveFontFamily(row.logicalFamily).reason).toBe('as_requested');
-    }
+    // All substitute rows are currently bundled. Prove the gate itself by denying one shipped asset.
+    const denyBonum = (family: string) => family !== 'TeX Gyre Bonum';
+
+    expect(getRenderableFallback('Bookman Old Style', { canRenderFamily: denyBonum })).toBeNull();
+    expect(getFallbackDecision('Bookman Old Style', { canRenderFamily: denyBonum })).toMatchObject({
+      kind: 'asset_missing',
+      substituteFamily: 'TeX Gyre Bonum',
+      evidenceId: 'bookman-old-style',
+    });
+    expect(resolveFontFamily('Bookman Old Style')).toEqual({
+      logicalFamily: 'Bookman Old Style',
+      physicalFamily: 'TeX Gyre Bonum',
+      reason: 'bundled_substitute',
+    });
   });
 
   it('a QUALIFIED row carries the authoritative per-face breakdown its top-level verdict hides', () => {
@@ -86,15 +101,173 @@ describe('substitution evidence -> resolver derivation', () => {
     expect(cambria?.glyphExceptions?.[0]).toMatchObject({ slot: 'boldItalic', codepoint: 0x60 });
   });
 
+  it('keeps the advance basis so proportional and monospace rows are not conflated', () => {
+    const calibri = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'calibri');
+    const lucidaConsole = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'lucida-console');
+
+    expect(calibri?.advance).toMatchObject({ basis: 'latin_full', meanDelta: 0, maxDelta: 0 });
+    expect(lucidaConsole?.advance).toMatchObject({ basis: 'monospace_cell' });
+  });
+
   it('Calibri Light is a category_fallback (visual_only), not a metric substitute', () => {
     const cl = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'calibri-light');
     expect(cl).toMatchObject({ policyAction: 'category_fallback', verdict: 'visual_only', physicalFamily: 'Carlito' });
-    // NOT among the metric substitutes, so the six-pair guard above is unaffected; the resolver maps it
+    // NOT among the metric substitutes, so the reviewed-substitute guard above is unaffected; the resolver maps it
     // with reason category_fallback, never bundled_substitute.
     const substituteRows = SUBSTITUTION_EVIDENCE.filter((r) => r.policyAction === 'substitute' && r.physicalFamily);
     expect(substituteRows.some((r) => r.evidenceId === 'calibri-light')).toBe(false);
     expect(resolveFontFamily('Calibri Light').reason).toBe('category_fallback');
     // Its Carlito target still ships in the bundled pack, so the runtime can render the fallback.
     expect(new Set(BUNDLED_MANIFEST.map((f) => f.family)).has('Carlito')).toBe(true);
+  });
+
+  it('Cooper Black activates Caprasimo with explicit synthetic styled faces from DocFonts', () => {
+    const row = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'cooper-black');
+    expect(row).toMatchObject({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      policyAction: 'substitute',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: false, italic: false, boldItalic: false },
+      faceSources: {
+        bold: { kind: 'synthetic', from: 'regular' },
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'regular' },
+      },
+      faceVerdicts: {
+        regular: 'metric_safe',
+        bold: 'visual_only',
+        italic: 'visual_only',
+        boldItalic: 'visual_only',
+      },
+    });
+    expect(resolveFontFamily('Cooper Black')).toEqual({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+    });
+  });
+
+  it('new reviewed rows preserve their real-vs-synthetic face model', () => {
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'arial-black')).toMatchObject({
+      logicalFamily: 'Arial Black',
+      physicalFamily: 'Archivo Black',
+      policyAction: 'substitute',
+      faces: { regular: true, bold: false, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+      },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'baskerville-old-face')).toMatchObject({
+      logicalFamily: 'Baskerville Old Face',
+      physicalFamily: 'Bacasime Antique',
+      policyAction: 'substitute',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: false, italic: false, boldItalic: false },
+      faceSources: {
+        bold: { kind: 'synthetic', from: 'regular' },
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'regular' },
+      },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'brush-script-mt')).toMatchObject({
+      logicalFamily: 'Brush Script MT',
+      physicalFamily: 'Oregano Italic',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: false, italic: false, boldItalic: false },
+      faceSources: {
+        bold: { kind: 'synthetic', from: 'regular' },
+      },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'lucida-console')).toMatchObject({
+      logicalFamily: 'Lucida Console',
+      physicalFamily: 'Noto Sans Mono',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      advance: { basis: 'monospace_cell', meanDelta: 0.00254, maxDelta: 0.00303 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'consolas')).toMatchObject({
+      logicalFamily: 'Consolas',
+      physicalFamily: 'Inconsolata SemiExpanded',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      faceVerdicts: {
+        regular: 'cell_width_only',
+        bold: 'cell_width_only',
+        italic: 'visual_only',
+        boldItalic: 'visual_only',
+      },
+      advance: { basis: 'monospace_cell', meanDelta: 0.00019531, maxDelta: 0.00019531 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'gill-sans-mt-condensed')).toMatchObject({
+      logicalFamily: 'Gill Sans MT Condensed',
+      physicalFamily: 'PT Sans Narrow',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'verdana')).toMatchObject({
+      logicalFamily: 'Verdana',
+      physicalFamily: 'Noto Sans',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: true, boldItalic: true },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'century-gothic')).toMatchObject({
+      logicalFamily: 'Century Gothic',
+      physicalFamily: 'URW Gothic',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: true, boldItalic: true },
+      advance: { basis: 'latin_text', meanDelta: 0.0013, maxDelta: 0.1662 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'segoe-ui')).toMatchObject({
+      logicalFamily: 'Segoe UI',
+      physicalFamily: 'Selawik',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'arial-mt')).toMatchObject({
+      logicalFamily: 'Arial MT',
+      physicalFamily: 'Liberation Sans',
+      policyAction: 'substitute',
+      verdict: 'metric_safe',
+      advance: { basis: 'latin_text', meanDelta: 0, maxDelta: 0 },
+    });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'times')).toMatchObject({
+      logicalFamily: 'Times',
+      physicalFamily: 'Liberation Serif',
+      policyAction: 'substitute',
+      verdict: 'visual_only',
+      faceVerdicts: {
+        regular: 'metric_safe',
+        bold: 'metric_safe',
+        italic: 'metric_safe',
+        boldItalic: 'visual_only',
+      },
+    });
+    expect(resolveFontFamily('Baskerville Old Face').reason).toBe('bundled_substitute');
+    expect(resolveFontFamily('Brush Script MT').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Lucida Console').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Consolas').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Gill Sans MT Condensed').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Verdana').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Century Gothic').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Segoe UI').reason).toBe('category_fallback');
   });
 });

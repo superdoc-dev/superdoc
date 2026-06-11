@@ -1,21 +1,33 @@
-import { test, expect } from '../../fixtures/superdoc.js';
+import { test, type SuperDocFixture } from '../../fixtures/superdoc.js';
+
+const BOLD_LINE = 'Bold text here.';
+const ITALIC_LINE = 'Italic text here.';
+const PLAIN_LINE = 'Plain text here.';
+
+// Selection is not the behavior under test, so select deterministically instead of
+// via triple-click (see behavior CLAUDE.md on click-based selection).
+async function selectExactText(superdoc: SuperDocFixture, text: string): Promise<void> {
+  const pos = await superdoc.findTextPos(text);
+  await superdoc.setTextSelection(pos, pos + text.length);
+  await superdoc.waitForStable();
+}
 
 test('clear formatting removes marks and undo restores them', async ({ superdoc }) => {
   // Type all text first as plain
-  await superdoc.type('Bold text here.');
+  await superdoc.type(BOLD_LINE);
   await superdoc.newLine();
-  await superdoc.type('Italic text here.');
+  await superdoc.type(ITALIC_LINE);
   await superdoc.newLine();
-  await superdoc.type('Plain text here.');
+  await superdoc.type(PLAIN_LINE);
   await superdoc.waitForStable();
 
   // Apply bold to line 0
-  await superdoc.tripleClickLine(0);
+  await selectExactText(superdoc, BOLD_LINE);
   await superdoc.bold();
   await superdoc.waitForStable();
 
   // Apply italic to line 1
-  await superdoc.tripleClickLine(1);
+  await selectExactText(superdoc, ITALIC_LINE);
   await superdoc.italic();
   await superdoc.waitForStable();
 

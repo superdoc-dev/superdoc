@@ -1,5 +1,8 @@
 import { ReplaceStep } from 'prosemirror-transform';
 import { findChildren } from '@core/helpers/findChildren';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
+
+const ALLOWED_META_KEYS = ['inputType', 'uiEvent', 'paste', CustomSelectionPluginKey.key];
 
 /**
  * Find field annotations that were removed by a transaction.
@@ -24,7 +27,7 @@ export function findRemovedFieldAnnotations(tr) {
 
   if (
     !tr.steps.length ||
-    (tr.meta && !Object.keys(tr.meta).every((meta) => ['inputType', 'uiEvent', 'paste'].includes(meta))) ||
+    (tr.meta && !Object.keys(tr.meta).every((meta) => ALLOWED_META_KEYS.includes(meta))) ||
     ['historyUndo', 'historyRedo'].includes(tr.getMeta('inputType')) ||
     ['drop'].includes(tr.getMeta('uiEvent')) ||
     tr.getMeta('fieldAnnotationUpdate') === true ||

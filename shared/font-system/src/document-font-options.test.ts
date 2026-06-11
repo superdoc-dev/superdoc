@@ -116,7 +116,7 @@ describe('buildDocumentFontOptions (document-specific toolbar fonts)', () => {
 });
 
 describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
-  it('combines bundled defaults and document fonts alphabetically with no status field', () => {
+  it('combines bundled toolbar choices and document fonts alphabetically with no status field', () => {
     const options = buildFontFamilyOptions([
       { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
       { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
@@ -127,11 +127,28 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
       'Apple Chancery',
       'Aptos',
       'Arial',
+      'Arial Black',
+      'Arial Narrow',
       'Bangla MN',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
       'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
       'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
     expect(options.every((option) => !('status' in option))).toBe(true);

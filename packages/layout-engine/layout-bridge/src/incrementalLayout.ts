@@ -6,12 +6,15 @@ import type {
   HeaderFooterLayout,
   SectionMetadata,
   ParagraphBlock,
+  ParagraphMeasure,
   ColumnLayout,
   SectionBreakBlock,
   NormalizedColumnLayout,
   PageNumberChapterSeparator,
   PageNumberFormat,
+  TextboxDrawing,
 } from '@superdoc/contracts';
+import { layoutTextboxContent } from '@superdoc/layout-engine';
 import {
   cloneColumnLayout,
   formatSectionPageNumberText,
@@ -1011,6 +1014,8 @@ export async function incrementalLayout(
           1,
           pageResolver,
           kind,
+          undefined,
+          (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         );
         const layout = layouts.default?.layout;
         if (!layout || !(layout.height > 0)) continue;
@@ -1043,6 +1048,8 @@ export async function incrementalLayout(
         1,
         pageResolver,
         kind,
+        undefined,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       const layout = layouts.default?.layout;
       if (layout && layout.height > 0) {
@@ -1102,6 +1109,7 @@ export async function incrementalLayout(
         prelayoutPageResolver,
         'header',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
 
       // Extract actual content heights from each variant
@@ -1209,6 +1217,7 @@ export async function incrementalLayout(
           prelayoutPageResolver,
           'footer',
           fontSignature,
+          (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         );
 
         // Extract actual content heights from each variant
@@ -1358,6 +1367,8 @@ export async function incrementalLayout(
       );
     }
   }
+
+  hydrateTableTextboxMeasures(currentBlocks, (block, maxWidth) => remeasureParagraph(block, maxWidth));
 
   const pageTokenEnd = performance.now();
   const totalTokenTime = pageTokenEnd - pageTokenStart;
@@ -2770,7 +2781,11 @@ export async function incrementalLayout(
         }
       : undefined;
 
+    const hfRemeasure = (block: ParagraphBlock, maxWidth: number) => remeasureParagraph(block, maxWidth);
     if (headerFooter.headerBlocks) {
+      for (const blocks of Object.values(headerFooter.headerBlocks)) {
+        hydrateTableTextboxMeasures(blocks, hfRemeasure);
+      }
       const headerLayouts = await layoutHeaderFooterWithCache(
         headerFooter.headerBlocks,
         headerFooter.constraints,
@@ -2780,10 +2795,14 @@ export async function incrementalLayout(
         pageResolver, // Use page resolver for section-aware numbering
         'header',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       headers = serializeHeaderFooterResults('header', headerLayouts);
     }
     if (headerFooter.footerBlocks) {
+      for (const blocks of Object.values(headerFooter.footerBlocks)) {
+        hydrateTableTextboxMeasures(blocks, hfRemeasure);
+      }
       const footerLayouts = await layoutHeaderFooterWithCache(
         headerFooter.footerBlocks,
         headerFooter.constraints,
@@ -2793,6 +2812,7 @@ export async function incrementalLayout(
         pageResolver, // Use page resolver for section-aware numbering
         'footer',
         fontSignature,
+        (block, maxWidth, firstLineIndent) => remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
       );
       footers = serializeHeaderFooterResults('footer', footerLayouts);
     }
@@ -2830,6 +2850,31 @@ const DEFAULT_MARGINS = { top: 72, right: 72, bottom: 72, left: 72 };
  */
 export const normalizeMargin = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? (value as number) : fallback;
+
+/**
+ * Walks table blocks (including nested tables) and computes `contentMeasures` for any
+ * `textboxShape` drawings found in table cells. Stores results directly on the block so
+ * the painter can read them without a `DrawingFragment` (table-cell drawings have none).
+ */
+export function hydrateTableTextboxMeasures(
+  blocks: FlowBlock[],
+  remeasure: (block: ParagraphBlock, maxWidth: number) => ParagraphMeasure,
+): void {
+  for (const block of blocks) {
+    if (block.kind !== 'table') continue;
+    for (const row of block.rows ?? []) {
+      for (const cell of row.cells ?? []) {
+        for (const cellBlock of cell.blocks ?? []) {
+          if (cellBlock.kind === 'drawing' && cellBlock.drawingKind === 'textboxShape') {
+            (cellBlock as TextboxDrawing).contentMeasures = layoutTextboxContent(cellBlock, remeasure);
+          } else if (cellBlock.kind === 'table') {
+            hydrateTableTextboxMeasures([cellBlock], remeasure);
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Rewrites section break blocks so that `layoutDocument` uses the semantic page

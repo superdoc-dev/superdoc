@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createFontResolver, type FontFaceRequest, type RegisterFaceResult } from '@superdoc/font-system';
 import type { FontRegistry } from '@superdoc/font-system';
+import { createFontResolver, type FontFaceRequest, type RegisterFaceResult } from '@superdoc/font-system';
+import { describe, expect, it, vi } from 'vitest';
 import { DocumentFontController, type EmbeddedFontFace } from './DocumentFontController';
 import type { FontReadinessGate } from './FontReadinessGate';
 
@@ -195,7 +195,7 @@ describe('DocumentFontController', () => {
     controller.reset();
     flushMicrotasks();
 
-    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
   });
 
@@ -209,7 +209,7 @@ describe('DocumentFontController', () => {
     flushMicrotasks();
 
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
-    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Verdana');
+    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(onDocumentFontConfigApplied).not.toHaveBeenCalled();
     expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
   });
@@ -358,8 +358,8 @@ describe('DocumentFontController', () => {
       ...over,
     });
 
-    // The bundled substitute pack (Carlito, Caladea, Liberation Sans/Serif/Mono) is registered in
-    // production by installBundledSubstitutes, mirroring BUNDLED_MANIFEST. After #3653 the resolver only
+    // These tests need a small fake of the bundled clone faces that production registers through
+    // installBundledSubstitutes. After #3653 the resolver only
     // takes the bundled_substitute rung when the clone face is loadable (hasFace-gated), so a fake that
     // omits the pack resolves e.g. Calibri to identity instead of Carlito. Report the clones as present -
     // all are four-face, so they supply every weight/style - mirroring resolver.test.ts's clone-aware

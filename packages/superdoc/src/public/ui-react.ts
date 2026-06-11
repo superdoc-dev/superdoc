@@ -35,6 +35,7 @@ export {
   useSuperDocCommand,
   useSuperDocDocument,
   useSuperDocFontOptions,
+  useSuperDocFontSizeOptions,
   useSuperDocZoom,
 } from '@superdoc/super-editor/ui/react';
 

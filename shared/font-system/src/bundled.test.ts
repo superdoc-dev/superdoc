@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  installBundledSubstitutes,
   BUNDLED_MANIFEST,
-  setBundledFontAssetBase,
   DEFAULT_BUNDLED_FONT_BASE,
+  installBundledSubstitutes,
+  setBundledFontAssetBase,
 } from './bundled';
 import type { FontRegistry } from './registry';
 
@@ -33,6 +33,38 @@ describe('installBundledSubstitutes URL resolution', () => {
     expect(reg.registered).toHaveLength(FACE_COUNT);
     expect(reg.sourcesFor('Carlito')).toContain('url(/fonts/Carlito-Regular.woff2)');
     expect(reg.sourcesFor('Liberation Sans')).toContain('url(/fonts/LiberationSans-Bold.woff2)');
+    expect(reg.sourcesFor('Liberation Sans Narrow')).toContain('url(/fonts/LiberationSansNarrow-BoldItalic.woff2)');
+    expect(reg.sourcesFor('C059')).toContain('url(/fonts/C059-BdIta.woff2)');
+    expect(reg.sourcesFor('URW Gothic')).toContain('url(/fonts/URWGothic-DemiOblique.woff2)');
+    expect(reg.sourcesFor('Caprasimo')).toEqual(['url(/fonts/Caprasimo-Regular.woff2)']);
+    expect(reg.sourcesFor('Archivo Black')).toEqual(['url(/fonts/ArchivoBlack-Regular.woff2)']);
+    expect(reg.sourcesFor('Bacasime Antique')).toEqual(['url(/fonts/BacasimeAntique-Regular.woff2)']);
+    expect(reg.sourcesFor('Oregano Italic')).toEqual(['url(/fonts/OreganoItalic-Regular.woff2)']);
+    expect(reg.sourcesFor('Gelasio')).toContain('url(/fonts/Gelasio-BoldItalic.woff2)');
+    expect(reg.sourcesFor('Cardo')).toEqual([
+      'url(/fonts/Cardo-Regular.woff2)',
+      'url(/fonts/Cardo-Bold.woff2)',
+      'url(/fonts/Cardo-Italic.woff2)',
+    ]);
+    expect(reg.sourcesFor('Comic Relief')).toEqual([
+      'url(/fonts/ComicRelief-Regular.woff2)',
+      'url(/fonts/ComicRelief-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('Selawik')).toEqual(['url(/fonts/Selawik-Regular.woff2)', 'url(/fonts/Selawik-Bold.woff2)']);
+    expect(reg.sourcesFor('Noto Sans Mono')).toEqual([
+      'url(/fonts/NotoSansMono-Regular.woff2)',
+      'url(/fonts/NotoSansMono-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('PT Sans Narrow')).toEqual([
+      'url(/fonts/PTSansNarrow-Regular.woff2)',
+      'url(/fonts/PTSansNarrow-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('TeX Gyre Bonum')).toEqual([
+      'url(/fonts/TeXGyreBonum-Regular.woff2)',
+      'url(/fonts/TeXGyreBonum-Bold.woff2)',
+      'url(/fonts/TeXGyreBonum-Italic.woff2)',
+      'url(/fonts/TeXGyreBonum-BoldItalic.woff2)',
+    ]);
   });
 
   it('uses assetBaseUrl and normalizes a missing trailing slash', () => {

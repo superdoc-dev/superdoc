@@ -315,6 +315,11 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
 
   const marks = getRawTrackedMarks(editor);
   const byRawId = new Map<string, GroupedTrackedChangeDraft>();
+  // Every underlying mark range per grouped id (not just the min/max envelope).
+  // A single revision id can have disjoint segments (Word reuses ids across the
+  // document), so whole-table subsumption below must test each segment, not the
+  // collapsed `from`/`to`.
+  const segmentsByRawId = new Map<string, Array<{ from: number; to: number }>>();
 
   for (const item of marks) {
     const attrs = item.mark?.attrs ?? {};
@@ -332,6 +337,10 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     const contributesToExcerpt = !wordRevisionId || !hasChildTrackedMarkOnNode(item, id);
     const excerptText = contributesToExcerpt ? getTrackedMarkText(editor, item) : '';
     const range: [number, number] = [item.from, item.to];
+
+    const priorSegments = segmentsByRawId.get(groupKey);
+    if (priorSegments) priorSegments.push({ from: item.from, to: item.to });
+    else segmentsByRawId.set(groupKey, [{ from: item.from, to: item.to }]);
 
     if (!existing) {
       byRawId.set(groupKey, {
@@ -397,7 +406,38 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   // their own grouped changes. Their `id` is the shared Word revision id; the
   // accept/reject command routes by id through the review graph which owns the
   // node-level mutation plan.
-  for (const structural of enumerateStructuralRowChanges(editor.state)) {
+  const structuralChanges = enumerateStructuralRowChanges(editor.state);
+
+  // Inline content inside a decidable whole-table structural change is OWNED by
+  // that change — a whole inserted/deleted table is ONE logical change, not the
+  // structural change plus a separate review item per tracked cell run. Native
+  // authoring (markInsertion/markDeletion on cell text) and imported-with-text
+  // tables both leave such inline marks, so drop the inline grouped entries
+  // whose content lives inside a whole-table range before the structural change
+  // is appended. Only decidable whole-table ranges suppress; a partial/
+  // undecidable structural shape is not one logical change, so its inline marks
+  // stay as their own items. Mirrors the comments-store range suppression
+  // (`isInlineRangeInsideTrackedTable`): an inline change is owned only when
+  // EVERY one of its segments sits inside some whole-table range. Testing each
+  // segment (not the collapsed `from`/`to` envelope) matters when one revision
+  // id has disjoint marks across two tracked tables — the envelope would span
+  // the gap between them, yet every segment is table-owned. A segment that
+  // straddles a table edge is (correctly) not owned, so the change stays.
+  const wholeTableRanges = structuralChanges
+    .filter((structural) => structural.decidable && structural.wholeTable)
+    .map((structural) => ({ from: structural.tableFrom, to: structural.tableTo }));
+  if (wholeTableRanges.length > 0) {
+    const segmentInsideSomeTable = (segment: { from: number; to: number }) =>
+      wholeTableRanges.some((range) => segment.from >= range.from && segment.to <= range.to);
+    for (let i = grouped.length - 1; i >= 0; i -= 1) {
+      const change = grouped[i];
+      const segments = segmentsByRawId.get(change.rawId) ?? [{ from: change.from, to: change.to }];
+      const ownedByTable = segments.every(segmentInsideSomeTable);
+      if (ownedByTable) grouped.splice(i, 1);
+    }
+  }
+
+  for (const structural of structuralChanges) {
     const excerpt = normalizeExcerpt(editor.state.doc.textBetween(structural.tableFrom, structural.tableTo, ' ', '￼'));
     // Public id must be stable across import → export → reopen. The logical
     // `structural.id` is a fresh UUID minted on each import, so derive the

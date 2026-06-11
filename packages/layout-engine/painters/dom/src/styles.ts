@@ -241,6 +241,9 @@ const LINK_AND_TOC_STYLES = `
   color: inherit !important;
   text-decoration: none !important;
   cursor: default;
+  /* Disable native link drag so our pointer loop can run text-selection. */
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 .superdoc-toc-entry .superdoc-link:hover {
@@ -250,6 +253,31 @@ const LINK_AND_TOC_STYLES = `
 /* Override focus styles for TOC links (they're not interactive) */
 .superdoc-toc-entry .superdoc-link:focus-visible {
   outline: none;
+}
+
+/* TOC hover. .toc-group-hover is set by PresentationEditor on every entry
+   sharing a data-toc-id so the whole TOC greys out together. The ::after
+   stripe (height set via --toc-gap-below) fills the paragraph-spacing gap
+   between adjacent entries so the hover reads as one continuous block. */
+.superdoc-toc-entry:hover,
+.superdoc-toc-entry.toc-group-hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+/* Pointer-events stay on (default) so the stripe extends the parent entry's
+   hit-test area through the paragraph-spacing gap. Without this, moving the
+   cursor between two adjacent entries fires mouseout on the upper entry with
+   relatedTarget = the page (not a TOC entry), the coordinator drops the
+   group-hover class, and the grey disappears for a frame before the next
+   entry's mouseover restores it — visible as a flicker. */
+.superdoc-toc-entry.toc-group-hover::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--toc-gap-below, 0px);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
 /* Remove focus outlines from layout engine elements */

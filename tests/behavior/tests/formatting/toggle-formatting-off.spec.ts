@@ -8,7 +8,7 @@ const DOC_PATH = path.resolve(__dirname, '../../test-data/styles/sd-1727-formatt
 
 test.use({ config: { toolbar: 'full' } });
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 test('toggle bold off retains other formatting', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);

@@ -562,6 +562,11 @@ export type ImageLuminanceAdjustment = {
   contrast?: number;
 };
 
+export type ImageAlphaModFix = {
+  /** OOXML a:alphaModFix/@amt in raw fixed-percentage units (0..100000). */
+  amt: number;
+};
+
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
 export type ImageHyperlink = { url: string; tooltip?: string };
 
@@ -639,6 +644,7 @@ export type ImageRun = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
 };
@@ -957,6 +963,7 @@ export type ImageBlock = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
@@ -966,7 +973,7 @@ export type ImageBlock = {
   sourceAnchor?: SourceAnchor;
 };
 
-export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
+export type DrawingKind = 'image' | 'vectorShape' | 'textboxShape' | 'shapeGroup' | 'chart';
 
 export type DrawingContentSnapshot = {
   name: string;
@@ -1147,6 +1154,7 @@ export type ShapeGroupImageChild = {
     src: string;
     alt?: string;
     clipPath?: string;
+    alphaModFix?: ImageAlphaModFix;
     imageId?: string;
     imageName?: string;
   };
@@ -1208,6 +1216,30 @@ export type VectorShapeDrawing = DrawingBlockBase & {
     bottom: number;
     left: number;
   };
+};
+
+export type TextboxDrawing = DrawingBlockBase & {
+  drawingKind: 'textboxShape';
+  geometry: DrawingGeometry;
+  shapeKind?: string;
+  customGeometry?: CustomGeometryData;
+  fillColor?: FillColor;
+  strokeColor?: StrokeColor;
+  strokeWidth?: number;
+  lineEnds?: LineEnds;
+  effectExtent?: EffectExtent;
+  textContent?: ShapeTextContent;
+  textAlign?: string;
+  textVerticalAlign?: 'top' | 'center' | 'bottom';
+  textInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+  contentBlocks: ParagraphBlock[];
+  /** Paragraph layout results for table-cell textboxes; populated by the layout bridge, read by the painter. */
+  contentMeasures?: ParagraphMeasure[];
 };
 
 export type ShapeGroupDrawing = DrawingBlockBase & {
@@ -1282,7 +1314,7 @@ export type ChartDrawing = DrawingBlockBase & {
   chartPartPath?: string;
 };
 
-export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
+export type DrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
 
 /**
  * Vertical alignment of content within a section/page.
@@ -1778,6 +1810,8 @@ export type ParagraphAttrs = {
   directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
+  /** Stable id shared by every paragraph in the same TOC (docPartObj uniqueId or parent sdBlockId). */
+  tocId?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
   floatAlignment?: 'left' | 'right' | 'center';
   /**
@@ -2346,6 +2380,7 @@ export type DrawingFragment = {
   geometry: DrawingGeometry;
   scale: number;
   drawingContentId?: string;
+  contentMeasures?: ParagraphMeasure[];
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;

@@ -48,6 +48,12 @@ export const DOM_CLASS_NAMES = {
    */
   SDT_GROUP_HOVER: 'sdt-group-hover',
 
+  /** Paragraph fragment rendered as a Table of Contents entry. */
+  TOC_ENTRY: 'superdoc-toc-entry',
+
+  /** TOC analogue of `SDT_GROUP_HOVER`, applied to every fragment sharing a `data-toc-id`. */
+  TOC_GROUP_HOVER: 'toc-group-hover',
+
   /** Block-level image fragment (ImageBlock). */
   IMAGE_FRAGMENT: 'superdoc-image-fragment',
 

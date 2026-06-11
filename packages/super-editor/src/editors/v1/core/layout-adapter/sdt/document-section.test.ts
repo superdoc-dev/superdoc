@@ -1199,6 +1199,7 @@ describe('document-section', () => {
             docPartObjectId: 'toc-123',
             tocInstruction: 'TOC \\o "1-3"',
             sdtMetadata: expect.objectContaining({ type: 'docPartObject' }),
+            tocId: 'toc-123',
           },
           expect.objectContaining({
             nextBlockId: mockBlockIdGenerator,

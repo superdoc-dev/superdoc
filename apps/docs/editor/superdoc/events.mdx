@@ -300,10 +300,11 @@ When comments are modified.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('comments-update', ({ type, comment, changes }) => {
-  // type: 'add', 'update', 'deleted', 'resolved'
+superdoc.on('comments-update', ({ type, comment, changes, pendingSelection }) => {
+  // type: 'pending', 'add', 'update', 'deleted', 'resolved'
   // comment: the comment object (when applicable)
   // changes: per-field change set (when the update is a mutation)
+  // pendingSelection: SelectionInfo | null on 'pending'
 });
 ```
 
@@ -316,10 +317,11 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('comments-update', ({ type, comment, changes }) => {
-  // type: 'add', 'update', 'deleted', 'resolved'
+superdoc.on('comments-update', ({ type, comment, changes, pendingSelection }) => {
+  // type: 'pending', 'add', 'update', 'deleted', 'resolved'
   // comment: the comment object (when applicable)
   // changes: per-field change set (when the update is a mutation)
+  // pendingSelection: SelectionInfo | null on 'pending'
 });
 ```
 </CodeGroup>

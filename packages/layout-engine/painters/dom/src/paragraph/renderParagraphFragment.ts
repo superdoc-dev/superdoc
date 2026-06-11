@@ -9,8 +9,10 @@ import type {
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import { resolvePhysicalFamily, type ResolvePhysicalFamily } from '@superdoc/font-system';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
+import { allowFontSynthesis } from '../runs/font-synthesis.js';
 import type { BetweenBorderInfo } from './borders/index.js';
 import { renderParagraphContent, type ParagraphRenderLineInput } from './renderParagraphContent.js';
 
@@ -101,7 +103,11 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
     }
 
     if (isTocEntry) {
-      fragmentEl.classList.add('superdoc-toc-entry');
+      fragmentEl.classList.add(DOM_CLASS_NAMES.TOC_ENTRY);
+      const tocId = block.attrs?.tocId;
+      if (typeof tocId === 'string' && tocId.length > 0) {
+        fragmentEl.dataset.tocId = tocId;
+      }
     }
 
     if (paraContinuesFromPrev) {
@@ -174,6 +180,7 @@ const renderDropCap = (
     style: run.italic ? 'italic' : 'normal',
   });
   dropCapEl.style.fontSize = `${run.fontSize}px`;
+  allowFontSynthesis(dropCapEl);
   if (run.bold) {
     dropCapEl.style.fontWeight = 'bold';
   }

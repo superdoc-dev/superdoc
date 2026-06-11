@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { Schema } from 'prosemirror-model';
+import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import type { TableHitResult } from '@superdoc/layout-bridge';
 
-import { getCellPosFromTableHit, shouldUseCellSelection, hitTestTable } from '../tables/TableSelectionUtilities.js';
+import {
+  getCellPosFromTableHit,
+  getTablePosFromHit,
+  getTopLevelTableBlockAtPos,
+  resolveCellAnchorStateFromCellPos,
+  shouldUseCellSelection,
+  hitTestTable,
+} from '../tables/TableSelectionUtilities.js';
 
 /**
  * Create a basic table schema for testing.
@@ -33,6 +40,31 @@ const tableSchema = new Schema({
   },
 });
 
+const nestedTableSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: {
+      content: 'text*',
+      group: 'block',
+    },
+    table: {
+      content: 'tableRow+',
+      tableRole: 'table',
+      group: 'block',
+    },
+    tableRow: {
+      content: 'tableCell+',
+      tableRole: 'row',
+    },
+    tableCell: {
+      content: 'block+',
+      tableRole: 'cell',
+      attrs: { colspan: { default: 1 }, rowspan: { default: 1 } },
+    },
+    text: {},
+  },
+});
+
 /**
  * Create a simple 2x2 table for testing.
  */
@@ -43,6 +75,38 @@ function createSimpleTable(): EditorState {
   const table = tableSchema.node('table', null, [row(cell('A1'), cell('B1')), row(cell('A2'), cell('B2'))]);
   const doc = tableSchema.node('doc', null, [table]);
   return EditorState.create({ schema: tableSchema, doc });
+}
+
+function createNestedTableState(): { state: EditorState; secondTablePos: number; secondTableCellPos: number } {
+  const paragraph = (text: string) => nestedTableSchema.node('paragraph', null, [nestedTableSchema.text(text)]);
+  const cell = (...content: ProseMirrorNode[]) => nestedTableSchema.node('tableCell', null, content);
+  const row = (...cells: ReturnType<typeof cell>[]) => nestedTableSchema.node('tableRow', null, cells);
+  const nestedTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Nested')))]);
+  const firstTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Outer 1'), nestedTable))]);
+  const secondTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Outer 2')))]);
+  const doc = nestedTableSchema.node('doc', null, [firstTable, secondTable]);
+  const state = EditorState.create({ schema: nestedTableSchema, doc });
+
+  let seenTopLevelTables = 0;
+  let secondTablePos: number | null = null;
+  doc.descendants((node, pos) => {
+    if (node.type.name !== 'table') return true;
+    if (seenTopLevelTables === 1) {
+      secondTablePos = pos;
+    }
+    seenTopLevelTables += 1;
+    return false;
+  });
+
+  if (secondTablePos === null) {
+    throw new Error('Failed to locate second top-level table.');
+  }
+
+  return {
+    state,
+    secondTablePos,
+    secondTableCellPos: secondTablePos + 2,
+  };
 }
 
 describe('TableSelectionUtilities', () => {
@@ -287,6 +351,61 @@ describe('TableSelectionUtilities', () => {
         expect(cellNode!.type.name).toBe('tableCell');
         expect(cellNode!.textContent).toBe('C5');
       }
+    });
+
+    it('ignores nested tables when mapping layout blocks to document positions', () => {
+      const { state, secondTableCellPos } = createNestedTableState();
+      const blocks: FlowBlock[] = [
+        { kind: 'table', id: 'outer-1', rows: [] },
+        { kind: 'table', id: 'outer-2', rows: [] },
+      ];
+
+      const hit: TableHitResult = {
+        block: { id: 'outer-2', kind: 'table' } as FlowBlock,
+        cellRowIndex: 0,
+        cellColIndex: 0,
+        fragment: {} as TableHitResult['fragment'],
+        pageIndex: 0,
+      };
+
+      expect(getCellPosFromTableHit(hit, state.doc, blocks)).toBe(secondTableCellPos);
+    });
+  });
+
+  describe('top-level table mapping', () => {
+    it('returns the top-level table position for a layout hit after a nested table', () => {
+      const { state, secondTablePos } = createNestedTableState();
+      const blocks: FlowBlock[] = [
+        { kind: 'table', id: 'outer-1', rows: [] },
+        { kind: 'table', id: 'outer-2', rows: [] },
+      ];
+
+      const hit: TableHitResult = {
+        block: { id: 'outer-2', kind: 'table' } as FlowBlock,
+        cellRowIndex: 0,
+        cellColIndex: 0,
+        fragment: {} as TableHitResult['fragment'],
+        pageIndex: 0,
+      };
+
+      expect(getTablePosFromHit(hit, state.doc, blocks)).toBe(secondTablePos);
+      expect(getTopLevelTableBlockAtPos(state.doc, blocks, secondTablePos)?.id).toBe('outer-2');
+    });
+
+    it('resolves cell-anchor state from a cell position after a nested table', () => {
+      const { state, secondTablePos, secondTableCellPos } = createNestedTableState();
+      const blocks: FlowBlock[] = [
+        { kind: 'table', id: 'outer-1', rows: [] },
+        { kind: 'table', id: 'outer-2', rows: [] },
+      ];
+
+      expect(resolveCellAnchorStateFromCellPos(state.doc, blocks, secondTableCellPos)).toEqual({
+        tablePos: secondTablePos,
+        cellPos: secondTableCellPos,
+        tableBlockId: 'outer-2',
+        cellRowIndex: 0,
+        cellColIndex: 0,
+      });
     });
   });
 

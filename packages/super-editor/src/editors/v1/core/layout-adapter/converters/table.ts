@@ -62,6 +62,7 @@ import {
 } from '@superdoc/style-engine/ooxml';
 import { resolveThemeColorValue } from '../marks/theme-color.js';
 import { resolveTableDirection, resolveSectionDirection } from '../direction/index.js';
+import { hydrateTextboxDrawingContent } from './shapes.js';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -533,7 +534,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.positions,
       );
       if (drawingBlock && drawingBlock.kind === 'drawing') {
-        blocks.push(drawingBlock);
+        blocks.push(hydrateTextboxDrawingContent(childNode, drawingBlock, context));
       }
       continue;
     }
@@ -545,7 +546,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         context.positions,
       );
       if (drawingBlock && drawingBlock.kind === 'drawing') {
-        blocks.push(drawingBlock);
+        blocks.push(hydrateTextboxDrawingContent(childNode, drawingBlock, context));
       }
       continue;
     }

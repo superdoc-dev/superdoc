@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import * as coreHelpers from '@core/helpers/index.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { ReplaceAroundStep } from 'prosemirror-transform';
 import {
   getAllFieldAnnotations,
@@ -114,6 +115,19 @@ describe('fieldAnnotation helpers', () => {
     trackFieldAnnotationsDeletion(editor, tr);
     vi.runAllTimers();
     expect(emit).toHaveBeenCalledWith('fieldAnnotationDeleted', expect.objectContaining({ removedNodes: removed }));
+  });
+
+  it('detects removed annotations when the transaction clears toolbar selection state', () => {
+    const tr = state.tr.delete(positions[0], positions[0] + annotations[0].nodeSize).setMeta(CustomSelectionPluginKey, {
+      focused: false,
+      preservedSelection: null,
+      showVisualSelection: false,
+      skipFocusReset: false,
+    });
+
+    const removed = findRemovedFieldAnnotations(tr);
+    expect(removed).toHaveLength(1);
+    expect(removed[0].node.attrs.fieldId).toBe('field-a');
   });
 
   it('aggregates header/footer annotations via helpers', () => {

@@ -484,7 +484,41 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
     async tripleClickLine(lineIndex: number) {
       const line = page.locator('.superdoc-line').nth(lineIndex);
-      await line.click({ clickCount: 3, timeout: 10_000 });
+      // Probe from the line's tail so leading list markers or decorations cannot break the match.
+      const probe = ((await line.textContent()) ?? '').trim().slice(-8);
+
+      const readSelectionText = (): Promise<string> =>
+        page.evaluate(() => {
+          const { state } = (window as any).editor;
+          const { from, to, empty } = state.selection;
+          return empty ? '' : state.doc.textBetween(from, to, ' ');
+        });
+
+      // The editor maps the native triple-click DOM selection to its own selection asynchronously.
+      // Under CI load the triple-click can also degrade to a caret (selection stays empty), and
+      // polling alone cannot recover from a degraded click — re-click until the editor selection
+      // holds this line's text, bounded by a total deadline.
+      const ATTEMPT_WINDOW_MS = 2_000;
+      const deadline = Date.now() + 15_000;
+      let lastSeen = '';
+
+      for (let attempt = 1; ; attempt++) {
+        await line.click({ clickCount: 3, timeout: 10_000 });
+
+        const attemptDeadline = Math.min(Date.now() + ATTEMPT_WINDOW_MS, deadline);
+        do {
+          lastSeen = await readSelectionText();
+          if (lastSeen.includes(probe)) return;
+          await page.waitForTimeout(100);
+        } while (Date.now() < attemptDeadline);
+
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `tripleClickLine(${lineIndex}): editor selection never contained probe "${probe}" ` +
+              `after ${attempt} triple-click attempts (last selection: "${lastSeen.slice(0, 80)}")`,
+          );
+        }
+      }
     },
 
     async setDocumentMode(mode: DocumentMode) {

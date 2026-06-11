@@ -1278,6 +1278,7 @@ export type TextboxDrawing = DrawingBlockBase & {
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;

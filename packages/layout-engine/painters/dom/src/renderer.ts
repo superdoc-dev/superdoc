@@ -3762,7 +3762,7 @@ export class DomPainter {
     }
   }
 
-  private applyShapeEffects(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+  private applyShapeEffects(svgElement: SVGElement, block: ShapeTextDrawingWithEffects): void {
     const outerShadow = block.effects?.outerShadow;
     if (!outerShadow) return;
     this.applyOuterShadowEffect(svgElement, block.id, outerShadow);
@@ -4035,7 +4035,9 @@ export class DomPainter {
       const normalizedFragmentRotation =
         typeof fragmentGeometry?.rotation === 'number' ? normalizeRotationDegrees(fragmentGeometry.rotation) : 0;
       const groupRotation =
-        normalizedGroupRotation && normalizedGroupRotation !== normalizedFragmentRotation ? groupTransform.rotation : 0;
+        normalizedGroupRotation && normalizedGroupRotation !== normalizedFragmentRotation
+          ? (groupTransform?.rotation ?? 0)
+          : 0;
       const groupFlipH = groupTransform?.flipH && groupTransform.flipH !== fragmentGeometry?.flipH;
       const groupFlipV = groupTransform?.flipV && groupTransform.flipV !== fragmentGeometry?.flipV;
       if (groupRotation) {

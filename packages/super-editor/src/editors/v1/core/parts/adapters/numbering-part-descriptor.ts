@@ -202,9 +202,12 @@ export const numberingPartDescriptor: PartDescriptor = {
     const converter = getConverter(editor);
     if (!converter) return;
 
-    // For remote full-part replacements, converter.numbering has stale
-    // references to the old XML tree. Rebuild from the committed part.
-    if (source.startsWith('collab:remote:')) {
+    // For full-part replacements, converter.numbering has stale references to
+    // the old XML tree. Rebuild from the committed part. This covers remote
+    // collab applies and local `templates.apply` numbering-graph reconciliation,
+    // where the canonical export (`#exportNumberingFile`) reads back from
+    // `converter.numbering`.
+    if (source.startsWith('collab:remote:') || source === 'templates.apply') {
       rebuildNumberingIndexFromPart(converter, part);
     }
 

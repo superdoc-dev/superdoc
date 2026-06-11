@@ -22,6 +22,10 @@ import type {
   CommandsHandle,
   ToolbarHandle,
   ToolbarSnapshotSlice,
+  FontsHandle,
+  FontsSlice,
+  FontFamilyOption,
+  FontSizeOption,
   CommentsHandle,
   CommentsSlice,
   TrackChangesHandle,
@@ -33,6 +37,8 @@ import type {
   ViewportHandle,
   ViewportRect,
   DocumentHandle,
+  ZoomHandle,
+  ZoomSlice,
   DocumentSlice,
   // Document API shapes re-exported through ui
   CommentInfo,
@@ -63,6 +69,10 @@ const _real_CommandHandle: AssertNotAny<CommandHandle<'bold'>> = true;
 const _real_CommandsHandle: AssertNotAny<CommandsHandle> = true;
 const _real_ToolbarHandle: AssertNotAny<ToolbarHandle> = true;
 const _real_ToolbarSnapshotSlice: AssertNotAny<ToolbarSnapshotSlice> = true;
+const _real_FontsHandle: AssertNotAny<FontsHandle> = true;
+const _real_FontsSlice: AssertNotAny<FontsSlice> = true;
+const _real_FontFamilyOption: AssertNotAny<FontFamilyOption> = true;
+const _real_FontSizeOption: AssertNotAny<FontSizeOption> = true;
 const _real_CommentsHandle: AssertNotAny<CommentsHandle> = true;
 const _real_CommentsSlice: AssertNotAny<CommentsSlice> = true;
 const _real_TrackChangesHandle: AssertNotAny<TrackChangesHandle> = true;
@@ -74,6 +84,8 @@ const _real_ViewportEntityAddress: AssertNotAny<ViewportEntityAddress> = true;
 const _real_ViewportHandle: AssertNotAny<ViewportHandle> = true;
 const _real_ViewportRect: AssertNotAny<ViewportRect> = true;
 const _real_DocumentHandle: AssertNotAny<DocumentHandle> = true;
+const _real_ZoomHandle: AssertNotAny<ZoomHandle> = true;
+const _real_ZoomSlice: AssertNotAny<ZoomSlice> = true;
 const _real_DocumentSlice: AssertNotAny<DocumentSlice> = true;
 
 const _real_CommentInfo: AssertNotAny<CommentInfo> = true;
@@ -98,6 +110,10 @@ void _real_CommandHandle;
 void _real_CommandsHandle;
 void _real_ToolbarHandle;
 void _real_ToolbarSnapshotSlice;
+void _real_FontsHandle;
+void _real_FontsSlice;
+void _real_FontFamilyOption;
+void _real_FontSizeOption;
 void _real_CommentsHandle;
 void _real_CommentsSlice;
 void _real_TrackChangesHandle;
@@ -109,6 +125,8 @@ void _real_ViewportEntityAddress;
 void _real_ViewportHandle;
 void _real_ViewportRect;
 void _real_DocumentHandle;
+void _real_ZoomHandle;
+void _real_ZoomSlice;
 void _real_DocumentSlice;
 void _real_CommentInfo;
 void _real_CommentsListResult;

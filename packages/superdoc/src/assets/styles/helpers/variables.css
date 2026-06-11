@@ -199,7 +199,8 @@
   --sd-tracked-changes-delete-background-focused: #cb0e4744;
   --sd-tracked-changes-format-background-focused: #ffd70033;
 
-  /* Styles: content controls (SDT) — blue accent, intentionally standalone */
+  /* Styles: content controls (SDT) — blue accent, intentionally standalone.
+     These theme the BUILT-IN chrome (modules.contentControls.chrome: 'default'). */
   --sd-content-controls-block-border: #629be7;
   --sd-content-controls-block-hover-border: transparent;
   --sd-content-controls-block-hover-bg: var(--sd-ui-hover-bg);
@@ -210,6 +211,22 @@
   --sd-content-controls-label-bg: #629be7ee;
   --sd-content-controls-label-text: #ffffff;
   --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
+
+  /* Custom SDT styling under chrome:'none' (SD-3322). The built-in chrome is
+     off, so set these on the painted wrapper (target via data-sdt-* attributes)
+     to paint your own field/clause look. The painter applies them across rest,
+     hover, and selected, so no !important and no state-class selectors are
+     needed. Unset by default (chrome:'none' stays visually empty). `border` is a
+     full shorthand, e.g. `1px solid #1355ff`; block adds a `-border-left` for an
+     accent rail. Inline:
+       --sd-content-controls-custom-inline-bg
+       --sd-content-controls-custom-inline-border
+       --sd-content-controls-custom-inline-radius
+       --sd-content-controls-custom-inline-padding
+       --sd-content-controls-custom-inline-hover-bg
+       --sd-content-controls-custom-inline-selected-bg
+     Block (same set, plus):
+       --sd-content-controls-custom-block-border-left */
 
   /* UI: surface system — dialog and floating overlays */
   --sd-ui-surface-bg: var(--sd-popover-bg, var(--sd-ui-bg));

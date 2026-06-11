@@ -28,9 +28,18 @@ import type {
   CollaborationProvider as SuperEditorCollaborationProvider,
   Comment,
   FontConfig,
+  FontFaceConfig,
+  FontFamilyConfig,
+  FontsConfig,
   FontsResolvedPayload,
+  FontsChangedPayload,
+  FontResolutionRecord,
+  DocumentFontOption,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
   ListDefinitionsPayload,
   ProofingProvider,
+  SelectionInfo,
   User,
 } from '@superdoc/super-editor';
 
@@ -66,6 +75,89 @@ export type NavigableAddress = SuperEditorNavigableAddress;
  * `#assignUserColor()` after `#init`.
  */
 export type { User } from '@superdoc/super-editor';
+export type {
+  FontFaceConfig,
+  FontFamilyConfig,
+  FontResolutionRecord,
+  FontsChangedPayload,
+  FontsConfig,
+  FontAssetUrlContext,
+  FontAssetUrlResolver,
+} from '@superdoc/super-editor';
+
+/**
+ * Font surface on a SuperDoc instance (`superdoc.fonts`). The substitution- and load-aware
+ * answer to "what fonts does this document use and did SuperDoc render them faithfully" -
+ * pulled on demand and streamed via the `fonts-changed` event - plus a per-document write
+ * surface: {@link map}/{@link unmap} override resolution, {@link add} registers custom faces,
+ * {@link preload} loads them. All reflect the ACTIVE editor: reads return empty arrays when no
+ * editor is active; writes throw. {@link getReport} and {@link getDocumentFonts} cover the
+ * document's DECLARED fonts (font table + theme + defaults), not only fonts visible on screen.
+ */
+/** Public SuperDoc alias for the canonical font face config. */
+export type SuperDocFontFace = FontFaceConfig;
+
+/** Public SuperDoc alias for the canonical font family config. */
+export type SuperDocFontFamily = FontFamilyConfig;
+
+export interface SuperDocFontsApi {
+  /** Per-font report: requested logical family -> physical render family, reason, load status, export family, missing. */
+  getReport(): FontResolutionRecord[];
+  /** Declared families with no faithful render font loaded (the substitution-aware truth). */
+  getMissingFonts(): string[];
+  /** The document's declared logical font families, deduped. */
+  getDocumentFonts(): string[];
+  /**
+   * The document's own fonts as toolbar options: one per logical family the document renders, each with
+   * a preview family. Document fonts only - compose with the defaults.
+   */
+  getDocumentFontOptions(): DocumentFontOption[];
+  /**
+   * Observe the font report: replays the current report immediately if one has already
+   * resolved, then invokes `callback` on every future change. Use this rather than
+   * `on('fonts-changed')` when you may subscribe after the report resolved. Note: right after
+   * a document swap, if the new active editor has not produced a report yet, nothing is
+   * delivered until it does (no stale prior-document report). Returns an unsubscribe function.
+   */
+  onReport(callback: (payload: FontsChangedPayload) => void): () => void;
+  /**
+   * Map logical families to physical render families for the ACTIVE document, overriding bundled
+   * defaults: `map({ Georgia: 'Gelasio', Arial: 'Liberation Sans' })`. Applies all entries, then
+   * re-measures and repaints once (a redundant map - a self-map, or a mapping identical to an
+   * already-stored override - does neither); observe via {@link onReport} / `fonts-changed` (`source:
+   * 'config-change'`). Mapping a family to its bundled clone (`map({ Calibri: 'Carlito' })`) is honored
+   * as an explicit PIN - stored so it outranks a registered real face for that family - not treated as
+   * a no-op. Each physical family must be loadable - a bundled substitute, or a face added via `add`.
+   * Per document: other editors on the page are unaffected. Render-only - export keeps the logical
+   * family name.
+   * @throws Error if no editor is active (a write needs a document; this fails loudly, not silently).
+   */
+  map(mappings: Record<string, string>): void;
+  /**
+   * Remove runtime mappings for the ACTIVE document; each family reverts to its bundled default
+   * (or its logical name). Accepts one family or several. Re-measures and repaints if anything
+   * changed.
+   * @throws Error if no editor is active.
+   */
+  unmap(families: string | string[]): void;
+  /**
+   * Register custom physical font faces (URL sources) for the ACTIVE document so they can be mapped
+   * to and loaded - e.g.
+   * `add({ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2', weight: 400 }] })`.
+   * Registering does NOT map; pair with {@link map}. Re-adding the same source for a face is
+   * idempotent; a DIFFERENT source for the same family/weight/style throws. Reflows once if a
+   * registered face is one the document already uses.
+   * @throws Error if no editor is active, or if a conflicting source is registered.
+   */
+  add(families: SuperDocFontFamily | SuperDocFontFamily[]): void;
+  /**
+   * Proactively load the physical faces for the given LOGICAL families (resolved through the active
+   * document's mappings) so they are ready before use, avoiding a late-load reflow. Awaits the
+   * regular (400/normal) face via the registry.
+   * @throws Error if no editor is active.
+   */
+  preload(families: string[]): Promise<void>;
+}
 
 /**
  * Internal post-`#init` shape of the active user. Extends the public
@@ -1087,6 +1179,11 @@ export interface CanPerformPermissionParams {
 
 /** Modules registered with the SuperDoc instance. */
 export interface Modules {
+  /** Content controls module configuration. */
+  contentControls?: {
+    /** Built-in SDT chrome rendering mode. */
+    chrome?: 'default' | 'none';
+  };
   /**
    * Comments module configuration (false to disable). The named fields below
    * are typed for IDE help; the runtime spreads the entire object through the
@@ -1222,6 +1319,10 @@ export interface Modules {
      * controls whether the marks render in the document.
      */
     showFormattingMarksButton?: boolean;
+    /**
+     * Show the table of contents insert button in the toolbar. Off by default.
+     */
+    showTableOfContentsButton?: boolean;
   } & Record<string, unknown>;
   /** Link click popover configuration. */
   links?: {
@@ -1249,6 +1350,46 @@ export interface Modules {
  * top-level `config.trackChanges` and `config.layoutEngineOptions.trackedChanges`
  * keys, which remain supported as deprecated aliases.
  */
+/**
+ * Identity of a tracked-change author, passed to a per-author color
+ * {@link TrackChangesAuthorColorsConfig.resolve | resolver}. Mirrors the
+ * author metadata SuperDoc carries on each tracked change.
+ */
+export interface TrackChangeAuthor {
+  /** Author display name (from the OOXML `w:author` attribute). */
+  name?: string;
+  /** Author email, when available. */
+  email?: string;
+  /** Author avatar image URL, when available. */
+  image?: string;
+}
+
+/**
+ * Per-author tracked-change color configuration. Lets hosts assign a color
+ * per author without injecting CSS `!important` rules against
+ * `[data-track-change-author]` or reaching into private editor internals.
+ *
+ * Resolution order per author: `overrides` by identity (email first, then
+ * name; exact match) → `resolve(author)` → a deterministic fallback color
+ * derived from the author identity. The fallback guarantees imported /
+ * discovered authors the host did not configure ahead of time still receive
+ * a stable, distinct color.
+ */
+export interface TrackChangesAuthorColorsConfig {
+  /** When `false`, per-author colors are not applied. Defaults to enabled. */
+  enabled?: boolean;
+  /**
+   * Color overrides keyed by author identity. Both `email` and `name` keys
+   * are supported (email is checked first); matching is exact.
+   */
+  overrides?: Record<string, string>;
+  /**
+   * Resolver consulted after `overrides`. Return a CSS color string, or
+   * `undefined` to fall through to the deterministic fallback.
+   */
+  resolve?: (author: TrackChangeAuthor) => string | undefined;
+}
+
 export interface TrackChangesModuleConfig {
   /** Whether tracked-change indicators are shown in viewing mode. */
   visible?: boolean;
@@ -1273,6 +1414,13 @@ export interface TrackChangesModuleConfig {
    *   and resolves independently.
    */
   replacements?: 'paired' | 'independent';
+  /**
+   * Per-author tracked-change colors. When configured, insert/delete/format
+   * tracked-change highlights are tinted per author through the
+   * `--sd-tracked-changes-*` CSS variable surface, and
+   * `ui.trackChanges.getSnapshot()` exposes the resolved author colors.
+   */
+  authorColors?: TrackChangesAuthorColorsConfig;
 }
 
 export type DocumentMode = 'editing' | 'viewing' | 'suggesting';
@@ -1411,6 +1559,22 @@ export interface SuperDocCommentsUpdatePayload {
   comment?: Comment;
   /** Per-field change set when the update is a mutation. */
   changes?: Array<{ key: string; commentId: string; fileId?: string | null }>;
+  /**
+   * The Document API selection snapshot captured at the moment a
+   * `'pending'` comment was started, before the pending mark is
+   * inserted (which clears the live DOM selection). Present only on the
+   * `'pending'` event. When it has a `target`, forward it straight to
+   * `ui.comments.createFromCapture(pendingSelection, { text })` to build
+   * the comment from a custom composer without tracking the selection
+   * yourself ahead of the floating-bubble click.
+   *
+   * `null` means the pending comment did not start from an addressable
+   * SuperEditor text selection, or the active editor/selection API was
+   * unavailable. PDF and other non-SuperEditor selections emit `null`.
+   * Empty SuperEditor selections can still yield a `SelectionInfo` with
+   * `target: null`.
+   */
+  pendingSelection?: SelectionInfo | null;
 }
 
 export interface EditorTransactionEvent {
@@ -1428,6 +1592,32 @@ export interface EditorTransactionEvent {
   headerId?: string | null;
   /** Header/footer variant (`default`, `first`, `even`, `odd`) when available. */
   sectionType?: string | null;
+}
+
+export interface SdtRef {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+}
+
+export interface ContentControlActiveChangePayload {
+  active: SdtRef | null;
+  previous: SdtRef | null;
+  /**
+   * Active content-control stack for the new selection, innermost first
+   * (matches `ui.contentControls` activeIds). `active` is `activePath[0]`.
+   * Empty when the selection is not inside any control. Lets nested-aware
+   * custom UI read the surrounding controls without combining with observe().
+   */
+  activePath: SdtRef[];
+  source: 'keyboard' | 'pointer';
+}
+
+export interface ContentControlClickPayload {
+  target: SdtRef;
+  source: 'pointer';
 }
 
 export interface SuperDocLayoutEngineOptions {
@@ -1538,6 +1728,121 @@ export type SuperDocExceptionPayload =
   | SuperDocExceptionRestorePayload
   | SuperDocExceptionEditorPayload;
 
+/**
+ * Zoom mode. `manual` holds whatever value was last set; `fit-width`
+ * continuously recomputes the zoom that fits the page width into the
+ * available container width. Calling `setZoom()` switches to
+ * `manual`; `setZoomMode('fit-width')` re-enters fitting.
+ */
+export type SuperDocZoomMode = 'manual' | 'fit-width';
+
+/**
+ * Payload emitted with the `zoomChange` event and passed to
+ * `Config.onZoomChange`. Fires for every zoom source: `setZoom()`,
+ * the toolbar zoom control, and fit-width adjustments.
+ */
+export interface SuperDocZoomPayload {
+  /** The zoom level as a percentage (e.g. 100, 150). */
+  zoom: number;
+  /** The zoom mode that produced this value. */
+  mode: SuperDocZoomMode;
+}
+
+/**
+ * Payload emitted with the `viewport-change` event and passed to
+ * `Config.onViewportChange`. The event fires when the implied fit
+ * changes: the rounded `fitZoom` or the rounded base page width.
+ * Pixel-level `availableWidth` movement that cannot change any fit
+ * decision does not emit; read `getViewportMetrics()` for the
+ * always-latest measurements. These are pure measurements:
+ * `zoom.fitWidth` policy options (`min`, `max`, `padding`) do not
+ * affect them. For the common case, prefer `zoom.mode: 'fit-width'`,
+ * which applies a clamped fit automatically.
+ */
+export interface SuperDocViewportChangePayload {
+  /**
+   * Width available to the document in pixels: the measured container
+   * width minus the comments sidebar when it is visible.
+   */
+  availableWidth: number;
+  /** Widest document page width in pixels at 100% zoom. */
+  documentWidth: number;
+  /** Zoom percentage that fits the document in the available width (unclamped, padding-free). Clamp before applying. */
+  fitZoom: number;
+}
+
+/**
+ * Latest viewport measurements, readable at any time via
+ * `superdoc.getViewportMetrics()`. Same shape as the
+ * `viewport-change` payload and refreshed on every measurement
+ * (including pixel-level changes the deduped event skips); `null`
+ * until the first measurement (editors still mounting).
+ */
+export type SuperDocViewportMetrics = SuperDocViewportChangePayload;
+
+/**
+ * Options for the `fit-width` zoom mode. `min`/`max` clamp the
+ * applied zoom percentage; `padding` reserves horizontal space
+ * inside the available width before computing the applied fit.
+ * These shape the applied policy only, never the reported metrics.
+ */
+export interface SuperDocFitWidthOptions {
+  /** Lower bound for the applied zoom percentage (default: 10). */
+  min?: number;
+  /**
+   * Upper bound for the applied zoom percentage (default: 100, so
+   * fitting never enlarges the document past its natural size; raise
+   * it to let wide containers scale the page up).
+   */
+  max?: number;
+  /** Horizontal padding in pixels reserved inside the available width before computing the fit (default: 0). */
+  padding?: number;
+}
+
+/**
+ * Snapshot of the current zoom state, readable via
+ * `superdoc.getZoomState()`.
+ */
+export interface SuperDocZoomState {
+  /** Current zoom mode. */
+  mode: SuperDocZoomMode;
+  /** Current zoom value as a percentage. */
+  value: number;
+  /** Latest computed fit zoom (unclamped), or `null` before the first viewport measurement. */
+  fitZoom: number | null;
+  /** Effective lower bound the fit policy applies (config or default). */
+  min: number;
+  /** Effective upper bound the fit policy applies (config or default). */
+  max: number;
+}
+
+/**
+ * Options for `Config.zoom`: the initial zoom level, the starting
+ * mode, and the fit-width policy bounds. Runtime control stays on
+ * the instance: `setZoom()` (switches to manual), `setZoomMode()`,
+ * `getZoomState()`, `getViewportMetrics()`, and the `zoomChange` /
+ * `viewport-change` events.
+ */
+export interface SuperDocZoomConfig {
+  /**
+   * Initial zoom level as a percentage (default: 100). Applied before
+   * the first paint, so the document renders directly at this zoom
+   * with no visible jump. In `fit-width` mode this is the paint zoom
+   * until the first fit computes. Invalid values (non-finite or <= 0)
+   * are ignored with a console warning.
+   */
+  initial?: number;
+  /**
+   * Starting zoom mode (default: `'manual'`). In `'fit-width'` the
+   * document continuously re-fits to the available container width;
+   * the fit is applied through the normal zoom pipeline, so
+   * `zoomChange` fires for every adjustment.
+   */
+  mode?: SuperDocZoomMode;
+  /** Bounds and padding for the `fit-width` policy. */
+  fitWidth?: SuperDocFitWidthOptions;
+}
+
 export interface Config {
   /** The ID of the SuperDoc. */
   superdocId?: string;
@@ -1644,6 +1949,10 @@ export interface Config {
   onReady?: (params: SuperDocReadyPayload) => void;
   /** Callback when comments are updated. */
   onCommentsUpdate?: (params: SuperDocCommentsUpdatePayload) => void;
+  /** Callback when active content control changes. */
+  onContentControlActiveChange?: (params: ContentControlActiveChangePayload) => void;
+  /** Callback when user clicks inside a content control. */
+  onContentControlClick?: (params: ContentControlClickPayload) => void;
   /** Callback when awareness is updated. */
   onAwarenessUpdate?: (params: SuperDocAwarenessUpdatePayload) => void;
   /** Callback when the SuperDoc is locked or unlocked. */
@@ -1672,6 +1981,19 @@ export interface Config {
   onPaginationUpdate?: (params: { totalPages: number; superdoc: SuperDoc }) => void;
   /** Callback when the list definitions change. */
   onListDefinitionsChange?: (params: ListDefinitionsPayload) => void;
+  /**
+   * Callback when the zoom level changes. Fires for every zoom source:
+   * `setZoom()`, the toolbar zoom control, and fit-width
+   * adjustments.
+   */
+  onZoomChange?: (params: SuperDocZoomPayload) => void;
+  /**
+   * Callback when the implied fit changes (rounded fit zoom or base
+   * page width); pixel-level width jitter does not fire it, and
+   * `getViewportMetrics()` always reads latest. Registered before the
+   * first emit.
+   */
+  onViewportChange?: (params: SuperDocViewportChangePayload) => void;
   /** The format of the document (docx, pdf, html). */
   format?: string;
   /** The extensions to load for the editor. */
@@ -1739,6 +2061,13 @@ export interface Config {
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
   /**
+   * Font system configuration. Currently the served location of the bundled reviewed fallback
+   * pack: set `fonts.assetBaseUrl` (e.g. `/fonts/` or a CDN URL) for npm/SSR/framework deploys,
+   * or `fonts.resolveAssetUrl` for signed/versioned hosting. The CDN `<script>` build
+   * auto-detects a script-relative default.
+   */
+  fonts?: FontsConfig;
+  /**
    * Opt-in toggle for the layout engine. Auto-disabled when web layout is
    * requested without `layoutEngineOptions.flowMode === 'semantic'`; the
    * loader logs a warning and falls back to the legacy ProseMirror render
@@ -1746,11 +2075,28 @@ export interface Config {
    */
   useLayoutEngine?: boolean;
   /**
+   * Zoom behavior: the initial zoom level and optional fit-width
+   * policy. See `SuperDocZoomConfig`.
+   */
+  zoom?: SuperDocZoomConfig;
+  /**
    * Callback fired after the editor reports `fonts-resolved`. The payload
    * contains `documentFonts` and `unsupportedFonts` arrays so hosts can fall
    * back, warn, or block printing on unsupported faces.
+   *
+   * LEGACY/EARLY: this fires once before fonts load and is not substitution-aware
+   * (`unsupportedFonts` over-reports families that render via a bundled substitute).
+   * For the authoritative, load-settled picture use {@link onFontsChanged}.
    */
   onFontsResolved?: (payload: FontsResolvedPayload) => void;
+  /**
+   * Callback fired with the authoritative substitution + load-aware font report: once
+   * after the load-before-measure gate settles (`source: 'initial'`), again when a face
+   * arrives after a timed-out first paint (`'late-load'`). Each payload carries the full
+   * per-font `resolutions`, the genuinely `missingFonts`, and a `loadSummary`. Also
+   * available to pull on demand via `superdoc.fonts.getReport()`.
+   */
+  onFontsChanged?: (payload: FontsChangedPayload) => void;
 }
 
 /**

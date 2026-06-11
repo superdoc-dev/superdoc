@@ -13,7 +13,7 @@
  * implementation details.
  */
 
-export { DOM_CLASS_NAMES } from './class-names.js';
+export { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from './class-names.js';
 export type { DomClassName } from './class-names.js';
 
 export { DATA_ATTRS, DATASET_KEYS, encodeLayoutStoryDataset, decodeLayoutStoryDataset } from './data-attrs.js';

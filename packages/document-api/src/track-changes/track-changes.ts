@@ -256,6 +256,23 @@ export function executeTrackChangesDecide(
         { field: 'target.story', value: rawStory },
       );
     }
+    // A partial-range qualifier on an entity (id) target requests a partial
+    // decision on a single logical change. Indivisible changes (structural
+    // whole-object revisions per spec §8/§9/§19) must fail closed and leave the
+    // document unmutated. No divisible-by-id-range path is fixture-backed yet,
+    // so reject the qualifier here with INVALID_INPUT rather than silently
+    // resolving the whole change.
+    if (target.range !== undefined) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_INPUT',
+          message:
+            'trackChanges.decide does not support a partial range on an id target; the change is not safely divisible.',
+          details: { target: input.target },
+        },
+      };
+    }
     if (typeof target.id !== 'string' || target.id.length === 0) {
       throw new DocumentApiValidationError('INVALID_TARGET', 'trackChanges.decide id targets require a non-empty id.', {
         field: 'target',

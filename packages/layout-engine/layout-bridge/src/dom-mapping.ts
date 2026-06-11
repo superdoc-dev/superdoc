@@ -24,7 +24,7 @@
  * @deprecated Use DomPointerMapping from super-editor/dom-observer instead.
  */
 
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES, STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES } from '@superdoc/dom-contract';
 
 // Debug logging for click-to-position pipeline (disabled - enable for debugging)
 const DEBUG_CLICK_MAPPING = false;
@@ -88,6 +88,10 @@ function isRtlLine(lineEl: HTMLElement): boolean {
 
 function isVisibleRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
+}
+
+function isStructuredContentChromeLabel(el: HTMLElement): boolean {
+  return STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES.some((className) => el.classList.contains(className));
 }
 
 /**
@@ -384,7 +388,8 @@ function processFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER),
+      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER) &&
+      !isStructuredContentChromeLabel(el),
   );
 
   log(
@@ -462,7 +467,8 @@ function processLineElement(lineEl: HTMLElement, viewX: number): number | null {
     (el) =>
       el.dataset.pmStart !== undefined &&
       el.dataset.pmEnd !== undefined &&
-      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER),
+      !el.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER) &&
+      !isStructuredContentChromeLabel(el),
   );
 
   log(

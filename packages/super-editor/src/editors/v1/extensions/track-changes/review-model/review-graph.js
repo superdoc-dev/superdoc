@@ -27,6 +27,7 @@ import {
   deterministicJson,
 } from './mark-metadata.js';
 import { BODY_STORY, buildStoryKey } from './story-locator.js';
+import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structuralRowChanges.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +55,7 @@ import { BODY_STORY, buildStoryKey } from './story-locator.js';
  * @property {string} parentId
  * @property {string} parentSide
  * @property {'parent'|'child'|'standalone'} overlapRole
+ * @property {boolean} [structural] True for a whole-table structural segment (no inline mark).
  * @property {Array<number>} [nodePath] optional diagnostics nodePath.
  */
 
@@ -131,7 +133,14 @@ import { BODY_STORY, buildStoryKey } from './story-locator.js';
  */
 export const buildReviewGraph = ({ state, story = BODY_STORY, replacementsMode = 'paired' }) => {
   const spans = enumerateTrackedMarkSpans(state);
-  return buildGraphFromSpans({ spans, doc: state?.doc ?? null, story, replacementsMode });
+  const structuralChanges = enumerateStructuralRowChanges(state);
+  return buildGraphFromSpans({
+    spans,
+    structuralChanges,
+    doc: state?.doc ?? null,
+    story,
+    replacementsMode,
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -190,7 +199,7 @@ export const invalidateReviewGraphCache = (editor) => {
 // Internal builder
 // ---------------------------------------------------------------------------
 
-const buildGraphFromSpans = ({ spans, doc, story, replacementsMode }) => {
+const buildGraphFromSpans = ({ spans, structuralChanges = [], doc, story, replacementsMode }) => {
   /** @type {Array<{ attrs: import('./mark-metadata.js').NormalizedTrackedAttrs, span: import('./segment-index.js').TrackedMarkSpan }>} */
   const normalized = spans.map((span) => ({
     attrs: readTrackedAttrs(span.mark, span.mark.type.name),
@@ -269,8 +278,38 @@ const buildGraphFromSpans = ({ spans, doc, story, replacementsMode }) => {
     for (const seg of segs) bySegmentId.set(seg.segmentId, seg);
   }
 
-  // 7. Flat ordered segment list.
-  const segments = mergedSegments;
+  // 6b. Structural row changes (whole-table insert/delete). These do not come
+  //     from marks — they live on `tableRow.attrs.trackChange` — so they are
+  //     projected into LogicalTrackedChange entries with synthetic segments
+  //     covering the table range. The decision engine reads `change.structural`
+  //     to apply node-level accept/reject.
+  //
+  //     Identity is TABLE-SCOPED. Real Word docs assign a distinct `w:id` per
+  //     row, and two separate tracked tables in one document can even share a
+  //     Word id. Keying the `changes` map purely on the Word revision id would
+  //     collapse/drop one of them. We therefore store each structural change
+  //     under an internal `structural:<tablePos>:<side>` key (unique per table)
+  //     and ALSO register the stable PUBLIC id as an alias so list/get/decide
+  //     can route by the public id. The public alias is first-wins so a
+  //     pathological id collision never overwrites a previously-seen table.
+  for (const structural of structuralChanges) {
+    const logical = buildStructuralLogicalChange({ structural, doc, story });
+    if (!logical) continue;
+    const internalKey = `structural:${structural.tablePos}:${structural.side}`;
+    if (changes.has(internalKey)) continue;
+    changes.set(internalKey, logical);
+    // Public-id alias (Word w:id or table-derived id). Only register when it is
+    // a distinct key and not already owned by another change.
+    if (logical.id && logical.id !== internalKey && !changes.has(logical.id)) {
+      changes.set(logical.id, logical);
+    }
+    for (const seg of logical.segments) bySegmentId.set(seg.segmentId, seg);
+    mergedSegments.push(...logical.segments);
+    appendToMap(byRevisionGroupId, logical.revisionGroupId, logical.id);
+  }
+
+  // 7. Flat ordered segment list (kept in document order for range queries).
+  const segments = mergedSegments.slice().sort((a, b) => a.from - b.from || a.to - b.to);
 
   /** @type {TrackedReviewGraph} */
   const graph = {
@@ -506,6 +545,114 @@ const buildLogicalChange = ({ changeId, segments, doc, story, replacementsMode }
   // observability/tests.
   Object.defineProperty(logical, 'replacementsMode', {
     value: replacementsMode,
+    enumerable: false,
+  });
+
+  return logical;
+};
+
+/**
+ * Project a structural row change (whole-table insert/delete) into a
+ * LogicalTrackedChange. The segments are synthetic and cover the whole table
+ * so range/all targeting and coverage checks treat the table atomically.
+ *
+ * @param {{
+ *   structural: import('../trackChangesHelpers/structuralRowChanges.js').StructuralChange,
+ *   doc: import('prosemirror-model').Node | null,
+ *   story: import('./story-locator.js').StoryLocator,
+ * }} input
+ * @returns {LogicalTrackedChange | null}
+ */
+const buildStructuralLogicalChange = ({ structural, doc, story }) => {
+  const side = structural.side === 'insertion' ? SegmentSide.Inserted : SegmentSide.Deleted;
+  const from = structural.tableFrom;
+  const to = structural.tableTo;
+  if (!(from < to)) return null;
+
+  /** @type {import('./mark-metadata.js').NormalizedTrackedAttrs} */
+  const attrs = {
+    id: structural.id,
+    revisionGroupId: structural.revisionGroupId,
+    splitFromId: '',
+    changeType: CanonicalChangeType.Structural,
+    replacementGroupId: '',
+    replacementSideId: '',
+    overlapParentId: '',
+    sourceIds: structural.sourceId ? { wordIdStructural: structural.sourceId } : {},
+    sourceId: structural.sourceId,
+    importedAuthor: structural.importedAuthor,
+    origin: structural.sourceId ? 'word' : '',
+    author: structural.author,
+    authorId: '',
+    authorEmail: structural.authorEmail,
+    authorImage: structural.authorImage,
+    date: structural.date,
+    markType: '',
+    side,
+    subtype: structural.subtype,
+    explicitChangeType: CanonicalChangeType.Structural,
+    hasReviewMetadata: true,
+  };
+
+  /** @type {TrackedSegment} */
+  const segment = {
+    segmentId: `${structural.id}:structural:${from}:${to}:0`,
+    changeId: structural.id,
+    markType: '',
+    side,
+    from,
+    to,
+    text: '',
+    mark: /** @type {*} */ (null),
+    markRuns: [],
+    attrs,
+    parentId: '',
+    parentSide: '',
+    overlapRole: 'standalone',
+    structural: true,
+  };
+  if (doc) {
+    try {
+      segment.text = doc.textBetween(from, to, ' ', '￼');
+    } catch {
+      segment.text = '';
+    }
+  }
+
+  const segments = [segment];
+  /** @type {LogicalTrackedChange} */
+  const logical = {
+    id: structural.id,
+    type: CanonicalChangeType.Structural,
+    subtype: structural.subtype,
+    state: 'open',
+    segments,
+    coverageSegments: [...segments],
+    insertedSegments: side === SegmentSide.Inserted ? [...segments] : [],
+    deletedSegments: side === SegmentSide.Deleted ? [...segments] : [],
+    formattingSegments: [],
+    replacement: null,
+    author: structural.author,
+    authorId: '',
+    authorEmail: structural.authorEmail,
+    authorImage: structural.authorImage,
+    date: structural.date,
+    sourceIds: attrs.sourceIds,
+    revisionGroupId: structural.revisionGroupId,
+    splitFromId: '',
+    sourcePlatform: structural.sourceId ? 'word' : '',
+    story,
+    parent: null,
+    children: [],
+    before: [],
+    after: [],
+    excerpt: segment.text.length > 200 ? `${segment.text.slice(0, 200)}…` : segment.text,
+  };
+  // Structural-specific payload the decision engine reads to apply node-level
+  // accept/reject. Non-enumerable so it never leaks into deterministic JSON or
+  // contract projections that iterate own keys.
+  Object.defineProperty(logical, 'structural', {
+    value: structural,
     enumerable: false,
   });
 

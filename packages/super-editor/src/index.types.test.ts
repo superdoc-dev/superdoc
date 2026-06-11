@@ -117,8 +117,12 @@ const SECTION_PAGE_STYLES_KEYS = ['pageSize', 'pageMargins', 'sectionIndex', 'or
 const SECTION_PAGE_SIZE_KEYS = ['width', 'height'] as const;
 const SECTION_PAGE_MARGINS_KEYS = ['left', 'right', 'top', 'bottom'] as const;
 
-/** Expected keys for getLayoutSnapshot return type */
+/** Expected keys for getLayoutSnapshot / getLayoutResolveSnapshot return type */
 const LAYOUT_SNAPSHOT_KEYS = ['blocks', 'measures', 'layout', 'sectionMetadata'] as const;
+
+/** Expected keys for getHeaderFooterLayoutSnapshot return type */
+const HEADER_FOOTER_LAYOUT_SNAPSHOT_KEYS = ['pageBindings', 'storyLayouts'] as const;
+const HEADER_FOOTER_STORY_LAYOUTS_KEYS = ['headers', 'footers'] as const;
 
 /** Required keys for LayoutPage interface (number and fragments are required) */
 const LAYOUT_PAGE_REQUIRED_KEYS = ['number', 'fragments'] as const;
@@ -293,6 +297,22 @@ function assertLayoutSnapshotShape(value: unknown, context: string): void {
   if (obj.layout !== null) {
     assertLayoutShape(obj.layout, `${context}.layout`);
   }
+}
+
+function assertHeaderFooterLayoutSnapshotShape(value: unknown, context: string): void {
+  expect(value).toBeTypeOf('object');
+  expect(value).not.toBeNull();
+  const obj = value as Record<string, unknown>;
+
+  assertExactKeys(obj, [...HEADER_FOOTER_LAYOUT_SNAPSHOT_KEYS], context);
+
+  expect(Array.isArray(obj.pageBindings)).toBe(true);
+
+  expect(obj.storyLayouts).toBeTypeOf('object');
+  const storyLayouts = obj.storyLayouts as Record<string, unknown>;
+  assertExactKeys(storyLayouts, [...HEADER_FOOTER_STORY_LAYOUTS_KEYS], `${context}.storyLayouts`);
+  expect(Array.isArray(storyLayouts.headers)).toBe(true);
+  expect(Array.isArray(storyLayouts.footers)).toBe(true);
 }
 
 function assertLayoutPageShape(value: unknown, context: string): void {
@@ -632,9 +652,11 @@ vi.mock('./editors/v1/core/Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return { ...actual, toFlowBlocks: mockToFlowBlocks };
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import(
+    './editors/v1/core/presentation-editor/tests/mock-layout-document-adapter-vitest.js'
+  );
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockToFlowBlocks });
 });
 
 // Mock PositionHitResolver
@@ -810,6 +832,30 @@ describe('Type Declaration Verification (index.d.ts)', () => {
       await createEditor('type-test-layout-snapshot');
       const result = presentation.getLayoutSnapshot();
       assertLayoutSnapshotShape(result, 'getLayoutSnapshot()');
+    });
+  });
+
+  // ============================================
+  // getLayoutResolveSnapshot
+  // ============================================
+
+  describe('getLayoutResolveSnapshot()', () => {
+    it('returns EXACT shape { blocks, measures, layout, sectionMetadata }', async () => {
+      await createEditor('type-test-layout-resolve-snapshot');
+      const result = presentation.getLayoutResolveSnapshot();
+      assertLayoutSnapshotShape(result, 'getLayoutResolveSnapshot()');
+    });
+  });
+
+  // ============================================
+  // getHeaderFooterLayoutSnapshot
+  // ============================================
+
+  describe('getHeaderFooterLayoutSnapshot()', () => {
+    it('returns EXACT shape { pageBindings, storyLayouts: { headers, footers } }', async () => {
+      await createEditor('type-test-hf-layout-snapshot');
+      const result = presentation.getHeaderFooterLayoutSnapshot();
+      assertHeaderFooterLayoutSnapshotShape(result, 'getHeaderFooterLayoutSnapshot()');
     });
   });
 

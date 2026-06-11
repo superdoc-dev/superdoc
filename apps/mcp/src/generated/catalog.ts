@@ -2471,6 +2471,11 @@ export const MCP_TOOL_CATALOG = {
                   story: {
                     $ref: '#/$defs/StoryLocator',
                   },
+                  range: {
+                    type: 'object',
+                    description:
+                      'Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.',
+                  },
                 },
                 additionalProperties: false,
                 required: ['id'],

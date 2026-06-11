@@ -5,7 +5,7 @@ sidebarTitle: Headless
 keywords: "headless toolbar, custom toolbar, toolbar api, createHeadlessToolbar, toolbar state, toolbar commands"
 ---
 
-Build your own toolbar UI. SuperDoc provides the state and commands — you render whatever you want.
+Build your own toolbar UI. SuperDoc provides the state and commands - you render whatever you want.
 
 ## Using React?
 
@@ -36,7 +36,7 @@ toolbar.execute('bold');
 ```
 
 <Tip>
-Don't pass `toolbar` to the SuperDoc constructor. The headless toolbar replaces the built-in UI entirely — no flags needed.
+Don't pass `toolbar` to the SuperDoc constructor. The headless toolbar replaces the built-in UI entirely - no flags needed.
 </Tip>
 
 ## Core concepts
@@ -48,7 +48,7 @@ Every time the editor state changes, the toolbar produces a `ToolbarSnapshot`. R
 ```ts
 snapshot.commands['bold']?.active    // true if bold is on
 snapshot.commands['bold']?.disabled  // true if the command can't run
-snapshot.commands['font-size']?.value // '12pt' — the current value
+snapshot.commands['font-size']?.value // '12pt' - the current value
 ```
 
 ### Execute
@@ -246,19 +246,19 @@ toolbar.destroy();
 ## Command reference
 
 <Tip>
-Snapshot values match the format you pass to `execute()`. What you read is what you write — no conversion needed.
+Snapshot values match the format you pass to `execute()`. What you read is what you write - no conversion needed.
 </Tip>
 
 ### Text formatting
 
 | Command | Payload | `value` in snapshot |
 |---------|---------|---------------------|
-| `bold` | — | — |
-| `italic` | — | — |
-| `underline` | — | — |
-| `strikethrough` | — | — |
-| `clear-formatting` | — | — |
-| `copy-format` | — | — |
+| `bold` | - | - |
+| `italic` | - | - |
+| `underline` | - | - |
+| `strikethrough` | - | - |
+| `clear-formatting` | - | - |
+| `copy-format` | - | - |
 
 ### Font controls
 
@@ -276,55 +276,62 @@ Snapshot values match the format you pass to `execute()`. What you read is what 
 | `text-align` | `'left'` \| `'center'` \| `'right'` \| `'justify'` | alignment string |
 | `line-height` | number (e.g. `1.5`) | number |
 | `linked-style` | style object from helpers | style ID string |
-| `bullet-list` | — | — |
-| `numbered-list` | — | — |
-| `indent-increase` | — | — |
-| `indent-decrease` | — | — |
+| `bullet-list` | - | - |
+| `numbered-list` | - | - |
+| `indent-increase` | - | - |
+| `indent-decrease` | - | - |
 
 ### Insert
 
 | Command | Payload | `value` in snapshot |
 |---------|---------|---------------------|
 | `link` | `{ href: string \| null }` | href string or `null` |
-| `image` | — (opens file picker) | — |
-| `table-insert` | `{ rows: number, cols: number }` | — |
+| `image` | - (opens file picker) | - |
+| `table-insert` | `{ rows: number, cols: number }` | - |
 
 ### Table actions
 
 | Command | Payload | `value` in snapshot |
 |---------|---------|---------------------|
-| `table-add-row-before` | — | — |
-| `table-add-row-after` | — | — |
-| `table-delete-row` | — | — |
-| `table-add-column-before` | — | — |
-| `table-add-column-after` | — | — |
-| `table-delete-column` | — | — |
-| `table-delete` | — | — |
-| `table-merge-cells` | — | — |
-| `table-split-cell` | — | — |
-| `table-remove-borders` | — | — |
-| `table-fix` | — | — |
+| `table-add-row-before` | - | - |
+| `table-add-row-after` | - | - |
+| `table-delete-row` | - | - |
+| `table-add-column-before` | - | - |
+| `table-add-column-after` | - | - |
+| `table-delete-column` | - | - |
+| `table-delete` | - | - |
+| `table-merge-cells` | - | - |
+| `table-split-cell` | - | - |
+| `table-remove-borders` | - | - |
+| `table-fix` | - | - |
 
 ### Document
 
 | Command | Payload | `value` in snapshot |
 |---------|---------|---------------------|
-| `undo` | — | — |
-| `redo` | — | — |
-| `ruler` | — | — |
+| `undo` | - | - |
+| `redo` | - | - |
+| `ruler` | - | - |
 | `zoom` | number (e.g. `125`) | number |
+| `zoom-fit-width` | none | none |
 | `document-mode` | `'editing'` \| `'suggesting'` \| `'viewing'` | mode string |
 
 ### Track changes
 
 | Command | Payload | `value` in snapshot |
 |---------|---------|---------------------|
-| `track-changes-accept-selection` | — | — |
-| `track-changes-reject-selection` | — | — |
+| `track-changes-accept-selection` | - | - |
+| `track-changes-reject-selection` | - | - |
 
 ## Constants
 
-`headlessToolbarConstants` provides preset option arrays for dropdown-style controls. Each option has `{ label, value }` — use `value` when calling `execute()`.
+`headlessToolbarConstants` provides preset option arrays for dropdown-style controls. Each option has `{ label, value }`. Use `value` when calling `execute()`.
+
+For a font dropdown that also includes fonts used by the active document, use `useSuperDocFontOptions()` from `superdoc/ui/react` or `ui.fonts` from `superdoc/ui`.
+
+`DEFAULT_FONT_FAMILY_OPTIONS` mirrors the built-in picker list. It can include bundled font choices beyond the core defaults; use the font report when you need per-font rendering details.
+
+For font family, font size, and other commands that apply to selected text, prefer a button menu or popover that prevents `mousedown` from moving focus out of the editor. Native selects can visually clear the editor selection while their menu is open.
 
 <CodeGroup>
 
@@ -354,7 +361,7 @@ const {
 
 | Constant | Contents |
 |----------|----------|
-| `DEFAULT_FONT_FAMILY_OPTIONS` | Aptos, Georgia, Arial, Courier New, Times New Roman |
+| `DEFAULT_FONT_FAMILY_OPTIONS` | Built-in picker list. Includes strict defaults plus explicitly advertised bundled fallback choices. |
 | `DEFAULT_FONT_SIZE_OPTIONS` | 8pt through 96pt (14 sizes) |
 | `DEFAULT_TEXT_ALIGN_OPTIONS` | left, center, right, justify |
 | `DEFAULT_LINE_HEIGHT_OPTIONS` | 1.00, 1.15, 1.50, 2.00, 2.50, 3.00 |

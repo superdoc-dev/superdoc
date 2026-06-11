@@ -26,6 +26,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Sections | 18 | 0 | 18 | [Open](/document-api/reference/sections/index) |
 | Format | 45 | 1 | 46 | [Open](/document-api/reference/format/index) |
 | Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
+| Templates | 1 | 0 | 1 | [Open](/document-api/reference/templates/index) |
 | Lists | 39 | 0 | 39 | [Open](/document-api/reference/lists/index) |
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
 | Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
@@ -116,7 +117,7 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-page-setup"><code>sections.setPageSetup</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageSetup(...)</code></span> | Set page size/orientation properties for a section. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-columns"><code>sections.setColumns</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setColumns(...)</code></span> | Set column configuration for a section. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-line-numbering"><code>sections.setLineNumbering</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setLineNumbering(...)</code></span> | Enable or configure line numbering for a section. |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-page-numbering"><code>sections.setPageNumbering</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageNumbering(...)</code></span> | Set page numbering format/start for a section. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-page-numbering"><code>sections.setPageNumbering</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageNumbering(...)</code></span> | Set page numbering format/start and chapter numbering settings for a section. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-title-page"><code>sections.setTitlePage</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setTitlePage(...)</code></span> | Enable or disable title-page behavior for a section. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-odd-even-headers-footers"><code>sections.setOddEvenHeadersFooters</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setOddEvenHeadersFooters(...)</code></span> | Enable or disable odd/even header-footer mode in document settings. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/sections/set-vertical-align"><code>sections.setVerticalAlign</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setVerticalAlign(...)</code></span> | Set vertical page alignment for a section. |
@@ -183,6 +184,12 @@ The tables below are grouped by namespace.
 | Operation | API member path | Description |
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/styles/apply"><code>styles.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.apply(...)</code></span> | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
+
+#### Templates
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/templates/apply"><code>templates.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>await editor.doc.templates.apply(...)</code></span> | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
 
 #### Lists
 

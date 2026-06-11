@@ -113,6 +113,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
 
+    // --- templates.* ---
+    'templates.apply': (input, options) => api.templates.apply(input, options),
+
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
     'create.heading': (input, options) => api.create.heading(input, options),

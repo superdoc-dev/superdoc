@@ -17,7 +17,7 @@
  * `goToSearchResult.parameters` is already locked in `search-match.ts`;
  * this file adds the `returns` assertion for the same method.
  */
-import type { NavigableAddress, SuperDoc } from 'superdoc';
+import type { NavigableAddress, SuperDoc, SuperDocViewportMetrics, SuperDocZoomState } from 'superdoc';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
@@ -40,6 +40,30 @@ const _htmlValueWithOpts: string[] = sd.getHTML({ unflattenLists: true });
 // Returns the active zoom percentage. Per JSDoc: 100 by default.
 const _zoomReturnOk: AssertEqual<ReturnType<SuperDoc['getZoom']>, number> = true;
 const _zoomValue: number = sd.getZoom();
+
+// ─── getZoomState ────────────────────────────────────────────────────
+// Snapshot of mode/value/fitZoom and the effective fit bounds. fitZoom
+// is null until the first viewport measurement.
+const _zoomStateReturnOk: AssertEqual<ReturnType<SuperDoc['getZoomState']>, SuperDocZoomState> = true;
+const _zoomState = sd.getZoomState();
+const _zoomStateMode: 'manual' | 'fit-width' = _zoomState.mode;
+const _zoomStateFit: number | null = _zoomState.fitZoom;
+void _zoomStateMode;
+void _zoomStateFit;
+
+// ─── getViewportMetrics ──────────────────────────────────────────────
+// Latest pure measurements, or null before editors mount.
+const _viewportMetricsReturnOk: AssertEqual<
+  ReturnType<SuperDoc['getViewportMetrics']>,
+  SuperDocViewportMetrics | null
+> = true;
+const _viewportMetrics = sd.getViewportMetrics();
+if (_viewportMetrics) {
+  const _availableWidth: number = _viewportMetrics.availableWidth;
+  const _documentWidth: number = _viewportMetrics.documentWidth;
+  const _fitZoom: number = _viewportMetrics.fitZoom;
+  void [_availableWidth, _documentWidth, _fitZoom];
+}
 
 // ─── navigateTo ──────────────────────────────────────────────────────
 // Async navigation to a stable address (bookmark, block, comment,

@@ -65,3 +65,11 @@ describe('superdoc/ui public barrel (SD-3204)', () => {
     expect(BARREL_TEXT).toMatch(/type\s+MetadataHandle\b/);
   });
 });
+
+describe('superdoc/ui public barrel font picker types', () => {
+  it('re-exports font picker option types and handles', () => {
+    for (const name of ['FontFamilyOption', 'FontSizeOption', 'FontsHandle', 'FontsSlice']) {
+      expect(BARREL_TEXT).toMatch(new RegExp(`type\\s+${name}\\b`));
+    }
+  });
+});

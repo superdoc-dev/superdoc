@@ -81,6 +81,56 @@ describe('sd:totalPageNumber translator', () => {
       expect(result.attrs.importedCachedText).toBe('5');
     });
 
+    it('preserves imported switched field attributes', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+
+      const result = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: {
+              instruction: 'NUMPAGES \\# "#,##0"',
+              pageNumberNumericPicture: '#,##0',
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(result.attrs).toEqual({
+        marksAsAttrs: [],
+        importedCachedText: null,
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+      });
+    });
+
+    it('preserves imported zero-padding field attributes', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+
+      const result = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: {
+              instruction: 'NUMPAGES \\# "00"',
+              pageNumberFormat: 'decimal',
+              pageNumberZeroPadding: 2,
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(result.attrs).toEqual({
+        marksAsAttrs: [],
+        importedCachedText: null,
+        instruction: 'NUMPAGES \\# "00"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 2,
+      });
+    });
+
     it('falls back to an empty rPr object when run properties are missing', () => {
       config.encode({
         nodes: [
@@ -138,6 +188,61 @@ describe('sd:totalPageNumber translator', () => {
       expect(result[3].elements[1].elements[0].text).toBe('12');
     });
 
+    it('formats fresh NUMPAGES cached text with preserved field switches', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const result = config.decode({
+        node: {
+          type: 'total-page-number',
+          attrs: {
+            instruction: 'NUMPAGES \\# "00"',
+            pageNumberFormat: 'decimal',
+            pageNumberZeroPadding: 2,
+            importedCachedText: '05',
+          },
+        },
+        statFieldCacheMap: new Map([['NUMPAGES', 7]]),
+      });
+
+      expect(result[0].elements[1].attributes).toEqual({
+        'w:fldCharType': 'begin',
+      });
+      expect(result[3].elements[1].elements[0].text).toBe('07');
+    });
+
+    it('round-trips an imported numeric-picture attr through PM attrs and exported cached text', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const imported = config.encode({
+        nodes: [
+          {
+            name: 'sd:totalPageNumber',
+            attributes: {
+              instruction: 'NUMPAGES \\# "#,##0"',
+              pageNumberNumericPicture: '#,##0',
+              importedCachedText: '1,000',
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(imported.attrs).toMatchObject({
+        instruction: 'NUMPAGES \\# "#,##0"',
+        pageNumberNumericPicture: '#,##0',
+        importedCachedText: '1,000',
+      });
+
+      const exported = config.decode({
+        node: imported,
+        statFieldCacheMap: new Map([['NUMPAGES', 1234]]),
+      });
+
+      expect(exported[1].elements[1].elements[0].text).toBe(' NUMPAGES \\# "#,##0"');
+      expect(exported[3].elements[1].elements[0].text).toBe('1,234');
+    });
+
     it('falls back to resolvedText when cache map is absent', () => {
       vi.mocked(processOutputMarks).mockReturnValue([]);
 
@@ -180,6 +285,19 @@ describe('sd:totalPageNumber translator', () => {
       expect(result[3].elements[1].name).toBe('w:t');
       expect(result[3].elements[1].elements[0].text).toBe('');
       expect(result[4].elements[1].attributes['w:fldCharType']).toBe('end');
+    });
+
+    it('exports the preserved switched NUMPAGES instruction', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const result = config.decode({
+        node: {
+          type: 'total-page-number',
+          attrs: { instruction: 'NUMPAGES \\# "#   pages"', importedCachedText: '7   pages' },
+        },
+      });
+
+      expect(result[1].elements[1].elements[0].text).toBe(' NUMPAGES \\# "#   pages"');
     });
   });
 });

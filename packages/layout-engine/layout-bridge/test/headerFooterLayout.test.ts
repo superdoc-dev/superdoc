@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FlowBlock, Measure } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from '@core/layout-adapter';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache } from '../src/layoutHeaderFooter';
 
 const makeBlock = (id: string, text = 'Hello'): FlowBlock => ({
@@ -113,6 +113,45 @@ describe('layoutHeaderFooterWithCache', () => {
     expect(result.default?.layout.pages[1].measures).toHaveLength(1);
   });
 
+  it('uses the largest page-specific metrics when section page counts change layout height', async () => {
+    const sections = {
+      default: [
+        {
+          kind: 'paragraph',
+          id: 'section-pages-footer',
+          runs: [
+            { text: 'Section pages ', fontFamily: 'Arial', fontSize: 16 },
+            { text: '0', token: 'sectionPageCount', fontFamily: 'Arial', fontSize: 16 },
+          ],
+        } satisfies FlowBlock,
+      ],
+    };
+    const measureBlock = vi.fn(async (block: FlowBlock) => {
+      const sectionPageText = block.kind === 'paragraph' ? block.runs[1]?.text : undefined;
+      return makeMeasure(sectionPageText === '100' ? 36 : 12);
+    });
+
+    const result = await layoutHeaderFooterWithCache(
+      sections,
+      { width: 300, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      (pageNumber) => ({
+        displayText: String(pageNumber),
+        totalPages: 2,
+        sectionPageCount: pageNumber === 1 ? 1 : 100,
+      }),
+      'footer',
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(2);
+    expect(result.default?.layout.pages[0].measures?.[0]?.totalHeight).toBe(12);
+    expect(result.default?.layout.pages[1].measures?.[0]?.totalHeight).toBe(36);
+    expect(result.default?.layout.height).toBe(36);
+    expect(result.default?.layout.renderHeight).toBe(36);
+  });
+
   describe('integration test', () => {
     it('full pipeline: PM JSON with page tokens → FlowBlocks → Measures → Layout', async () => {
       // 1. Create PM JSON with page number tokens (simulates header/footer from SuperConverter)
@@ -141,7 +180,7 @@ describe('layoutHeaderFooterWithCache', () => {
         ],
       };
 
-      // 2. Convert PM JSON to FlowBlocks using PM adapter
+      // 2. Convert PM JSON to FlowBlocks using the v1 layout adapter
       const { blocks: headerBlocks } = toFlowBlocks(headerPmDoc, { blockIdPrefix: 'header-default-' });
       const { blocks: footerBlocks } = toFlowBlocks(footerPmDoc, { blockIdPrefix: 'footer-default-' });
 

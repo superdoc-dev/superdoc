@@ -10,7 +10,9 @@ import {
   dataUriToArrayBuffer,
   detectImageType,
   eighthPointsToPixels,
+  resolveShadingFillColor,
 } from './helpers.js';
+import { getFallbackImageNameFromDataUri } from './helpers/mediaHelpers.js';
 
 describe('polygonToObj', () => {
   it('should return null for null input', () => {
@@ -335,6 +337,15 @@ describe('getArrayBufferFromUrl', () => {
     expect(Array.from(new Uint8Array(result))).toEqual(Array.from(bytes));
   });
 
+  it('decodes non-base64 data URIs into an ArrayBuffer', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+    const result = await getArrayBufferFromUrl(dataUri);
+
+    expect(new TextDecoder().decode(result)).toBe(svg);
+  });
+
   it('decodes bare base64 strings into an ArrayBuffer', async () => {
     const bytes = new Uint8Array([55, 66, 77]);
     const base64 = Buffer.from(bytes).toString('base64');
@@ -407,6 +418,22 @@ describe('dataUriToArrayBuffer', () => {
     expect(Array.from(new Uint8Array(result))).toEqual([11, 22, 33]);
   });
 
+  it('decodes a non-base64 data URI string', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const result = dataUriToArrayBuffer(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    expect(new TextDecoder().decode(result)).toBe(svg);
+  });
+
+  it('rejects malformed non-base64 SVG payloads', () => {
+    expect(() => dataUriToArrayBuffer('data:image/svg+xml,%')).toThrow('Invalid non-base64 data URI payload');
+  });
+
+  it('rejects non-base64 raster data URI strings', () => {
+    expect(() => dataUriToArrayBuffer('data:image/png,not-base64')).toThrow(
+      'Unsupported non-base64 data URI media type',
+    );
+  });
+
   it('decodes a raw base64 string', () => {
     const bytes = new Uint8Array([55, 66, 77]);
     const base64 = Buffer.from(bytes).toString('base64');
@@ -421,6 +448,21 @@ describe('dataUriToArrayBuffer', () => {
   it('throws on unsupported data types', () => {
     expect(() => dataUriToArrayBuffer(12345)).toThrow('Unsupported data type');
     expect(() => dataUriToArrayBuffer({})).toThrow('Unsupported data type');
+  });
+});
+
+describe('getFallbackImageNameFromDataUri', () => {
+  it('normalizes SVG extension when the data URI has no parameters', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const dataUri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+
+    expect(getFallbackImageNameFromDataUri(dataUri)).toBe('image.svg');
+  });
+
+  it('normalizes MIME aliases to Word-compatible image extensions', () => {
+    expect(getFallbackImageNameFromDataUri('data:image/jpeg;base64,abc')).toBe('image.jpg');
+    expect(getFallbackImageNameFromDataUri('data:image/tiff;base64,abc')).toBe('image.tif');
+    expect(getFallbackImageNameFromDataUri('data:image/x-icon;base64,abc')).toBe('image.ico');
   });
 });
 
@@ -558,5 +600,45 @@ describe('eighthPointsToPixels', () => {
       expect(eighthPointsToPixels(0, { clamp: true })).toBe(0);
       expect(eighthPointsToPixels(-5, { clamp: true })).toBe(0);
     });
+  });
+});
+
+describe('resolveShadingFillColor', () => {
+  it('returns null when there is no shading', () => {
+    expect(resolveShadingFillColor(null)).toBeNull();
+    expect(resolveShadingFillColor(undefined)).toBeNull();
+  });
+
+  it('returns the explicit fill for a clear pattern (no blend)', () => {
+    expect(resolveShadingFillColor({ val: 'clear', color: 'auto', fill: 'DCE6F1' })).toBe('DCE6F1');
+  });
+
+  it('treats an automatic fill as no background when there is no pattern', () => {
+    expect(resolveShadingFillColor({ val: 'clear', color: 'auto', fill: 'auto' })).toBeNull();
+    expect(resolveShadingFillColor({ fill: 'auto' })).toBeNull();
+  });
+
+  it('returns null for an explicit no-shading pattern (nil/none)', () => {
+    expect(resolveShadingFillColor({ val: 'nil', fill: 'DCE6F1' })).toBeNull();
+    expect(resolveShadingFillColor({ val: 'none', fill: 'DCE6F1' })).toBeNull();
+  });
+
+  // SD-2969: a pattern over the automatic sentinel must resolve to gray (Word renders it gray), not garbage/white.
+  it('resolves pct10 over auto fill and color to light gray', () => {
+    // 10% black painted over automatic (white) ≈ #E6E6E6
+    expect(resolveShadingFillColor({ val: 'pct10', color: 'auto', fill: 'auto' })).toBe('E6E6E6');
+  });
+
+  it('resolves pct35 over explicit black-on-white to mid gray', () => {
+    expect(resolveShadingFillColor({ val: 'pct35', color: '000000', fill: 'FFFFFF' })).toBe('A6A6A6');
+  });
+
+  it('blends a percentage pattern over an explicit fill and color', () => {
+    // 50% black over white = #808080
+    expect(resolveShadingFillColor({ val: 'pct50', color: '000000', fill: 'FFFFFF' })).toBe('808080');
+  });
+
+  it('treats a solid pattern as 100% foreground color', () => {
+    expect(resolveShadingFillColor({ val: 'solid', color: 'FF0000', fill: 'FFFFFF' })).toBe('FF0000');
   });
 });

@@ -3,6 +3,7 @@ import { NodeTranslator } from '@translator';
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
 import { buildComplexFieldRuns } from '../build-complex-field-runs.js';
+import { formatPageNumberFieldValue } from '../../../../field-references/shared/page-number-field-switches.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:totalPageNumber';
@@ -31,6 +32,7 @@ const encode = (params) => {
     attrs: {
       marksAsAttrs: marks,
       importedCachedText,
+      ...getPageNumberFieldAttrs(node),
     },
   };
 
@@ -54,8 +56,21 @@ const decode = (params) => {
   const hasFreshPageCount = params.statFieldCacheMap?.has?.('NUMPAGES');
   const dirty = !hasFreshPageCount;
 
-  return buildComplexFieldRuns({ instruction: 'NUMPAGES', cachedText, outputMarks, dirty });
+  return buildComplexFieldRuns({ instruction: node.attrs?.instruction || 'NUMPAGES', cachedText, outputMarks, dirty });
 };
+
+function getPageNumberFieldAttrs(node) {
+  const attrs = {};
+  if (node.attributes?.instruction) attrs.instruction = node.attributes.instruction;
+  if (node.attributes?.pageNumberFormat) attrs.pageNumberFormat = node.attributes.pageNumberFormat;
+  if (node.attributes?.pageNumberZeroPadding != null) {
+    attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
+  }
+  if (node.attributes?.pageNumberNumericPicture) {
+    attrs.pageNumberNumericPicture = node.attributes.pageNumberNumericPicture;
+  }
+  return attrs;
+}
 
 /**
  * Resolves the cached page count text for export.
@@ -69,6 +84,10 @@ const decode = (params) => {
 function resolveCachedPageCount(params, node) {
   const cacheMap = params.statFieldCacheMap;
   if (cacheMap?.has?.('NUMPAGES')) {
+    const pageCount = Number(cacheMap.get('NUMPAGES'));
+    if (node.attrs?.pageNumberFormat || node.attrs?.pageNumberZeroPadding || node.attrs?.pageNumberNumericPicture) {
+      return formatPageNumberFieldValue(pageCount, node.attrs);
+    }
     return String(cacheMap.get('NUMPAGES'));
   }
 

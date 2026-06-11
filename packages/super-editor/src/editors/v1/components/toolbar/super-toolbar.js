@@ -9,6 +9,7 @@ import Toolbar from './Toolbar.vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { toolbarTexts } from './toolbarTexts.js';
 import {
+  composeToolbarFontOptions,
   HEADLESS_TOOLBAR_COMMANDS,
   HEADLESS_ITEM_MAP,
   HEADLESS_EXECUTE_ITEMS,
@@ -49,6 +50,7 @@ import { insertTableOfContentsAtSelection } from '@extensions/table-of-contents/
  * @property {string} [aiEndpoint] - Endpoint for AI integration
  * @property {Array<Record<string, unknown>> | ToolbarItem[]} [customButtons=[]] - Custom buttons to add to the toolbar. SuperDoc forwards the structural `Array<Record<string, unknown>>` shape from `Modules.toolbar.customButtons`; the runtime wraps each entry into a full `ToolbarItem` via `useToolbarItem`.
  * @property {boolean} [showFormattingMarksButton=false] - Show the formatting marks (pilcrow) button in the toolbar. Distinct from `layoutEngineOptions.showFormattingMarks`, which controls whether the marks render in the document.
+ * @property {boolean} [showTableOfContentsButton=false] - Show the table of contents insert button in the toolbar. Off by default until the feature is generally available.
  * @property {boolean} [isDev] - Dev-mode flag forwarded from `SuperDoc.isDev`; gates debug tooltips and overlays.
  * @property {object} [superdoc] - The owning SuperDoc instance. Set by SuperDoc when constructing the toolbar; the toolbar uses it to dispatch commands back through the parent.
  * @property {boolean} [responsiveToContainer=false] - When `true`, the toolbar measures the container width instead of the document width when deciding which items to collapse.
@@ -169,6 +171,7 @@ export class SuperToolbar extends EventEmitter {
     aiEndpoint: null,
     customButtons: [],
     showFormattingMarksButton: false,
+    showTableOfContentsButton: false,
   };
 
   /**
@@ -286,14 +289,23 @@ export class SuperToolbar extends EventEmitter {
 
     /**
      * Bound event handlers stored for proper cleanup when switching editors.
-     * @type {{transaction: Function|null, selectionUpdate: Function|null, focus: Function|null}}
+     * @type {{transaction: Function|null, selectionUpdate: Function|null, focus: Function|null, fontsChanged: Function|null}}
      * @private
      */
     this._boundEditorHandlers = {
       transaction: null,
       selectionUpdate: null,
       focus: null,
+      fontsChanged: null,
     };
+
+    /**
+     * Signature of the last-built document font options. Fonts resolve in several steps after a document
+     * opens, so `fonts-changed` fires repeatedly; this skips rebuilding the dropdown when the options did
+     * not actually change.
+     * @private
+     */
+    this._lastFontOptionsSignature = '';
 
     /**
      * Timeout ID for restoring editor focus after toolbar command execution.
@@ -389,36 +401,59 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Detach listeners from the current active editor.
+   * @private
+   * @returns {void}
+   */
+  #detachActiveEditorListeners() {
+    if (!this.activeEditor || !this._boundEditorHandlers.transaction) return;
+
+    this.activeEditor.off('transaction', this._boundEditorHandlers.transaction);
+    this.activeEditor.off('selectionUpdate', this._boundEditorHandlers.selectionUpdate);
+    this.activeEditor.off('focus', this._boundEditorHandlers.focus);
+    this.activeEditor.off('fonts-changed', this._boundEditorHandlers.fontsChanged);
+    this._boundEditorHandlers.transaction = null;
+    this._boundEditorHandlers.selectionUpdate = null;
+    this._boundEditorHandlers.focus = null;
+    this._boundEditorHandlers.fontsChanged = null;
+  }
+
+  /**
    * The toolbar expects an active Super Editor instance.
    * Removes listeners from the previous editor (if any) before attaching to the new one.
    * @param {Object|null} editor - The editor instance to attach to the toolbar, or null to detach
    * @returns {void}
    */
   setActiveEditor(editor) {
-    // Remove listeners from previous editor to prevent memory leaks
-    if (this.activeEditor && this._boundEditorHandlers.transaction) {
-      this.activeEditor.off('transaction', this._boundEditorHandlers.transaction);
-      this.activeEditor.off('selectionUpdate', this._boundEditorHandlers.selectionUpdate);
-      this.activeEditor.off('focus', this._boundEditorHandlers.focus);
-      // Clear bound handlers when removing editor
-      this._boundEditorHandlers.transaction = null;
-      this._boundEditorHandlers.selectionUpdate = null;
-      this._boundEditorHandlers.focus = null;
+    const sameEditor = editor === this.activeEditor;
+    const alreadyListening = Boolean(this._boundEditorHandlers.transaction);
+    if (sameEditor && (!editor || alreadyListening)) {
+      this.updateToolbarState();
+      return;
     }
 
+    this.#detachActiveEditorListeners();
     this.activeEditor = editor;
 
-    // Only attach listeners if editor is not null
     if (editor) {
-      // Create and store bound handlers for later cleanup
       this._boundEditorHandlers.transaction = this.onEditorTransaction.bind(this);
       this._boundEditorHandlers.selectionUpdate = this.onEditorSelectionUpdate.bind(this);
       this._boundEditorHandlers.focus = this.onEditorFocus.bind(this);
+      // Document fonts resolve asynchronously after load (the report can settle with no transaction), so
+      // the font list must rebuild on `fonts-changed`, not only on edits.
+      this._boundEditorHandlers.fontsChanged = this.onEditorFontsChanged.bind(this);
 
       this.activeEditor.on('transaction', this._boundEditorHandlers.transaction);
       this.activeEditor.on('selectionUpdate', this._boundEditorHandlers.selectionUpdate);
       this.activeEditor.on('focus', this._boundEditorHandlers.focus);
+      this.activeEditor.on('fonts-changed', this._boundEditorHandlers.fontsChanged);
     }
+
+    // Recompute on active-editor change: the new document has its own fonts, so rebuild the dropdown
+    // OPTIONS (updateToolbarState alone only refreshes item state), then refresh state.
+    this.#rebuildToolbarItems();
+    this._lastFontOptionsSignature = this.#fontOptionsSignature();
+    this.updateToolbarState();
   }
 
   /**
@@ -476,7 +511,7 @@ export class SuperToolbar extends EventEmitter {
       superToolbar,
       toolbarIcons: icons,
       toolbarTexts: texts,
-      toolbarFonts: fonts,
+      toolbarFonts: this.#resolveToolbarFonts(fonts),
       hideButtons,
       availableWidth,
       role: this.role,
@@ -500,6 +535,55 @@ export class SuperToolbar extends EventEmitter {
 
     this.toolbarItems = filteredItems;
     this.overflowItems = overflowItems.filter((item) => allConfigItems.includes(item.name.value));
+  }
+
+  /**
+   * The font dropdown options. Lifecycle only: get the active document's font options from the read API
+   * and hand the composition (dedupe, ordering, preview styling) to the pure
+   * {@link composeToolbarFontOptions} seam. A consumer-provided `configFonts` list is returned untouched.
+   * @private
+   * @param {Array|undefined} configFonts - the consumer's `fonts` config, if any
+   * @returns {Array|undefined} the toolbar font options, or undefined to fall back to the bundled defaults
+   */
+  #resolveToolbarFonts(configFonts) {
+    return composeToolbarFontOptions(this.superdoc?.fonts?.getDocumentFontOptions?.() ?? [], configFonts);
+  }
+
+  /**
+   * Rebuild the toolbar items (and so the font dropdown OPTIONS) from current config + document fonts.
+   * `updateToolbarState()` only refreshes existing item state; this re-creates the items, which is what
+   * surfaces a newly-resolved document font in the dropdown.
+   *
+   * `toolbarItems` / `overflowItems` are plain instance fields, not a Vue reactive source, so swapping them
+   * is invisible to the mounted `Toolbar.vue` until it re-renders. Emit `toolbar-items-changed` so the view
+   * forces that re-render (it bumps its render key). Without it the rebuilt items never reach the DOM and the
+   * toolbar keeps showing the previously-built set - e.g. the initial disabled items before an editor attaches.
+   * The resize path rebuilds and bumps the key from the view itself, so it does not go through this method.
+   * @private
+   * @returns {void}
+   */
+  #rebuildToolbarItems() {
+    this.#makeToolbarItems({
+      superToolbar: this,
+      icons: this.config.icons,
+      texts: this.config.texts,
+      fonts: this.config.fonts,
+      hideButtons: this.config.hideButtons,
+      isDev: this.isDev,
+    });
+    this.emit('toolbar-items-changed');
+  }
+
+  /**
+   * A stable signature of the active document's font options, to detect when a `fonts-changed` event
+   * actually changed the dropdown (vs the same options resolving again).
+   * @private
+   * @returns {string}
+   */
+  #fontOptionsSignature() {
+    if (this.config.fonts) return 'custom-fonts';
+    const options = this.superdoc?.fonts?.getDocumentFontOptions?.() ?? [];
+    return JSON.stringify(options.map((option) => [option.logicalFamily, option.previewFamily]));
   }
 
   /**
@@ -931,48 +1015,74 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Execute and clear any queued mark commands immediately. Queued commands
+   * normally replay on the editor's next 'selectionUpdate', which is
+   * asynchronous; toolbar focus handoffs (Tab from the font inputs back to
+   * the editor) call this directly so a fast first keystroke cannot outrun
+   * the queued setFontFamily/setFontSize replay.
+   * @returns {boolean} True when pending commands were flushed.
+   */
+  flushPendingMarkCommands() {
+    if (!this.activeEditor) return false;
+    if (!this.pendingMarkCommands.length) return false;
+
+    const pending = this.pendingMarkCommands;
+    this.pendingMarkCommands = [];
+
+    pending.forEach(({ command, argument, item }) => {
+      if (!command) return;
+
+      try {
+        if (HEADLESS_EXECUTE_ITEMS.has(item?.name?.value)) {
+          const handledByHeadless = this.#executeHeadlessCommand(item, argument);
+          if (handledByHeadless) {
+            this.#ensureStoredMarksForMarkToggle({ command, argument });
+            return;
+          }
+        }
+
+        if (this.activeEditor.commands && command in this.activeEditor.commands) {
+          this.activeEditor.commands[command](argument);
+        }
+        this.#ensureStoredMarksForMarkToggle({ command, argument });
+      } catch (error) {
+        const err = new Error(`[super-toolbar 🎨] Failed to execute pending command: ${command}`);
+        this.emit('exception', { error: err, editor: this.activeEditor, originalError: error });
+        console.error(err, error);
+      }
+    });
+
+    this.#syncStickyMarksFromState();
+    this.updateToolbarState();
+    return true;
+  }
+
+  /**
    * Processes and executes pending mark commands when editor selection updates.
    * This is triggered by the editor's 'selectionUpdate' event after focus is restored.
-   * Clears the pending queue after execution.
    * @returns {void}
    */
   onEditorSelectionUpdate() {
     if (!this.activeEditor) return;
 
-    if (this.pendingMarkCommands.length) {
-      const pending = this.pendingMarkCommands;
-      this.pendingMarkCommands = [];
-
-      pending.forEach(({ command, argument, item }) => {
-        if (!command) return;
-
-        try {
-          if (HEADLESS_EXECUTE_ITEMS.has(item?.name?.value)) {
-            const handledByHeadless = this.#executeHeadlessCommand(item, argument);
-            if (handledByHeadless) {
-              this.#ensureStoredMarksForMarkToggle({ command, argument });
-              return;
-            }
-          }
-
-          if (this.activeEditor.commands && command in this.activeEditor.commands) {
-            this.activeEditor.commands[command](argument);
-          }
-          this.#ensureStoredMarksForMarkToggle({ command, argument });
-        } catch (error) {
-          const err = new Error(`[super-toolbar 🎨] Failed to execute pending command: ${command}`);
-          this.emit('exception', { error: err, editor: this.activeEditor, originalError: error });
-          console.error(err, error);
-        }
-      });
-
-      this.#syncStickyMarksFromState();
-      this.updateToolbarState();
-      return;
-    }
+    if (this.flushPendingMarkCommands()) return;
 
     const restored = this.#restoreStickyMarksIfNeeded();
     if (restored) this.updateToolbarState();
+  }
+
+  /**
+   * Rebuild the toolbar (and so the font dropdown) when the active document's font picture resolves.
+   * Fonts load asynchronously after a document opens, so document font options can change with no edit.
+   * @returns {void}
+   */
+  onEditorFontsChanged() {
+    const signature = this.#fontOptionsSignature();
+    if (signature !== this._lastFontOptionsSignature) {
+      this._lastFontOptionsSignature = signature;
+      this.#rebuildToolbarItems();
+    }
+    this.updateToolbarState();
   }
 
   /**
@@ -1086,6 +1196,7 @@ export class SuperToolbar extends EventEmitter {
       this._restoreFocusTimeoutId = null;
     }
 
+    this.#detachActiveEditorListeners();
     this.destroyHeadlessToolbar();
     this.app?.unmount();
   }

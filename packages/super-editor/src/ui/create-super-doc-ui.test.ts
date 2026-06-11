@@ -13,6 +13,7 @@ function makeSuperdocStub(
   initial: {
     documentMode?: 'editing' | 'suggesting' | 'viewing';
     selection?: { empty: boolean; text?: string };
+    documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
   } = {},
 ) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -20,6 +21,7 @@ function makeSuperdocStub(
 
   let selectionEmpty = initial.selection?.empty ?? true;
   let selectionText = initial.selection?.text ?? '';
+  let documentFontOptions = initial.documentFontOptions ?? [];
 
   const editor = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
@@ -45,12 +47,16 @@ function makeSuperdocStub(
     fireSuperdoc(event: string, ...args: unknown[]): void;
     setSelection(empty: boolean, text?: string): void;
     setDocumentMode(mode: 'editing' | 'suggesting' | 'viewing'): void;
+    setDocumentFontOptions(options: Array<{ logicalFamily: string; previewFamily: string }>): void;
     swapEditor(next: typeof editor | null): void;
     editorListenerCount(event: string): number;
     superdocListenerCount(event: string): number;
   } = {
     activeEditor: editor,
     config: { documentMode: initial.documentMode ?? 'editing' },
+    fonts: {
+      getDocumentFontOptions: vi.fn(() => documentFontOptions),
+    },
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!superdocListeners.has(event)) superdocListeners.set(event, new Set());
       superdocListeners.get(event)!.add(handler);
@@ -80,6 +86,9 @@ function makeSuperdocStub(
     },
     setDocumentMode(mode) {
       this.config!.documentMode = mode;
+    },
+    setDocumentFontOptions(options) {
+      documentFontOptions = options;
     },
     swapEditor(next) {
       this.activeEditor = next as never;
@@ -125,6 +134,162 @@ describe('createSuperDocUI', () => {
 
     const slice = ui.select((state) => state.documentMode);
     expect(slice.get()).toBe('editing');
+  });
+
+  it('exposes final font-family options for custom UI', () => {
+    const superdoc = makeSuperdocStub({
+      documentFontOptions: [
+        { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+        { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
+        { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const options = ui.fonts.getOptions();
+    const sizeOptions = ui.fonts.getSizeOptions();
+    expect(options.map((option) => option.label)).toEqual([
+      'Aptos',
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Bangla MN',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
+    expect(options.find((option) => option.label === 'Aptos')).toEqual({
+      label: 'Aptos',
+      value: 'Aptos',
+      previewFamily: 'Aptos',
+    });
+    expect(options.every((option) => !('status' in option))).toBe(true);
+    expect(sizeOptions.map((option) => option.value)).toEqual([
+      '8pt',
+      '9pt',
+      '10pt',
+      '11pt',
+      '12pt',
+      '14pt',
+      '18pt',
+      '24pt',
+      '30pt',
+      '36pt',
+      '48pt',
+      '60pt',
+      '72pt',
+      '96pt',
+    ]);
+    expect(ui.fonts.getSnapshot().sizeOptions).toBe(sizeOptions);
+  });
+
+  it('refreshes ui.fonts when fonts-changed fires', async () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const observed: string[][] = [];
+    ui.fonts.observe((snapshot) => {
+      observed.push(snapshot.options.map((option) => option.label));
+    });
+
+    superdoc.setDocumentFontOptions([{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+
+    expect(observed.at(0)).toEqual([
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
+    expect(observed.at(-1)).toEqual([
+      'Aptos',
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
+  });
+
+  it('refreshes ui.fonts for delimiter-colliding font names', async () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const observed: string[][] = [];
+    ui.fonts.observe((snapshot) => {
+      observed.push(snapshot.options.map((option) => option.label));
+    });
+
+    superdoc.setDocumentFontOptions([{ logicalFamily: 'Zulu', previewFamily: 'Preview:One|Zzz:Zzz:Two' }]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+    expect(observed.at(-1)).toContain('Zulu');
+    expect(observed.at(-1)).not.toContain('Zzz');
+
+    superdoc.setDocumentFontOptions([
+      { logicalFamily: 'Zulu', previewFamily: 'Preview:One' },
+      { logicalFamily: 'Zzz', previewFamily: 'Two' },
+    ]);
+    superdoc.fireSuperdoc('fonts-changed');
+    await flushMicrotasks();
+
+    expect(observed.at(-1)).toContain('Zulu');
+    expect(observed.at(-1)).toContain('Zzz');
   });
 
   it('does not re-fire the listener when the selected slice is unchanged', async () => {
@@ -1044,5 +1209,145 @@ describe('createSuperDocUI', () => {
 
     expect(buggy).toHaveBeenCalledTimes(2);
     expect(ok).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ui.zoom', () => {
+  let teardown: Array<() => void> = [];
+
+  afterEach(() => {
+    teardown.forEach((fn) => fn());
+    teardown = [];
+  });
+
+  const attachZoomSurface = (superdoc: ReturnType<typeof makeSuperdocStub>) => {
+    const zoomHost = {
+      state: {
+        mode: 'manual' as 'manual' | 'fit-width',
+        value: 100,
+        fitZoom: null as number | null,
+        min: 10,
+        max: 100,
+      },
+      metrics: null as { availableWidth: number; documentWidth: number; fitZoom: number } | null,
+      setZoom: vi.fn(),
+      setZoomMode: vi.fn(),
+    };
+    superdoc.getZoomState = vi.fn(() => ({ ...zoomHost.state }));
+    superdoc.getViewportMetrics = vi.fn(() => zoomHost.metrics);
+    superdoc.setZoom = zoomHost.setZoom;
+    superdoc.setZoomMode = zoomHost.setZoomMode;
+    return zoomHost;
+  };
+
+  it('degrades to a static manual/100 snapshot when the host lacks the zoom surface', () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.zoom.getSnapshot()).toEqual({
+      mode: 'manual',
+      value: 100,
+      fitZoom: null,
+      min: 10,
+      max: 100,
+      metrics: null,
+    });
+    // Mutations are no-ops, not crashes.
+    expect(() => ui.zoom.set(150)).not.toThrow();
+    expect(() => ui.zoom.setMode('fit-width')).not.toThrow();
+  });
+
+  it('snapshots the host zoom state and metrics', () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+    zoomHost.state = { mode: 'fit-width', value: 84, fitZoom: 84, min: 25, max: 100 };
+    zoomHost.metrics = { availableWidth: 685, documentWidth: 816, fitZoom: 84 };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.zoom.getSnapshot()).toEqual({
+      mode: 'fit-width',
+      value: 84,
+      fitZoom: 84,
+      min: 25,
+      max: 100,
+      metrics: { availableWidth: 685, documentWidth: 816, fitZoom: 84 },
+    });
+  });
+
+  it('observes mode-only transitions via zoomChange', async () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb.mock.calls[0][0].mode).toBe('manual');
+
+    zoomHost.state = { ...zoomHost.state, mode: 'fit-width' };
+    superdoc.fireSuperdoc('zoomChange', { zoom: 100, mode: 'fit-width' });
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(2);
+    expect(cb.mock.calls[1][0].mode).toBe('fit-width');
+    expect(cb.mock.calls[1][0].value).toBe(100);
+  });
+
+  it('observes viewport metric updates via viewport-change', async () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    zoomHost.state = { ...zoomHost.state, fitZoom: 74 };
+    zoomHost.metrics = { availableWidth: 600, documentWidth: 816, fitZoom: 74 };
+    superdoc.fireSuperdoc('viewport-change', zoomHost.metrics);
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(2);
+    expect(cb.mock.calls[1][0].fitZoom).toBe(74);
+    expect(cb.mock.calls[1][0].metrics).toEqual({ availableWidth: 600, documentWidth: 816, fitZoom: 74 });
+  });
+
+  it('does not re-fire observers when zoom state is unchanged', async () => {
+    const superdoc = makeSuperdocStub();
+    attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    teardown.push(ui.zoom.observe(cb));
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Unrelated recompute trigger with identical zoom state.
+    superdoc.fireSuperdoc('document-mode-change', { documentMode: 'viewing' });
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes set and setMode to the host zoom surface', () => {
+    const superdoc = makeSuperdocStub();
+    const zoomHost = attachZoomSurface(superdoc);
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    ui.zoom.set(125);
+    expect(zoomHost.setZoom).toHaveBeenCalledWith(125);
+
+    ui.zoom.setMode('fit-width');
+    expect(zoomHost.setZoomMode).toHaveBeenCalledWith('fit-width');
   });
 });

@@ -8,6 +8,7 @@ import { colors } from './terminal.js';
 
 const VALID_EXTENSIONS = new Set(['.docx']);
 const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const CANONICAL_CORPUS_BUCKET_NAME = 'docx-test-documents';
 
 function normalizeSegment(value: string): string {
   return value
@@ -44,16 +45,12 @@ function walk(dir: string, onFile: (filePath: string) => void): void {
 
 async function createClient(): Promise<{ client: S3Client; bucketName: string }> {
   const accountId = process.env.SD_TESTING_R2_ACCOUNT_ID ?? '';
-  const bucketName = process.env.SD_TESTING_R2_BUCKET_NAME ?? '';
+  const bucketName = CANONICAL_CORPUS_BUCKET_NAME;
   const accessKeyId = process.env.SD_TESTING_R2_ACCESS_KEY_ID ?? '';
   const secretAccessKey = process.env.SD_TESTING_R2_SECRET_ACCESS_KEY ?? '';
 
   if (!accountId) {
     throw new Error('Missing SD_TESTING_R2_ACCOUNT_ID');
-  }
-
-  if (!bucketName) {
-    throw new Error('Missing SD_TESTING_R2_BUCKET_NAME');
   }
 
   if (!accessKeyId) {

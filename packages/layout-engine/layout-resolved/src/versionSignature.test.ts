@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ImageBlock,
+  ImageRun,
+  ParagraphBlock,
+  SourceAnchor,
+  TableBlock,
+  TabRun,
+  TextRun,
+} from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -67,6 +76,95 @@ describe('deriveBlockVersion - bidi', () => {
   });
 });
 
+describe('deriveBlockVersion - tab underline', () => {
+  const makeTabParagraph = (underline?: { style?: string; color?: string }): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: {},
+    runs: [{ kind: 'tab', text: '\t', pmStart: 1, pmEnd: 2, ...(underline ? { underline } : {}) } as TabRun],
+  });
+
+  // SD-3330: toggling underline on a tab must change the block version, otherwise the
+  // DomPainter reuses the cached (non-underlined) fragment and the underline does not
+  // appear until an unrelated edit forces a rebuild.
+  it('produces a different version when a tab gains an underline', () => {
+    const plain = deriveBlockVersion(makeTabParagraph());
+    const underlined = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    expect(underlined).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab underline color changes', () => {
+    const black = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const red = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#FF0000' }));
+    expect(red).not.toBe(black);
+  });
+
+  it('is stable when the tab underline is identical', () => {
+    const a = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    const b = deriveBlockVersion(makeTabParagraph({ style: 'single', color: '#000000' }));
+    expect(a).toBe(b);
+  });
+
+  // SD-3330: the painter's tab underline thickness comes from fontSize, and its offset/color
+  // come from measured line metrics fed by fontFamily and the run color. Each must change the
+  // block version, or a font-size/family/color edit leaves a stale tab underline cached.
+  const makeStyledTabParagraph = (
+    overrides: Partial<{ fontSize: number; fontFamily: string; color: string; bold: boolean; italic: boolean }>,
+  ): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: {},
+    runs: [
+      {
+        kind: 'tab',
+        text: '\t',
+        pmStart: 1,
+        pmEnd: 2,
+        underline: { style: 'single', color: '#000000' },
+        ...overrides,
+      } as TabRun,
+    ],
+  });
+
+  it('produces a different version when the tab fontSize changes', () => {
+    const small = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 12 }));
+    const large = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 24 }));
+    expect(large).not.toBe(small);
+  });
+
+  it('produces a different version when the tab fontFamily changes', () => {
+    const arial = deriveBlockVersion(makeStyledTabParagraph({ fontFamily: 'Arial' }));
+    const times = deriveBlockVersion(makeStyledTabParagraph({ fontFamily: 'Times New Roman' }));
+    expect(times).not.toBe(arial);
+  });
+
+  it('produces a different version when the tab run color changes', () => {
+    const black = deriveBlockVersion(makeStyledTabParagraph({ color: '#000000' }));
+    const red = deriveBlockVersion(makeStyledTabParagraph({ color: '#FF0000' }));
+    expect(red).not.toBe(black);
+  });
+
+  // SD-3330 review: tab-only line metrics now come from the tab's font via getFontInfoFromRun, which
+  // feeds bold/italic into the measured ascent/descent, so toggling them must change the version.
+  it('produces a different version when the tab bold changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ bold: false }));
+    const bold = deriveBlockVersion(makeStyledTabParagraph({ bold: true }));
+    expect(bold).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab italic changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ italic: false }));
+    const italic = deriveBlockVersion(makeStyledTabParagraph({ italic: true }));
+    expect(italic).not.toBe(plain);
+  });
+
+  it('is stable when tab fontSize, fontFamily and color are identical', () => {
+    const a = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
+    const b = deriveBlockVersion(makeStyledTabParagraph({ fontSize: 16, fontFamily: 'Arial', color: '#123456' }));
+    expect(a).toBe(b);
+  });
+});
+
 describe('deriveBlockVersion - table image content', () => {
   const makeTableWithImage = (image: ImageBlock): TableBlock => ({
     kind: 'table',
@@ -99,6 +197,13 @@ describe('deriveBlockVersion - table image content', () => {
     expect(filtered).not.toBe(plain);
   });
 
+  it('changes when a table image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeTableWithImage(baseImage));
+    const transparent = deriveBlockVersion(makeTableWithImage({ ...baseImage, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
+  });
+
   it('changes when a table image hyperlink changes', () => {
     const unlinked = deriveBlockVersion(makeTableWithImage(baseImage));
     const linked = deriveBlockVersion(
@@ -125,6 +230,43 @@ describe('deriveBlockVersion - table image content', () => {
       }),
     );
 
+    expect(second).not.toBe(first);
+  });
+});
+
+describe('deriveBlockVersion - textboxShape content', () => {
+  const makeTextboxParagraph = (text: string): ParagraphBlock => ({
+    kind: 'paragraph',
+    id: 'textbox-para-1',
+    runs: [{ text, fontFamily: 'Arial', fontSize: 16, pmStart: 10, pmEnd: 10 + text.length }],
+  });
+
+  const makeTextbox = (text: string): FlowBlock => ({
+    kind: 'drawing',
+    id: 'textbox-1',
+    drawingKind: 'textboxShape',
+    geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    shapeKind: 'rect',
+    contentBlocks: [makeTextboxParagraph(text)],
+    textContent: {
+      parts: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+    },
+    textInsets: { top: 4, right: 6, bottom: 4, left: 6 },
+    textVerticalAlign: 'top',
+  });
+
+  it('produces a different version when textbox text changes', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion(makeTextbox('Beta'));
+    expect(second).not.toBe(first);
+  });
+
+  it('produces a different version when textbox insets change', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion({
+      ...makeTextbox('Alpha'),
+      textInsets: { top: 8, right: 6, bottom: 4, left: 6 },
+    });
     expect(second).not.toBe(first);
   });
 });
@@ -168,6 +310,13 @@ describe('deriveBlockVersion - inline image runs', () => {
     expect(filtered).not.toBe(plain);
   });
 
+  it('changes when an inline image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const transparent = deriveBlockVersion(makeParagraphWithImageRun({ ...baseImageRun, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
+  });
+
   it('changes when an inline image transform changes', () => {
     const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
     const transformed = deriveBlockVersion(makeParagraphWithImageRun({ ...baseImageRun, rotation: 45, flipH: true }));
@@ -182,6 +331,32 @@ describe('deriveBlockVersion - inline image runs', () => {
     );
 
     expect(linked).not.toBe(unlinked);
+  });
+
+  it('changes when inline image SDT metadata changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const locked = deriveBlockVersion(
+      makeParagraphWithImageRun({
+        ...baseImageRun,
+        sdt: {
+          type: 'structuredContent',
+          scope: 'inline',
+          id: 'image-sdt',
+          lockMode: 'contentLocked',
+        },
+      }),
+    );
+
+    expect(locked).not.toBe(plain);
+  });
+
+  it('changes when inline image data attributes change', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const withDataAttrs = deriveBlockVersion(
+      makeParagraphWithImageRun({ ...baseImageRun, dataAttrs: { 'data-example': '1' } }),
+    );
+
+    expect(withDataAttrs).not.toBe(plain);
   });
 
   it('changes when an inline image raw clip path changes', () => {

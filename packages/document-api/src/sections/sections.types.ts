@@ -36,6 +36,8 @@ export type SectionPageNumberingFormat =
   | 'upperRoman'
   | 'numberInDash';
 
+export type SectionPageNumberingChapterSeparator = 'hyphen' | 'period' | 'colon' | 'emDash' | 'enDash';
+
 export interface SectionPageMargins {
   top?: number;
   right?: number;
@@ -73,6 +75,8 @@ export interface SectionLineNumbering {
 export interface SectionPageNumbering {
   start?: number;
   format?: SectionPageNumberingFormat;
+  chapterStyle?: number;
+  chapterSeparator?: SectionPageNumberingChapterSeparator;
 }
 
 export interface SectionHeaderFooterRefs {
@@ -227,6 +231,8 @@ export interface SectionsSetLineNumberingInput extends SectionTargetInput {
 export interface SectionsSetPageNumberingInput extends SectionTargetInput {
   start?: number;
   format?: SectionPageNumberingFormat;
+  chapterStyle?: number;
+  chapterSeparator?: SectionPageNumberingChapterSeparator;
 }
 
 export interface SectionsSetTitlePageInput extends SectionTargetInput {

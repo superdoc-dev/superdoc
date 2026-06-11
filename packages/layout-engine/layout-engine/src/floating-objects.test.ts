@@ -132,7 +132,7 @@ describe('FloatingObjectManager', () => {
       expect(zones[0].bounds.x).toBe((600 - 200) / 2 + 10); // (columnWidth - imageWidth) / 2 + offsetH
     });
 
-    it('applies vertical offset to image Y position', () => {
+    it('uses fully resolved anchor Y for exclusion bounds (offset applied upstream)', () => {
       const manager = createFloatingObjectManager(mockColumns, { left: 0, right: 0 }, 600);
       const imageBlock = createMockImageBlock({
         anchor: {
@@ -141,10 +141,11 @@ describe('FloatingObjectManager', () => {
         },
       });
 
-      manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
+      // resolvedAnchorY already includes offsetV from resolveAnchoredGraphicY
+      manager.registerDrawing(imageBlock, createMockMeasure(), 150, 0, 1);
 
       const zones = manager.getAllFloatsForPage(1);
-      expect(zones[0].bounds.y).toBe(150); // anchorY(100) + offsetV(50)
+      expect(zones[0].bounds.y).toBe(150);
     });
   });
 
@@ -236,8 +237,8 @@ describe('FloatingObjectManager', () => {
       manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
 
       const result = manager.computeAvailableWidth(120, 20, 600, 0, 1);
-      expect(result.width).toBe(600 - 200 - 5 - 10); // baseWidth - imageWidth - distLeft - distRight
-      expect(result.offsetX).toBe(200 + 5 + 10); // Image width + distances
+      expect(result.width).toBe(600 - 200 - 10); // baseWidth - imageWidth - distRight
+      expect(result.offsetX).toBe(200 + 10); // Image width + right-side text gap
     });
 
     it('reduces width for right-side image (wrapText=left)', () => {
@@ -258,7 +259,7 @@ describe('FloatingObjectManager', () => {
       manager.registerDrawing(imageBlock, createMockMeasure(), 100, 0, 1);
 
       const result = manager.computeAvailableWidth(120, 20, 600, 0, 1);
-      expect(result.width).toBe(600 - 200 - 5 - 10);
+      expect(result.width).toBe(600 - 200 - 5); // baseWidth - imageWidth - distLeft
       expect(result.offsetX).toBe(0); // No offset for right-side image
     });
 
@@ -554,9 +555,9 @@ describe('FloatingObjectManager', () => {
       const result = manager.computeAvailableWidth(120, 20, 600, 0, 1);
 
       // Float center is at 50, which is < 300 (baseWidth/2), so it's a left float
-      // Boundary: 0 + 100 + 5 + 10 = 115 (full exclusion width)
-      expect(result.width).toBe(600 - 115);
-      expect(result.offsetX).toBe(115);
+      // Boundary: 0 + 100 + 10 = 110 (image width + distRight)
+      expect(result.width).toBe(600 - 110);
+      expect(result.offsetX).toBe(110);
     });
 
     it('handles bothSides wrapText for float on right', () => {
@@ -583,8 +584,8 @@ describe('FloatingObjectManager', () => {
       const result = manager.computeAvailableWidth(120, 20, 600, 0, 1);
 
       // Float is at X = 600 - 100 = 500, center at 550 > 300, so it's a right float
-      // Boundary: 500 - 10 - 5 = 485 (subtract both distances for symmetry)
-      expect(result.width).toBe(485);
+      // Boundary: 500 - 10 = 490 (image left edge - distLeft)
+      expect(result.width).toBe(490);
       expect(result.offsetX).toBe(0);
     });
 
@@ -612,9 +613,9 @@ describe('FloatingObjectManager', () => {
       const result = manager.computeAvailableWidth(120, 20, 600, 0, 1);
 
       // Float on left side (center < baseWidth/2)
-      // Exclusion width: 0 + 100 + 5 + 10 = 115
-      expect(result.width).toBe(600 - 115);
-      expect(result.offsetX).toBe(115);
+      // Exclusion width: 0 + 100 + 10 = 110
+      expect(result.width).toBe(600 - 110);
+      expect(result.offsetX).toBe(110);
     });
 
     it('returns full width when all exclusions are non-wrapping', () => {

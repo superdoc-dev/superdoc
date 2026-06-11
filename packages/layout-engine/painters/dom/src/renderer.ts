@@ -15,6 +15,8 @@ import type {
   Line,
   LineSegment,
   PageMargins,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParaFragment,
   ParagraphBlock,
   PositionedDrawingGeometry,
@@ -27,6 +29,7 @@ import type {
   TableBlock,
   TableFragment,
   TableMeasure,
+  TextboxDrawing,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -38,13 +41,19 @@ import type {
   ResolvedDrawingItem,
   LayoutSourceIdentity,
   LayoutStoryLocator,
+  ListBlock,
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
+  formatPageNumber,
+  formatSectionPageNumberText,
   getCellSpacingPx,
+  getColumnGeometry,
+  getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
+  resolveColumnMode,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -126,7 +135,7 @@ type EffectExtent = {
   bottom: number;
 };
 
-type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
+type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
 };
@@ -241,6 +250,10 @@ type PainterOptions = {
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
   /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
   showFormattingMarks?: boolean;
+  /** Built-in SDT chrome rendering mode. */
+  contentControlsChrome?: 'default' | 'none';
+  /** Per-document logical->physical font resolver (face-aware); see DomPainterOptions.resolvePhysical. */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 type FragmentDomState = {
@@ -256,6 +269,95 @@ type PageDomState = {
   fragments: FragmentDomState[];
 };
 
+function pageContextSignature(context: FragmentRenderContext): string {
+  return [
+    context.pageNumber,
+    context.totalPages,
+    context.sectionPageCount ?? '',
+    context.pageNumberText ?? '',
+    context.displayPageNumber ?? '',
+    context.pageNumberFormat ?? '',
+    context.pageNumberChapterText ?? '',
+    context.pageNumberChapterSeparator ?? '',
+  ].join('|');
+}
+
+function hasPageContextTokenInShapeText(textContent: ShapeTextContent | undefined): boolean {
+  return (
+    Array.isArray(textContent?.parts) &&
+    textContent.parts.some(
+      (part) => part.fieldType === 'PAGE' || part.fieldType === 'NUMPAGES' || part.fieldType === 'SECTIONPAGES',
+    )
+  );
+}
+
+function hasPageContextTokenInShapeGroup(shapes: readonly ShapeGroupChild[] | undefined): boolean {
+  return (
+    Array.isArray(shapes) &&
+    shapes.some((shape) => {
+      if (shape.shapeType !== 'vectorShape') {
+        return false;
+      }
+      return hasPageContextTokenInShapeText(shape.attrs.textContent);
+    })
+  );
+}
+
+function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
+  if (!block) return false;
+  if (block.kind === 'paragraph') {
+    for (const run of (block as ParagraphBlock).runs) {
+      if (
+        'token' in run &&
+        (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+      ) {
+        return true;
+      }
+    }
+  } else if (block.kind === 'list') {
+    const list = block as ListBlock;
+    for (const item of list.items ?? []) {
+      if (hasPageContextTokenInBlock(item.paragraph)) {
+        return true;
+      }
+    }
+  } else if (block.kind === 'table') {
+    const table = block as TableBlock;
+    for (const row of table.rows ?? []) {
+      for (const cell of row.cells ?? []) {
+        const cellBlocks: FlowBlock[] = cell.blocks
+          ? (cell.blocks as FlowBlock[])
+          : cell.paragraph
+            ? [cell.paragraph]
+            : [];
+        if (cellBlocks.some(hasPageContextTokenInBlock)) {
+          return true;
+        }
+      }
+    }
+  } else if (block.kind === 'drawing') {
+    const drawing = block as DrawingBlock;
+    if (drawing.drawingKind === 'vectorShape' || drawing.drawingKind === 'textboxShape') {
+      return hasPageContextTokenInShapeText(drawing.textContent);
+    }
+    if (drawing.drawingKind === 'shapeGroup') {
+      return hasPageContextTokenInShapeGroup(drawing.shapes);
+    }
+  }
+  return false;
+}
+
+function needsRebuildForPageContext(
+  currentContext: FragmentRenderContext,
+  nextContext: FragmentRenderContext,
+  resolvedItem: ResolvedPaintItem | undefined,
+): boolean {
+  const block = resolvedItem?.kind === 'fragment' && 'block' in resolvedItem ? resolvedItem.block : undefined;
+  return (
+    pageContextSignature(currentContext) !== pageContextSignature(nextContext) && hasPageContextTokenInBlock(block)
+  );
+}
+
 /**
  * Rendering context passed to fragment renderers containing page metadata.
  * Provides information about the current page position and section for dynamic content like page numbers.
@@ -265,6 +367,8 @@ type PageDomState = {
  * @property {number} totalPages - Total number of pages in the document
  * @property {'body'|'header'|'footer'} section - Document section being rendered
  * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
+ * @property {number} [displayPageNumber] - Section-aware numeric page value before formatting
+ * @property {number} [sectionPageCount] - Physical page count in the current section
  */
 export type FragmentRenderContext = {
   pageNumber: number;
@@ -272,8 +376,22 @@ export type FragmentRenderContext = {
   section: 'body' | 'header' | 'footer';
   story?: LayoutStoryLocator;
   pageNumberText?: string;
+  displayPageNumber?: number;
+  pageNumberFormat?: PageNumberFormat;
+  pageNumberChapterText?: string;
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
+  sectionPageCount?: number;
   pageIndex?: number;
 };
+
+function buildSectionPageCounts(pages: ResolvedPage[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const page of pages) {
+    const sectionIndex = page.sectionIndex ?? 0;
+    counts.set(sectionIndex, (counts.get(sectionIndex) ?? 0) + 1);
+  }
+  return counts;
+}
 
 export type PaintSnapshotLineStyle = {
   paddingLeftPx?: number;
@@ -773,6 +891,7 @@ export class DomPainter {
   private headerProvider?: PageDecorationProvider;
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
+  private sectionPageCounts = new Map<number, number>();
   private linkIdCounter = 0; // Counter for generating unique link IDs
   private sdtLabelsRendered = new Set<string>(); // Tracks SDT labels rendered across pages
 
@@ -833,6 +952,7 @@ export class DomPainter {
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
   private showFormattingMarks = false;
+  private contentControlsChrome: 'default' | 'none' = 'default';
 
   constructor(options: PainterOptions = {}) {
     this.options = options;
@@ -841,6 +961,7 @@ export class DomPainter {
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
     this.showFormattingMarks = options.showFormattingMarks === true;
+    this.contentControlsChrome = options.contentControlsChrome ?? 'default';
 
     // Initialize page gap (defaults: 24px vertical, 20px horizontal)
     const defaultGap = this.layoutMode === 'horizontal' ? 20 : 24;
@@ -885,6 +1006,7 @@ export class DomPainter {
 
   private applyFormattingMarksClass(mount: HTMLElement | null = this.mount): void {
     mount?.classList.toggle('superdoc-show-formatting-marks', this.showFormattingMarks);
+    mount?.classList.toggle('superdoc-cc-chrome-none', this.contentControlsChrome === 'none');
   }
 
   private invalidateRenderedContent(): void {
@@ -1196,18 +1318,20 @@ export class DomPainter {
     this.beginPaintSnapshot(resolvedLayout);
 
     this.totalPages = resolvedLayout.pages.length;
+    this.sectionPageCounts = buildSectionPageCounts(resolvedLayout.pages);
+    const previousLayout = this.currentLayout;
+    this.currentLayout = resolvedLayout;
     if (this.isSemanticFlow) {
       // Semantic mode always renders as a single continuous surface.
       applyStyles(mount, containerStyles);
       mount.style.gap = '0px';
       mount.style.alignItems = 'stretch';
-      if (!this.currentLayout || this.pageStates.length === 0) {
+      if (!previousLayout || this.pageStates.length === 0) {
         this.fullRender(resolvedLayout);
       } else {
         this.patchLayout(resolvedLayout);
       }
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
-      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
       return;
@@ -1254,7 +1378,7 @@ export class DomPainter {
     } else {
       // Use configured page gap for normal vertical rendering
       mount.style.gap = `${this.pageGap}px`;
-      if (!this.currentLayout || this.pageStates.length === 0) {
+      if (!previousLayout || this.pageStates.length === 0) {
         this.fullRender(resolvedLayout);
       } else {
         this.patchLayout(resolvedLayout);
@@ -1709,6 +1833,11 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -1874,37 +2003,23 @@ export class DomPainter {
   }
 
   private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
-    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
-
-    if (!hasExplicitWidths) {
-      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+    // SD-2629: separator positions come from the one resolved column geometry (the same source as
+    // fill count and column widths), not a re-derivation here. The caller has already gated on
+    // withSeparator and count > 1.
+    const normalized = normalizeColumnLayout(columns, contentWidth);
+    // Equal mode: skip when the evenly-divided column is too narrow for a 1px line. This must be
+    // checked PRE-geometry because normalize floors fabricated widths at 1 (and falls back to the
+    // full content width when the gap overflows the content area), so the geometry width alone would
+    // not reveal the overflow. Keyed on resolveColumnMode (not the presence of a widths array) so a
+    // raw equalWidth:true config carrying stray widths still takes the equal-mode guard. Legacy guard.
+    if (resolveColumnMode(columns) === 'equal') {
+      const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
       if (equalWidth <= 1) return [];
-
-      const separatorPositions: number[] = [];
-      for (let index = 0; index < columns.count - 1; index += 1) {
-        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
-      }
-      return separatorPositions;
     }
-
-    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
-    if (normalizedColumns.count <= 1) return [];
-
-    const columnWidths =
-      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
-    // A 1px separator only makes sense when every participating column is wider than the separator itself.
-    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
-
-    const separatorPositions: number[] = [];
-    let cursorX = leftMargin;
-
-    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
-      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
-      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
-      cursorX += currentColumnWidth + normalizedColumns.gap;
-    }
-
-    return separatorPositions;
+    const geometry = getColumnGeometry(normalized);
+    if (geometry.length <= 1) return [];
+    if (geometry.some((column) => column.width <= 1)) return [];
+    return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);
   }
   private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;
@@ -2063,6 +2178,11 @@ export class DomPainter {
       section: kind,
       story: resolveDecorationStory(kind, data),
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2205,6 +2325,10 @@ export class DomPainter {
     this.mountedPageIndices = [];
   }
 
+  private getSectionPageCount(page: ResolvedPage): number {
+    return this.sectionPageCounts.get(page.sectionIndex ?? 0) ?? this.totalPages ?? 1;
+  }
+
   private fullRender(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
     this.mount.innerHTML = '';
@@ -2266,6 +2390,11 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2287,6 +2416,7 @@ export class DomPainter {
           (current.element.dataset.betweenBorder === 'true') !== (betweenInfo?.showBetweenBorder ?? false) ||
           (current.element.dataset.suppressTopBorder === 'true') !== (betweenInfo?.suppressTopBorder ?? false) ||
           (current.element.dataset.gapBelow ?? '') !== (betweenInfo?.gapBelow ? String(betweenInfo.gapBelow) : '');
+        const pageContextChanged = needsRebuildForPageContext(current.context, contextBase, resolvedItem);
         // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
         // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
         // we must rebuild to get correct span position attributes.
@@ -2302,6 +2432,7 @@ export class DomPainter {
           current.signature !== resolvedSig ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
+          pageContextChanged ||
           mappingUnreliable;
 
         if (needsRebuild) {
@@ -2426,6 +2557,11 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
+      pageNumberFormat: page.pageNumberFormat,
+      pageNumberChapterText: page.pageNumberChapterText,
+      pageNumberChapterSeparator: page.pageNumberChapterSeparator,
+      sectionPageCount: this.getSectionPageCount(page),
       pageIndex,
     };
 
@@ -2470,11 +2606,16 @@ export class DomPainter {
   }
 
   private getEffectivePageStyles(): PageStyles | undefined {
+    const documentBackgroundColor = this.currentLayout?.documentBackground?.color;
+    const base = this.options.pageStyles ?? {};
+    const baseWithDocumentBackground = documentBackgroundColor
+      ? { ...base, background: documentBackgroundColor }
+      : base;
+
     if (this.isSemanticFlow) {
-      const base = this.options.pageStyles ?? {};
       return {
-        ...base,
-        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
+        ...baseWithDocumentBackground,
+        background: baseWithDocumentBackground.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',
@@ -2482,10 +2623,9 @@ export class DomPainter {
     }
     if (this.virtualEnabled && this.layoutMode === 'vertical') {
       // Remove top/bottom margins to avoid double-counting with container gap during virtualization
-      const base = this.options.pageStyles ?? {};
-      return { ...base, margin: '0 auto' };
+      return { ...baseWithDocumentBackground, margin: '0 auto' };
     }
-    return this.options.pageStyles;
+    return documentBackgroundColor ? baseWithDocumentBackground : this.options.pageStyles;
   }
 
   private renderFragment(
@@ -2545,6 +2685,9 @@ export class DomPainter {
         this.applyFragmentFrame(el, paraFragment, context.section, context.story),
       applySdtDataset,
       applyContainerSdtDataset,
+      // Per-document font resolver so list markers and drop caps paint the same physical family
+      // they were measured in (undefined => the renderers fall back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       renderLine: ({
         block,
         line,
@@ -2576,6 +2719,7 @@ export class DomPainter {
           sourceAnchor: options?.sourceAnchor,
         });
       },
+      contentControlsChrome: this.contentControlsChrome,
       createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
   }
@@ -2726,8 +2870,8 @@ export class DomPainter {
     if (block.drawingKind === 'image') {
       return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
-    if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
+      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context, fragment);
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
@@ -2739,15 +2883,19 @@ export class DomPainter {
   }
 
   private createVectorShapeElement(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
     applyTransforms = false,
     groupScaleX = 1,
     groupScaleY = 1,
     context?: FragmentRenderContext,
+    fragment?: DrawingFragment,
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
+    if (block.drawingKind === 'textboxShape') {
+      container.classList.add('superdoc-textbox-shape');
+    }
     container.style.width = '100%';
     container.style.height = '100%';
     container.style.position = 'relative';
@@ -2790,15 +2938,11 @@ export class DomPainter {
         this.applyLineEnds(svgElement, block);
         contentContainer.appendChild(svgElement);
 
-        if (this.hasShapeTextContent(block.textContent)) {
-          const textElement = this.createShapeTextElement(
-            block,
-            innerWidth,
-            innerHeight,
-            groupScaleX,
-            groupScaleY,
-            context,
-          );
+        if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+          const textElement =
+            block.drawingKind === 'textboxShape'
+              ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+              : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
           contentContainer.appendChild(textElement);
         }
 
@@ -2810,15 +2954,11 @@ export class DomPainter {
     // Fallback rendering when no preset shape SVG is available
     this.applyFallbackShapeStyle(contentContainer, block);
 
-    if (this.hasShapeTextContent(block.textContent)) {
-      const textElement = this.createShapeTextElement(
-        block,
-        innerWidth,
-        innerHeight,
-        groupScaleX,
-        groupScaleY,
-        context,
-      );
+    if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+      const textElement =
+        block.drawingKind === 'textboxShape'
+          ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+          : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
       contentContainer.appendChild(textElement);
     }
 
@@ -2829,7 +2969,7 @@ export class DomPainter {
   /**
    * Apply fill and stroke styles to a fallback shape container
    */
-  private applyFallbackShapeStyle(container: HTMLElement, block: VectorShapeDrawing): void {
+  private applyFallbackShapeStyle(container: HTMLElement, block: ShapeTextDrawingWithEffects): void {
     // Handle fill color
     if (block.fillColor === null) {
       container.style.background = 'none';
@@ -2866,7 +3006,7 @@ export class DomPainter {
   }
 
   private createShapeTextElement(
-    block: VectorShapeDrawing,
+    block: VectorShapeDrawing | TextboxDrawing,
     width: number,
     height: number,
     groupScaleX = 1,
@@ -2900,7 +3040,60 @@ export class DomPainter {
     );
   }
 
-  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
+  private createTextboxContentElement(
+    block: TextboxDrawing,
+    fragment: DrawingFragment | undefined,
+    width: number,
+    height: number,
+    context?: FragmentRenderContext,
+  ): Element {
+    const contentMeasures = fragment?.contentMeasures ?? block.contentMeasures;
+    if (!Array.isArray(contentMeasures) || contentMeasures.length === 0) {
+      return this.hasShapeTextContent(block.textContent)
+        ? this.createShapeTextElement(block, width, height, 1, 1, context)
+        : this.doc!.createElement('div');
+    }
+
+    const contentRoot = this.doc!.createElement('div');
+    contentRoot.style.position = 'absolute';
+    contentRoot.style.top = '0';
+    contentRoot.style.left = '0';
+    contentRoot.style.width = '100%';
+    contentRoot.style.height = '100%';
+    contentRoot.style.display = 'flex';
+    contentRoot.style.flexDirection = 'column';
+    contentRoot.style.boxSizing = 'border-box';
+    contentRoot.style.overflow = 'hidden';
+
+    const insets = block.textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    contentRoot.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
+
+    const verticalAlign = block.textVerticalAlign ?? 'top';
+    contentRoot.style.justifyContent =
+      verticalAlign === 'bottom' ? 'flex-end' : verticalAlign === 'center' ? 'center' : 'flex-start';
+
+    const linesHost = this.doc!.createElement('div');
+    linesHost.style.display = 'flex';
+    linesHost.style.flexDirection = 'column';
+    linesHost.style.minWidth = '0';
+    linesHost.style.width = '100%';
+
+    const renderContext = context ?? this.defaultFragmentRenderContext();
+    const availableWidth = Math.max(1, width - insets.left - insets.right);
+
+    block.contentBlocks.forEach((paragraphBlock, paragraphIndex) => {
+      const measure = contentMeasures[paragraphIndex];
+      if (!measure?.lines) return;
+      measure.lines.forEach((line, lineIndex) => {
+        linesHost.appendChild(this.renderLine(paragraphBlock, line, renderContext, availableWidth, lineIndex));
+      });
+    });
+
+    contentRoot.appendChild(linesHost);
+    return contentRoot;
+  }
+
+  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing | TextboxDrawing): boolean {
     return block.attrs?.isWordArt === true && this.hasShapeTextContent(block.textContent);
   }
 
@@ -2993,10 +3186,26 @@ export class DomPainter {
 
   private resolveShapeTextPartText(part: ShapeTextContent['parts'][number], context?: FragmentRenderContext): string {
     if (part.fieldType === 'PAGE') {
+      if (part.pageNumberFormat || context?.pageNumberChapterText) {
+        return formatSectionPageNumberText({
+          displayNumber: context?.displayPageNumber ?? context?.pageNumber ?? 1,
+          pageFormat: part.pageNumberFormat ?? context?.pageNumberFormat ?? 'decimal',
+          chapterNumberText: context?.pageNumberChapterText,
+          chapterSeparator: context?.pageNumberChapterSeparator,
+        });
+      }
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }
     if (part.fieldType === 'NUMPAGES') {
-      return String(context?.totalPages ?? 1);
+      const totalPages = context?.totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(totalPages, part.pageNumberFormat) : String(totalPages);
+    }
+    if (part.fieldType === 'SECTIONPAGES') {
+      if (context?.sectionPageCount == null) return part.text ?? '1';
+      const sectionPageCount = context.sectionPageCount;
+      return part.pageNumberFormat
+        ? formatPageNumber(sectionPageCount, part.pageNumberFormat)
+        : String(sectionPageCount);
     }
     return part.text;
   }
@@ -3175,7 +3384,7 @@ export class DomPainter {
   }
 
   private tryCreatePresetSvg(
-    block: VectorShapeDrawing,
+    block: ShapeTextDrawingWithEffects,
     widthOverride?: number,
     heightOverride?: number,
   ): string | null {
@@ -3226,7 +3435,7 @@ export class DomPainter {
    * Each path in the custom geometry has its own coordinate space (w × h) which is
    * mapped to the shape's actual dimensions via the SVG viewBox.
    */
-  private tryCreateCustomGeometrySvg(block: VectorShapeDrawing, width: number, height: number): string | null {
+  private tryCreateCustomGeometrySvg(block: ShapeTextDrawingWithEffects, width: number, height: number): string | null {
     const custGeom = block.customGeometry;
     if (!custGeom?.paths?.length) return null;
 
@@ -3317,7 +3526,7 @@ export class DomPainter {
   }
 
   private getEffectExtentMetrics(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
   ): {
     offsetX: number;
@@ -3337,7 +3546,7 @@ export class DomPainter {
     return { offsetX: left, offsetY: top, innerWidth, innerHeight };
   }
 
-  private applyLineEnds(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+  private applyLineEnds(svgElement: SVGElement, block: ShapeTextDrawingWithEffects): void {
     const lineEnds = block.lineEnds;
     if (!lineEnds) return;
     if (block.strokeColor === null) return;
@@ -3577,7 +3786,7 @@ export class DomPainter {
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
-      const vectorChild: VectorShapeDrawingWithEffects = {
+      const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
         id: `${attrs.shapeId ?? child.shapeType}`,
@@ -3713,7 +3922,7 @@ export class DomPainter {
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);
         }
-        if (block.drawingKind === 'vectorShape') {
+        if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
           return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
         }
         if (block.drawingKind === 'chart') {
@@ -3732,6 +3941,7 @@ export class DomPainter {
         measure: tableRenderData.measure,
         cellSpacingPx: tableRenderData.cellSpacingPx,
         effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
+        chrome: this.contentControlsChrome,
         sdtBoundary,
         renderLine: renderLineForTableCell,
         captureLineSnapshot: (lineEl, lineContext, options) => {
@@ -3746,6 +3956,9 @@ export class DomPainter {
         applySdtDataset,
         applyContainerSdtDataset,
         applyStyles,
+        // Per-document font resolver so in-cell list markers and drop caps paint the same physical
+        // family they were measured in (undefined => the renderers fall back to the global default).
+        resolvePhysical: this.options.resolvePhysical,
       });
 
       // Override outer wrapper positioning with resolved data when available.
@@ -3806,6 +4019,9 @@ export class DomPainter {
       doc: this.doc,
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
+      contentControlsChrome: this.contentControlsChrome,
+      // Per-document font resolver (undefined => applyRunStyles falls back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
       applySdtDataset,
@@ -3820,6 +4036,14 @@ export class DomPainter {
       expandSdtWrapperPmRange,
     };
     return runContext;
+  }
+
+  private defaultFragmentRenderContext(): FragmentRenderContext {
+    return {
+      pageNumber: 1,
+      totalPages: 1,
+      section: 'body',
+    };
   }
 
   /**

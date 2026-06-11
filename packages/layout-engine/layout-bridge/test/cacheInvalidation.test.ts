@@ -52,6 +52,25 @@ describe('Cache Invalidation', () => {
         expect(hash).toContain('token:pageNumber');
       });
 
+      it('should include page number token format in hash', () => {
+        const decimalBlocks: FlowBlock[] = [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: '0', token: 'pageNumber', pageNumberFieldFormat: { format: 'decimal' } }],
+          } as ParagraphBlock,
+        ];
+        const romanBlocks: FlowBlock[] = [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: '0', token: 'pageNumber', pageNumberFieldFormat: { format: 'upperRoman' } }],
+          } as ParagraphBlock,
+        ];
+
+        expect(computeHeaderFooterContentHash(decimalBlocks)).not.toBe(computeHeaderFooterContentHash(romanBlocks));
+      });
+
       it('should produce different hashes for different content', () => {
         const blocks1: FlowBlock[] = [
           {

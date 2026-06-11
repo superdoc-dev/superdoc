@@ -1,0 +1,22 @@
+diff --git a/src/embed-superdoc.js b/src/embed-superdoc.js
+--- a/src/embed-superdoc.js
++++ b/src/embed-superdoc.js
+@@ -1,3 +1,16 @@
++import { SuperDoc } from 'superdoc';
++import 'superdoc/style.css';
++
++export function embedSuperDoc({ file }) {
++  return new SuperDoc({
++    selector: '#editor',
++    documentMode: 'editing',
++    documents: [
++      {
++        id: 'contract',
++        type: 'docx',
++        data: file,
++      },
++    ],
++  });
+-export function embedSuperDoc() {
+-  return null;
+ }

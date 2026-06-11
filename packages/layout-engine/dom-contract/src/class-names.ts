@@ -27,8 +27,14 @@ export const DOM_CLASS_NAMES = {
    */
   INLINE_SDT_WRAPPER: 'superdoc-structured-content-inline',
 
+  /** Inline structured-content label chrome. */
+  INLINE_SDT_LABEL: 'superdoc-structured-content-inline__label',
+
   /** Block-level structured-content container. */
   BLOCK_SDT: 'superdoc-structured-content-block',
+
+  /** Block-level structured-content label chrome. */
+  BLOCK_SDT_LABEL: 'superdoc-structured-content__label',
 
   /** Table fragment container (resize overlay and click-mapping target). */
   TABLE_FRAGMENT: 'superdoc-table-fragment',
@@ -41,6 +47,12 @@ export const DOM_CLASS_NAMES = {
    * Set by PresentationEditor's hover coordination via event delegation.
    */
   SDT_GROUP_HOVER: 'sdt-group-hover',
+
+  /** Paragraph fragment rendered as a Table of Contents entry. */
+  TOC_ENTRY: 'superdoc-toc-entry',
+
+  /** TOC analogue of `SDT_GROUP_HOVER`, applied to every fragment sharing a `data-toc-id`. */
+  TOC_GROUP_HOVER: 'toc-group-hover',
 
   /** Block-level image fragment (ImageBlock). */
   IMAGE_FRAGMENT: 'superdoc-image-fragment',
@@ -66,3 +78,9 @@ export const DOM_CLASS_NAMES = {
 
 /** Union of all DOM contract class name values. */
 export type DomClassName = (typeof DOM_CLASS_NAMES)[keyof typeof DOM_CLASS_NAMES];
+
+/** Structured-content chrome labels that should not drive text-position mapping. */
+export const STRUCTURED_CONTENT_CHROME_LABEL_CLASS_NAMES = [
+  DOM_CLASS_NAMES.INLINE_SDT_LABEL,
+  DOM_CLASS_NAMES.BLOCK_SDT_LABEL,
+] as const;

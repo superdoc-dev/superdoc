@@ -3,6 +3,9 @@ import {
   calculateJustifySpacing,
   computeLinePmRange,
   expandRunsForInlineNewlines,
+  isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
+  normalizeBaselineShift,
   shouldApplyJustify,
   sliceRunsForLine,
   SPACE_CHARS,
@@ -17,7 +20,13 @@ import { applyTooltipAccessibility } from './links.js';
 import { appendFormattingParagraphMark } from './formatting-marks.js';
 import { textRunMergeSignature } from './hash.js';
 import { isBreakRun, isFieldAnnotationRun, isImageRun, isLineBreakRun, isMathRun, renderRun } from './render-run.js';
-import { renderInlineTabRun, renderPositionedTabRun } from './tab-run.js';
+import {
+  canPaintUnderlineOverlay,
+  renderInlineTabRun,
+  renderPositionedTabRun,
+  underlineBorderForRun,
+  underlineOffsetFromLineTop,
+} from './tab-run.js';
 import type { RenderLineParams } from './types.js';
 
 /**
@@ -50,6 +59,17 @@ const isWhitespaceOnly = (text: string): boolean => {
     if (!SPACE_CHARS.has(text[i])) return false;
   }
   return true;
+};
+
+const alignNormalTextBesideInlineImage = (element: HTMLElement, run: Run, lineContainsInlineImage: boolean): void => {
+  if (!lineContainsInlineImage) return;
+  if ((run.kind !== 'text' && run.kind !== undefined) || !('text' in run)) return;
+
+  const textRun = run as TextRun;
+  if (normalizeBaselineShift(textRun.baselineShift) != null || textRun.vertAlign != null) return;
+
+  element.style.lineHeight = 'normal';
+  element.style.verticalAlign = 'bottom';
 };
 
 const cloneTextRun = (run: TextRun): TextRun => ({
@@ -147,6 +167,127 @@ const normalizeJustifiedRuns = (runsForLine: Run[]): Run[] => {
   }
 
   return merged;
+};
+
+type UnderlineOverlaySpan = {
+  from: number;
+  to: number;
+  border: string;
+};
+
+const isTextRun = (run: Run): run is TextRun => (run.kind === 'text' || run.kind === undefined) && 'text' in run;
+
+// The overlay can only measure and cover text and tab runs - their widths come from line segments
+// or run.width. Atomic runs (field annotations, inline images, math) carry their width elsewhere
+// (run.size), so a line containing one would mis-advance the overlay cursor and could suppress an
+// atomic run's native underline without painting a replacement (SD-3330 review). Restrict the
+// overlay to lines built only from text / tab / line-break runs, with an overlay-eligible tab.
+const isOverlaySafeRunKind = (run: Run): boolean => {
+  const kind = run.kind ?? 'text';
+  return kind === 'text' || kind === 'tab' || kind === 'lineBreak' || kind === 'break';
+};
+
+const shouldUseLineUnderlineOverlay = (runsForLine: Run[]): boolean =>
+  runsForLine.every(isOverlaySafeRunKind) &&
+  runsForLine.some((run) => run.kind === 'tab' && canPaintUnderlineOverlay(run));
+
+const cloneRunWithoutUnderline = <T extends Run>(run: T): T => ({ ...run, underline: undefined }) as T;
+
+const appendUnderlineOverlaySpan = (
+  spans: UnderlineOverlaySpan[],
+  from: number,
+  to: number,
+  border: string | undefined,
+): void => {
+  if (!border || to <= from) return;
+  const last = spans[spans.length - 1];
+  if (last && last.border === border && Math.abs(last.to - from) < 0.5) {
+    last.to = to;
+    return;
+  }
+  spans.push({ from, to, border });
+};
+
+const runInlinePaintWidth = (
+  run: Run,
+  runIndex: number,
+  segmentsByRun: Map<number, LineSegment[]>,
+  spacingPerSpace: number,
+): number => {
+  if (run.kind === 'tab') {
+    return run.width ?? 48;
+  }
+
+  const segments = segmentsByRun.get(runIndex);
+  if (segments?.length) {
+    return segments.reduce((sum, segment) => {
+      const text = isTextRun(run) ? (run.text ?? '').slice(segment.fromChar, segment.toChar) : '';
+      return sum + segment.width + spacingPerSpace * countSpaces(text);
+    }, 0);
+  }
+
+  if ('width' in run && typeof run.width === 'number') {
+    return run.width;
+  }
+
+  return 0;
+};
+
+// Builds underline spans for the normal inline-flow branch. Spans are in line-relative px
+// (the paragraph indent is folded into `from`/`to`) so a single coordinate space is shared
+// with the segment-positioned branch and the draw step below.
+const buildInlineUnderlineSpans = (
+  block: ParagraphBlock,
+  line: import('@superdoc/contracts').Line,
+  spacingPerSpace: number,
+  lineTextStartOffsetPx: number,
+): UnderlineOverlaySpan[] => {
+  const segmentsByRun = new Map<number, LineSegment[]>();
+  line.segments?.forEach((segment) => {
+    const segments = segmentsByRun.get(segment.runIndex);
+    if (segments) {
+      segments.push(segment);
+    } else {
+      segmentsByRun.set(segment.runIndex, [segment]);
+    }
+  });
+
+  const spans: UnderlineOverlaySpan[] = [];
+  let currentX = lineTextStartOffsetPx;
+
+  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
+    const run = block.runs[runIndex];
+    if (!run) continue;
+
+    const width = runInlinePaintWidth(run, runIndex, segmentsByRun, spacingPerSpace);
+    if (canPaintUnderlineOverlay(run)) {
+      appendUnderlineOverlaySpan(spans, currentX, currentX + width, underlineBorderForRun(run));
+    }
+    currentX += width;
+  }
+
+  return spans;
+};
+
+// Draws one absolutely-positioned underline element per span. Because the overlay owns the
+// underline for both text and tabs in the covered range, text, preserved spaces, and tabs
+// share one y, thickness, style and color - removing the text-decoration vs tab-border seam
+// that two separate painters produced (SD-3330). `span.from`/`span.to` are line-relative px.
+const renderUnderlineSpans = (spans: UnderlineOverlaySpan[], top: number, el: HTMLElement, doc: Document): void => {
+  spans.forEach((span) => {
+    const overlay = doc.createElement('div');
+    overlay.classList.add('superdoc-underline-overlay');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.position = 'absolute';
+    overlay.style.left = `${span.from}px`;
+    overlay.style.top = `${top}px`;
+    overlay.style.width = `${Math.max(0, span.to - span.from)}px`;
+    overlay.style.height = '0px';
+    overlay.style.borderTop = span.border;
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '2';
+    el.appendChild(overlay);
+  });
 };
 
 export const renderLine = ({
@@ -289,6 +430,39 @@ export const renderLine = ({
     spaceCount,
     shouldJustify: justifyShouldApply,
   });
+  const lineContainsInlineImage = runsForLine.some((run) => isImageRun(run));
+  const useSegmentPositioning = shouldUseSegmentPositioning(
+    hasExplicitPositioning ?? false,
+    Boolean(line.segments),
+    isRtl,
+  );
+  // Enabled for both inline-flow and segment-positioned lines: a single measured underline
+  // overlay owns the mark across text + preserved spaces + tabs, so the two never disagree
+  // on the underline's y (SD-3330). The segment-positioned branch captures span geometry as
+  // it renders; the inline branch builds it from segment/tab widths.
+  // The inline-flow overlay builds left-origin offsets that only line up with the content when the
+  // content actually starts at the left. Several layouts shift it the overlay can't see:
+  //  - RTL: shouldUseSegmentPositioning returns false, so RTL falls to inline flow where the browser
+  //    bidi-places the tabs - the LTR overlay would land on the wrong side.
+  //  - center / right alignment: the browser shifts the in-flow content; the overlay does not.
+  //  - hanging or negative indent: renderParagraphContent's CSS clamps negative indent and treats
+  //    hanging continuation lines differently than the overlay's resolveLineIndentOffset, so the two
+  //    origins diverge.
+  // In all of these, keep native underlines (don't suppress) rather than paint a misplaced overlay.
+  // The segment-positioned branch is exempt: it captures spans at the same absolute x it positions
+  // runs at, so it stays correct under any alignment/indent.
+  const overlayAlignment = (block.attrs as ParagraphAttrs | undefined)?.alignment;
+  const overlayIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+  const inlineOverlayOriginMatchesContent =
+    overlayAlignment !== 'center' &&
+    overlayAlignment !== 'right' &&
+    (overlayIndent?.hanging ?? 0) === 0 &&
+    (overlayIndent?.left ?? 0) >= 0;
+  const useLineUnderlineOverlay =
+    Boolean(line.segments) &&
+    !isRtl &&
+    shouldUseLineUnderlineOverlay(runsForLine) &&
+    (useSegmentPositioning || inlineOverlayOriginMatchesContent);
   const resolveLineIndentOffset = (): number => {
     if (indentOffsetOverride != null) {
       return indentOffsetOverride;
@@ -324,7 +498,12 @@ export const renderLine = ({
     el.style.wordSpacing = `${spacingPerSpace}px`;
   }
 
-  if (shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl)) {
+  // Collects measured underline spans (line-relative px) from whichever branch renders, so a
+  // single draw step paints them. The segment-positioned branch fills it during rendering
+  // (using the same coordinates it positions runs at); the inline branch builds it afterwards.
+  const underlineSpans: UnderlineOverlaySpan[] = [];
+
+  if (useSegmentPositioning) {
     renderExplicitlyPositionedRuns({
       block,
       line,
@@ -335,6 +514,9 @@ export const renderLine = ({
       styleId,
       runContext,
       trackedConfig,
+      lineContainsInlineImage,
+      useLineUnderlineOverlay,
+      underlineSpanCollector: useLineUnderlineOverlay ? underlineSpans : undefined,
     });
   } else {
     renderInlineRuns({
@@ -345,7 +527,18 @@ export const renderLine = ({
       styleId,
       runContext,
       trackedConfig,
+      lineContainsInlineImage,
+      useLineUnderlineOverlay,
     });
+    if (useLineUnderlineOverlay) {
+      underlineSpans.push(
+        ...buildInlineUnderlineSpans(expandedBlock as ParagraphBlock, line, spacingPerSpace, lineTextStartOffsetPx),
+      );
+    }
+  }
+
+  if (useLineUnderlineOverlay && underlineSpans.length > 0) {
+    renderUnderlineSpans(underlineSpans, underlineOffsetFromLineTop(line), el, runContext.doc);
   }
 
   appendFormattingParagraphMark(
@@ -380,6 +573,7 @@ type RunRenderBranchParams = {
   styleId?: string;
   runContext: RenderLineParams['runContext'];
   trackedConfig: ReturnType<RenderLineParams['runContext']['resolveTrackedChangesConfig']>;
+  lineContainsInlineImage: boolean;
 };
 
 const renderExplicitlyPositionedRuns = ({
@@ -392,10 +586,15 @@ const renderExplicitlyPositionedRuns = ({
   styleId,
   runContext,
   trackedConfig,
+  lineContainsInlineImage,
+  useLineUnderlineOverlay,
+  underlineSpanCollector,
 }: RunRenderBranchParams & {
   block: ParagraphBlock;
   lineTextStartOffsetPx: number;
   spacingPerSpace: number;
+  useLineUnderlineOverlay: boolean;
+  underlineSpanCollector?: UnderlineOverlaySpan[];
 }): void => {
   // Use segment-based rendering with absolute positioning for tab-aligned text.
   // shouldUseSegmentPositioning returns false for RTL because the layout engine
@@ -488,6 +687,9 @@ const renderExplicitlyPositionedRuns = ({
     if (resolved) {
       if (!geoSdtWrapper) {
         geoSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
+        if (isEmptyInlineSdtPlaceholderRun(runForSdt)) {
+          geoSdtWrapper.dataset.empty = 'true';
+        }
         geoSdtId = thisRunSdtId;
         geoSdtWrapperLeft = elemLeftPx;
         geoSdtMaxRight = elemLeftPx;
@@ -495,6 +697,9 @@ const renderExplicitlyPositionedRuns = ({
         geoSdtWrapper.style.left = `${elemLeftPx}px`;
         geoSdtWrapper.style.top = '0px';
         geoSdtWrapper.style.height = `${line.lineHeight}px`;
+      }
+      if (isImageRun(runForSdt)) {
+        geoSdtWrapper.dataset.containsInlineImage = 'true';
       }
       runContext.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
       elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
@@ -514,6 +719,10 @@ const renderExplicitlyPositionedRuns = ({
       // Find where the immediate next content begins (if it's right after this tab)
       const immediateNextSegment = findImmediateNextSegment(runIndex);
       const tabStartX = cumulativeX;
+      // When the line-level underline overlay owns this tab's underline, render the tab box
+      // without its own border and let the overlay draw the mark; capture the tab's measured
+      // span so the overlay covers exactly the geometry the tab occupies.
+      const coveredByOverlay = useLineUnderlineOverlay && canPaintUnderlineOverlay(baseRun);
       const {
         element: tabEl,
         tabEndX,
@@ -527,8 +736,17 @@ const renderExplicitlyPositionedRuns = ({
         indentOffset,
         immediateNextSegment,
         styleId,
+        !coveredByOverlay,
       );
       appendToLineGeo(tabEl, baseRun, tabStartX + indentOffset, actualTabWidth);
+      if (coveredByOverlay && underlineSpanCollector) {
+        appendUnderlineOverlaySpan(
+          underlineSpanCollector,
+          tabStartX + indentOffset,
+          tabStartX + indentOffset + actualTabWidth,
+          underlineBorderForRun(baseRun),
+        );
+      }
 
       // Update cumulativeX to where the next content begins
       // This ensures proper positioning for subsequent elements
@@ -615,6 +833,23 @@ const renderExplicitlyPositionedRuns = ({
       continue;
     }
 
+    if (isEmptySdtPlaceholderRun(baseRun)) {
+      const elem = renderRun(baseRun, context, runContext, trackedConfig);
+      if (elem) {
+        if (styleId) {
+          elem.setAttribute('styleid', styleId);
+        }
+        const segment = runSegments[0]!;
+        const baseX = segment.x !== undefined ? segment.x : cumulativeX;
+        const xPos = baseX + indentOffset;
+        elem.style.position = 'absolute';
+        elem.style.left = `${xPos}px`;
+        appendToLineGeo(elem, baseRun, xPos, segment.width);
+        cumulativeX = baseX + segment.width;
+      }
+      continue;
+    }
+
     // At this point, baseRun must be TextRun (has .text property)
     if (!('text' in baseRun)) {
       continue;
@@ -624,6 +859,10 @@ const renderExplicitlyPositionedRuns = ({
     const runPmStart = baseRun.pmStart ?? null;
     const fallbackPmEnd =
       runPmStart != null && baseRun.pmEnd == null ? runPmStart + baseText.length : (baseRun.pmEnd ?? null);
+    // When the overlay owns this run's underline, render the text without text-decoration and
+    // let the overlay paint a single continuous mark spanning the text (incl. preserved
+    // trailing spaces) and the adjacent tabs (SD-3330).
+    const coveredByOverlay = useLineUnderlineOverlay && canPaintUnderlineOverlay(baseRun);
 
     runSegments.forEach((segment) => {
       const segmentText = baseText.slice(segment.fromChar, segment.toChar);
@@ -636,13 +875,18 @@ const renderExplicitlyPositionedRuns = ({
         text: segmentText,
         pmStart: pmSliceStart,
         pmEnd: pmSliceEnd,
+        ...(coveredByOverlay ? { underline: undefined } : {}),
       };
 
       const elem = renderRun(segmentRun, context, runContext, trackedConfig);
       if (elem) {
+        if (coveredByOverlay) {
+          elem.style.textDecorationLine = segmentRun.strike ? 'line-through' : 'none';
+        }
         if (styleId) {
           elem.setAttribute('styleid', styleId);
         }
+        alignNormalTextBesideInlineImage(elem, segmentRun, lineContainsInlineImage);
         // Determine X position for this segment
         // Layout positions are relative to content area start (0).
         // Add indentOffset to position content at the correct paragraph indent.
@@ -654,12 +898,16 @@ const renderExplicitlyPositionedRuns = ({
         appendToLineGeo(elem, segmentRun, xPos, segment.width);
 
         // Advance cumulative X by the resolved segment width. LineSegment.width is the
-        // sole source of truth — the painter does not measure inline elements (SD-2957).
+        // sole source of truth. The painter does not measure inline elements (SD-2957).
         // Use baseX (without indent) to keep cumulativeX relative to content area,
         // matching how segment.x values are calculated in layout.
         const width = segment.width;
         const justifyExtraWidth = spacingPerSpace !== 0 ? spacingPerSpace * countSpaces(segmentText) : 0;
         const visualWidth = width + justifyExtraWidth;
+        // Span the visual width so the mark meets the next element (tab or run) flush.
+        if (coveredByOverlay && underlineSpanCollector) {
+          appendUnderlineOverlaySpan(underlineSpanCollector, xPos, xPos + visualWidth, underlineBorderForRun(baseRun));
+        }
         cumulativeX = baseX + visualWidth;
         // Update SDT wrapper width if actual measured width differs from initial estimate
         if (geoSdtWrapper) {
@@ -680,7 +928,9 @@ const renderInlineRuns = ({
   styleId,
   runContext,
   trackedConfig,
-}: RunRenderBranchParams & { runsForLine: Run[] }): void => {
+  lineContainsInlineImage,
+  useLineUnderlineOverlay,
+}: RunRenderBranchParams & { runsForLine: Run[]; useLineUnderlineOverlay: boolean }): void => {
   // Use run-based rendering for normal text flow
   // Track current inline SDT wrapper to group adjacent runs with the same SDT id
   let currentInlineSdtWrapper: HTMLElement | null = null;
@@ -704,23 +954,43 @@ const renderInlineRuns = ({
       closeCurrentWrapper();
     }
 
+    const suppressUnderline = useLineUnderlineOverlay && canPaintUnderlineOverlay(run);
+    const runForRender = suppressUnderline ? cloneRunWithoutUnderline(run) : run;
+
     // Special handling for TabRuns (e.g., signature lines with underlines)
     const elem =
       run.kind === 'tab'
-        ? renderInlineTabRun(run, line, runContext.doc, runContext.layoutEpoch, styleId)
-        : renderRun(run, context, runContext, trackedConfig);
+        ? renderInlineTabRun(
+            runForRender as Extract<Run, { kind: 'tab' }>,
+            line,
+            runContext.doc,
+            runContext.layoutEpoch,
+            styleId,
+            !suppressUnderline,
+          )
+        : renderRun(runForRender, context, runContext, trackedConfig);
 
     if (elem) {
+      if (suppressUnderline && run.kind !== 'tab') {
+        elem.style.textDecorationLine = 'strike' in runForRender && runForRender.strike ? 'line-through' : 'none';
+      }
       if (styleId) {
         elem.setAttribute('styleid', styleId);
       }
+      alignNormalTextBesideInlineImage(elem, runForRender, lineContainsInlineImage);
 
       // If this run has inline SDT, add to or create wrapper
       if (resolved) {
         if (!currentInlineSdtWrapper) {
           currentInlineSdtWrapper = runContext.createInlineSdtWrapper(resolved.sdt);
+          if (isEmptyInlineSdtPlaceholderRun(run)) {
+            currentInlineSdtWrapper.dataset.empty = 'true';
+          }
           runContext.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
           currentInlineSdtId = runSdtId;
+        }
+        if (isImageRun(run)) {
+          currentInlineSdtWrapper.dataset.containsInlineImage = 'true';
         }
         // Typography is set when wrapper is created from the first run.
         // Follow-up (SD-2744): define a deterministic mixed-typography rule.

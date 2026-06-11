@@ -21,6 +21,7 @@ import {
 import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 import { findChildByLocalName, someChildHasLocalName, hasLocalName } from './drawingml-utils.js';
+import { importDrawingMLTextbox } from './import-drawingml-textbox.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -123,6 +124,39 @@ const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
   const left = percentEdges.left ?? 0;
 
   return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
+};
+
+const extractAlphaModFix = (blip) => {
+  const alphaModFix = findChildByLocalName(blip?.elements, 'alphaModFix');
+  const amt = Number(alphaModFix?.attributes?.amt);
+  return Number.isFinite(amt) ? { amt } : undefined;
+};
+
+/**
+ * Fill wrap.attrs distance fields from wp:anchor dist* when the wrap element omits them.
+ * Only merges sides each wp:wrap* element may carry (ECMA-376 CT_WrapSquare / Tight / Through / TopBottom).
+ *
+ * @param {{ type: string, attrs: Record<string, unknown> }} wrap
+ * @param {{ top?: number, right?: number, bottom?: number, left?: number }} padding
+ */
+const mergeAnchorPaddingIntoWrapDistances = (wrap, padding) => {
+  if (!wrap?.attrs || !padding) return;
+  const type = wrap.type;
+  const mergeVertical = type === 'Square' || type === 'TopAndBottom';
+  const mergeHorizontal = type === 'Square' || type === 'Tight' || type === 'Through';
+
+  if (mergeVertical && wrap.attrs.distTop == null && Number.isFinite(padding.top) && padding.top !== 0) {
+    wrap.attrs.distTop = padding.top;
+  }
+  if (mergeVertical && wrap.attrs.distBottom == null && Number.isFinite(padding.bottom) && padding.bottom !== 0) {
+    wrap.attrs.distBottom = padding.bottom;
+  }
+  if (mergeHorizontal && wrap.attrs.distLeft == null && Number.isFinite(padding.left) && padding.left !== 0) {
+    wrap.attrs.distLeft = padding.left;
+  }
+  if (mergeHorizontal && wrap.attrs.distRight == null && Number.isFinite(padding.right) && padding.right !== 0) {
+    wrap.attrs.distRight = padding.right;
+  }
 };
 
 /**
@@ -263,6 +297,12 @@ export function handleImageNode(node, params, isAnchor) {
       break;
   }
 
+  // OOXML stores wrap distances on wp:anchor (distL/distR/distT/distB); wrap child elements
+  // may omit them. Merge into wrap.attrs for wrap modes that affect text flow.
+  if (wrap.type === 'Square' || wrap.type === 'Tight' || wrap.type === 'Through' || wrap.type === 'TopAndBottom') {
+    mergeAnchorPaddingIntoWrapDistances(wrap, padding);
+  }
+
   const docPr = node.elements.find((el) => el.name === 'wp:docPr');
   const isHidden = isDocPrHidden(docPr);
 
@@ -339,6 +379,7 @@ export function handleImageNode(node, params, isAnchor) {
           ...(Number.isFinite(rawContrast) ? { contrast: rawContrast } : {}),
         }
       : undefined;
+  const alphaModFix = extractAlphaModFix(blip);
 
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
@@ -563,6 +604,7 @@ export function handleImageNode(node, params, isAnchor) {
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
     ...(hasGrayscale ? { grayscale: true } : {}),
     ...(lum ? { lum } : {}),
+    ...(alphaModFix ? { alphaModFix } : {}),
   };
 
   return {
@@ -621,6 +663,43 @@ const handleShapeDrawing = (
       wrap,
       isAnchor,
       customGeometry: custGeom,
+    });
+    if (result?.attrs && isHidden) {
+      result.attrs.hidden = true;
+    }
+    if (result) return result;
+  }
+
+  // Plain textbox without preset or custom geometry (txBox="1", no prstGeom/custGeom).
+  // getVectorShape was never called, so importDrawingMLTextbox must be called directly.
+  const nonVisualShapeProps = wsp.elements?.find((el) => el.name === 'wps:cNvSpPr');
+  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
+  if (isTextBox && textBoxContent) {
+    const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
+    const drawingNode = params.nodes?.[0];
+    const result = importDrawingMLTextbox({
+      params,
+      drawingNode: drawingNode?.name === 'w:drawing' ? drawingNode : null,
+      textBoxContent,
+      bodyPr,
+      baseAttrs: {
+        width: size?.width,
+        height: size?.height,
+        marginOffset,
+        anchorData,
+        wrap,
+        isAnchor,
+        isTextBox: true,
+        originalAttributes: node?.attributes,
+        ...(params.nodes?.[0]?.name === 'w:drawing' ? { drawingContent: params.nodes[0] } : {}),
+      },
+      paragraphImporter:
+        params?.nodeListHandler != null
+          ? undefined
+          : (paragraph) => {
+              const imported = paragraphToPmParagraph(paragraph, params);
+              return Array.isArray(imported) ? imported : imported ? [imported] : [];
+            },
     });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
@@ -859,6 +938,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const blipFill = pic.elements?.find((el) => el.name === 'pic:blipFill');
       const blip = findChildByLocalName(blipFill?.elements, 'blip');
       if (!blip) return null;
+      const alphaModFix = extractAlphaModFix(blip);
 
       const rEmbed = blip.attributes?.['r:embed'];
       if (!rEmbed) return null;
@@ -892,6 +972,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
           src: path,
           imageId: picId,
           imageName: picName,
+          ...(alphaModFix ? { alphaModFix } : {}),
         },
       };
     })
@@ -998,7 +1079,8 @@ const handleChartDrawing = (params, node, graphicData, size, padding, marginOffs
  *   parts: Array<{
  *     text: string,
  *     formatting?: { bold?: boolean, italic?: boolean, color?: string, fontSize?: number, fontFamily?: string },
- *     fieldType?: 'PAGE' | 'NUMPAGES',
+ *     fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES',
+ *     pageNumberFormat?: string,
  *     isLineBreak?: boolean,
  *     isEmptyParagraph?: boolean
  *   }>,
@@ -1017,15 +1099,24 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   let horizontalAlign = null;
 
   /**
-   * Appends a field part (PAGE or NUMPAGES) to textParts with formatting.
-   * @param {'PAGE' | 'NUMPAGES'} fieldType - The field type
+   * Appends a field part (PAGE, NUMPAGES, or SECTIONPAGES) to textParts with formatting.
+   * @param {'PAGE' | 'NUMPAGES' | 'SECTIONPAGES'} fieldType - The field type
    * @param {Object} node - The field node element
    * @param {Object} paragraphProperties - Resolved paragraph properties
    */
   const appendFieldPart = (fieldType, node, paragraphProperties) => {
     const rPr = node?.elements?.find((el) => el.name === 'w:rPr');
     const formatting = extractRunFormatting(rPr, paragraphProperties, params);
-    textParts.push({ text: '', formatting, fieldType });
+    const cachedText =
+      fieldType === 'SECTIONPAGES'
+        ? (node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '')
+        : '';
+    textParts.push({
+      text: cachedText,
+      formatting,
+      fieldType,
+      ...(node?.attributes?.pageNumberFormat ? { pageNumberFormat: node.attributes.pageNumberFormat } : {}),
+    });
   };
 
   /**
@@ -1061,6 +1152,9 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       } else if (el.name === 'sd:totalPageNumber') {
         hasText = true;
         appendFieldPart('NUMPAGES', el, paragraphProperties);
+      } else if (el.name === 'sd:sectionPageCount') {
+        hasText = true;
+        appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       } else if (el.name === 'w:drawing') {
         // SD-2804 / ECMA-376 §20.4.2.38: a textbox can hold body-level
         // content, including runs with inline w:drawing images. Defer to
@@ -1115,6 +1209,10 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
     }
     if (el.name === 'sd:totalPageNumber') {
       appendFieldPart('NUMPAGES', el, paragraphProperties);
+      return true;
+    }
+    if (el.name === 'sd:sectionPageCount') {
+      appendFieldPart('SECTIONPAGES', el, paragraphProperties);
       return true;
     }
     if ((el.name === 'w:hyperlink' || el.name === 'sd:pageReference') && Array.isArray(el.elements)) {
@@ -1301,6 +1399,105 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
  * //   }
  * // }
  */
+
+function extractFieldInlineNodes(node) {
+  if (node?.name === 'sd:autoPageNumber') {
+    return [{ type: 'page-number', attrs: { marksAsAttrs: [], instruction: 'PAGE' } }];
+  }
+  if (node?.name === 'sd:totalPageNumber') {
+    return [{ type: 'total-page-number', attrs: { marksAsAttrs: [], instruction: 'NUMPAGES' } }];
+  }
+  if (node?.name === 'sd:sectionPageCount') {
+    const cachedText = node?.attributes?.resolvedText ?? node?.attributes?.importedCachedText ?? '';
+    if (!cachedText) return [];
+    return [{ type: 'text', text: cachedText }];
+  }
+  return [];
+}
+
+function extractInlineNodesFromRun(run, params) {
+  if (!run?.elements) return [];
+
+  const nodes = [];
+  run.elements.forEach((el) => {
+    if (el.name === 'w:t' || el.name === 'w:delText') {
+      const textNode = el.elements?.find((n) => n.type === 'text');
+      if (!textNode || typeof textNode.text !== 'string') return;
+      const cleanedText = textNode.text.replace(/\[\[sdspace\]\]/g, ' ');
+      if (cleanedText.length > 0) {
+        nodes.push({ type: 'text', text: cleanedText });
+      }
+    } else if (el.name === 'w:tab') {
+      nodes.push({ type: 'text', text: '\t' });
+    } else if (el.name === 'w:br') {
+      nodes.push({ type: 'lineBreak', attrs: {} });
+    } else if (
+      el.name === 'sd:autoPageNumber' ||
+      el.name === 'sd:totalPageNumber' ||
+      el.name === 'sd:sectionPageCount'
+    ) {
+      nodes.push(...extractFieldInlineNodes(el));
+    } else if (el.name === 'w:drawing') {
+      const inline = el.elements?.find((child) => child?.name === 'wp:inline');
+      if (!inline) return;
+      const imagePm = handleImageNode(inline, { ...params, nodes: [el] }, false);
+      if (imagePm?.type === 'image' && imagePm.attrs?.hidden !== true) {
+        nodes.push(imagePm);
+      }
+    }
+  });
+
+  return nodes;
+}
+
+function paragraphToPmParagraph(paragraph, params) {
+  // `paragraph` is already preprocessed by importDrawingMLTextbox — do not call
+  // preProcessTextBoxContent again here or field nodes (sd:autoPageNumber, etc.) get processed twice.
+  const paragraphNode = collectTextBoxParagraphs([paragraph])[0];
+  if (!paragraphNode) return null;
+
+  const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraphNode, params);
+  const alignment = extractParagraphAlignment(paragraphNode) || 'left';
+  const content = [];
+  let pendingRunContent = [];
+
+  const flushPendingRun = () => {
+    if (pendingRunContent.length === 0) return;
+    content.push({ type: 'run', attrs: {}, content: pendingRunContent });
+    pendingRunContent = [];
+  };
+
+  (paragraphNode.elements || []).forEach((element) => {
+    if (element?.name === 'w:r') {
+      const inlineParts = extractInlineNodesFromRun(element, params);
+      inlineParts.forEach((part) => {
+        if (part?.type === 'image') {
+          flushPendingRun();
+          content.push(part);
+          return;
+        }
+        pendingRunContent.push(part);
+      });
+      return;
+    }
+
+    if (element?.name?.startsWith('sd:')) {
+      const runContent = extractFieldInlineNodes(element);
+      if (runContent.length > 0) {
+        pendingRunContent.push(...runContent);
+      }
+    }
+  });
+  flushPendingRun();
+
+  return {
+    type: 'paragraph',
+    attrs: { paragraphProperties, textAlign: alignment },
+    content,
+    marks: [],
+  };
+}
+
 export function getVectorShape({
   params,
   node,
@@ -1368,6 +1565,46 @@ export function getVectorShape({
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
   const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
   const nonVisualShapeProps = wsp.elements?.find((el) => el.name === 'wps:cNvSpPr');
+
+  const isWordArt = bodyPr?.attributes?.['fromWordArt'] === '1';
+  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
+
+  if (isTextBox && textBoxContent) {
+    return importDrawingMLTextbox({
+      params,
+      drawingNode: drawingNode?.name === 'w:drawing' ? drawingNode : null,
+      textBoxContent,
+      bodyPr,
+      baseAttrs: {
+        ...schemaAttrs,
+        width,
+        height,
+        rotation,
+        flipH,
+        flipV,
+        fillColor,
+        strokeColor,
+        strokeWidth,
+        lineEnds,
+        effectExtent,
+        marginOffset,
+        anchorData,
+        wrap,
+        isAnchor,
+        isWordArt,
+        isTextBox,
+        originalAttributes: node?.attributes,
+      },
+      paragraphImporter:
+        params?.nodeListHandler != null
+          ? undefined
+          : (paragraph) => {
+              const imported = paragraphToPmParagraph(paragraph, params);
+              return Array.isArray(imported) ? imported : imported ? [imported] : [];
+            },
+    });
+  }
+
   let textContent = null;
   let textAlign = 'left';
 
@@ -1375,9 +1612,6 @@ export function getVectorShape({
     textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
     textAlign = textContent?.horizontalAlign || 'left';
   }
-
-  const isWordArt = bodyPr?.attributes?.['fromWordArt'] === '1';
-  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
 
   return {
     type: 'vectorShape',

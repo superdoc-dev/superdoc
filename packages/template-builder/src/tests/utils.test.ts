@@ -208,6 +208,7 @@ describe('generateFieldColorCSS', () => {
     const css = generateFieldColorCSS({ owner: '#629be7', signer: '#d97706' }, '.scope');
     // Default rule (no tag selector) + per-type rules
     expect(css).toContain('.scope .superdoc-structured-content-inline,');
+    expect(css).toContain('.scope .superdoc-structured-content-block::after');
     expect(css).toContain('#629be7');
     expect(css).toContain('#d97706');
   });

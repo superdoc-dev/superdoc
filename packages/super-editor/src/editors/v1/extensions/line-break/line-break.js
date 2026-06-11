@@ -32,6 +32,17 @@ export const LineBreak = Node.create({
   content: '',
   atom: true,
 
+  // The visible text representation of this leaf. Without it, flattening APIs
+  // see the break as nothing or a U+FFFC placeholder, so the rewrite char-diff
+  // and the doc-api text model (query.match, structural projection) disagree
+  // with the visible document. For example, an idempotent text.rewrite over
+  // `Alpha\nBeta` would duplicate the break, and query.match could not find it.
+  // Read by PM's built-in `Node.textBetween` (so `node.textContent` too),
+  // SuperDoc's `textBetweenWithTabs` / `charOffsetToDocPos`, SearchIndex, and
+  // `text-offset-resolver`. Mirrors the `noBreakHyphen` leaf (U+2011). See
+  // SD-3278.
+  leafText: () => '\n',
+
   addOptions() {
     return {};
   },

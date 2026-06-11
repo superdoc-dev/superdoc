@@ -243,6 +243,55 @@ superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
 ```
 </CodeGroup>
 
+## Content controls (SDT fields)
+
+### `content-control:active-change`
+
+Fires when selection enters a content control, switches between controls, or leaves all controls.
+
+```javascript
+superdoc.on('content-control:active-change', ({ active, previous, activePath, source }) => {
+  // source: 'keyboard' | 'pointer'
+  // active / previous: SdtRef | null
+  // activePath: SdtRef[] - full active stack, innermost first ([] when none)
+});
+```
+
+`SdtRef` shape:
+
+```ts
+type SdtRef = {
+  id: string;
+  tag?: string;
+  alias?: string;
+  controlType: string;
+  scope: 'inline' | 'block';
+};
+```
+
+`active` is the deepest control (`activePath[0]`); `activePath` holds the full stack, innermost first. Controls without an `id` do not emit these events.
+
+How to interpret:
+
+1. Focus (`null -> A`): `previous === null && active !== null`
+2. Switch (`A -> B`): `previous !== null && active !== null && previous.id !== active.id`
+3. Blur (`A -> null`): `previous !== null && active === null`
+
+### `content-control:click`
+
+Fires on pointer click inside a content control.
+
+```javascript
+superdoc.on('content-control:click', ({ target, source }) => {
+  // source is always 'pointer'
+  // target: SdtRef
+});
+```
+
+Both are also available as config callbacks: `onContentControlActiveChange` and `onContentControlClick`.
+
+To build your own content-control UI on these events, see [Custom UI > Content controls](/editor/custom-ui/content-controls).
+
 ## Comments events
 
 ### `comments-update`
@@ -251,10 +300,11 @@ When comments are modified.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('comments-update', ({ type, comment, changes }) => {
-  // type: 'add', 'update', 'deleted', 'resolved'
+superdoc.on('comments-update', ({ type, comment, changes, pendingSelection }) => {
+  // type: 'pending', 'add', 'update', 'deleted', 'resolved'
   // comment: the comment object (when applicable)
   // changes: per-field change set (when the update is a mutation)
+  // pendingSelection: SelectionInfo | null on 'pending'
 });
 ```
 
@@ -267,10 +317,11 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('comments-update', ({ type, comment, changes }) => {
-  // type: 'add', 'update', 'deleted', 'resolved'
+superdoc.on('comments-update', ({ type, comment, changes, pendingSelection }) => {
+  // type: 'pending', 'add', 'update', 'deleted', 'resolved'
   // comment: the comment object (when applicable)
   // changes: per-field change set (when the update is a mutation)
+  // pendingSelection: SelectionInfo | null on 'pending'
 });
 ```
 </CodeGroup>
@@ -391,12 +442,12 @@ superdoc.on('pagination-update', ({ totalPages, superdoc }) => {
 
 ### `zoomChange`
 
-When the zoom level changes via `setZoom()`.
+When the zoom level changes, from any source: `setZoom()`, the toolbar zoom control, or [`fit-width` mode](/editor/superdoc/configuration#param-zoom). The payload carries the value and the mode that produced it. Also available as the `onZoomChange` config callback.
 
 <CodeGroup>
 ```javascript Usage
-superdoc.on('zoomChange', ({ zoom }) => {
-  console.log(`Zoom: ${zoom}%`);
+superdoc.on('zoomChange', ({ zoom, mode }) => {
+  console.log(`Zoom: ${zoom}% (${mode})`);
 });
 ```
 
@@ -409,8 +460,41 @@ const superdoc = new SuperDoc({
   document: yourFile,
 });
 
-superdoc.on('zoomChange', ({ zoom }) => {
-  console.log(`Zoom: ${zoom}%`);
+superdoc.on('zoomChange', ({ zoom, mode }) => {
+  console.log(`Zoom: ${zoom}% (${mode})`);
+});
+```
+</CodeGroup>
+
+### `viewport-change`
+
+When the fit-width calculation changes. Pixel-level width changes that do not affect the rounded fit are deduped. `getViewportMetrics()` always reads the latest measurements.
+
+- `availableWidth` - container width in pixels, minus the comments sidebar when visible
+- `documentWidth` - the widest document page width in pixels at 100% zoom (zoom-independent; DOCX from laid-out pages with page-styles fallback, PDF from rendered pages)
+- `fitZoom` - the unclamped zoom percentage that fits the page into the available width
+
+HTML documents reflow to the container, so an HTML-only instance reports no metrics.
+
+For most use cases, prefer [`zoom.mode: 'fit-width'`](/editor/superdoc/configuration#param-zoom). Subscribe to this event only when you want to apply custom zoom behavior.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('viewport-change', ({ fitZoom }) => {
+  superdoc.setZoom(Math.min(100, Math.max(35, fitZoom)));
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onViewportChange: ({ availableWidth, documentWidth, fitZoom }) => {
+    console.log(`Need ${fitZoom}% to fit ${documentWidth}px into ${availableWidth}px`);
+  },
 });
 ```
 </CodeGroup>

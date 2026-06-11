@@ -45,6 +45,7 @@ import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
 import type { FormatInlineAliasInput, FormatRangeInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
 import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/index.js';
+import type { TemplatesApplyInput, TemplatesApplyOptions, TemplatesApplyReceipt } from '../templates/index.js';
 import type {
   CommentsCreateReceipt,
   CommentsCreateInput,
@@ -692,6 +693,15 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
+
+  // --- templates.* ---
+  // Async operation (SD-3247): output is Promise<TemplatesApplyReceipt>. The JSON
+  // output schema still describes the resolved receipt, not the Promise.
+  'templates.apply': {
+    input: TemplatesApplyInput;
+    options: TemplatesApplyOptions;
+    output: Promise<TemplatesApplyReceipt>;
+  };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };

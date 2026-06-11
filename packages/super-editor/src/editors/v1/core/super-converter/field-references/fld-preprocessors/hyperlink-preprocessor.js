@@ -14,7 +14,7 @@ import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
  *   when the instruction has no recognisable target.
  */
 export function resolveHyperlinkAttributes(instruction, docx) {
-  const urlMatch = instruction.match(/HYPERLINK\s+"([^"]+)"/);
+  const urlMatch = instruction.match(/^\s*HYPERLINK\s+"([^"]+)"/i);
   if (urlMatch && urlMatch.length >= 2) {
     const url = urlMatch[1];
     const rels = docx?.['word/_rels/document.xml.rels'];
@@ -67,11 +67,12 @@ export function resolveHyperlinkAttributes(instruction, docx) {
  * Processes a HYPERLINK instruction and creates a `w:hyperlink` node.
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
  * @param {string} instruction The instruction text.
- * @param {import('../../v2/docxHelper').ParsedDocx} [docx] - The docx object.
+ * @param {{ docx?: import('../../v2/docxHelper').ParsedDocx }} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 1216
  */
-export function preProcessHyperlinkInstruction(nodesToCombine, instruction, docx) {
+export function preProcessHyperlinkInstruction(nodesToCombine, instruction, options = {}) {
+  const docx = options.docx;
   const linkAttributes = resolveHyperlinkAttributes(instruction, docx) ?? {};
 
   return [

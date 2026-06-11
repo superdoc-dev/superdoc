@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 214,
+    "total": 234,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 146
+      "supported-root": 166
     },
     "byConfidence": {
-      "high": 111,
+      "high": 131,
       "medium": 101,
       "low": 2
     }
@@ -433,6 +433,17 @@
       "inCjs": false
     },
     {
+      "name": "DocumentFontOption",
+      "bucket": "supported-root",
+      "rationale": "Document-scoped font picker option returned by superdoc.fonts.getDocumentFontOptions() and surfaced through ui.fonts / useSuperDocFontOptions for custom toolbar integrations.",
+      "confidence": "high",
+      "source": "font-api",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "DocumentApi",
       "bucket": "supported-root",
       "rationale": "Document API navigation/address/selection type. Promoted into the root facade by SD-3185.",
@@ -807,10 +818,87 @@
       "inCjs": false
     },
     {
+      "name": "FontAssetUrlContext",
+      "bucket": "supported-root",
+      "rationale": "Context passed to the public FontsConfig.resolveAssetUrl resolver.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontAssetUrlResolver",
+      "bucket": "supported-root",
+      "rationale": "Type of the public FontsConfig.resolveAssetUrl hook.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "FontConfig",
       "bucket": "supported-root",
       "rationale": "Configuration type for a supported feature.",
       "confidence": "medium",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontFaceConfig",
+      "bucket": "supported-root",
+      "rationale": "Public URL-backed font-face shape used by FontsConfig.families and superdoc.fonts.add.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontFamilyConfig",
+      "bucket": "supported-root",
+      "rationale": "Public font-family shape used by FontsConfig.families and superdoc.fonts.add.",
+      "confidence": "high",
+      "source": "config-supported",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontResolutionRecord",
+      "bucket": "supported-root",
+      "rationale": "Per-font logical-to-physical resolution record returned by superdoc.fonts.getReport().",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontsChangedPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload of the public fonts-changed event / onFontsChanged callback and fonts.onReport.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "FontsConfig",
+      "bucket": "supported-root",
+      "rationale": "Consumer fonts configuration (custom families, logical mappings, and bundled asset URL hooks); part of the public SuperDoc Config.",
+      "confidence": "high",
       "source": "config-supported",
       "inDts": true,
       "inDcts": true,
@@ -1764,6 +1852,50 @@
       "inCjs": false
     },
     {
+      "name": "SuperDocFitWidthOptions",
+      "rationale": "Bounds and padding for the fit-width zoom policy (Config.zoom.fitWidth); named so consumers can type fit policies outside the inline config literal.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontFace",
+      "bucket": "supported-root",
+      "rationale": "Public font-face shape for superdoc.fonts.add (URL source + optional weight/style).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontFamily",
+      "bucket": "supported-root",
+      "rationale": "Public font-family shape for superdoc.fonts.add (family name + faces).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocFontsApi",
+      "bucket": "supported-root",
+      "rationale": "Return type of the public superdoc.fonts read + write surface (getReport/getMissingFonts/getDocumentFonts/onReport + map/unmap/add/preload).",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
       "name": "SuperDocLayoutEngineOptions",
       "bucket": "supported-root",
       "rationale": "Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field.",
@@ -1813,6 +1945,72 @@
       "rationale": "Backs Config.telemetry; documented at apps/docs/resources/telemetry.mdx (enabled/endpoint/metadata/licenseKey).",
       "confidence": "high",
       "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocViewportChangePayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the viewport-change event and passed to Config.onViewportChange; named so custom fit-to-width consumers can type handlers.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocViewportMetrics",
+      "rationale": "Return type of getViewportMetrics(); alias of the viewport-change payload so reads and events share one shape.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomConfig",
+      "bucket": "supported-root",
+      "rationale": "Config.zoom domain object (initial + fitToContainer); named so consumers can build zoom configuration values with a public type.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomMode",
+      "rationale": "Closed zoom mode union (manual | fit-width) used by Config.zoom.mode, setZoomMode, and the zoomChange payload.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomPayload",
+      "bucket": "supported-root",
+      "rationale": "Payload emitted with the zoomChange event and passed to Config.onZoomChange; promoted from an internal interface when the config callback made it consumer-facing.",
+      "confidence": "high",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocZoomState",
+      "rationale": "Return type of getZoomState(); snapshot of mode, value, fit zoom, and effective bounds for zoom UI.",
+      "bucket": "supported-root",
+      "confidence": "high",
+      "source": "core",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -2004,6 +2202,28 @@
       "inDcts": true,
       "inEsm": true,
       "inCjs": true
+    },
+    {
+      "name": "TrackChangeAuthor",
+      "bucket": "supported-root",
+      "rationale": "Structured author identity passed to modules.trackChanges.authorColors.resolve.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "TrackChangesAuthorColorsConfig",
+      "bucket": "supported-root",
+      "rationale": "Module config for per-author tracked-change colors (modules.trackChanges.authorColors). Documented at the module-config layer.",
+      "confidence": "high",
+      "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
     },
     {
       "name": "TrackChangesBasePluginKey",

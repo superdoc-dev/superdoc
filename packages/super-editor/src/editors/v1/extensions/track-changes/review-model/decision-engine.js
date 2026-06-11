@@ -21,7 +21,7 @@
  */
 
 import { Slice } from 'prosemirror-model';
-import { AddMarkStep, RemoveMarkStep, ReplaceStep, Mapping } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep, canJoin } from 'prosemirror-transform';
 
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
@@ -80,7 +80,7 @@ import { planCommentEffects } from './comment-effects.js';
 /**
  * @typedef {Object} DecisionFailure
  * @property {false} ok
- * @property {'TARGET_NOT_FOUND'|'INVALID_TARGET'|'REVISION_MISMATCH'|'PERMISSION_DENIED'|'CAPABILITY_UNAVAILABLE'|'PRECONDITION_FAILED'|'COMMENT_CASCADE_PARTIAL'|'NO_OP'} code
+ * @property {'TARGET_NOT_FOUND'|'INVALID_TARGET'|'INVALID_INPUT'|'REVISION_MISMATCH'|'PERMISSION_DENIED'|'CAPABILITY_UNAVAILABLE'|'PRECONDITION_FAILED'|'COMMENT_CASCADE_PARTIAL'|'NO_OP'} code
  * @property {string} message
  * @property {DecisionDiagnostic[]} [diagnostics]
  * @property {unknown} [details]
@@ -136,7 +136,7 @@ export const decideTrackedChanges = ({ state, editor, decision, target, replacem
   if (!permissionResult.ok) return permissionResult.failure;
 
   // Compute the PM mutation plan + comment effects.
-  const planResult = buildMutationPlan({ state, graph, selections, decision, replacements });
+  const planResult = buildMutationPlan({ state, graph, selections, decision });
   if (!planResult.ok) return planResult.failure;
   const { plan } = planResult;
 
@@ -216,11 +216,45 @@ const normalizeDecisionTarget = (target) => {
  * @property {Array<{ from: number, to: number }>} ranges Concrete PM ranges to resolve.
  */
 
+/**
+ * Resolve a logical change id to its change object, preferring a STRUCTURAL
+ * whole-table change when the id is shared.
+ *
+ * Cell text typed in a tracked-inserted row inherits the row's revision id, so
+ * the same id can map to BOTH the inline text change and the structural table
+ * change. The structural change registers its public-id alias only when the key
+ * is free (review-graph), so a plain `changes.get(id)` can return the inline
+ * child. Always selecting the structural change lets the decide cascade clear
+ * the contained cell text in ONE action — and this must hold for id, range, and
+ * collapsed-cursor targets alike (otherwise a range/cursor decide on a tracked
+ * table resolves the inline child instead of the table).
+ *
+ * @param {import('./review-graph.js').TrackedReviewGraph} graph
+ * @param {string} id
+ * @returns {import('./review-graph.js').LogicalTrackedChange | undefined}
+ */
+const resolveLogicalChangeById = (graph, id) => {
+  const key = String(id);
+  for (const candidate of graph.changes.values()) {
+    if (candidate?.type === CanonicalChangeType.Structural && String(candidate.id) === key) {
+      return candidate;
+    }
+  }
+  return graph.changes.get(id);
+};
+
 const resolveTargetToSelections = ({ graph, normalized }) => {
   if (normalized.kind === 'all') {
     /** @type {ChangeSelection[]} */
     const sel = [];
+    // The `changes` map can hold a logical change under more than one key
+    // (structural changes register both a table-scoped internal key and a
+    // public-id alias). Dedupe by object identity so `scope:'all'` never plans
+    // the same change twice.
+    const seen = new Set();
     for (const change of graph.changes.values()) {
+      if (seen.has(change)) continue;
+      seen.add(change);
       sel.push({ change, coverage: 'full', ranges: change.segments.map((s) => ({ from: s.from, to: s.to })) });
     }
     // Document-order sort to make the apply pass deterministic and to keep
@@ -229,7 +263,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
     return { ok: true, selections: sel };
   }
   if (normalized.kind === 'id') {
-    const change = graph.changes.get(normalized.id);
+    const change = resolveLogicalChangeById(graph, normalized.id);
     if (!change)
       return { ok: false, failure: failure('TARGET_NOT_FOUND', `no tracked change with id "${normalized.id}".`) };
     return {
@@ -255,7 +289,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
       // per phase0-004 "Range Decisions": collapsed range inside a change
       // resolves the whole logical change.
       if (from === to && segment.from <= from && segment.to > from) {
-        const change = graph.changes.get(segment.changeId);
+        const change = resolveLogicalChangeById(graph, segment.changeId);
         if (!change) continue;
         const existing = byId.get(change.id);
         if (existing) {
@@ -271,7 +305,7 @@ const resolveTargetToSelections = ({ graph, normalized }) => {
       }
       continue;
     }
-    const change = graph.changes.get(segment.changeId);
+    const change = resolveLogicalChangeById(graph, segment.changeId);
     if (!change) continue;
     const existing = byId.get(change.id);
     if (existing) {
@@ -376,7 +410,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
 
 /**
  * @typedef {Object} MutationOp
- * @property {'removeContent'|'removeMark'|'addMark'|'unwrapInsert'|'restoreFormat'|'removeFormat'} kind
+ * @property {'removeContent'|'removeMark'|'addMark'|'unwrapInsert'|'restoreFormat'|'removeFormat'|'rejectParagraphSplit'|'clearRowTrackChange'} kind
  * @property {number} from
  * @property {number} to
  * @property {string} [changeId]
@@ -384,6 +418,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
  * @property {import('prosemirror-model').Mark} [mark]
  * @property {Array<unknown>} [beforeMarks]
  * @property {Array<unknown>} [afterMarks]
+ * @property {'inserted'|'source'} [anchor]
  */
 
 /**
@@ -395,7 +430,7 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
  * @property {DecisionDiagnostic[]} diagnostics
  */
 
-const buildMutationPlan = ({ state, graph, selections, decision, replacements }) => {
+const buildMutationPlan = ({ state, graph, selections, decision }) => {
   /** @type {MutationOp[]} */
   const ops = [];
   /** @type {Array<{ from: number, to: number, cause: string }>} */
@@ -409,10 +444,149 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
   /** @type {DecisionDiagnostic[]} */
   const diagnostics = [];
 
+  // Pre-compute the table ranges that a selected whole-table structural change
+  // will REMOVE (reject-insert / accept-delete). Inline tracked changes wholly
+  // inside such a table must be retired/suppressed as side effects BEFORE
+  // mutation planning so they do not generate their own overlapping ops or
+  // cause position drift (scope:'all' and explicit multi-target decides). This
+  // mirrors the `affectedChildren` retirement for removed ranges below.
+  /** @type {Array<{ from: number, to: number, structuralId: string }>} */
+  const structuralTableRemovals = [];
+  for (const selection of selections) {
+    const change = selection.change;
+    if (change.type !== CanonicalChangeType.Structural) continue;
+    const structural = change.structural;
+    if (!structural || structural.wholeTable !== true || structural.decidable === false) continue;
+    const removesTable =
+      (structural.side === 'insertion' && decision === 'reject') ||
+      (structural.side === 'deletion' && decision === 'accept');
+    if (!removesTable) continue;
+    structuralTableRemovals.push({
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      structuralId: change.id,
+    });
+  }
+  /** @type {Set<string>} Inline ids suppressed because they live inside a removed table. */
+  const suppressedInsideTable = new Set();
+  const isInsideRemovedTable = (change) =>
+    structuralTableRemovals.length > 0 &&
+    change.type !== CanonicalChangeType.Structural &&
+    change.segments.length > 0 &&
+    change.segments.every((seg) =>
+      structuralTableRemovals.some((range) => range.from <= seg.from && range.to >= seg.to),
+    );
+
+  // Pre-compute the table ranges that a selected whole-table structural change
+  // KEEPS (accept-insert / reject-delete → the table stays as normal content).
+  // Word / Google Docs treat an inserted/deleted table as ONE change: approving
+  // it approves the text inside. We therefore cascade the SAME decision onto
+  // every inline tracked change whose segments are wholly inside [tableFrom,
+  // tableTo] — accepting an inserted table accepts the contained insertions
+  // (their trackInsert marks are removed, text stays); rejecting a deleted table
+  // rejects the contained changes (e.g. contained deletions are rejected so
+  // their content stays). The inline change is the CHILD of the structural
+  // parent here, decided together so the bubble pipeline retires it as a child.
+  /** @type {Array<{ from: number, to: number, structuralId: string }>} */
+  const structuralTableStays = [];
+  for (const selection of selections) {
+    const change = selection.change;
+    if (change.type !== CanonicalChangeType.Structural) continue;
+    const structural = change.structural;
+    if (!structural || structural.wholeTable !== true || structural.decidable === false) continue;
+    const tableStays =
+      (structural.side === 'insertion' && decision === 'accept') ||
+      (structural.side === 'deletion' && decision === 'reject');
+    if (!tableStays) continue;
+    structuralTableStays.push({
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      structuralId: change.id,
+    });
+  }
+  const isInsideStayingTable = (change) =>
+    structuralTableStays.length > 0 &&
+    change.type !== CanonicalChangeType.Structural &&
+    change.segments.length > 0 &&
+    change.segments.every((seg) => structuralTableStays.some((range) => range.from <= seg.from && range.to >= seg.to));
+
+  /** @type {Set<string>} Inline ids resolved as children of a staying table. */
+  const cascadedInsideStayingTable = new Set();
+  // Plan a single inline tracked change as a CHILD of a staying-table structural
+  // decision, reusing the existing inline plan functions with FULL coverage and
+  // the SAME decision. Marks it touched + retired and records it as an affected
+  // child. Returns a failure to bubble up, or null on success.
+  const planContainedInlineChild = (change) => {
+    if (cascadedInsideStayingTable.has(change.id)) return null;
+    cascadedInsideStayingTable.add(change.id);
+    touched.add(change.id);
+    const fullSelection = {
+      change,
+      coverage: 'full',
+      ranges: change.segments.map((s) => ({ from: s.from, to: s.to })),
+    };
+    if (change.type === CanonicalChangeType.Insertion) {
+      planInsertionDecision({ ops, change, selection: fullSelection, decision, removedRanges, retired });
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Deletion) {
+      planDeletionDecision({ ops, change, selection: fullSelection, decision, removedRanges, retired });
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Replacement) {
+      const repResult = planReplacementDecision({ ops, graph, change, decision, removedRanges, retired });
+      if (!repResult.ok) return repResult.failure;
+      return null;
+    }
+    if (change.type === CanonicalChangeType.Formatting) {
+      planFormattingDecision({ ops, change, decision, retired });
+      return null;
+    }
+    // Nested structural (a tracked table inside a tracked table cell) is out of
+    // scope for the cascade; leave it for its own decide.
+    cascadedInsideStayingTable.delete(change.id);
+    touched.delete(change.id);
+    return null;
+  };
+
   for (const selection of selections) {
     const { change } = selection;
+    // Inline tracked change fully contained in a table the decision removes:
+    // suppress its own ops and retire it as a side effect. The whole-table
+    // removeContent op already deletes its content; planning it independently
+    // would double-plan overlapping ops / drift positions.
+    if (isInsideRemovedTable(change)) {
+      retired.add(change.id);
+      touched.add(change.id);
+      suppressedInsideTable.add(change.id);
+      continue;
+    }
+    // Inline tracked change fully contained in a table the decision KEEPS:
+    // cascade the SAME decision onto it as a child (accept-insert → its
+    // trackInsert marks are removed; reject-delete → it is rejected). Routing it
+    // through the dedicated child planner here (instead of the normal path
+    // below) keeps `scope:'all'` from double-planning the same change. Recorded
+    // as an affected child in the side-effect pass below.
+    if (isInsideStayingTable(change)) {
+      const failureResult = planContainedInlineChild(change);
+      if (failureResult) return { ok: false, failure: failureResult };
+      continue;
+    }
     const isFull = selection.coverage === 'full';
     if (!isFull) {
+      if (change.type === CanonicalChangeType.Structural) {
+        // Whole-object atomicity (spec §8/§9/§19/TC-OPS-003): a partial-range
+        // target on a structural revision that is not safely divisible MUST
+        // fail closed with INVALID_INPUT and leave the document unmutated.
+        return {
+          ok: false,
+          failure: failure(
+            'INVALID_INPUT',
+            'partial-range decisions are not valid on an indivisible structural revision.',
+            { details: { changeId: change.id, subtype: change.subtype } },
+          ),
+        };
+      }
       if (change.type === CanonicalChangeType.Replacement) {
         return {
           ok: false,
@@ -445,7 +619,13 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
       }
     }
 
-    if (!isFull && (change.type === CanonicalChangeType.Insertion || change.type === CanonicalChangeType.Deletion)) {
+    if (change.type === CanonicalChangeType.Structural) {
+      const structuralResult = planStructuralDecision({ ops, change, decision, removedRanges, retired });
+      if (!structuralResult.ok) return { ok: false, failure: structuralResult.failure };
+    } else if (
+      !isFull &&
+      (change.type === CanonicalChangeType.Insertion || change.type === CanonicalChangeType.Deletion)
+    ) {
       const partialResult = planPartialTextDecision({
         ops,
         change,
@@ -461,7 +641,7 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
     } else if (change.type === CanonicalChangeType.Deletion) {
       planDeletionDecision({ ops, change, selection, decision, removedRanges, retired });
     } else if (change.type === CanonicalChangeType.Replacement) {
-      const repResult = planReplacementDecision({ ops, change, decision, removedRanges, retired });
+      const repResult = planReplacementDecision({ ops, graph, change, decision, removedRanges, retired });
       if (!repResult.ok) return { ok: false, failure: repResult.failure };
     } else if (change.type === CanonicalChangeType.Formatting) {
       planFormattingDecision({ ops, change, decision, retired });
@@ -473,6 +653,34 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
           `unsupported change type "${change.type}" for change "${change.id}".`,
         ),
       };
+    }
+  }
+
+  // Cascade onto contained inline children of a STAYING table that were NOT in
+  // the selection set (e.g. a `{kind:'id'}` decide that targets only the
+  // structural change). The whole-table change is the parent; every inline
+  // tracked change wholly inside [tableFrom, tableTo] is decided with the SAME
+  // decision so the table ends up clean (accept-insert) / restored with content
+  // (reject-delete) and zero inline marks remain. Scope:'all' already cascaded
+  // these in the main loop; `cascadedInsideStayingTable` dedups so they are not
+  // planned twice. Done after the main loop so positions are consistent.
+  if (structuralTableStays.length > 0) {
+    // Skip by OBJECT identity, not by `change.id`. Cell text typed in a
+    // tracked-inserted row inherits the row's revision id, so the inline text
+    // change and the structural table change SHARE an id. An id-based skip
+    // (`touched.has(change.id)`) would treat the just-decided table as if it
+    // also covered the inline child and wrongly exclude it from the cascade —
+    // leaving the cell text tracked after the table is accepted. The decided
+    // (selected) changes and already-cascaded children are distinct objects.
+    const decidedObjects = new Set(selections.map((selection) => selection.change));
+    const seenStaying = new Set();
+    for (const change of graph.changes.values()) {
+      if (seenStaying.has(change)) continue;
+      seenStaying.add(change);
+      if (decidedObjects.has(change) || cascadedInsideStayingTable.has(change.id)) continue;
+      if (!isInsideStayingTable(change)) continue;
+      const failureResult = planContainedInlineChild(change);
+      if (failureResult) return { ok: false, failure: failureResult };
     }
   }
 
@@ -493,12 +701,38 @@ const buildMutationPlan = ({ state, graph, selections, decision, replacements })
   // that were meaningful only inside it.
   /** @type {Array<{ changeId: string }>} */
   const affectedChildren = [];
+  // Inline changes suppressed because they were wholly inside a removed table
+  // are already retired/touched above; surface them as affected side effects so
+  // the bubble lifecycle resolves their threads.
+  for (const id of suppressedInsideTable) {
+    affectedChildren.push({ changeId: id });
+  }
+  // Inline children cascaded as part of a STAYING whole-table decision: surface
+  // them so the bubble lifecycle resolves their threads alongside the parent.
+  for (const id of cascadedInsideStayingTable) {
+    affectedChildren.push({ changeId: id });
+  }
+  const seenChange = new Set();
   for (const change of graph.changes.values()) {
+    // `changes` may hold a logical change under both an internal key and a
+    // public alias; skip the duplicate visit.
+    if (seenChange.has(change)) continue;
+    seenChange.add(change);
     if (touched.has(change.id)) continue;
+    const insideRemoved = change.segments.length
+      ? change.segments.every((seg) => removedRanges.some((r) => r.from <= seg.from && r.to >= seg.to))
+      : false;
+    // An inline change wholly inside a removed table (even with no parent
+    // relationship) is gone with the table — retire it as a side effect.
+    if (insideRemoved && isInsideRemovedTable(change)) {
+      retired.add(change.id);
+      touched.add(change.id);
+      affectedChildren.push({ changeId: change.id });
+      continue;
+    }
     if (!change.parent) continue;
     if (!retired.has(change.parent) && !touched.has(change.parent)) continue;
-    const inside = change.segments.every((seg) => removedRanges.some((r) => r.from <= seg.from && r.to >= seg.to));
-    if (inside) {
+    if (insideRemoved) {
       retired.add(change.id);
       touched.add(change.id);
       affectedChildren.push({ changeId: change.id });
@@ -590,7 +824,75 @@ const planDeletionDecision = ({ ops, change, selection, decision, removedRanges,
   if (isFull) retired.add(change.id);
 };
 
-const planReplacementDecision = ({ ops, change, decision, removedRanges, retired }) => {
+/**
+ * Plan a whole-object structural decision (whole-table insert/delete).
+ *
+ * Semantics (spec §8 / §14):
+ *   - accept insertion  → clear the rows' trackChange attrs (table becomes normal content).
+ *   - reject insertion  → remove the whole table node.
+ *   - accept deletion   → remove the whole table node.
+ *   - reject deletion   → clear the rows' trackChange attrs (table restored).
+ */
+const planStructuralDecision = ({ ops, change, decision, removedRanges, retired }) => {
+  const structural = change.structural;
+  if (!structural) {
+    return {
+      ok: false,
+      failure: failure('PRECONDITION_FAILED', `structural change "${change.id}" is missing its structural payload.`),
+    };
+  }
+
+  // Fail closed on any structural shape that is NOT a whole-table insert/delete
+  // (spec TC-OPS-003). A partial row subset or mixed sides within one
+  // table is NOT a decidable whole-table change; row-level structural is out of
+  // scope. We must NEVER route such a shape through the table-removal path. The
+  // engine returns CAPABILITY_UNAVAILABLE and the document stays unmutated.
+  if (structural.decidable === false || !structural.wholeTable) {
+    return {
+      ok: false,
+      failure: failure(
+        'CAPABILITY_UNAVAILABLE',
+        'structural row-level revisions (partial rows or mixed sides) are not decidable; only whole-table insert/delete is supported.',
+        { details: { changeId: change.id, reason: structural.undecidableReason ?? 'not-whole-table' } },
+      ),
+    };
+  }
+
+  const removeWholeTable =
+    (structural.side === 'insertion' && decision === 'reject') ||
+    (structural.side === 'deletion' && decision === 'accept');
+
+  if (removeWholeTable) {
+    ops.push({
+      kind: 'removeContent',
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      changeId: change.id,
+      side: structural.side === 'insertion' ? SegmentSide.Inserted : SegmentSide.Deleted,
+    });
+    removedRanges.push({
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      cause: `${decision}-structural:${change.id}`,
+    });
+    retired.add(change.id);
+    return { ok: true };
+  }
+
+  // Otherwise the table stays and the revision is cleared from every grouped row.
+  for (const row of structural.rows) {
+    ops.push({
+      kind: 'clearRowTrackChange',
+      from: row.from,
+      to: row.to,
+      changeId: change.id,
+    });
+  }
+  retired.add(change.id);
+  return { ok: true };
+};
+
+const planReplacementDecision = ({ ops, graph, change, decision, removedRanges, retired }) => {
   const inserted = change.insertedSegments;
   const deleted = change.deletedSegments;
   if (!inserted.length || !deleted.length) {
@@ -618,6 +920,7 @@ const planReplacementDecision = ({ ops, change, decision, removedRanges, retired
       ops.push({ kind: 'removeContent', from: seg.from, to: seg.to, changeId: change.id, side: SegmentSide.Inserted });
       removedRanges.push({ from: seg.from, to: seg.to, cause: `reject-replacement-inserted:${change.id}` });
     }
+    const parentRestore = getParentRestoreContext({ graph, change });
     for (const seg of deleted) {
       pushRemoveMarkOpsForSegment({
         ops,
@@ -625,10 +928,95 @@ const planReplacementDecision = ({ ops, change, decision, removedRanges, retired
         changeId: change.id,
         side: SegmentSide.Deleted,
       });
+      if (parentRestore?.mark) {
+        pushAddMarkOpsForSegment({
+          ops,
+          segment: seg,
+          changeId: parentRestore.mark.attrs?.id || change.parent || change.id,
+          side: parentRestore.mark.type.name === TrackInsertMarkName ? SegmentSide.Inserted : SegmentSide.Deleted,
+          mark: parentRestore.mark,
+        });
+      }
+    }
+    for (const sibling of parentRestore?.siblingSegments ?? []) {
+      pushRemoveMarkOpsForSegment({
+        ops,
+        segment: sibling,
+        changeId: sibling.changeId,
+        side: sibling.side,
+      });
+      pushAddMarkOpsForSegment({
+        ops,
+        segment: sibling,
+        changeId: parentRestore.mark.attrs?.id || sibling.changeId,
+        side: parentRestore.mark.type.name === TrackInsertMarkName ? SegmentSide.Inserted : SegmentSide.Deleted,
+        mark: parentRestore.mark,
+      });
+      retired.add(sibling.changeId);
     }
   }
   retired.add(change.id);
   return { ok: true };
+};
+
+const getParentRestoreContext = ({ graph, change }) => {
+  const explicit = getExplicitParentRestoreContext({ graph, change });
+  if (explicit) return explicit;
+  return inferAdjacentParentRestoreContext({ graph, change });
+};
+
+const getExplicitParentRestoreContext = ({ graph, change }) => {
+  if (!change.parent) return null;
+  const parent = graph.changes.get(change.parent);
+  if (!parent) return null;
+  if (parent.type === CanonicalChangeType.Insertion) {
+    const mark = parent.insertedSegments[0]?.mark ?? null;
+    return mark ? { mark, siblingSegments: [] } : null;
+  }
+  if (parent.type === CanonicalChangeType.Deletion) {
+    const mark = parent.deletedSegments[0]?.mark ?? null;
+    return mark ? { mark, siblingSegments: [] } : null;
+  }
+  return null;
+};
+
+const inferAdjacentParentRestoreContext = ({ graph, change }) => {
+  if (!change.deletedSegments.length || !change.segments.length) return null;
+  const from = Math.min(...change.segments.map((segment) => segment.from));
+  const to = Math.max(...change.segments.map((segment) => segment.to));
+  const before = nearestSegmentBefore({ graph, change, from });
+  const after = nearestSegmentAfter({ graph, change, to });
+  if (!before || !after) return null;
+  if (!areParentRestorePeers(before, after)) return null;
+
+  return {
+    mark: before.mark,
+    siblingSegments: after.changeId === before.changeId ? [] : [after],
+  };
+};
+
+const nearestSegmentBefore = ({ graph, change, from }) => {
+  return graph.segments
+    .filter((segment) => segment.changeId !== change.id && segment.to <= from)
+    .sort((a, b) => b.to - a.to || b.from - a.from)[0];
+};
+
+const nearestSegmentAfter = ({ graph, change, to }) => {
+  return graph.segments
+    .filter((segment) => segment.changeId !== change.id && segment.from >= to)
+    .sort((a, b) => a.from - b.from || a.to - b.to)[0];
+};
+
+const areParentRestorePeers = (left, right) => {
+  if (!left || !right) return false;
+  if (left.side !== right.side) return false;
+  if (left.side !== SegmentSide.Inserted && left.side !== SegmentSide.Deleted) return false;
+  if (left.markType !== right.markType) return false;
+  return (
+    left.attrs.author === right.attrs.author &&
+    left.attrs.authorEmail === right.attrs.authorEmail &&
+    left.attrs.date === right.attrs.date
+  );
 };
 
 const planFormattingDecision = ({ ops, change, decision, retired }) => {
@@ -640,8 +1028,22 @@ const planFormattingDecision = ({ ops, change, decision, retired }) => {
         changeId: change.id,
         side: SegmentSide.Formatting,
       });
-    } else {
-      for (const run of getSegmentMarkRuns(seg)) {
+      continue;
+    }
+
+    for (const run of getSegmentMarkRuns(seg)) {
+      const paragraphSplit = snapshotAttrsForType(run.mark.attrs?.before, 'paragraphSplit');
+      if (paragraphSplit) {
+        ops.push({
+          kind: 'rejectParagraphSplit',
+          from: run.from,
+          to: run.to,
+          changeId: change.id,
+          side: SegmentSide.Formatting,
+          mark: run.mark,
+          anchor: paragraphSplit.anchor === 'source' ? 'source' : 'inserted',
+        });
+      } else {
         ops.push({
           kind: 'restoreFormat',
           from: run.from,
@@ -656,6 +1058,12 @@ const planFormattingDecision = ({ ops, change, decision, retired }) => {
     }
   }
   retired.add(change.id);
+};
+
+const snapshotAttrsForType = (snapshots, type) => {
+  if (!Array.isArray(snapshots)) return null;
+  const snapshot = snapshots.find((entry) => entry?.type === type);
+  return snapshot?.attrs && typeof snapshot.attrs === 'object' ? snapshot.attrs : null;
 };
 
 const planPartialTextDecision = ({ ops, change, selection, decision, removedRanges, retired }) => {
@@ -748,6 +1156,22 @@ const pushRemoveMarkOpsForSegment = ({ ops, segment, changeId, side, from = segm
   }
 };
 
+const pushAddMarkOpsForSegment = ({ ops, segment, changeId, side, mark, from = segment.from, to = segment.to }) => {
+  for (const run of getSegmentMarkRuns(segment)) {
+    const clippedFrom = Math.max(from, run.from);
+    const clippedTo = Math.min(to, run.to);
+    if (clippedFrom >= clippedTo) continue;
+    ops.push({
+      kind: 'addMark',
+      from: clippedFrom,
+      to: clippedTo,
+      changeId,
+      side,
+      mark,
+    });
+  }
+};
+
 const getSegmentMarkRuns = (segment) => {
   return segment.markRuns?.length ? segment.markRuns : [{ from: segment.from, to: segment.to, mark: segment.mark }];
 };
@@ -796,6 +1220,27 @@ const deterministicSuccessorId = ({ sourceId, revisionGroupId, side, offsetStart
   return `${sourceId}~${side}~${(hash >>> 0).toString(36)}`;
 };
 
+const findTextblockAt = (doc, pos) => {
+  const bounded = Math.max(0, Math.min(pos, doc.content.size));
+  const $pos = doc.resolve(bounded);
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const node = $pos.node(depth);
+    if (node.isTextblock) {
+      return { pos: $pos.before(depth), node };
+    }
+  }
+  return null;
+};
+
+const rejectParagraphSplitAt = (tr, from, anchor = 'inserted') => {
+  const block = findTextblockAt(tr.doc, from);
+  if (!block) return false;
+  const joinPos = anchor === 'source' ? block.pos + block.node.nodeSize : block.pos;
+  if (joinPos <= 0 || joinPos >= tr.doc.content.size || !canJoin(tr.doc, joinPos)) return false;
+  tr.join(joinPos);
+  return true;
+};
+
 // ---------------------------------------------------------------------------
 // Plan application
 // ---------------------------------------------------------------------------
@@ -812,6 +1257,13 @@ const applyPlan = ({ state, plan }) => {
   const sortedOps = [...plan.ops].sort((a, b) => a.from - b.from || a.to - b.to);
   const markOps = sortedOps.filter((op) => op.kind !== 'removeContent');
   const contentOps = sortedOps.filter((op) => op.kind === 'removeContent').reverse();
+  // Structural paragraph joins are NOT position-stable mark operations: tr.join()
+  // changes document structure and shifts every later position. Doing the join
+  // inside the mark pass invalidates the source positions of later mark ops, which
+  // breaks decisions that reject multiple paragraph splits in one transaction.
+  // We therefore remove the track-format mark in the position-stable mark pass and
+  // defer the join to a mapped structural phase below.
+  const splitJoinOps = sortedOps.filter((op) => op.kind === 'rejectParagraphSplit').reverse();
 
   try {
     for (const op of markOps) {
@@ -845,9 +1297,37 @@ const applyPlan = ({ state, plan }) => {
         tr.step(new RemoveMarkStep(op.from, op.to, op.mark));
         continue;
       }
+      if (op.kind === 'rejectParagraphSplit' && op.mark) {
+        // Position-stable part only: drop the tracked-format mark here. The join
+        // runs in the structural phase after content removal.
+        tr.step(new RemoveMarkStep(op.from, op.to, op.mark));
+        continue;
+      }
+      if (op.kind === 'clearRowTrackChange') {
+        // Whole-table accept-insert / reject-delete: the table survives as
+        // normal content. setNodeMarkup is position-stable (same node size), so
+        // it is safe in the mark pass. Map through the accumulated transaction
+        // mapping in case an earlier op shifted positions.
+        const mappedFrom = tr.mapping.map(op.from, 1);
+        const rowNode = tr.doc.nodeAt(mappedFrom);
+        if (rowNode && rowNode.type.name === 'tableRow') {
+          tr.setNodeMarkup(mappedFrom, undefined, { ...rowNode.attrs, trackChange: null });
+        }
+        continue;
+      }
     }
     for (const op of contentOps) {
       tr.step(new ReplaceStep(op.from, op.to, Slice.empty));
+    }
+    // Structural phase: apply paragraph-split joins in reverse document order,
+    // mapping each original source position through the accumulated transaction
+    // mapping so prior content removals / earlier joins do not desync positions.
+    // Fail closed if a join cannot be applied so the whole decision aborts.
+    for (const op of splitJoinOps) {
+      const mappedFrom = tr.mapping.map(op.from, 1);
+      if (!rejectParagraphSplitAt(tr, mappedFrom, op.anchor)) {
+        throw new Error(`could not join paragraph split for tracked change "${op.changeId ?? ''}".`);
+      }
     }
   } catch (error) {
     return {

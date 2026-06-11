@@ -52,7 +52,11 @@ export type ReceiptFailureCode =
   | 'PRESERVE_ONLY_VIOLATION'
   // SD-2070 content controls failure codes
   | 'LOCK_VIOLATION'
-  | 'TYPE_MISMATCH';
+  | 'TYPE_MISMATCH'
+  // SD-3247 templates.apply receipt failure codes
+  | 'UNSUPPORTED_SOURCE'
+  | 'INVALID_PACKAGE'
+  | 'UNSUPPORTED_TEMPLATE_CONTENT';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

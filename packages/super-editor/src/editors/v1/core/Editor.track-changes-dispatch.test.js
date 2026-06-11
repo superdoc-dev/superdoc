@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { Editor } from '@core/Editor.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/trackChangesBasePlugin.js';
@@ -268,6 +270,53 @@ describe('Editor dispatch tracked-change meta', () => {
         authorEmail: 'test@example.com',
       }),
     );
+  });
+
+  it('tracks native replacement transactions that clear a toolbar-preserved selection', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Replace target</p>',
+      user: { name: 'Test', email: 'test@example.com' },
+      useImmediateSetTimeout: false,
+    }));
+
+    editor.setDocumentMode('suggesting');
+
+    const range = findTextRange(editor, 'Replace target');
+    const preservedSelection = TextSelection.create(editor.state.doc, range.from, range.to);
+    editor.dispatch(
+      editor.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection,
+        showVisualSelection: true,
+        skipFocusReset: false,
+      }),
+    );
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).not.toBeNull();
+
+    editor.dispatch(
+      editor.state.tr
+        .insertText('Tracked text', range.from, range.to)
+        .setMeta(CustomSelectionPluginKey, {
+          focused: false,
+          preservedSelection: null,
+          showVisualSelection: false,
+          skipFocusReset: false,
+        })
+        .setMeta('inputType', 'insertText'),
+    );
+
+    const insertedText = markEntries(editor, TrackInsertMarkName)
+      .map(({ text }) => text)
+      .join('');
+    const deletedText = markEntries(editor, TrackDeleteMarkName)
+      .map(({ text }) => text)
+      .join('');
+
+    expect(insertedText).toContain('Tracked text');
+    expect(deletedText).toContain('Replace target');
+    expect(getTrackChanges(editor.state).length).toBeGreaterThanOrEqual(1);
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).toBeNull();
   });
 
   it('normalizes modules.trackChanges.replacements for direct Editor.open callers', async () => {

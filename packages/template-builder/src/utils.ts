@@ -109,12 +109,21 @@ ${scope} ${SDT_BLOCK}${selector} {
   --sd-content-controls-label-border: ${color};
   --sd-content-controls-label-bg: ${labelFill};
 }
+${scope} ${SDT_BLOCK}${selector}::after {
+  border-color: ${color};
+}
 ${scope} ${SDT_INLINE}${selector}:hover,
 ${scope} ${SDT_BLOCK}${selector}:hover {
   border-color: ${color};
 }
+${scope} ${SDT_BLOCK}${selector}:hover::after {
+  border-color: ${color};
+}
 ${scope} ${SDT_INLINE}${selector}.ProseMirror-selectednode,
 ${scope} ${SDT_BLOCK}${selector}.ProseMirror-selectednode {
+  border-color: ${color};
+}
+${scope} ${SDT_BLOCK}${selector}.ProseMirror-selectednode::after {
   border-color: ${color};
 }
 ${scope} ${SDT_INLINE}${selector} ${INLINE_LABEL},

@@ -14,7 +14,14 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
-import type { ImageHyperlink, StructuredContentLockMode } from '@superdoc/contracts';
+import type {
+  FieldResultFormat,
+  ImageHyperlink,
+  NumericPictureFormat,
+  PageNumberFieldFormat,
+  PageNumberFormat,
+  StructuredContentLockMode,
+} from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -741,21 +748,84 @@ export interface BookmarkEndAttrs extends InlineNodeAttributes {
 }
 
 // ============================================
+// SMART TAG (ECMA-376 §17.5.1.9)
+// ============================================
+
+/**
+ * Smart-tag node attributes (SD-2647 / SD-3298).
+ *
+ * `w:smartTag` is a transparent OOXML inline wrapper around `EG_PContent`.
+ * The wrapper carries semantic metadata (element + uri) plus an optional
+ * `<w:smartTagPr>` property bag (`<w:attr w:name w:val>` pairs). Children are
+ * normal inline content; the wrapper itself is invisible at render time.
+ */
+export interface SmartTagAttrs extends InlineNodeAttributes {
+  /** Smart-tag element name (w:element), e.g. "country-region", "PlaceName" */
+  element?: string | null;
+  /** Smart-tag namespace URI (w:uri), e.g. "urn:schemas-microsoft-com:office:smarttags" */
+  uri?: string | null;
+  /** @internal Preserved raw `<w:smartTagPr>` OOXML for round-trip export. */
+  smartTagPr?: Record<string, unknown> | null;
+}
+
+// ============================================
 // SHAPE CONTAINER
 // ============================================
 
 /** Shape container node attributes */
 export interface ShapeContainerAttrs extends BlockNodeAttributes {
-  /** Background color for the shape */
+  /** Background color for the shape (VML fillcolor) */
   fillcolor?: string;
-  /** CSS style string */
+  /** CSS style string (VML geometry) */
   style?: string;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
-  /** @internal Wrapper attributes */
+  /** @internal VML wrapper attributes */
   wrapAttributes?: Record<string, unknown>;
-  /** @internal Attributes storage */
+  /** @internal Anchor positioning data */
+  anchorData?: Record<string, unknown> | null;
+  /** @internal Margin offset for positioned shapes */
+  marginOffset?: { horizontal?: number; top?: number } | null;
+  /** @internal Raw XML attributes storage */
   attributes?: Record<string, unknown>;
+
+  // DrawingML shape geometry
+  /** Preset geometry kind (e.g. 'rect', 'ellipse') */
+  kind?: string | null;
+  /** Display width in pixels */
+  width?: number | null;
+  /** Display height in pixels */
+  height?: number | null;
+  /** Fill color (DrawingML) */
+  fillColor?: string | null;
+  /** Stroke color */
+  strokeColor?: string | null;
+  /** Stroke width in pixels */
+  strokeWidth?: number | null;
+  /** Rotation in degrees */
+  rotation?: number;
+  /** Horizontal flip */
+  flipH?: boolean;
+  /** Vertical flip */
+  flipV?: boolean;
+  /** Text wrap configuration */
+  wrap?: Record<string, unknown> | null;
+  /** Whether the shape is anchored (not inline) */
+  isAnchor?: boolean;
+  /** @internal Original w:drawing XML blob for round-trip export */
+  drawingContent?: Record<string, unknown> | null;
+  /** @internal Original anchor XML attributes */
+  originalAttributes?: Record<string, unknown> | null;
+  /** @internal Effect extent padding */
+  effectExtent?: Record<string, unknown> | null;
+  /** @internal Line end markers */
+  lineEnds?: Record<string, unknown> | null;
+  /** Whether the shape is hidden */
+  hidden?: boolean;
+  /** Whether this shape is a textbox (txBox="1") */
+  isTextBox?: boolean;
+  /** Whether this shape is WordArt */
+  isWordArt?: boolean;
 }
 
 // ============================================
@@ -917,6 +987,22 @@ export interface PageReferenceAttrs extends InlineNodeAttributes {
   marksAsAttrs?: unknown[] | null;
   /** Field instruction */
   instruction?: string;
+  /** @internal Raw field instruction tokens for lossless export */
+  instructionTokens?: Array<{ type: string; text?: string }> | null;
+  /** @internal Parsed bookmark target */
+  bookmarkId?: string;
+  /** @internal Whether the instruction has a \h switch */
+  hasHyperlinkSwitch?: boolean;
+  /** @internal Whether the instruction has a \p switch */
+  hasRelativePositionSwitch?: boolean;
+  /** @internal Parsed page number format for PAGEREF output */
+  pageNumberFieldFormat?: PageNumberFieldFormat | null;
+  /** @internal Parsed numeric picture format for PAGEREF output */
+  numericPictureFormat?: NumericPictureFormat | null;
+  /** @internal Parsed field result formatting switch */
+  fieldResultFormat?: FieldResultFormat | null;
+  /** @internal Parsed run properties from the first instruction run for CHARFORMAT */
+  fieldRunProperties?: unknown | null;
 }
 
 // ============================================
@@ -927,12 +1013,40 @@ export interface PageReferenceAttrs extends InlineNodeAttributes {
 export interface PageNumberAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original PAGE field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: PageNumberFormat | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
 }
 
 /** Total page count node attributes */
 export interface TotalPageCountAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original NUMPAGES field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: PageNumberFormat | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
+  /** @internal Raw numeric picture switch */
+  pageNumberNumericPicture?: string | null;
+}
+
+/** Section page count node attributes */
+export interface SectionPageCountAttrs extends InlineNodeAttributes {
+  /** @internal Marks stored as attributes */
+  marksAsAttrs?: unknown[] | null;
+  /** Imported cached field result */
+  importedCachedText?: string | null;
+  /** Cached display value set by an explicit field update */
+  resolvedText?: string | null;
+  /** Imported or synthesized SECTIONPAGES field instruction */
+  instruction?: string | null;
+  /** PAGE/SECTIONPAGES field-local value formatting override */
+  pageNumberFormat?: PageNumberFormat | null;
 }
 
 // ============================================
@@ -1063,6 +1177,8 @@ export interface DocumentIndexAttrs extends BlockNodeAttributes {
   instructionTokens?: unknown;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
+  /** @internal Original generated-reference wrapper paragraph properties for export preservation */
+  wrapperParagraphProperties?: unknown;
 }
 
 /** Index entry node attributes */
@@ -1237,6 +1353,9 @@ declare module '../../core/types/NodeAttributesMap.js' {
     bookmarkStart: BookmarkStartAttrs;
     bookmarkEnd: BookmarkEndAttrs;
 
+    // Smart tags
+    smartTag: SmartTagAttrs;
+
     // Comments (note: no 'comment' node - only commentRangeStart/End/Reference)
     commentRangeStart: CommentRangeStartAttrs;
     commentRangeEnd: CommentRangeEndAttrs;
@@ -1253,6 +1372,7 @@ declare module '../../core/types/NodeAttributesMap.js' {
     pageReference: PageReferenceAttrs;
     'page-number': PageNumberAttrs;
     'total-page-number': TotalPageCountAttrs;
+    'section-page-count': SectionPageCountAttrs;
 
     // Field annotations
     fieldAnnotation: FieldAnnotationAttrs;

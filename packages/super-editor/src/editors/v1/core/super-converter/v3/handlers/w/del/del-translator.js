@@ -104,12 +104,18 @@ function decode(params) {
     return null;
   }
 
-  // ECMA-376 renames w:t → w:delText inside <w:del>. Other inline content —
-  // w:noBreakHyphen, w:tab, w:br, etc. — stays as-is; the deletion is
-  // conveyed by the <w:del> wrapper alone. Guard the rename so non-text
-  // atoms inside <w:del> don't crash.
-  const textNode = translatedTextNode.elements.find((n) => n.name === 'w:t');
-  if (textNode) textNode.name = 'w:delText';
+  // ECMA-376 (17.3.3.7) requires w:delText for ALL text runs inside <w:del>. A
+  // single run can now hold multiple <w:t> siblings, because the newline export
+  // safety net splits text around <w:br/> (e.g. <w:t>Alpha</w:t><w:br/><w:t>Beta</w:t>),
+  // so rename every direct w:t, not just the first; a leftover <w:t> inside
+  // <w:del> would not be treated as deleted. Other inline content
+  // (w:noBreakHyphen, w:tab, w:br, etc.) stays as-is; the <w:del> wrapper alone
+  // conveys the deletion.
+  (translatedTextNode.elements || [])
+    .filter((n) => n.name === 'w:t')
+    .forEach((n) => {
+      n.name = 'w:delText';
+    });
 
   return {
     name: 'w:del',

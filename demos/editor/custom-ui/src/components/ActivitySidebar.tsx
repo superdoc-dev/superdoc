@@ -10,6 +10,7 @@ import { CommentComposer } from './CommentComposer';
 import type { DecidedChange, DecidedChangesState } from './useDecidedChanges';
 
 type CommentItem = CommentsListResult['items'][number];
+type SuperDocUIHandle = NonNullable<ReturnType<typeof useSuperDocUI>>;
 
 /**
  * Local merged-feed item. The controller exposes comments and tracked
@@ -20,6 +21,53 @@ type CommentItem = CommentsListResult['items'][number];
 type ActivityItem =
   | { kind: 'comment'; id: string; comment: CommentItem }
   | { kind: 'change'; id: string; change: TrackChangeInfo };
+
+function getEditorScrollContainer(): HTMLElement | null {
+  const canvas = document.querySelector<HTMLElement>('.editor-canvas');
+  let el = canvas?.parentElement ?? null;
+
+  while (el && el !== document.body) {
+    const style = getComputedStyle(el);
+    const overflow = `${style.overflow}${style.overflowY}${style.overflowX}`;
+    if (/(auto|scroll)/.test(overflow) && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+
+  return null;
+}
+
+function scrollRectIntoEditorView(rect: { top: number; height: number }) {
+  const scroller = getEditorScrollContainer();
+  if (!scroller) {
+    window.scrollBy({
+      top: rect.top - window.innerHeight / 2 + rect.height / 2,
+      behavior: 'smooth',
+    });
+    return;
+  }
+
+  const host = scroller.getBoundingClientRect();
+  scroller.scrollTo({
+    top: scroller.scrollTop + rect.top - host.top - host.height / 2 + rect.height / 2,
+    behavior: 'smooth',
+  });
+}
+
+function activateCommentFromSidebar(ui: SuperDocUIHandle, commentId: string) {
+  const rect = ui.viewport.getRect({
+    target: { kind: 'entity', entityType: 'comment', entityId: commentId },
+  });
+
+  if (rect.success) {
+    scrollRectIntoEditorView(rect.rect);
+    ui.comments.setActive(commentId);
+    return;
+  }
+
+  ui.comments.scrollTo(commentId);
+}
 
 interface Props {
   /** When true, render the inline composer at the top of the panel. */
@@ -70,9 +118,32 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
   // (separate ticket), we'll be able to interleave by document
   // position; until then this stable two-bucket ordering matches what
   // the controller used to do internally.
+  //
+  // SuperDoc models tracked changes as comment-linked entities, so
+  // `ui.comments.items` mirrors each tracked change as a synthetic
+  // comment whose id is the tracked-change id. Without de-duping, every
+  // suggestion shows twice (one comment card + one change card).
+  //
+  // We dedupe by id, NOT by the `trackedChange` flag: a real comment
+  // thread also gets `trackedChange: true` when its anchor overlaps a
+  // suggestion (`comments.list()` links it via `assignTrackedChangeLink`),
+  // so a flag filter would wrongly hide those discussions. Only the
+  // synthetic rows reuse a tracked-change id; real comments have their
+  // own. Note: this demo runs `replacements: 'independent'`, so both
+  // sides of a replacement surface as separate change rows and both
+  // synthetic comment ids land in the dedupe set. Under the default
+  // `'paired'` mode the collapsed row drops the delete-side id, which
+  // `trackChanges.list()` does not currently expose — the delete-side
+  // synthetic comment would leak as a duplicate. Engine follow-up needed
+  // before this pattern is safe in paired mode.
   const feed = useMemo<ActivityItem[]>(() => {
+    const changeIds = new Set<string>();
+    for (const tc of trackChanges.items) changeIds.add(tc.id);
     const items: ActivityItem[] = [];
-    for (const c of comments.items) items.push({ kind: 'comment', id: c.id, comment: c });
+    for (const c of comments.items) {
+      if (changeIds.has(c.id)) continue;
+      items.push({ kind: 'comment', id: c.id, comment: c });
+    }
     for (const tc of trackChanges.items) items.push({ kind: 'change', id: tc.id, change: tc.change });
     return items;
   }, [comments.items, trackChanges.items]);
@@ -161,7 +232,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
               replies={item.kind === 'comment' ? repliesByParent.get(item.id) : undefined}
               onDecideChange={decideChange}
               onClick={() => {
-                if (item.kind === 'comment') ui.comments.scrollTo(item.id);
+                if (item.kind === 'comment') activateCommentFromSidebar(ui, item.id);
                 else ui.trackChanges.scrollTo(item.id);
               }}
             />
@@ -180,7 +251,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props
               resolved
               replies={repliesByParent.get(item.id)}
               onDecideChange={decideChange}
-              onClick={() => ui.comments.scrollTo(item.id)}
+              onClick={() => activateCommentFromSidebar(ui, item.id)}
             />
           ))}
           {decidedList.map((entry) => (
@@ -225,7 +296,7 @@ function CommentBody({
   comment: CommentItem;
   resolved: boolean;
   replies?: ActivityItem[];
-  ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
+  ui: SuperDocUIHandle;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');

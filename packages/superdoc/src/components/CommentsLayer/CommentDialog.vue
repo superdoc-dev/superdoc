@@ -778,6 +778,7 @@ watch(editingCommentId, (commentId) => {
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
+    data-sd-part="comment-thread"
     data-editor-ui-surface
     :data-comment-instance-id="props.floatingInstanceId ?? ''"
     :data-comment-thread-id="props.comment.commentId ?? ''"
@@ -789,7 +790,7 @@ watch(editingCommentId, (commentId) => {
       <div v-if="shouldShowInternalExternal" class="existing-internal-input">
         <InternalDropdown
           @click.stop.prevent
-          class="internal-dropdown"
+          class="sd-internal-dropdown"
           :is-disabled="false"
           :state="pendingComment.isInternal ? 'internal' : 'external'"
           @select="handleInternalExternalSelect"
@@ -813,7 +814,7 @@ watch(editingCommentId, (commentId) => {
           class="sd-button primary reply-btn-primary"
           @click.stop.prevent="handleAddComment"
           :disabled="!hasTextContent"
-          :class="{ 'is-disabled': !hasTextContent }"
+          :class="{ 'sd-is-disabled': !hasTextContent }"
         >
           Comment
         </button>
@@ -831,7 +832,7 @@ watch(editingCommentId, (commentId) => {
       <div v-if="shouldShowInternalExternal" class="existing-internal-input">
         <InternalDropdown
           @click.stop.prevent
-          class="internal-dropdown"
+          class="sd-internal-dropdown"
           :is-disabled="isInternalDropdownDisabled"
           :state="comment.isInternal ? 'internal' : 'external'"
           @select="handleInternalExternalSelect"
@@ -863,6 +864,15 @@ watch(editingCommentId, (commentId) => {
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
               <span class="change-type">Changed hyperlink to </span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'paragraphSplit'">
+              <span class="change-type">Added new line</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'tableInsert'">
+              <span class="change-type">Added table</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'tableDelete'">
+              <span class="change-type">Deleted table</span>
             </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
@@ -929,7 +939,7 @@ watch(editingCommentId, (commentId) => {
                 class="sd-button primary reply-btn-primary"
                 @click.stop.prevent="handleCommentUpdate(comment)"
                 :disabled="!hasTextContent"
-                :class="{ 'is-disabled': !hasTextContent }"
+                :class="{ 'sd-is-disabled': !hasTextContent }"
               >
                 Update
               </button>
@@ -989,7 +999,7 @@ watch(editingCommentId, (commentId) => {
               class="sd-button primary reply-btn-primary"
               @click.stop.prevent="handleAddComment"
               :disabled="!hasTextContent"
-              :class="{ 'is-disabled': !hasTextContent }"
+              :class="{ 'sd-is-disabled': !hasTextContent }"
             >
               Reply
             </button>
@@ -1257,7 +1267,7 @@ watch(editingCommentId, (commentId) => {
 .reply-btn-primary:hover {
   background: var(--sd-ui-action-hover, #0f44cc);
 }
-.reply-btn-primary.is-disabled {
+.reply-btn-primary.sd-is-disabled {
   background: var(--sd-color-gray-400, #dbdbdb);
   color: var(--sd-color-gray-600, #888888);
   cursor: default;
@@ -1268,7 +1278,7 @@ watch(editingCommentId, (commentId) => {
   margin-bottom: 10px;
 }
 
-.internal-dropdown {
+.sd-internal-dropdown {
   display: inline-block;
 }
 </style>

@@ -180,3 +180,155 @@ export async function getSdtIdFromState(page: Page, alias: string): Promise<stri
     return foundId;
   }, alias);
 }
+
+// ---------------------------------------------------------------------------
+// Inline SDT state helpers used by keyboard/parity behavior tests. Locate an
+// inline SDT and snapshot selection/control state so specs don't each
+// reimplement the PM scan.
+// ---------------------------------------------------------------------------
+
+export interface InlineSdtRange {
+  id: string;
+  pos: number;
+  start: number;
+  end: number;
+  nodeEnd: number;
+  content: string;
+}
+
+/** Return the first inline `structuredContent` node (or the one with `sdtId`) and its PM range. */
+export async function getInlineSdtRange(page: Page, sdtId?: string): Promise<InlineSdtRange | null> {
+  return page.evaluate((sdtId) => {
+    const { state } = (window as any).editor;
+    let r: InlineSdtRange | null = null;
+    state.doc.descendants((node: any, pos: number) => {
+      if (r) return false;
+      if (node.type.name === 'structuredContent' && (sdtId == null || String(node.attrs?.id) === sdtId)) {
+        r = {
+          id: String(node.attrs?.id),
+          pos,
+          start: pos + 1,
+          end: pos + node.nodeSize - 1,
+          nodeEnd: pos + node.nodeSize,
+          content: node.textContent,
+        };
+        return false;
+      }
+      return true;
+    });
+    return r;
+  }, sdtId);
+}
+
+export interface InlineSdtSnapshot {
+  from: number;
+  to: number;
+  empty: boolean;
+  nodeType: string | null;
+  sdtExists: boolean;
+  sdtContent: string | null;
+  sdtPos: number;
+  docText: string;
+  docSize: number;
+  paragraphCount: number;
+}
+
+/** Snapshot the current selection plus the existence/content/position of inline SDT `sdtId`. */
+export async function getInlineSdtSnapshot(page: Page, sdtId: string): Promise<InlineSdtSnapshot> {
+  return page.evaluate((sdtId) => {
+    const { state } = (window as any).editor;
+    const sel = state.selection;
+    let sdtExists = false;
+    let sdtContent: string | null = null;
+    let sdtPos = -1;
+    state.doc.descendants((node: any, pos: number) => {
+      if (node.type.name === 'structuredContent' && String(node.attrs?.id) === sdtId) {
+        sdtExists = true;
+        sdtContent = node.textContent;
+        sdtPos = pos;
+        return false;
+      }
+      return true;
+    });
+    return {
+      from: sel.from,
+      to: sel.to,
+      empty: sel.empty,
+      nodeType: sel.node?.type?.name ?? null,
+      sdtExists,
+      sdtContent,
+      sdtPos,
+      docText: state.doc.textContent,
+      docSize: state.doc.content.size,
+      paragraphCount: state.doc.content.childCount,
+    };
+  }, sdtId);
+}
+
+// ---------------------------------------------------------------------------
+// Parity axis helpers. Pure functions that derive a Word-parity-contract axis
+// value from a snapshot (+ the SDT range), using the same vocabulary as the
+// word-api contracts (see parity-contracts/TRANSLATION.md). Keeping them as
+// pure compute functions makes them unit-testable without a browser and makes
+// each parity spec a one-liner: expect(selectionScope(snap, sdt)).toBe(...).
+// ---------------------------------------------------------------------------
+
+export type SelectionScope =
+  | 'collapsed'
+  | 'cc-content'
+  | 'whole-content-control'
+  | 'within-cc'
+  | 'cc-and-beyond'
+  | 'whole-document'
+  | 'outside-cc';
+
+/** Classify the current selection relative to the SDT range (current, post-edit). */
+export function selectionScope(snap: InlineSdtSnapshot, range: InlineSdtRange): SelectionScope {
+  if (snap.empty) return 'collapsed';
+  if (snap.from <= 1 && snap.to >= snap.docSize - 1) return 'whole-document';
+  if (snap.from === range.start && snap.to === range.end) return 'cc-content';
+  if (snap.from === range.pos && snap.to === range.nodeEnd) return 'whole-content-control';
+  if (snap.from >= range.start && snap.to <= range.end) return 'within-cc';
+  if (snap.from < range.end && snap.to > range.start) return 'cc-and-beyond';
+  return 'outside-cc';
+}
+
+export type ContentControlLifecycle = 'preserved' | 'emptied' | 'deleted' | 'created' | 'none';
+
+/** Classify what happened to the SDT wrapper between two snapshots. */
+export function contentControlLifecycle(before: InlineSdtSnapshot, after: InlineSdtSnapshot): ContentControlLifecycle {
+  if (before.sdtExists && !after.sdtExists) return 'deleted';
+  if (!before.sdtExists && after.sdtExists) return 'created';
+  if (before.sdtExists && after.sdtExists) {
+    const wasNonEmpty = !!before.sdtContent;
+    const nowEmpty = !after.sdtContent;
+    if (wasNonEmpty && nowEmpty) return 'emptied';
+    return 'preserved';
+  }
+  return 'none';
+}
+
+export type CaretLocation = 'inside-cc' | 'before-cc' | 'after-cc' | 'outside-cc';
+
+/** Collapsed-caret position relative to the SDT range; null when the selection is a range. */
+export function caretLocation(snap: InlineSdtSnapshot, range: InlineSdtRange): CaretLocation | null {
+  if (!snap.empty) return null;
+  if (snap.from >= range.start && snap.from <= range.end) return 'inside-cc';
+  if (snap.from <= range.pos) return 'before-cc';
+  if (snap.from >= range.nodeEnd) return 'after-cc';
+  return 'outside-cc';
+}
+
+export type BodyMutation = 'none' | 'text-changed' | 'structure-changed';
+
+/**
+ * Whole-document body text / paragraph change between two snapshots. Compares
+ * the whole `doc.textContent`, so it INCLUDES changes to the SDT's own content
+ * (e.g. emptying it reads as text-changed). It excludes only wrapper lifecycle
+ * (existence / empty-state) - that is the contentControlLifecycle axis.
+ */
+export function bodyMutation(before: InlineSdtSnapshot, after: InlineSdtSnapshot): BodyMutation {
+  if (before.paragraphCount !== after.paragraphCount) return 'structure-changed';
+  if (before.docText !== after.docText) return 'text-changed';
+  return 'none';
+}

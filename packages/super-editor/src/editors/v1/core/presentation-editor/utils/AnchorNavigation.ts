@@ -135,6 +135,9 @@ export async function goToAnchor({
     let nextFragmentPage: number | null = null;
     let nextFragmentStart: number | null = null;
     let nextFragmentY: number | null = null;
+    let prevFragmentPage: number | null = null;
+    let prevFragmentEnd: number | null = null;
+    let prevFragmentY: number | null = null;
 
     for (const page of layout.pages) {
       for (const fragment of page.fragments) {
@@ -156,14 +159,35 @@ export async function goToAnchor({
           nextFragmentStart = fragStart;
           nextFragmentY = fragment.y;
         }
+
+        // SD-3227: also track the last fragment that ends at or before our
+        // position. Bookmarks embedded inside hidden field instructions (e.g.
+        // `_Toc…` inside a TC field) often land at a PM position right after
+        // the paragraph's visible runs — they belong to that paragraph, but
+        // sit outside `fragment.pmEnd` (which is derived from visible runs).
+        // We resolve this by picking whichever neighbour is PM-closer below.
+        if (fragEnd <= pmPos && (prevFragmentEnd === null || fragEnd > prevFragmentEnd)) {
+          prevFragmentPage = page.number - 1;
+          prevFragmentEnd = fragEnd;
+          prevFragmentY = fragment.y;
+        }
       }
       if (pageIndex != null) break;
     }
 
-    // Use the page of the next fragment if bookmark is in a gap
-    if (pageIndex == null && nextFragmentPage != null) {
-      pageIndex = nextFragmentPage;
-      fragmentY = nextFragmentY;
+    // No fragment contained the bookmark — choose the neighbour whose PM
+    // range is closer. Ties go to the next fragment to preserve the prior
+    // gap-between-paragraphs behaviour.
+    if (pageIndex == null) {
+      const prevGap = prevFragmentEnd != null ? pmPos - prevFragmentEnd : Infinity;
+      const nextGap = nextFragmentStart != null ? nextFragmentStart - pmPos : Infinity;
+      if (prevFragmentPage != null && prevGap < nextGap) {
+        pageIndex = prevFragmentPage;
+        fragmentY = prevFragmentY;
+      } else if (nextFragmentPage != null) {
+        pageIndex = nextFragmentPage;
+        fragmentY = nextFragmentY;
+      }
     }
   }
 

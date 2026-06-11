@@ -1,5 +1,6 @@
 import type { ImageRun, ParagraphAttrs, ParagraphBlock, TextRun, TrackedChangeMeta } from '@superdoc/contracts';
 import { getParagraphInlineDirection } from '@superdoc/contracts';
+import { getFontConfigVersion } from '@superdoc/font-system';
 import { hashParagraphBorders } from '../paragraph-hash-utils.js';
 import {
   getRunBooleanProp,
@@ -150,6 +151,9 @@ export const deriveParagraphBlockVersion = (
       return [
         textRun.text ?? '',
         textRun.fontFamily,
+        // Font epoch: busts block paint reuse when a font loads/changes (logical family
+        // alone cannot see a substitute becoming available after first paint).
+        getFontConfigVersion(),
         textRun.fontSize,
         textRun.bold ? 1 : 0,
         textRun.italic ? 1 : 0,
@@ -162,6 +166,7 @@ export const deriveParagraphBlockVersion = (
         textRun.vertAlign ?? '',
         textRun.baselineShift != null ? textRun.baselineShift : '',
         textRun.token ?? '',
+        textRun.pageNumberFieldFormat ? JSON.stringify(textRun.pageNumberFieldFormat) : '',
         trackedVersion,
         textRun.comments?.length ?? 0,
       ].join(',');

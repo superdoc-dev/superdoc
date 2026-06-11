@@ -8,6 +8,7 @@ export * from './addMarkStep.js';
 export * from './removeMarkStep.js';
 export * from './getLiveInlineMarksInRange.js';
 export * from './getTrackChanges.js';
+export * from './structuralRowChanges.js';
 export * from './parseFormatList.js';
 export * from './findTrackedMarkBetween.js';
 export * from './markSnapshotHelpers.js';

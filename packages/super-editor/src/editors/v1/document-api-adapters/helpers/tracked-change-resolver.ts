@@ -4,7 +4,6 @@ import type {
   StoryLocator,
   TrackChangeOverlapInfo,
   TrackChangeOverlapLayer,
-  TrackChangeType,
   TrackChangeWordRevisionIds,
   TrackedChangeAddress,
 } from '@superdoc/document-api';
@@ -14,7 +13,13 @@ import {
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
-import { toNonEmptyString } from './value-utils.js';
+import { enumerateStructuralRowChanges } from '../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js';
+import {
+  projectInternalTrackChangeType,
+  type InternalTrackChangeSubtype,
+  type InternalTrackChangeType,
+} from './tracked-change-type-utils.js';
+import { normalizeExcerpt, toNonEmptyString } from './value-utils.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { buildStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
 import type { TrackedChangeRuntimeRef } from './tracked-change-runtime-ref.js';
@@ -42,12 +47,33 @@ export type GroupedTrackedChange = {
   excerpt?: string;
   wordRevisionIds?: TrackChangeWordRevisionIds;
   overlap?: TrackChangeOverlapInfo;
+  /** Set for whole-object structural revisions (e.g. whole-table insert/delete). */
+  structural?: { side: 'insertion' | 'deletion'; subtype: InternalTrackChangeSubtype };
 };
 
 export type TrackedChangeProjectedSide = 'inserted' | 'deleted';
 
-type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat'>;
-type GroupedTrackedChangeDraft = Omit<GroupedTrackedChange, 'id' | 'excerpt'> & { excerptParts: string[] };
+type ChangeTypeInput = Pick<GroupedTrackedChange, 'hasInsert' | 'hasDelete' | 'hasFormat' | 'structural'>;
+type GroupedTrackedChangeDraft = Omit<GroupedTrackedChange, 'id' | 'excerpt'> & {
+  excerptParts: string[];
+  /**
+   * Half-open `[from, to)` ranges already counted toward `excerptParts`. One
+   * tracked change can carry more than one mark of the same group over
+   * overlapping ranges — e.g. an imported format change whose run-level mark
+   * (`[2, 9)`) and paragraph-level mark (`[1, 10)`) both describe the same
+   * "Format " text, with {@link getTrackChanges} yielding one entry per mark.
+   * Without this guard the overlapping spans concatenate their text twice
+   * ("Format Format "), which both misrepresents the excerpt and breaks
+   * downstream text-based element location. Skip a span whose range overlaps
+   * one already counted so each region of text contributes once.
+   */
+  excerptRanges: Array<[number, number]>;
+};
+
+/** True when two half-open `[from, to)` ranges share any position. */
+function rangesOverlap(a: readonly [number, number], b: readonly [number, number]): boolean {
+  return a[0] < b[1] && b[0] < a[1];
+}
 type InternalTrackChangeOverlapLayer = TrackChangeOverlapLayer & {
   rawId?: string;
   commandRawId?: string;
@@ -78,7 +104,8 @@ function deriveTrackedChangeId(change: Omit<GroupedTrackedChange, 'id'>): string
   return change.rawId;
 }
 
-export function resolveTrackedChangeType(change: ChangeTypeInput): TrackChangeType {
+export function resolveTrackedChangeType(change: ChangeTypeInput): InternalTrackChangeType {
+  if (change.structural) return 'structural';
   if (change.hasFormat) return 'format';
   if (change.hasInsert && change.hasDelete) return 'replacement';
   if (change.hasDelete) return 'delete';
@@ -189,18 +216,19 @@ function layerFromChange(
   change: GroupedTrackedChange,
   relationship: TrackChangeOverlapLayer['relationship'],
 ): InternalTrackChangeOverlapLayer {
+  const type = resolveTrackedChangeType(change);
   return {
     id: change.id,
     rawId: change.rawId,
     commandRawId: change.commandRawId,
-    type: resolveTrackedChangeType(change),
+    type: projectInternalTrackChangeType(type, change.structural),
     relationship,
   };
 }
 
 function compareOverlapChildren(a: GroupedTrackedChange, b: GroupedTrackedChange): number {
-  const aType = resolveTrackedChangeType(a);
-  const bType = resolveTrackedChangeType(b);
+  const aType = projectInternalTrackChangeType(resolveTrackedChangeType(a), a.structural);
+  const bType = projectInternalTrackChangeType(resolveTrackedChangeType(b), b.structural);
   if (aType !== bType) {
     if (aType === 'delete') return -1;
     if (bType === 'delete') return 1;
@@ -287,6 +315,11 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
 
   const marks = getRawTrackedMarks(editor);
   const byRawId = new Map<string, GroupedTrackedChangeDraft>();
+  // Every underlying mark range per grouped id (not just the min/max envelope).
+  // A single revision id can have disjoint segments (Word reuses ids across the
+  // document), so whole-table subsumption below must test each segment, not the
+  // collapsed `from`/`to`.
+  const segmentsByRawId = new Map<string, Array<{ from: number; to: number }>>();
 
   for (const item of marks) {
     const attrs = item.mark?.attrs ?? {};
@@ -303,6 +336,11 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     const wordRevisionIdKey = getWordRevisionIdKey(markType);
     const contributesToExcerpt = !wordRevisionId || !hasChildTrackedMarkOnNode(item, id);
     const excerptText = contributesToExcerpt ? getTrackedMarkText(editor, item) : '';
+    const range: [number, number] = [item.from, item.to];
+
+    const priorSegments = segmentsByRawId.get(groupKey);
+    if (priorSegments) priorSegments.push({ from: item.from, to: item.to });
+    else segmentsByRawId.set(groupKey, [{ from: item.from, to: item.to }]);
 
     if (!existing) {
       byRawId.set(groupKey, {
@@ -315,6 +353,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
         hasFormat: nextHasFormat,
         attrs: { ...attrs },
         excerptParts: excerptText ? [excerptText] : [],
+        excerptRanges: excerptText ? [range] : [],
         wordRevisionIds: wordRevisionIdKey
           ? mergeWordRevisionId(undefined, wordRevisionIdKey, wordRevisionId ?? undefined)
           : undefined,
@@ -330,7 +369,8 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
     if (Object.keys(existing.attrs).length === 0 && Object.keys(attrs).length > 0) {
       existing.attrs = { ...attrs };
     }
-    if (excerptText) {
+    if (excerptText && !existing.excerptRanges.some((counted) => rangesOverlap(counted, range))) {
+      existing.excerptRanges.push(range);
       existing.excerptParts.push(excerptText);
     }
     if (wordRevisionIdKey) {
@@ -343,7 +383,7 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   }
 
   const grouped = Array.from(byRawId.values())
-    .map(({ excerptParts, ...change }) => {
+    .map(({ excerptParts, excerptRanges: _excerptRanges, ...change }) => {
       const hasWordSourceId = Boolean(toNonEmptyString(change.attrs.sourceId));
       const rawExcerpt = excerptParts.join('');
       const withExcerpt = {
@@ -360,6 +400,85 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
       return a.id.localeCompare(b.id);
     });
   attachOverlapMetadata(grouped);
+
+  // Whole-object structural revisions (e.g. whole-table insert/delete) live on
+  // node attrs, not marks, so they are enumerated separately and appended as
+  // their own grouped changes. Their `id` is the shared Word revision id; the
+  // accept/reject command routes by id through the review graph which owns the
+  // node-level mutation plan.
+  const structuralChanges = enumerateStructuralRowChanges(editor.state);
+
+  // Inline content inside a decidable whole-table structural change is OWNED by
+  // that change — a whole inserted/deleted table is ONE logical change, not the
+  // structural change plus a separate review item per tracked cell run. Native
+  // authoring (markInsertion/markDeletion on cell text) and imported-with-text
+  // tables both leave such inline marks, so drop the inline grouped entries
+  // whose content lives inside a whole-table range before the structural change
+  // is appended. Only decidable whole-table ranges suppress; a partial/
+  // undecidable structural shape is not one logical change, so its inline marks
+  // stay as their own items. Mirrors the comments-store range suppression
+  // (`isInlineRangeInsideTrackedTable`): an inline change is owned only when
+  // EVERY one of its segments sits inside some whole-table range. Testing each
+  // segment (not the collapsed `from`/`to` envelope) matters when one revision
+  // id has disjoint marks across two tracked tables — the envelope would span
+  // the gap between them, yet every segment is table-owned. A segment that
+  // straddles a table edge is (correctly) not owned, so the change stays.
+  const wholeTableRanges = structuralChanges
+    .filter((structural) => structural.decidable && structural.wholeTable)
+    .map((structural) => ({ from: structural.tableFrom, to: structural.tableTo }));
+  if (wholeTableRanges.length > 0) {
+    const segmentInsideSomeTable = (segment: { from: number; to: number }) =>
+      wholeTableRanges.some((range) => segment.from >= range.from && segment.to <= range.to);
+    for (let i = grouped.length - 1; i >= 0; i -= 1) {
+      const change = grouped[i];
+      const segments = segmentsByRawId.get(change.rawId) ?? [{ from: change.from, to: change.to }];
+      const ownedByTable = segments.every(segmentInsideSomeTable);
+      if (ownedByTable) grouped.splice(i, 1);
+    }
+  }
+
+  for (const structural of structuralChanges) {
+    const excerpt = normalizeExcerpt(editor.state.doc.textBetween(structural.tableFrom, structural.tableTo, ' ', '￼'));
+    // Public id must be stable across import → export → reopen. The logical
+    // `structural.id` is a fresh UUID minted on each import, so derive the
+    // public/raw id from the Word revision id (mirrors inline `word:<mark>:<id>`
+    // grouping). `commandRawId` keeps the logical id the review graph keys by,
+    // so accept/reject still routes to the right structural change.
+    const stableRawId = structural.sourceId ? `word:structural:${structural.sourceId}` : structural.id;
+    grouped.push({
+      rawId: stableRawId,
+      commandRawId: structural.id,
+      id: stableRawId,
+      from: structural.tableFrom,
+      to: structural.tableTo,
+      hasInsert: false,
+      hasDelete: false,
+      hasFormat: false,
+      structural: { side: structural.side, subtype: structural.subtype },
+      attrs: {
+        id: structural.id,
+        sourceId: structural.sourceId || undefined,
+        author: structural.author || undefined,
+        authorEmail: structural.authorEmail || undefined,
+        authorImage: structural.authorImage || undefined,
+        date: structural.date || undefined,
+        importedAuthor: structural.importedAuthor || undefined,
+        origin: structural.sourceId ? 'word' : undefined,
+        revisionGroupId: structural.revisionGroupId || undefined,
+      },
+      excerpt,
+      wordRevisionIds: structural.sourceId
+        ? structural.side === 'insertion'
+          ? { insert: structural.sourceId }
+          : { delete: structural.sourceId }
+        : undefined,
+    });
+  }
+
+  grouped.sort((a, b) => {
+    if (a.from !== b.from) return a.from - b.from;
+    return a.id.localeCompare(b.id);
+  });
 
   groupedCache.set(editor, { doc: currentDoc, grouped });
   return grouped;

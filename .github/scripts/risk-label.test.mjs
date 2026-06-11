@@ -85,7 +85,7 @@ describe('classify', () => {
 
   it('critical: pm-adapter', () => {
     assert.equal(
-      classify(['packages/layout-engine/pm-adapter/src/foo.js']).level,
+      classify(['packages/pm-adapter/src/foo.js']).level,
       'critical',
     );
   });

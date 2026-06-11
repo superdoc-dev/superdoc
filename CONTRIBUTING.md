@@ -47,12 +47,16 @@ SuperDoc uses its own rendering pipeline -- ProseMirror is NOT used for visual o
 ```
 DOCX File
   → super-converter (parse OOXML into ProseMirror document)
-    → pm-adapter (convert PM nodes into FlowBlocks)
+    → v1 layout-adapter (super-editor: convert PM nodes into FlowBlocks)
       → layout-engine (paginate FlowBlocks into Layouts)
         → DomPainter (render Layouts to DOM)
 ```
 
 A hidden ProseMirror `Editor` instance manages document state and editing commands, but its DOM is never shown to the user. All visual rendering goes through DomPainter.
+
+The PM → FlowBlock adapter is owned by `super-editor`
+(`src/editors/v1/core/layout-adapter`), not by `layout-engine`. The layout
+engine packages consume `FlowBlock[]` and shared layout contracts only.
 
 ### Project Structure
 
@@ -64,9 +68,9 @@ packages/
     src/editors/v1/
       core/
         super-converter/ DOCX import/export (OOXML ↔ ProseMirror)
+        layout-adapter/  ProseMirror → FlowBlock[] projection (v1-owned)
       extensions/        Editing behaviors (bold, lists, tables, etc.)
   layout-engine/         Layout & pagination pipeline
-    pm-adapter/          ProseMirror → Layout bridge
     layout-engine/       Pagination algorithms
     painters/dom/        DOM rendering (DomPainter)
     style-engine/        OOXML style resolution & cascade
@@ -84,7 +88,7 @@ tests/visual/            Visual regression tests (Playwright)
 |--------------------------|---------------|
 | How something looks (visual rendering) | `layout-engine/painters/dom/` |
 | Style resolution (fonts, colors, borders) | `layout-engine/style-engine/` |
-| Data flowing from editor to renderer | `layout-engine/pm-adapter/` |
+| Data flowing from editor to renderer | `super-editor/src/editors/v1/core/layout-adapter/` |
 | Editing behavior (keyboard, commands) | `super-editor/src/editors/v1/extensions/` |
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | React integration | `packages/react/` |

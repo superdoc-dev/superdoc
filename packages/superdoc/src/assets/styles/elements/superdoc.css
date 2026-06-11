@@ -5,11 +5,6 @@
   fill: currentColor;
 }
 
-/* Override global svg styles above for AI Writer error state */
-.superdoc .ai-textarea-icon.error > svg {
-  fill: #ed4337;
-}
-
 /* Web Layout Mode (OOXML ST_View 'web') - content reflows to container width */
 .superdoc--web-layout,
 .superdoc--web-layout .superdoc__layers,

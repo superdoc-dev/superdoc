@@ -1,4 +1,4 @@
-import type { SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
+import type { SdtMetadata, StructuredContentMetadata } from '@superdoc/contracts';
 export {
   getSdtContainerKey,
   getSdtContainerKeyForBlock,
@@ -6,6 +6,7 @@ export {
   hasExplicitSdtContainerKey,
 } from '@superdoc/contracts';
 import { getSdtContainerKey, getSdtContainerMetadata } from '@superdoc/contracts';
+import { DOM_CLASS_NAMES } from '../constants.js';
 
 export type SdtContainerConfig = {
   className: string;
@@ -30,12 +31,7 @@ export type SdtAncestorOptions = {
   ancestorContainerSdts?: readonly (SdtMetadata | null | undefined)[];
 };
 
-export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
-  type: 'structuredContent';
-  scope: 'inline' | 'block';
-  alias?: string | null;
-  lockMode?: StructuredContentLockMode;
-} {
+export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is StructuredContentMetadata {
   return (
     sdt !== null && sdt !== undefined && typeof sdt === 'object' && 'type' in sdt && sdt.type === 'structuredContent'
   );
@@ -64,7 +60,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
     return {
       className: 'superdoc-structured-content-block',
       labelText: sdt.alias ?? 'Structured content',
-      labelClassName: 'superdoc-structured-content__label superdoc-structured-content-block__label',
+      labelClassName: `${DOM_CLASS_NAMES.BLOCK_SDT_LABEL} superdoc-structured-content-block__label`,
       isStart: true,
       isEnd: true,
     };
@@ -80,6 +76,9 @@ export function shouldRenderSdtContainerChrome(
 ): boolean {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
   if (!metadata) return false;
+  if (isStructuredContentMetadata(metadata) && metadata.appearance === 'hidden') {
+    return false;
+  }
 
   const containerKey = getSdtContainerKey(sdt, containerSdt);
   const ancestorKeys = [options?.ancestorContainerKey, ...(options?.ancestorContainerKeys ?? [])];
@@ -113,6 +112,7 @@ export function applySdtContainerChrome(
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
   options?: SdtAncestorOptions,
+  chrome?: 'default' | 'none',
 ): boolean {
   if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return false;
 
@@ -138,11 +138,15 @@ export function applySdtContainerChrome(
 
   if (boundaryOptions?.paddingBottomOverride != null && boundaryOptions.paddingBottomOverride > 0) {
     container.style.paddingBottom = `${boundaryOptions.paddingBottomOverride}px`;
+    container.style.setProperty('--sd-sdt-chrome-bottom-extension', `${boundaryOptions.paddingBottomOverride}px`);
   }
 
   const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
 
   if (shouldShowLabel) {
+    if (chrome === 'none' && isStructuredContentMetadata(metadata)) {
+      return true;
+    }
     const labelEl = doc.createElement('div');
     labelEl.className = config.labelClassName;
     const labelText = doc.createElement('span');

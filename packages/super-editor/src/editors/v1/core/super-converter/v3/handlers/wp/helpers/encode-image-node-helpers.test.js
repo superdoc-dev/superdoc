@@ -679,14 +679,81 @@ describe('handleImageNode', () => {
       expect(result.attrs.wrap.attrs.distRight).toBe(4);
     });
 
+    it('uses anchor distL/distR when wrapSquare omits distance attributes', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '0',
+          distB: '0',
+          distL: '12000',
+          distR: '15130',
+        },
+      });
+      node.elements.push({
+        name: 'wp:wrapSquare',
+        attributes: { wrapText: 'bothSides' },
+      });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('Square');
+      expect(result.attrs.wrap.attrs.wrapText).toBe('bothSides');
+      expect(result.attrs.wrap.attrs.distLeft).toBeCloseTo(12, 0);
+      expect(result.attrs.wrap.attrs.distRight).toBeCloseTo(15.13, 1);
+    });
+
     it('handles wrap type TopAndBottom without distance attributes', () => {
-      const node = makeNode();
+      const node = makeNode({
+        attributes: { distT: '0', distB: '0', distL: '0', distR: '0' },
+      });
       node.elements.push({ name: 'wp:wrapTopAndBottom' });
 
       const result = handleImageNode(node, makeParams(), true);
 
       expect(result.attrs.wrap.type).toBe('TopAndBottom');
       expect(result.attrs.wrap.attrs).toEqual({});
+    });
+
+    it('does not merge anchor distL/distR onto TopAndBottom wrap', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '5000',
+          distB: '6000',
+          distL: '12000',
+          distR: '9000',
+        },
+      });
+      node.elements.push({ name: 'wp:wrapTopAndBottom' });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('TopAndBottom');
+      expect(result.attrs.wrap.attrs.distTop).toBe(5);
+      expect(result.attrs.wrap.attrs.distBottom).toBe(6);
+      expect(result.attrs.wrap.attrs.distLeft).toBeUndefined();
+      expect(result.attrs.wrap.attrs.distRight).toBeUndefined();
+    });
+
+    it('does not merge anchor distT/distB onto Tight wrap', () => {
+      const node = makeNode({
+        attributes: {
+          distT: '8000',
+          distB: '7000',
+          distL: '2000',
+          distR: '3000',
+        },
+      });
+      node.elements.push({
+        name: 'wp:wrapTight',
+        attributes: { wrapText: 'bothSides' },
+      });
+
+      const result = handleImageNode(node, makeParams(), true);
+
+      expect(result.attrs.wrap.type).toBe('Tight');
+      expect(result.attrs.wrap.attrs.distLeft).toBe(2);
+      expect(result.attrs.wrap.attrs.distRight).toBe(3);
+      expect(result.attrs.wrap.attrs.distTop).toBeUndefined();
+      expect(result.attrs.wrap.attrs.distBottom).toBeUndefined();
     });
 
     it('handles wrap type TopAndBottom with distance attributes', () => {
@@ -1201,13 +1268,30 @@ describe('handleImageNode', () => {
     expect(result.attrs.lum).toEqual({ bright: 70000, contrast: -70000 });
   });
 
-  it('does not set grayscale when effect is not present', () => {
+  it('extracts fixed alpha adjustment from a:blip element', () => {
+    const node = makeNode();
+    const graphic = node.elements.find((el) => el.name === 'a:graphic');
+    const graphicData = graphic.elements[0];
+    const pic = graphicData.elements[0];
+    const blipFill = pic.elements[0];
+    const blip = blipFill.elements[0];
+
+    blip.elements = [{ name: 'a:alphaModFix', attributes: { amt: '9000' } }];
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.alphaModFix).toEqual({ amt: 9000 });
+  });
+
+  it('does not set image effects when they are not present', () => {
     const node = makeNode();
     const result = handleImageNode(node, makeParams(), false);
 
     expect(result).not.toBeNull();
     expect(result.attrs.grayscale).toBeUndefined();
     expect(result.attrs.lum).toBeUndefined();
+    expect(result.attrs.alphaModFix).toBeUndefined();
   });
 
   describe('lockAspectRatio / noChangeAspect import defaults', () => {
@@ -1760,6 +1844,33 @@ describe('getVectorShape', () => {
       expect(result.attrs.textContent.parts[0].text).toBe('Hello World');
     });
 
+    it('preserves cached SECTIONPAGES text in textbox field parts', () => {
+      const graphicData = makeGraphicDataWithTextbox('');
+      const paragraph = graphicData.elements[0].elements.find((el) => el.name === 'wps:txbx').elements[0].elements[0];
+      paragraph.elements = [
+        {
+          name: 'sd:sectionPageCount',
+          attributes: {
+            importedCachedText: '3',
+            resolvedText: '4',
+          },
+        },
+      ];
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.parts).toHaveLength(1);
+      expect(result.attrs.textContent.parts[0]).toMatchObject({
+        text: '4',
+        fieldType: 'SECTIONPAGES',
+      });
+    });
+
     it('handles [[sdspace]] at the beginning of text', () => {
       const graphicData = makeGraphicDataWithTextbox('[[sdspace]]Hello');
       const result = getVectorShape({
@@ -2121,7 +2232,7 @@ describe('getVectorShape', () => {
       ],
     });
 
-    it('emits an image part in textContent for an inline w:drawing inside the textbox', () => {
+    it('emits an inline image node inside the textbox paragraph content', () => {
       const graphicData = makeShape();
       const result = getVectorShape({
         params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: docxFixture, filename: 'header1.xml' },
@@ -2130,12 +2241,85 @@ describe('getVectorShape', () => {
         size: { width: 374, height: 41 },
       });
 
+      expect(result?.type).toBe('shapeContainer');
+      const paragraphNodes = result?.content?.[0]?.content || [];
+      const inlineNodes = paragraphNodes.flatMap((paragraph) => paragraph?.content || []);
+      const imageNode = inlineNodes.find((node) => node?.type === 'image');
+      expect(imageNode).toBeTruthy();
+      expect(typeof imageNode?.attrs?.src).toBe('string');
+      expect(imageNode?.attrs?.src.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('DrawingML textbox routing', () => {
+    const makeTxBoxGraphicData = (withTxbxContent) => ({
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            { name: 'wps:spPr', elements: [{ name: 'a:prstGeom', attributes: { prst: 'rect' } }] },
+            { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+            ...(withTxbxContent
+              ? [
+                  {
+                    name: 'wps:txbx',
+                    elements: [{ name: 'w:txbxContent', elements: [{ name: 'w:p', elements: [] }] }],
+                  },
+                ]
+              : []),
+            { name: 'wps:bodyPr', attributes: {} },
+          ],
+        },
+      ],
+    });
+
+    it('routes txBox=1 shape WITH w:txbxContent to shapeContainer', () => {
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData: makeTxBoxGraphicData(true),
+        size: { width: 100, height: 50 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      expect(result?.content?.[0]?.type).toBe('shapeTextbox');
+    });
+
+    it('routes txBox=1 shape WITHOUT prstGeom but WITH w:txbxContent to shapeContainer', () => {
+      const graphicData = {
+        elements: [
+          {
+            name: 'wps:wsp',
+            elements: [
+              { name: 'wps:spPr', elements: [] }, // no prstGeom, no custGeom
+              { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+              { name: 'wps:txbx', elements: [{ name: 'w:txbxContent', elements: [{ name: 'w:p', elements: [] }] }] },
+              { name: 'wps:bodyPr', attributes: {} },
+            ],
+          },
+        ],
+      };
+
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData,
+        size: { width: 100, height: 50 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      expect(result?.content?.[0]?.type).toBe('shapeTextbox');
+    });
+
+    it('routes txBox=1 shape WITHOUT w:txbxContent to vectorShape', () => {
+      const result = getVectorShape({
+        params: { nodes: [], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData: makeTxBoxGraphicData(false),
+        size: { width: 100, height: 50 },
+      });
+
       expect(result?.type).toBe('vectorShape');
-      const parts = result?.attrs?.textContent?.parts || [];
-      const imagePart = parts.find((p) => p.kind === 'image');
-      expect(imagePart).toBeTruthy();
-      expect(typeof imagePart?.src).toBe('string');
-      expect(imagePart?.src.length).toBeGreaterThan(0);
     });
   });
 });

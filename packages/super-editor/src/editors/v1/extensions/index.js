@@ -39,8 +39,9 @@ import { TableCell } from './table-cell/index.js';
 import { FieldAnnotation, fieldAnnotationHelpers } from './field-annotation/index.js';
 import { Image } from './image/index.js';
 import { BookmarkStart, BookmarkEnd } from './bookmarks/index.js';
+import { SmartTag } from './smart-tag/index.js';
 import { Mention } from './mention/index.js';
-import { PageNumber, TotalPageCount } from './page-number/index.js';
+import { PageNumber, TotalPageCount, SectionPageCount } from './page-number/index.js';
 import { PageReference } from './page-reference/index.js';
 import { ShapeContainer } from './shape-container/index.js';
 import { ShapeTextbox } from './shape-textbox/index.js';
@@ -185,6 +186,7 @@ const getStarterExtensions = () => {
     Image,
     BookmarkStart,
     BookmarkEnd,
+    SmartTag,
     Mention,
     Collaboration,
     CollaborationCursor,
@@ -201,6 +203,7 @@ const getStarterExtensions = () => {
     AiLoaderNode,
     PageNumber,
     TotalPageCount,
+    SectionPageCount,
     PageReference,
     IndexEntry,
     TableOfContentsEntry,
@@ -290,6 +293,7 @@ export {
   Image,
   BookmarkStart,
   BookmarkEnd,
+  SmartTag,
   PopoverPlugin,
   Mention,
   Collaboration,

@@ -1,6 +1,6 @@
 export const toolbarTexts = {
   bold: 'Bold',
-  fontFamily: 'Font',
+  fontFamily: 'Font family',
   ai: 'AI text generation',
   fontSize: 'Font size',
   italic: 'Italic',

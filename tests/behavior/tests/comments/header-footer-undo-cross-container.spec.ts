@@ -54,9 +54,30 @@ function getSurfaceLocator(page: Page, surface: SurfaceKind) {
 }
 
 async function clickBodySurface(page: Page) {
-  const bodyLine = page.locator('.superdoc-line').first();
-  await bodyLine.scrollIntoViewIfNeeded();
-  await bodyLine.click();
+  // Leave the active header/footer story with a real body click. We deliberately
+  // avoid targeting an individual `.superdoc-line`: those elements virtualize and
+  // repaint, so holding a locator across scrollIntoView + click races with the
+  // repaint on slower runners (webkit/CI) and throws "element is not attached /
+  // not stable". The first line is also unsafe — in large-header docs it abuts the
+  // header geometry region, so the click resolves into the still-active header
+  // surface and the session is never exited (see EditorInputManager's
+  // #handleClickInHeaderFooterMode: only a click on body content OR outside any
+  // H/F region exits the session).
+  //
+  // Instead click the middle of the page's on-screen region via the stable
+  // `.superdoc-page` container. Mid-page is always body content (header sits in the
+  // top margin, footer in the bottom margin), so the exit branch always fires.
+  const pageSurface = page.locator('.superdoc-page').first();
+  await pageSurface.scrollIntoViewIfNeeded();
+  const box = await pageSurface.boundingBox();
+  expect(box).toBeTruthy();
+
+  const viewport = page.viewportSize();
+  const clickX = box!.x + box!.width / 2;
+  const clickY = viewport
+    ? (Math.max(box!.y, 0) + Math.min(box!.y + box!.height, viewport.height)) / 2
+    : box!.y + box!.height / 2;
+  await page.mouse.click(clickX, clickY);
 }
 
 async function activateBlankDocumentHeader(superdoc: SuperDocFixture) {

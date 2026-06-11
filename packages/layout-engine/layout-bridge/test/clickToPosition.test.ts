@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { clickToPosition, hitTestPage, hitTestTableFragment } from '../src/index.ts';
+import {
+  clickToPosition,
+  hitTestPage,
+  hitTestTableFragment,
+  hitTestTextboxFragment,
+  resolveTextboxContentHit,
+} from '../src/index.ts';
 import type {
   Layout,
   FlowBlock,
@@ -9,6 +15,8 @@ import type {
   TableBlock,
   TableMeasure,
   TableFragment,
+  DrawingFragment,
+  ParagraphMeasure,
 } from '@superdoc/contracts';
 import {
   simpleLayout,
@@ -29,6 +37,81 @@ import {
 } from './mock-data';
 
 describe('clickToPosition', () => {
+  it('hit-tests textboxShape content paragraphs with insets', () => {
+    const textboxParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'textbox-para',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 16, pmStart: 50, pmEnd: 62 }],
+    };
+
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-0',
+      drawingKind: 'textboxShape',
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 8, right: 10, bottom: 8, left: 12 },
+      attrs: { pmStart: 49, pmEnd: 63 },
+    };
+
+    const textboxParagraphMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 12,
+          width: 96,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 140,
+      height: 60,
+      scale: 1,
+      naturalWidth: 140,
+      naturalHeight: 60,
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxFragment: DrawingFragment = {
+      kind: 'drawing',
+      blockId: 'textbox-0',
+      drawingKind: 'textboxShape',
+      x: 40,
+      y: 70,
+      width: 140,
+      height: 60,
+      geometry: { width: 140, height: 60, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+      pmStart: 49,
+      pmEnd: 63,
+      contentMeasures: [textboxParagraphMeasure],
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [{ number: 1, fragments: [textboxFragment] }],
+    };
+
+    const pageHit = hitTestPage(layout, { x: 64, y: 86 });
+    expect(pageHit).not.toBeNull();
+
+    const hit = hitTestTextboxFragment(pageHit!, [textboxBlock], [textboxMeasure], { x: 64, y: 86 });
+    expect(hit).not.toBeNull();
+    expect(hit?.contentBlock.id).toBe('textbox-para');
+    expect(hit?.localX).toBe(12);
+    expect(hit?.localY).toBe(8);
+  });
+
   it('maps point to PM position near start', () => {
     const result = clickToPosition(simpleLayout, blocks, measures, { x: 40, y: 60 });
     expect(result?.pos).toBeGreaterThanOrEqual(1);
@@ -50,6 +133,78 @@ describe('clickToPosition', () => {
     const result = clickToPosition(drawingLayout, [drawingBlock], [drawingMeasure], { x: 70, y: 90 });
     expect(result?.blockId).toBe('drawing-0');
     expect(result?.pos).toBe(20);
+  });
+
+  it('maps point inside textboxShape to paragraph PM position', () => {
+    const textboxParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'textbox-para-2',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 16, pmStart: 80, pmEnd: 92 }],
+    };
+
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'textbox-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 8, right: 10, bottom: 8, left: 12 },
+      attrs: { pmStart: 79, pmEnd: 93 },
+    };
+
+    const textboxParagraphMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 12,
+          width: 96,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 160,
+      height: 70,
+      scale: 1,
+      naturalWidth: 160,
+      naturalHeight: 70,
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxFragment: DrawingFragment = {
+      kind: 'drawing',
+      blockId: 'textbox-1',
+      drawingKind: 'textboxShape',
+      x: 40,
+      y: 80,
+      width: 160,
+      height: 70,
+      geometry: { width: 160, height: 70, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+      pmStart: 79,
+      pmEnd: 93,
+      contentMeasures: [textboxParagraphMeasure],
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [{ number: 1, fragments: [textboxFragment] }],
+    };
+
+    const result = clickToPosition(layout, [textboxBlock], [textboxMeasure], { x: 76, y: 96 });
+    expect(result?.blockId).toBe('textbox-1');
+    expect(result?.lineIndex).toBe(0);
+    expect(result?.pos).toBeGreaterThanOrEqual(80);
+    expect(result?.pos).toBeLessThanOrEqual(92);
   });
 
   it('uses table fragment columnIndex instead of visual x for multi-column overflow tables', () => {
@@ -127,7 +282,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 340, y: 54 });
@@ -208,7 +370,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 360, y: 54 });
@@ -289,7 +458,14 @@ describe('clickToPosition', () => {
     const layout: Layout = {
       pageSize: { w: 600, h: 800 },
       columns: { count: 2, gap: 20 },
-      pages: [{ number: 1, fragments: [tableFragment] }],
+      pages: [
+        {
+          number: 1,
+          columns: { count: 2, gap: 20 },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          fragments: [tableFragment],
+        },
+      ],
     };
 
     const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 120, y: 54 });
@@ -1112,5 +1288,144 @@ describe('clickToPosition: table cells with SDT wrappers', () => {
     expect(result!.blockId).toBe('table-sdt-block');
     expect(result!.pos).toBeGreaterThanOrEqual(70);
     expect(result!.pos).toBeLessThanOrEqual(78);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveTextboxContentHit — vertical alignment offset
+//
+// Layout: textbox at (x:20, y:10), 100px wide, 100px tall, insets all zero.
+// Two paragraphs, 15px each → totalContentHeight = 30px.
+//
+//   top:    content starts at y=0 (relative to inset origin)
+//   center: content starts at (100-30)/2 = 35px
+//   bottom: content starts at 100-30 = 70px
+//
+// The painter renders these via CSS flex justifyContent; the hit-test must
+// mirror that offset so clicks map to the correct paragraph.
+// ---------------------------------------------------------------------------
+describe('resolveTextboxContentHit: textVerticalAlign center and bottom', () => {
+  const para1: FlowBlock = {
+    kind: 'paragraph',
+    id: 'vp-para-1',
+    runs: [{ text: 'First', fontFamily: 'Arial', fontSize: 12, pmStart: 10, pmEnd: 15 }],
+  };
+  const para2: FlowBlock = {
+    kind: 'paragraph',
+    id: 'vp-para-2',
+    runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 12, pmStart: 16, pmEnd: 22 }],
+  };
+
+  const para1Measure: ParagraphMeasure = {
+    kind: 'paragraph',
+    lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 40, ascent: 10, descent: 3, lineHeight: 15 }],
+    totalHeight: 15,
+  };
+  const para2Measure: ParagraphMeasure = {
+    kind: 'paragraph',
+    lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 6, width: 48, ascent: 10, descent: 3, lineHeight: 15 }],
+    totalHeight: 15,
+  };
+
+  const makeFixture = (textVerticalAlign: 'top' | 'center' | 'bottom') => {
+    const block: FlowBlock = {
+      kind: 'drawing',
+      id: 'vp-box',
+      drawingKind: 'textboxShape',
+      geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [para1, para2],
+      textInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+      textVerticalAlign,
+      attrs: { pmStart: 9, pmEnd: 23 },
+    };
+    const measure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 100,
+      height: 100,
+      scale: 1,
+      naturalWidth: 100,
+      naturalHeight: 100,
+      geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+    };
+    const fragment: DrawingFragment = {
+      kind: 'drawing',
+      blockId: 'vp-box',
+      drawingKind: 'textboxShape',
+      x: 20,
+      y: 10,
+      width: 100,
+      height: 100,
+      geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+      scale: 1,
+      pmStart: 9,
+      pmEnd: 23,
+      contentMeasures: [para1Measure, para2Measure],
+    };
+    return { block, measure, fragment };
+  };
+
+  it('top-aligned: click at content top hits paragraph 1', () => {
+    const { block, measure, fragment } = makeFixture('top');
+    // content starts at y=0 relative to fragment; click at fragment.y + 5 = y=15 → localY=5 → para1 (0-15)
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 15 });
+    expect(hit?.contentBlock.id).toBe('vp-para-1');
+  });
+
+  it('top-aligned: click at para2 region hits paragraph 2', () => {
+    const { block, measure, fragment } = makeFixture('top');
+    // para2 starts at y=15; click at fragment.y + 20 = y=30 → localY=20 → para2 (15-30)
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 30 });
+    expect(hit?.contentBlock.id).toBe('vp-para-2');
+  });
+
+  it('center-aligned: click above content offset snaps to nearest (para1)', () => {
+    const { block, measure, fragment } = makeFixture('center');
+    // contentOffset = (100-30)/2 = 35. Content: para1 at [35,50), para2 at [50,65).
+    // click at fragment.y + 10 = y=20 → localY = 10 - 35 = -25, above all content → nearest = para1
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 20 });
+    expect(hit?.contentBlock.id).toBe('vp-para-1');
+  });
+
+  it('center-aligned: click inside para1 content area hits paragraph 1', () => {
+    const { block, measure, fragment } = makeFixture('center');
+    // contentOffset=35. para1 spans localY [0,15). click at fragment.y + 40 = y=50 → localY = 40-35 = 5 → para1
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 50 });
+    expect(hit?.contentBlock.id).toBe('vp-para-1');
+  });
+
+  it('center-aligned: click inside para2 content area hits paragraph 2', () => {
+    const { block, measure, fragment } = makeFixture('center');
+    // contentOffset=35. para2 spans localY [15,30). click at fragment.y + 55 = y=65 → localY = 55-35 = 20 → para2
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 65 });
+    expect(hit?.contentBlock.id).toBe('vp-para-2');
+  });
+
+  it('center-aligned: click below content offset snaps to nearest (para2)', () => {
+    const { block, measure, fragment } = makeFixture('center');
+    // contentOffset=35. Content ends at localY=30 (fragment.y+65). click at fragment.y+90=y=100 → localY=55 → nearest=para2
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 100 });
+    expect(hit?.contentBlock.id).toBe('vp-para-2');
+  });
+
+  it('bottom-aligned: click inside para1 content area hits paragraph 1', () => {
+    const { block, measure, fragment } = makeFixture('bottom');
+    // contentOffset = 100-30 = 70. para1 spans localY [0,15). click at fragment.y + 75 = y=85 → localY=75-70=5 → para1
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 85 });
+    expect(hit?.contentBlock.id).toBe('vp-para-1');
+  });
+
+  it('bottom-aligned: click inside para2 content area hits paragraph 2', () => {
+    const { block, measure, fragment } = makeFixture('bottom');
+    // contentOffset=70. para2 spans localY [15,30). click at fragment.y + 90 = y=100 → localY=90-70=20 → para2
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 100 });
+    expect(hit?.contentBlock.id).toBe('vp-para-2');
+  });
+
+  it('bottom-aligned: click above content offset snaps to nearest (para1)', () => {
+    const { block, measure, fragment } = makeFixture('bottom');
+    // contentOffset=70. click at fragment.y+5=y=15 → localY=5-70=-65 → nearest=para1
+    const hit = resolveTextboxContentHit(fragment, block as any, measure, 0, { x: 70, y: 15 });
+    expect(hit?.contentBlock.id).toBe('vp-para-1');
   });
 });

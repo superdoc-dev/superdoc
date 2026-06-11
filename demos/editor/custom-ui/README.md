@@ -26,7 +26,7 @@ Open http://localhost:5189.
 - Click **Scroll to** in the sources panel to navigate to a cited span. Uses `ui.metadata.scrollIntoView({ id })`.
 - Click **Edit** on a citation to change `displayText`, `locator`, or `excerpt`. Calls `editor.doc.metadata.update`.
 - Click **Remove** to strip the anchor and payload. Calls `editor.doc.metadata.remove`.
-- Click toolbar buttons (bold, italic, lists, undo, redo) wired through `useSuperDocCommand`.
+- Click toolbar buttons (bold, italic, lists, undo, redo) wired through `useSuperDocCommand`, and use the font-family picker powered by `useSuperDocFontOptions`. The picker uses a button menu so opening it does not move focus away from the editor selection.
 - Insert a custom clause registered with `ui.commands.register`. The button works, and so does its keyboard shortcut `Mod-Shift-C`, declared on the registration rather than wired in a separate keydown listener.
 - Switch between Edit and Suggest. In Suggest, every edit lands as a tracked change.
 - Select text and watch the floating bubble menu appear next to the selection (anchored via `ui.selection.getAnchorRect()`, not `window.getSelection()`).
@@ -44,7 +44,7 @@ The demo composes anchored citation pointers on top of `editor.doc.metadata.*` a
 | **Mock RAG output** | Pre-canned text + per-citation payloads (sourceId, displayText, locator, excerpt, confidence). Stand-in for a real generation pipeline. | `mockDraft.ts` |
 | **Insert + attach** | Inserts the text via `editor.doc.insert`, then computes a `SelectionTarget` for each cited span and calls `editor.doc.metadata.attach` per citation. | `GenerateDraftButton.tsx`, `useCitations.ts` |
 | **Sources panel** | Lists citations grouped by `sourceId`. Scroll-to navigation uses `ui.metadata.scrollIntoView({ id })`. Edit form calls `editor.doc.metadata.update`. | `CitationsPanel.tsx` |
-| **Highlight overlay** | Renders one absolute-positioned rectangle per painted line of each cited span. Rects come from `ui.metadata.getRect({ id })`. Remeasures on scroll, resize, ResizeObserver, and MutationObserver. | `CitationHighlights.tsx` |
+| **Highlight overlay** | Renders one absolute-positioned rectangle per painted line of each cited span. Rects come from `ui.metadata.getRect({ id })` and remeasure through `ui.viewport.observe`. | `CitationHighlights.tsx` |
 | **Hover popover** | `ui.viewport.entityAt({ x, y })` returns the content control under the cursor; `metadata.get({ id })` fetches the payload to render. | `CitationPopover.tsx` |
 | **Persistence** | Hidden inline content controls in the body carry the stable id in `w:tag`; payloads live in a namespaced custom XML data part. Survives DOCX export, reopen, and Word save (validated by the `word-roundtrip` fixtures in the monorepo). | `editor.doc.metadata.*` |
 
@@ -55,7 +55,7 @@ The demo composes anchored citation pointers on top of `editor.doc.metadata.*` a
 ```
 SuperDocUIProvider                one controller per app
 └── EditorMount                   <SuperDocEditor> + onReady + disableContextMenu
-    ├── Toolbar                   ui.commands + setDocumentMode
+    ├── Toolbar                   ui.commands + ui.fonts + setDocumentMode
     ├── SelectionPopover          ui.selection.getAnchorRect, bubble menu over the selection
     ├── ContextMenu               ui.viewport.contextAt + ui.commands.getContextMenuItems(context) + item.invoke()
     ├── ContextMenuRegistrations  ui.commands.register({ contextMenu: { when } })
@@ -86,13 +86,15 @@ Right-click on plain text where no item matches falls through to the browser's n
 
 ## The four custom-UI patterns
 
-1. **Floating selection toolbar.** `ui.selection.getAnchorRect({ placement: 'start' })` returns viewport-relative coords for the painted selection. Re-position on `useSuperDocSelection()` change plus `scroll`/`resize`. Don't reach for `window.getSelection()`; SuperDoc's painted DOM is separate from the offscreen ProseMirror DOM and the browser API returns the wrong rect. See `SelectionPopover.tsx`.
+1. **Toolbar controls.** `useSuperDocCommand(id)` binds each button to one command. `useSuperDocFontOptions()` gives the font-family picker its built-in defaults plus fonts used by the active document. Apply a selected font with `ui.toolbar.execute('font-family', option.value)`. See `Toolbar.tsx`.
 
-2. **Right-click context menu.** Set `disableContextMenu` on `<SuperDocEditor>` to suppress the built-in. On `contextmenu`, call `ui.viewport.contextAt({ x, y })` to get the bundle, then `ui.commands.getContextMenuItems(context)` to get items contributed via `register({ contextMenu })`. Each item carries `invoke()`, which fires the registered `execute({ context })` with the bundle bound, so handlers act on the click target without the menu component threading payloads. Scope the listener with `ui.viewport.getHost()` instead of a CSS class. See `ContextMenu.tsx` and `ContextMenuRegistrations.tsx`.
+2. **Floating selection toolbar.** `ui.selection.getAnchorRect({ placement: 'start' })` returns viewport-relative coords for the painted selection. Re-position on `useSuperDocSelection()` change plus `scroll`/`resize`. Don't reach for `window.getSelection()`; SuperDoc's painted DOM is separate from the offscreen ProseMirror DOM and the browser API returns the wrong rect. See `SelectionPopover.tsx`.
 
-3. **Custom command + keyboard shortcut.** Declare `shortcut: 'Mod-Shift-C'` on the registration. The controller installs a single bubble-phase keydown listener scoped to the painted host; matched shortcuts dispatch through the same path the toolbar button uses. No per-command keymap wiring. See `InsertClauseButton.tsx`.
+3. **Right-click context menu.** Set `disableContextMenu` on `<SuperDocEditor>` to suppress the built-in. On `contextmenu`, call `ui.viewport.contextAt({ x, y })` to get the bundle, then `ui.commands.getContextMenuItems(context)` to get items contributed via `register({ contextMenu })`. Each item carries `invoke()`, which fires the registered `execute({ context })` with the bundle bound, so handlers act on the click target without the menu component threading payloads. Scope the listener with `ui.viewport.getHost()` instead of a CSS class. See `ContextMenu.tsx` and `ContextMenuRegistrations.tsx`.
 
-4. **Composer capture + restore.** `ui.selection.capture()` on open holds the selection across focus moves. `ui.comments.createFromCapture(captured, { text })` posts the comment using the frozen target. `ui.selection.restore(captured)` puts the visible selection back so the user keeps their place. See `CommentComposer.tsx`.
+4. **Custom command + keyboard shortcut.** Declare `shortcut: 'Mod-Shift-C'` on the registration. The controller installs a single bubble-phase keydown listener scoped to the painted host; matched shortcuts dispatch through the same path the toolbar button uses. No per-command keymap wiring. See `InsertClauseButton.tsx`.
+
+5. **Composer capture + restore.** `ui.selection.capture()` on open holds the selection across focus moves. `ui.comments.createFromCapture(captured, { text })` posts the comment using the frozen target. `ui.selection.restore(captured)` puts the visible selection back so the user keeps their place. See `CommentComposer.tsx`.
 
 ## Adapting this to your stack
 

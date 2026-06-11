@@ -1,5 +1,6 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
+import { getDataUriMetadata, tryDecodeDataUriText } from './helpers/mediaHelpers.js';
 
 // --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
 const CRC32_TABLE = new Uint32Array(256);
@@ -33,9 +34,16 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+function stringToUtf8ArrayBuffer(value) {
+  return new globalThis.TextEncoder().encode(value).buffer;
+}
+
 /**
- * Convert a base64 string or data URI to an ArrayBuffer.
- * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
+ * Convert media data to an ArrayBuffer for DOCX packaging.
+ *
+ * Accepts ArrayBuffer, TypedArray, raw base64 strings, base64 data URIs, and
+ * percent-encoded non-base64 SVG data URIs. Other non-base64 data URI MIME
+ * types are rejected, and malformed percent-encoded SVG payloads throw.
  *
  * @param {string|ArrayBuffer|Uint8Array} data
  * @returns {ArrayBuffer}
@@ -50,11 +58,25 @@ function dataUriToArrayBuffer(data) {
 
   let base64 = data;
   if (data.startsWith('data:')) {
-    const commaIndex = data.indexOf(',');
-    if (commaIndex === -1) {
-      throw new Error('Invalid data URI: missing base64 content');
+    const metadata = getDataUriMetadata(data);
+    if (!metadata?.hasPayloadSeparator) {
+      throw new Error('Invalid data URI: missing content');
     }
-    base64 = data.substring(commaIndex + 1);
+
+    if (!metadata.isBase64) {
+      if (metadata.mimeType !== 'image/svg+xml') {
+        throw new Error(`Unsupported non-base64 data URI media type: ${metadata.mimeType || 'unknown'}`);
+      }
+
+      const decodedPayload = tryDecodeDataUriText(metadata.payload);
+      if (decodedPayload == null) {
+        throw new Error('Invalid non-base64 data URI payload');
+      }
+
+      return stringToUtf8ArrayBuffer(decodedPayload);
+    }
+
+    base64 = metadata.payload;
   }
 
   return base64ToUint8Array(base64).buffer;
@@ -351,10 +373,11 @@ const getArrayBufferFromUrl = async (input) => {
     return await response.arrayBuffer();
   }
 
-  // If this is a data URI we need only the payload portion
-  const base64Payload = isDataUri ? trimmed.split(',', 2)[1] : trimmed.replace(/\s/g, '');
+  if (isDataUri) {
+    return dataUriToArrayBuffer(trimmed);
+  }
 
-  return base64ToUint8Array(base64Payload).buffer;
+  return base64ToUint8Array(trimmed.replace(/\s/g, '')).buffer;
 };
 
 const getContentTypesFromXml = (contentTypesXml) => {
@@ -496,6 +519,7 @@ const rgbToHex = (rgb) => {
 };
 
 const DEFAULT_SHADING_FOREGROUND_COLOR = '#000000';
+const DEFAULT_SHADING_FILL_COLOR = '#FFFFFF';
 
 const hexToRgb = (hex) => {
   const normalized = normalizeHexColor(hex);
@@ -526,21 +550,53 @@ const blendHexColors = (backgroundHex, foregroundHex, foregroundRatio) => {
   return `${toByte(r)}${toByte(g)}${toByte(b)}`;
 };
 
+/**
+ * Resolve an OOXML shading element (CT_Shd, ECMA-376 §17.3.5) to a concrete CSS
+ * hex fill WITHOUT a leading '#', or null when the shading produces no background.
+ *
+ * The shading model paints a pattern (`w:val`) of the foreground color (`w:color`)
+ * over the fill background (`w:fill`). The `auto` sentinel resolves to white for a
+ * fill and black for a foreground, so `pct10` + `color="auto"` + `fill="auto"` is
+ * 10% black over white ≈ light gray (#E6E6E6) — which is what Word renders.
+ *
+ * Theme colors (themeFill/themeColor) are resolved by callers that own the theme
+ * palette and passed back in as explicit hex; this helper handles explicit hex and
+ * the `auto` sentinel only.
+ *
+ * @param {{ val?: string, color?: string, fill?: string } | null | undefined} shading
+ * @returns {string | null} Hex without '#', or null for "no background".
+ */
 const resolveShadingFillColor = (shading) => {
   if (!shading || typeof shading !== 'object') return null;
 
-  const fill = normalizeHexColor(shading.fill);
-  if (!fill) return null;
-
   const val = typeof shading.val === 'string' ? shading.val.trim().toLowerCase() : '';
+  if (val === 'nil' || val === 'none') return null;
+
+  // The `auto` fill sentinel means "automatic background" (white). A missing or
+  // non-hex fill yields no explicit color.
+  const fillIsAuto = typeof shading.fill === 'string' && shading.fill.trim().toLowerCase() === 'auto';
+  const fillHex = fillIsAuto ? null : normalizeHexColor(shading.fill);
+
   const pctMatch = val.match(/^pct(\d{1,3})$/);
-  if (!pctMatch) return fill;
+  const isPattern = Boolean(pctMatch) || val === 'solid';
 
-  const pct = Number.parseInt(pctMatch[1], 10);
-  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fill;
+  // No pattern (clear / unspecified): the fill IS the background. An automatic or
+  // missing fill therefore means "no background".
+  if (!isPattern) return fillHex;
 
-  const foreground = normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR;
-  return blendHexColors(fill, foreground, pct / 100) ?? fill;
+  // Pattern (pctNN or solid): blend the foreground over the fill base. An automatic
+  // fill base resolves to white; an automatic or absent foreground resolves to black.
+  const baseHex = fillHex ?? DEFAULT_SHADING_FILL_COLOR;
+  const colorIsAuto =
+    typeof shading.color !== 'string' || shading.color.trim() === '' || shading.color.trim().toLowerCase() === 'auto';
+  const foregroundHex = colorIsAuto
+    ? DEFAULT_SHADING_FOREGROUND_COLOR
+    : (normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR);
+
+  const pct = pctMatch ? Number.parseInt(pctMatch[1], 10) : 100; // solid = 100% foreground
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fillHex;
+
+  return blendHexColors(baseHex, foregroundHex, pct / 100) ?? fillHex;
 };
 
 const getLineHeightValueString = (lineHeight, defaultUnit, lineRule = '', isObject = false) => {

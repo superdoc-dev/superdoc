@@ -374,6 +374,30 @@ function mapDiffError(operationId: CliExposedOperationId, error: unknown, code: 
   return new CliError('COMMAND_FAILED', message, { operationId, details });
 }
 
+function mapTemplatesError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+  const message = extractErrorMessage(error);
+  const details = extractErrorDetails(error);
+
+  const planEngineError = tryMapPlanEngineError(operationId, error, code);
+  if (planEngineError) return planEngineError;
+
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+  }
+  if (code === 'UNSUPPORTED_SOURCE') {
+    return new CliError('UNSUPPORTED_SOURCE', message, { operationId, details });
+  }
+  if (code === 'INVALID_PACKAGE') {
+    return new CliError('INVALID_PACKAGE', message, { operationId, details });
+  }
+  if (code === 'UNSUPPORTED_TEMPLATE_CONTENT') {
+    return new CliError('UNSUPPORTED_TEMPLATE_CONTENT', message, { operationId, details });
+  }
+
+  if (error instanceof CliError) return error;
+  return new CliError('COMMAND_FAILED', message, { operationId, details });
+}
+
 const FAMILY_MAPPERS: Record<
   OperationFamily,
   (
@@ -394,6 +418,7 @@ const FAMILY_MAPPERS: Record<
   blocks: mapBlocksError,
   query: mapQueryError,
   diff: mapDiffError,
+  templates: mapTemplatesError,
   general: (operationId, error, code) => {
     // Plan-engine errors pass through with original code and structured details
     const planEngineError = tryMapPlanEngineError(operationId, error, code);
@@ -579,6 +604,23 @@ export function mapFailedReceipt(
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
       return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+    }
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  // Templates family
+  if (family === 'templates') {
+    if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'UNSUPPORTED_SOURCE') {
+      return new CliError('UNSUPPORTED_SOURCE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'INVALID_PACKAGE') {
+      return new CliError('INVALID_PACKAGE', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'UNSUPPORTED_TEMPLATE_CONTENT') {
+      return new CliError('UNSUPPORTED_TEMPLATE_CONTENT', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

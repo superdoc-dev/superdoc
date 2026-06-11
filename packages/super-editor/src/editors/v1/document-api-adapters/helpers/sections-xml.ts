@@ -12,6 +12,7 @@ import type {
   SectionPageBorders,
   SectionPageMargins,
   SectionPageNumbering,
+  SectionPageNumberingChapterSeparator,
   SectionPageNumberingFormat,
   SectionPageSetup,
   SectionVerticalAlign,
@@ -37,6 +38,13 @@ const PAGE_NUMBER_FORMAT_VALUES: readonly SectionPageNumberingFormat[] = [
   'lowerRoman',
   'upperRoman',
   'numberInDash',
+] as const;
+const PAGE_NUMBER_CHAPTER_SEPARATOR_VALUES: readonly SectionPageNumberingChapterSeparator[] = [
+  'hyphen',
+  'period',
+  'colon',
+  'emDash',
+  'enDash',
 ] as const;
 const SECTION_ORIENTATION_VALUES: readonly SectionOrientation[] = ['portrait', 'landscape'] as const;
 const SECTION_VERTICAL_ALIGN_VALUES: readonly SectionVerticalAlign[] = ['top', 'center', 'bottom', 'both'] as const;
@@ -300,16 +308,30 @@ export function readSectPrPageNumbering(sectPr: XmlElement): SectionPageNumberin
   const formatRaw = asString(pgNumType.attributes?.['w:fmt']);
   const format = isKnownValue(formatRaw, PAGE_NUMBER_FORMAT_VALUES) ? formatRaw : undefined;
   const start = toPositiveInteger(pgNumType.attributes?.['w:start']);
+  const chapterStyle = toPositiveInteger(pgNumType.attributes?.['w:chapStyle']);
+  const chapterSeparatorRaw = asString(pgNumType.attributes?.['w:chapSep']);
+  const chapterSeparator = isKnownValue(chapterSeparatorRaw, PAGE_NUMBER_CHAPTER_SEPARATOR_VALUES)
+    ? chapterSeparatorRaw
+    : undefined;
 
-  if (format == null && start == null) return undefined;
-  return { format, start };
+  if (format == null && start == null && chapterStyle == null && chapterSeparator == null) return undefined;
+  return { format, start, chapterStyle, chapterSeparator };
 }
 
 export function writeSectPrPageNumbering(sectPr: XmlElement, numbering: SectionPageNumbering): void {
-  if (numbering.start === undefined && numbering.format === undefined) return;
+  if (
+    numbering.start === undefined &&
+    numbering.format === undefined &&
+    numbering.chapterStyle === undefined &&
+    numbering.chapterSeparator === undefined
+  ) {
+    return;
+  }
   const pgNumType = ensureChild(sectPr, 'w:pgNumType');
   if (numbering.start !== undefined) setStringAttr(pgNumType, 'w:start', numbering.start);
   if (numbering.format !== undefined) setStringAttr(pgNumType, 'w:fmt', numbering.format);
+  if (numbering.chapterStyle !== undefined) setStringAttr(pgNumType, 'w:chapStyle', numbering.chapterStyle);
+  if (numbering.chapterSeparator !== undefined) setStringAttr(pgNumType, 'w:chapSep', numbering.chapterSeparator);
 }
 
 export function readSectPrTitlePage(sectPr: XmlElement): boolean {

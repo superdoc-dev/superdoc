@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { mount, shallowMount } from '@vue/test-utils';
 import { h, nextTick, ref } from 'vue';
 import ButtonGroup from './ButtonGroup.vue';
@@ -55,7 +55,7 @@ describe('ButtonGroup dropdownOptions selected class', () => {
     const options = wrapper.findComponent({ name: 'ToolbarDropdown' }).props('options');
 
     expect(options[1].type).toBeUndefined();
-    expect(options[1].props.class).toBe('selected');
+    expect(options[1].props.class).toBe('sd-selected');
   });
 });
 
@@ -162,7 +162,7 @@ describe('ButtonGroup dropdown keyboard activation', () => {
     const item = createDropdownItem('plain-match');
     const wrapper = mountWithItem(item);
 
-    await wrapper.find('.toolbar-item-ctn').trigger('keydown', { key });
+    await wrapper.find('.sd-toolbar-item-ctn').trigger('keydown', { key });
 
     expect(item.expand.value).toBe(true);
   });
@@ -170,8 +170,8 @@ describe('ButtonGroup dropdown keyboard activation', () => {
 
 // Regression for the codex P2 finding on PR #3304: after Escape closes the
 // dropdown, ToolbarDropdown.rememberTriggerFocusTarget restores focus to the
-// inner `.toolbar-item` (ToolbarButton root, role="button", tabindex="0"),
-// not to `.toolbar-item-ctn`. ToolbarButton used to handle Enter with
+// inner `.sd-toolbar-item` (ToolbarButton root, role="button", tabindex="0"),
+// not to `.sd-toolbar-item-ctn`. ToolbarButton used to handle Enter with
 // `@keydown.enter.stop`, which silently swallowed the event before
 // ButtonGroup's roving-tabindex handler could see it. Pressing Enter on the
 // restored focus would emit `buttonClick` (no listener on the dropdown
@@ -180,7 +180,7 @@ describe('ButtonGroup dropdown keyboard activation', () => {
 //
 // Fix is the `allowEnterPropagation` prop on ToolbarButton: when true the
 // keydown handler does NOT stopPropagation, so Enter bubbles to
-// `.toolbar-item-ctn` and ButtonGroup.activateToolbarItem runs.
+// `.sd-toolbar-item-ctn` and ButtonGroup.activateToolbarItem runs.
 // Note: this only applies to non-split dropdown items. Split buttons
 // (bullet list / numbered list main button) call handleSplitMainClick on
 // Enter which itself stops propagation and runs the main command instead.
@@ -213,23 +213,25 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
 
   // Real ToolbarButton (no stub) inside the dropdown branch so we exercise
   // the actual @keydown.enter handler + allowEnterPropagation plumbing.
-  const mountWithDropdownItem = (item) =>
+  const mountWithDropdownItem = (item, globalOverrides = {}) =>
     mount(ButtonGroup, {
       props: { toolbarItems: [item], overflowItems: [] },
       attachTo: document.body,
       global: {
+        ...globalOverrides,
         stubs: {
           // Render SdTooltip's trigger slot so the real ToolbarButton mounts.
           SdTooltip: { name: 'SdTooltip', template: '<div><slot name="trigger" /></div>' },
+          ...(globalOverrides.stubs ?? {}),
         },
       },
     });
 
-  it('Enter on the inner .toolbar-item bubbles up and opens the dropdown', async () => {
+  it('Enter on the inner .sd-toolbar-item bubbles up and opens the dropdown', async () => {
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     expect(innerItem.getAttribute('tabindex')).toBe('0');
     expect(innerItem.getAttribute('role')).toBe('button');
 
@@ -246,8 +248,8 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const ctn = wrapper.find('.toolbar-item-ctn').element;
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const ctn = wrapper.find('.sd-toolbar-item-ctn').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
 
     // Open the dropdown the way Tab + Enter does (focus on ctn).
     ctn.focus();
@@ -271,11 +273,11 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     expect(item.expand.value).toBe(true);
   });
 
-  it('Space on the inner .toolbar-item also opens the dropdown (control)', async () => {
+  it('Space on the inner .sd-toolbar-item also opens the dropdown (control)', async () => {
     const item = createFullDropdownItem('plain-match');
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     innerItem.focus();
     innerItem.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     await nextTick();
@@ -299,7 +301,7 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     };
     wrapper = mountWithDropdownItem(item);
 
-    const innerItem = wrapper.find('.toolbar-dropdown-trigger .toolbar-item').element;
+    const innerItem = wrapper.find('.toolbar-dropdown-trigger .sd-toolbar-item').element;
     innerItem.focus();
     innerItem.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await nextTick();
@@ -313,5 +315,237 @@ describe('ButtonGroup dropdown trigger keyboard activation (codex P2 regression)
     expect(events).toHaveLength(1);
     expect(events[0][0].item.command).toBe('toggleBulletList');
     expect(events[0][0].argument).toBeNull();
+  });
+
+  it('does not open the font size dropdown when clicking inside the size input', async () => {
+    const item = {
+      ...createFullDropdownItem('12pt'),
+      name: ref('fontSize'),
+      label: ref('12'),
+      selectedValue: ref('12pt'),
+      inlineTextInputVisible: ref(true),
+      hasInlineTextInput: ref(true),
+      nestedOptions: ref([{ key: '12pt', label: '12', props: { 'data-item': 'btn-fontSize-option' } }]),
+    };
+    wrapper = mountWithDropdownItem(item);
+
+    await wrapper.get('#inlineTextInput-fontSize').trigger('click');
+    expect(item.expand.value).toBe(false);
+
+    const caret = wrapper.get('[data-item="btn-fontSize-caret"]');
+    expect(caret.attributes('aria-label')).toBe('Test dropdown options');
+
+    await caret.trigger('click');
+    expect(item.expand.value).toBe(true);
+  });
+
+  it('wraps the font family combobox in the toolbar tooltip', () => {
+    const item = {
+      ...createFullDropdownItem('Arial'),
+      command: 'setFontFamily',
+      id: ref('font-family'),
+      name: ref('fontFamily'),
+      label: ref('Arial'),
+      selectedValue: ref('Arial'),
+      nestedOptions: ref([
+        { key: 'Arial', label: 'Arial', props: { style: { fontFamily: 'Arial' } } },
+        { key: 'Helvetica', label: 'Helvetica', props: { style: { fontFamily: 'Helvetica' } } },
+      ]),
+    };
+    wrapper = mountWithDropdownItem(item);
+
+    expect(wrapper.findComponent({ name: 'SdTooltip' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'FontFamilyCombobox' }).exists()).toBe(true);
+  });
+
+  it('does not render the font family combobox when the font options list is empty', () => {
+    const item = {
+      ...createFullDropdownItem('Arial'),
+      command: 'setFontFamily',
+      id: ref('font-family'),
+      name: ref('fontFamily'),
+      label: ref('Arial'),
+      selectedValue: ref('Arial'),
+      nestedOptions: ref([]),
+    };
+    wrapper = mountWithDropdownItem(item);
+
+    expect(wrapper.findComponent({ name: 'FontFamilyCombobox' }).exists()).toBe(false);
+  });
+
+  it('opens the font family combobox from roving keyboard activation', async () => {
+    const item = {
+      ...createFullDropdownItem('Arial'),
+      command: 'setFontFamily',
+      id: ref('font-family'),
+      name: ref('fontFamily'),
+      label: ref('Arial'),
+      selectedValue: ref('Arial'),
+      nestedOptions: ref([
+        { key: 'Arial', label: 'Arial', props: { style: { fontFamily: 'Arial' } } },
+        { key: 'Helvetica', label: 'Helvetica', props: { style: { fontFamily: 'Helvetica' } } },
+      ]),
+    };
+    wrapper = mountWithDropdownItem(item);
+
+    const ctn = wrapper.find('.sd-toolbar-item-ctn').element;
+    ctn.focus();
+    ctn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await nextTick();
+    await nextTick();
+
+    const input = wrapper.get('[data-item="btn-fontFamily"] input').element;
+    expect(item.expand.value).toBe(true);
+    expect(document.body.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('moves from font family to font size on Tab', async () => {
+    const flushPendingMarkCommands = vi.fn(() => true);
+    const fontFamily = {
+      ...createFullDropdownItem('Arial'),
+      command: 'setFontFamily',
+      id: ref('font-family'),
+      name: ref('fontFamily'),
+      label: ref('Arial'),
+      selectedValue: ref('Arial'),
+      nestedOptions: ref([
+        { key: 'Arial', label: 'Arial', props: { style: { fontFamily: 'Arial' } } },
+        { key: 'Helvetica', label: 'Helvetica', props: { style: { fontFamily: 'Helvetica' } } },
+      ]),
+    };
+    const separator = {
+      type: 'separator',
+      id: ref('separator'),
+      disabled: ref(false),
+      isNarrow: ref(false),
+      isWide: ref(false),
+    };
+    const fontSize = {
+      ...createFullDropdownItem('12pt'),
+      command: 'setFontSize',
+      id: ref('font-size'),
+      name: ref('fontSize'),
+      label: ref('12'),
+      selectedValue: ref('12pt'),
+      inlineTextInputVisible: ref(true),
+      hasInlineTextInput: ref(true),
+      nestedOptions: ref([{ key: '12pt', label: '12', props: { 'data-item': 'btn-fontSize-option' } }]),
+    };
+    // Mount the trio up front: production toolbar rebuilds re-mount ButtonGroup
+    // with fresh props (Toolbar bumps its render key), so a mid-test setProps
+    // swap does not model anything real. Rebuild survival is covered by the
+    // browser-level Tab-flow behavior spec.
+    wrapper = mount(ButtonGroup, {
+      props: { toolbarItems: [fontFamily, separator, fontSize], overflowItems: [] },
+      attachTo: document.body,
+      global: {
+        // Matches production: $toolbar is installed via app.config.globalProperties,
+        // which is what getCurrentInstance().proxy can actually see.
+        config: {
+          globalProperties: {
+            $toolbar: {
+              flushPendingMarkCommands,
+            },
+          },
+        },
+        stubs: {
+          SdTooltip: { name: 'SdTooltip', template: '<div><slot name="trigger" /></div>' },
+        },
+      },
+    });
+
+    const input = wrapper.get('[data-item="btn-fontFamily"] input');
+    await input.trigger('focus');
+    await input.setValue('hel');
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    input.element.dispatchEvent(event);
+    await nextTick();
+    await waitForAnimationFrame();
+    await nextTick();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(flushPendingMarkCommands).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('command')?.[0]?.[0].argument).toBe('Helvetica');
+    const fontSizeInput = wrapper.get('#inlineTextInput-fontSize').element;
+    expect(document.activeElement).toBe(fontSizeInput);
+    await nextTick();
+    expect(fontSizeInput.selectionStart).toBe(0);
+    expect(fontSizeInput.selectionEnd).toBe(fontSizeInput.value.length);
+  });
+
+  it('moves from font size to the editor on Tab', async () => {
+    const flushPendingMarkCommands = vi.fn(() => true);
+    const item = {
+      ...createFullDropdownItem('12pt'),
+      command: 'setFontSize',
+      id: ref('font-size'),
+      name: ref('fontSize'),
+      label: ref('12'),
+      selectedValue: ref('12pt'),
+      inlineTextInputVisible: ref(true),
+      hasInlineTextInput: ref(true),
+      nestedOptions: ref([{ key: '12pt', label: '12', props: { 'data-item': 'btn-fontSize-option' } }]),
+    };
+    const focusEditor = vi.fn();
+    wrapper = mountWithDropdownItem(item, {
+      config: {
+        globalProperties: {
+          $toolbar: {
+            flushPendingMarkCommands,
+            activeEditor: {
+              focus: focusEditor,
+            },
+          },
+        },
+      },
+    });
+
+    const input = wrapper.get('#inlineTextInput-fontSize');
+    await input.trigger('focus');
+    await input.setValue('18');
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    input.element.dispatchEvent(event);
+    await nextTick();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(wrapper.emitted('command')?.[0]?.[0].argument).toBe('18');
+    expect(flushPendingMarkCommands).toHaveBeenCalledTimes(1);
+    expect(focusEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes pending font marks when the font family combobox hands focus back to the editor', async () => {
+    const flushPendingMarkCommands = vi.fn(() => true);
+    const focusEditor = vi.fn();
+    const item = {
+      ...createFullDropdownItem('Arial'),
+      command: 'setFontFamily',
+      id: ref('font-family'),
+      name: ref('fontFamily'),
+      label: ref('Arial'),
+      selectedValue: ref('Arial'),
+      nestedOptions: ref([
+        { key: 'Arial', label: 'Arial', props: { style: { fontFamily: 'Arial' } } },
+        { key: 'Helvetica', label: 'Helvetica', props: { style: { fontFamily: 'Helvetica' } } },
+      ]),
+    };
+    wrapper = mountWithDropdownItem(item, {
+      config: {
+        globalProperties: {
+          $toolbar: {
+            flushPendingMarkCommands,
+            activeEditor: {
+              focus: focusEditor,
+            },
+          },
+        },
+      },
+    });
+
+    wrapper.findComponent({ name: 'FontFamilyCombobox' }).vm.$emit('editor-handoff');
+    await nextTick();
+
+    expect(flushPendingMarkCommands).toHaveBeenCalledTimes(1);
+    expect(focusEditor).toHaveBeenCalledTimes(1);
   });
 });

@@ -29,10 +29,11 @@ This repo can load documents from Cloudflare R2. Configure via env vars (no secr
 
 Required env vars:
 - `SD_TESTING_R2_ACCOUNT_ID`
-- `SD_TESTING_R2_BUCKET_NAME`
 - `SD_TESTING_R2_BASELINES_BUCKET_NAME`
 - `SD_TESTING_R2_ACCESS_KEY_ID`
 - `SD_TESTING_R2_SECRET_ACCESS_KEY`
+
+Corpus docs are pinned to the Docx Universe bucket `docx-test-documents`.
 
 Baselines are uploaded to the `SD_TESTING_R2_BASELINES_BUCKET_NAME` bucket when you run `pnpm baseline`.
 Local baselines are written to a temporary directory and removed after upload.

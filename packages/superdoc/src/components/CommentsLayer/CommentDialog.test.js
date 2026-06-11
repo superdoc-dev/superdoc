@@ -812,6 +812,22 @@ describe('CommentDialog.vue', () => {
     expect(trackedChange.text()).not.toContain('underline');
   });
 
+  it('renders paragraph splits as new-line changes without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'paragraphSplit',
+        trackedChangeText: 'new line',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Added new line');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('formatting');
+  });
+
   it('calls custom accept handler instead of default behavior when configured', async () => {
     const customAcceptHandler = vi.fn();
 

@@ -105,7 +105,7 @@ if (!isLocalPreview && !isPrerelease) {
 // Linear integration - labels issues with version on release
 if (!isLocalPreview) {
   config.plugins.push([
-    'semantic-release-linear-app',
+    '../../scripts/semantic-release/linear-commit-sync.cjs',
     {
       teamKeys: ['SD'],
       addComment: shouldCommentOnRelease,

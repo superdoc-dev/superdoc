@@ -28,6 +28,16 @@ import { TRACKED_CHANGE_SOURCE_ID_MAP_PROPERTY } from '@extensions/track-changes
 const TRACK_NAMES = new Set(['w:ins', 'w:del']);
 const FORMAT_REVISION_NAMES = new Set(['w:rPrChange', 'w:pPrChange']);
 const FORBIDDEN_NAMESPACE_PREFIXES = ['sd:', 'sdrev:', 'superdoc:'];
+const WORD_RSID_ATTRS = ['w:rsidDel', 'w:rsidR', 'w:rsidRDefault', 'w:rsidRPr', 'w:rsidP', 'w:rsidTr', 'w:rsidSect'];
+const TRACKED_CHANGE_ALLOWED_ATTRS = new Set([
+  'w:id',
+  'w:author',
+  'w:authorEmail',
+  'w:date',
+  'w:authorImage',
+  ...WORD_RSID_ATTRS,
+]);
+const FORMAT_REVISION_ALLOWED_ATTRS = new Set(['w:id', 'w:author', 'w:date']);
 
 const visitNodes = (node, visit) => {
   if (!node || typeof node !== 'object') return;
@@ -130,31 +140,29 @@ describe('overlap export — Word-native shape only', () => {
       }
 
       // Phase 005 — no SuperDoc-private attributes on tracked-change
-      // wrappers. The Word-native attribute set is `w:id`, `w:author`,
-      // `w:authorEmail`, `w:date`, plus optional `w:authorImage` (treated
-      // as Word-supported per converter convention).
-      // Word-standard tracked-change attributes. `w:rsid*` are
-      // revision-save ids that ship in untouched Word documents.
-      const allowedAttrs = new Set([
-        'w:id',
-        'w:author',
-        'w:authorEmail',
-        'w:date',
-        'w:authorImage',
-        'w:rsidDel',
-        'w:rsidR',
-        'w:rsidRDefault',
-        'w:rsidRPr',
-        'w:rsidP',
-        'w:rsidTr',
-        'w:rsidSect',
-      ]);
-      for (const node of [...tracked, ...formats]) {
+      // wrappers. Run insert/delete nodes keep the existing converter
+      // author-metadata convention; format revision nodes must stay inside the
+      // standard CT_TrackChange attribute set.
+      for (const node of tracked) {
         if (!node.attributes) continue;
         for (const key of Object.keys(node.attributes)) {
           // overlap internal attrs (`changeType`, `revisionGroupId`,
           // `splitFromId`, etc.) live on PM marks only — never on OOXML.
-          expect(allowedAttrs.has(key), `Tracked-change wrapper carries non-Word attribute "${key}"`).toBe(true);
+          expect(
+            TRACKED_CHANGE_ALLOWED_ATTRS.has(key),
+            `Tracked-change wrapper carries non-Word attribute "${key}"`,
+          ).toBe(true);
+        }
+      }
+      for (const node of formats) {
+        if (!node.attributes) continue;
+        for (const key of Object.keys(node.attributes)) {
+          // overlap internal attrs (`changeType`, `revisionGroupId`,
+          // `splitFromId`, etc.) live on PM marks only — never on OOXML.
+          expect(
+            FORMAT_REVISION_ALLOWED_ATTRS.has(key),
+            `Format revision wrapper carries non-Word attribute "${key}"`,
+          ).toBe(true);
         }
       }
 

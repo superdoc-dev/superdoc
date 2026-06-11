@@ -162,6 +162,67 @@ describe('handleImageNode - Shape Group Support', () => {
     };
   };
 
+  const createPicture = ({ rEmbed = 'rIdImage', alphaModFixAmt } = {}) => ({
+    name: 'pic:pic',
+    elements: [
+      {
+        name: 'pic:nvPicPr',
+        elements: [
+          {
+            name: 'pic:cNvPr',
+            attributes: { id: '9', name: 'Grouped Picture' },
+          },
+        ],
+      },
+      {
+        name: 'pic:blipFill',
+        elements: [
+          {
+            name: 'a:blip',
+            attributes: { 'r:embed': rEmbed },
+            ...(alphaModFixAmt != null
+              ? {
+                  elements: [{ name: 'a:alphaModFix', attributes: { amt: String(alphaModFixAmt) } }],
+                }
+              : {}),
+          },
+        ],
+      },
+      {
+        name: 'pic:spPr',
+        elements: [
+          {
+            name: 'a:xfrm',
+            elements: [
+              { name: 'a:off', attributes: { x: '0', y: '0' } },
+              { name: 'a:ext', attributes: { cx: '914400', cy: '914400' } },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const createImageParams = () => ({
+    filename: 'document.xml',
+    docx: {
+      'word/_rels/document.xml.rels': {
+        elements: [
+          {
+            name: 'Relationships',
+            elements: [
+              {
+                name: 'Relationship',
+                attributes: { Id: 'rIdImage', Target: 'media/grouped-watermark.png' },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    nodes: [{ name: 'w:drawing' }],
+  });
+
   it('should parse a shape group with multiple shapes', () => {
     const shapes = [
       createShape('2', 'Shape 1', '1260360', '0', '1571760', '1571760', 'ff0000'),
@@ -181,6 +242,25 @@ describe('handleImageNode - Shape Group Support', () => {
     expect(result.type).toBe('shapeGroup');
     expect(result.attrs.shapes).toHaveLength(3);
     expect(result.attrs.groupTransform).toBeDefined();
+  });
+
+  it('should extract alphaModFix from grouped pictures', () => {
+    const node = createShapeGroupNode([createPicture({ alphaModFixAmt: 9000 })]);
+
+    const result = handleImageNode(node, createImageParams(), true);
+
+    expect(result).toBeTruthy();
+    expect(result.type).toBe('shapeGroup');
+    expect(result.attrs.shapes).toHaveLength(1);
+    expect(result.attrs.shapes[0]).toMatchObject({
+      shapeType: 'image',
+      attrs: {
+        src: 'word/media/grouped-watermark.png',
+        imageId: '9',
+        imageName: 'Grouped Picture',
+        alphaModFix: { amt: 9000 },
+      },
+    });
   });
 
   it('should extract group transform properties', () => {

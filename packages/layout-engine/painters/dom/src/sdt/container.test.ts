@@ -27,6 +27,22 @@ describe('SDT container chrome', () => {
     expect(el.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Signer');
   });
 
+  it('exposes inter-fragment SDT chrome extension', () => {
+    const doc = document.implementation.createHTMLDocument('sdt-container');
+    const el = doc.createElement('div');
+    const sdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'block-sdt',
+      alias: 'Signer',
+    };
+
+    applySdtContainerChrome(doc, el, sdt, null, { isStart: true, isEnd: false, paddingBottomOverride: 12 });
+
+    expect(el.style.paddingBottom).toBe('12px');
+    expect(el.style.getPropertyValue('--sd-sdt-chrome-bottom-extension')).toBe('12px');
+  });
+
   it('does not render block chrome for inline structuredContent', () => {
     const doc = document.implementation.createHTMLDocument('sdt-container');
     const el = doc.createElement('div');

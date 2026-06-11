@@ -1,12 +1,14 @@
 /**
  * Consumer typecheck: realistic Config with `modules.*` pass-through fields.
  *
- * The runtime spreads consumer-provided module configs into downstream
- * stores (comments-store, SuperToolbar, etc.), so each `modules.X` shape
- * is intentionally open: typed fields for IDE help on documented options,
+ * The runtime spreads many consumer-provided module configs into downstream
+ * stores (comments-store, SuperToolbar, etc.), so those `modules.X` shapes
+ * are intentionally open: typed fields for IDE help on documented options,
  * plus an index-signature intersection to accept additional keys that the
  * runtime forwards. This fixture pins that contract so a future PR cannot
- * silently re-narrow these into closed object literals.
+ * silently re-narrow them into closed object literals. Configs that forward
+ * nothing (e.g. `contentControls`, with a single real option) are instead
+ * intentionally exact; this fixture pins that shape too.
  *
  * Past regressions covered here:
  *   - SD-2869 review pass flagged `Modules.comments` rejecting
@@ -65,6 +67,15 @@ const config: Config = {
       // and comments-store).
       useInternalExternalComments: true,
       suppressInternalExternalComments: false,
+    },
+
+    // Documented field: built-in SDT chrome mode (SD-3159). A consumer must be
+    // able to set the union value and get IDE help on it. Unlike the other
+    // module configs in this fixture, contentControls is exact (no pass-through
+    // index signature): it has a single real runtime option, so an unknown key
+    // is a typo to catch, not a forwarded setting.
+    contentControls: {
+      chrome: 'none',
     },
 
     ai: {

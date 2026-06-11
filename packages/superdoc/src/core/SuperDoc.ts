@@ -8,6 +8,7 @@ import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
+import { resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
@@ -22,6 +23,7 @@ import { SurfaceManager } from './surface-manager.js';
 import { createDeprecatedEditorProxy } from '../helpers/deprecation.js';
 import { normalizeTrackChangesConfig } from './helpers/normalize-track-changes-config.js';
 import { normalizeCommentsUiPolicy } from '../helpers/comment-small-screen.js';
+import { EditorRuntimeRegistry } from './editor-runtime/editor-runtime-registry.js';
 
 const DEFAULT_USER = Object.freeze({
   id: null,
@@ -68,6 +70,8 @@ import type {
   CanPerformPermissionParams,
   CollaborationProvider,
   Config,
+  ContentControlActiveChangePayload,
+  ContentControlClickPayload,
   DocumentMode,
   Editor,
   EditorUpdateEvent,
@@ -82,27 +86,43 @@ import type {
   SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocFontsApi,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
   SuperDocState,
+  SuperDocViewportChangePayload,
+  SuperDocViewportMetrics,
+  SuperDocZoomMode,
+  SuperDocZoomPayload,
+  SuperDocZoomState,
   SurfaceHandle,
   SurfaceRequest,
   UpgradeToCollaborationOptions,
   User,
 } from './types/index.js';
-import type { Comment, FontsResolvedPayload, ListDefinitionsPayload, PresentationEditor } from '@superdoc/super-editor';
+import type {
+  Comment,
+  FontsResolvedPayload,
+  FontsChangedPayload,
+  FontResolutionRecord,
+  ListDefinitionsPayload,
+  PresentationEditor,
+} from '@superdoc/super-editor';
+import type { EditorRuntime, EditorRuntimeId } from './editor-runtime/index.js';
+import type { EditorRuntimeRegistryUnsubscribe } from './editor-runtime/editor-runtime-registry.js';
 import type * as Y from 'yjs';
 // `Whiteboard` is already imported as a value above (line 19); reuse it
 // as a type here without a separate `import type` declaration.
 import type { WhiteboardData } from './whiteboard/Whiteboard.js';
 
+type ActiveEditor = Editor & {
+  editorVersion?: 1 | 2;
+};
+
 // Internal-only event payload shapes (consumer-facing payloads are
 // exported from `core/types/index.ts` and imported above).
 interface SuperDocWhiteboardPayload {
   whiteboard: Whiteboard;
-}
-interface SuperDocZoomPayload {
-  zoom: number;
 }
 interface SuperDocFormattingMarksPayload {
   showFormattingMarks: boolean;
@@ -139,9 +159,12 @@ interface SuperDocEventMap {
   'editor-update': [EditorUpdateEvent];
   'content-error': [SuperDocContentErrorPayload];
   'fonts-resolved': [FontsResolvedPayload];
+  'fonts-changed': [FontsChangedPayload];
   'pagination-update': [SuperDocPaginationPayload];
   'list-definitions-change': [ListDefinitionsPayload];
   'comments-update': [SuperDocCommentsUpdatePayload];
+  'content-control:active-change': [ContentControlActiveChangePayload];
+  'content-control:click': [ContentControlClickPayload];
   'collaboration-ready': [SuperDocEditorPayload];
   'awareness-update': [SuperDocAwarenessUpdatePayload];
   locked: [SuperDocLockedPayload];
@@ -151,6 +174,7 @@ interface SuperDocEventMap {
   'whiteboard:enabled': [boolean];
   'whiteboard:tool': [string];
   exception: [SuperDocExceptionPayload];
+  'viewport-change': [SuperDocViewportChangePayload];
 }
 // Notes on the event map above:
 //
@@ -168,6 +192,22 @@ interface SuperDocEventMap {
 // editor's `onFontsResolved` option. Cleanup of this transport (relay
 // through SuperDoc instead) is a follow-up; typing it here matches the
 // current consumer-visible contract.
+
+/**
+ * Whether a runtime's legacy editor projection is a v1, command-capable surface
+ * the legacy shell (toolbar, `search`, `goToSearchResult`, `activeEditor`) can
+ * drive. v2-shaped scaffolding (`editorVersion === 2`), null projections, and
+ * projections whose `commands` are not object-like are UNSUPPORTED and must
+ * fail closed so stale v1 surfaces never stay bound to the wrong editor.
+ *
+ * @param projection The runtime's `getLegacyEditorProjection()` result.
+ */
+function isCommandCapableV1LegacyProjection(projection: unknown): projection is ActiveEditor {
+  if (!projection || typeof projection !== 'object') return false;
+  const candidate = projection as { editorVersion?: number; commands?: unknown };
+  if (candidate.editorVersion === 2) return false;
+  return Boolean(candidate.commands) && typeof candidate.commands === 'object';
+}
 
 /**
  * SuperDoc class
@@ -328,7 +368,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   // runtime own-property initializer. Each is assigned during `#init`
   // (called synchronously from the constructor), so by the time any
   // external callsite reads them they exist.
-  declare activeEditor: Editor | null;
+  declare activeEditor: ActiveEditor | null;
   declare toolbar: SuperToolbar | null;
   declare toolbarElement: string | HTMLElement | undefined;
   declare userColorMap: Map<string, string>;
@@ -343,6 +383,24 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   declare user: AwarenessUser;
   declare _cleanupAwareness: (() => void) | null;
   declare _commentsCollabInitialized: boolean;
+
+  /**
+   * SuperDoc-owned editor runtime registry. This is the internal place to ask
+   * which mounted editor runtime is active and which runtime owns a DOM event
+   * target. It stays private so it never widens the public SDK type surface.
+   */
+  readonly #editorRuntimeRegistry = new EditorRuntimeRegistry();
+
+  /** Unsubscribe handle for the registry active-change bridge. */
+  #editorRuntimeRegistryUnsub: EditorRuntimeRegistryUnsubscribe | null = null;
+
+  /**
+   * Re-entrancy guard. True while the registry active-change bridge is applying
+   * a projection through `setActiveEditor(...)`, so that call applies the
+   * projection directly instead of routing back into runtime activation (which
+   * would recurse). The sole writer of `activeEditor` stays `setActiveEditor`.
+   */
+  #applyingRuntimeActiveChange = false;
 
   /**
    * The active configuration. Typed as `InternalConfig` because `#init` runs
@@ -412,6 +470,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     onContentError: () => null,
     onReady: () => null,
     onCommentsUpdate: () => null,
+    onContentControlActiveChange: () => null,
+    onContentControlClick: () => null,
     onAwarenessUpdate: () => null,
     onLocked: () => null,
     onPdfDocumentReady: () => null,
@@ -581,6 +641,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.activeEditor = null;
     this.comments = [];
+
+    // Bridge active runtime changes onto the legacy `activeEditor` projection.
+    // The registry never writes `activeEditor` directly; it surfaces the next
+    // runtime's compatibility projection and SuperDoc routes that through
+    // `setActiveEditor(...)` so existing toolbar side effects stay centralized.
+    if (!this.#editorRuntimeRegistryUnsub) {
+      this.#editorRuntimeRegistryUnsub = this.#editorRuntimeRegistry.subscribe((change) => {
+        this.#applyActiveRuntimeChange(change.nextRuntimeId, change.legacyEditorProjection);
+      });
+    }
 
     this.isLocked = this.config.isLocked || false;
     this.lockedBy = this.config.lockedBy || null;
@@ -841,6 +911,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('editorDestroy', this.config.onEditorDestroy);
     this.#onConfig('ready', this.config.onReady);
     this.#onConfig('comments-update', this.config.onCommentsUpdate);
+    this.#onConfig('content-control:active-change', this.config.onContentControlActiveChange);
+    this.#onConfig('content-control:click', this.config.onContentControlClick);
     this.#onConfig('awareness-update', this.config.onAwarenessUpdate);
     this.#onConfig('locked', this.config.onLocked);
     this.#onConfig('pdf:document-ready', this.config.onPdfDocumentReady);
@@ -852,6 +924,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('list-definitions-change', this.config.onListDefinitionsChange);
     this.#onConfig('pagination-update', this.config.onPaginationUpdate);
     this.#onConfig('fonts-resolved', this.config.onFontsResolved);
+    this.#onConfig('fonts-changed', this.config.onFontsChanged);
+    this.#onConfig('zoomChange', this.config.onZoomChange);
+    this.#onConfig('viewport-change', this.config.onViewportChange);
   }
 
   /**
@@ -1480,7 +1555,56 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   broadcastEditorCreate(editor: Editor) {
     this.readyEditors++;
     this.broadcastReady();
+    this.#wireFontsChangedRelay(editor);
     this.emit('editorCreate', { editor: createDeprecatedEditorProxy(editor) });
+  }
+
+  /** Editors whose `fonts-changed` we already relay, so a repeated create wires once. */
+  #fontsRelayEditors = new WeakSet<Editor>();
+
+  /**
+   * Relay an editor's authoritative `fonts-changed` up to the SuperDoc surface, so
+   * `superdoc.on('fonts-changed')` / `onFontsChanged` fire without the legacy
+   * `fonts-resolved` SuperDoc.vue listener-transport. Two robustness rules the happy
+   * path missed: (1) guard `editor.on` - test stubs and pre-layout editors lack it;
+   * (2) the PresentationEditor may have emitted its first report BEFORE this relay
+   * subscribed (a fast or swapped document), so replay the cached payload once on wire,
+   * matching what `superdoc.fonts.getReport()` returns for the active document. Wired at
+   * most once per editor (a create can fire twice).
+   */
+  #wireFontsChangedRelay(editor: Editor): void {
+    if (!editor || typeof editor.on !== 'function') return;
+    if (this.#fontsRelayEditors.has(editor)) return;
+    this.#fontsRelayEditors.add(editor);
+    editor.on('fonts-changed', (payload) => {
+      if (this.#fontReportSurfaces(editor)) this.#deliverFontsChanged(payload);
+    });
+    // Replay the editor's already-emitted report once on wire (a fast or swapped document may
+    // have emitted before this relay subscribed), under the SAME active-editor rule as the
+    // live path so creating an inactive editor cannot replay a stale report into the cache.
+    const cached = editor.presentationEditor?.getLastFontsChangedPayload?.();
+    if (cached && this.#fontReportSurfaces(editor)) this.#deliverFontsChanged(cached);
+  }
+
+  /**
+   * Whether a wired editor's font report may surface on the SuperDoc instance. Only the
+   * active editor's report surfaces; before any editor is marked active, the sole editor's
+   * does. After a document swap an old editor can still emit `fonts-changed` (e.g. a
+   * timed-out font finishing later) or be re-created with a cached payload - the payload has
+   * no document id to disambiguate, so surfacing it would poison the `onReport` cache for the
+   * new document. Both the live event and the cached replay gate on this single rule.
+   */
+  #fontReportSurfaces(editor: Editor): boolean {
+    return !this.activeEditor || editor === this.activeEditor;
+  }
+
+  /** Last font report delivered on this instance, so `fonts.onReport` can replay it. */
+  #lastFontsChangedPayload: FontsChangedPayload | null = null;
+
+  /** Cache then emit a font report, so a later `onReport` subscriber gets the current one. */
+  #deliverFontsChanged(payload: FontsChangedPayload): void {
+    this.#lastFontsChangedPayload = payload;
+    this.emit('fonts-changed', payload);
   }
 
   /**
@@ -1502,16 +1626,263 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     (console.debug ? console.debug : console.log)('🦋 🦸‍♀️ [superdoc]', ...args);
   }
 
+  #fontsApi: SuperDocFontsApi | null = null;
+
   /**
-   * Set the active editor
-   * @param editor The editor to set as active
+   * Read-only font surface: the substitution- and load-aware report for the active
+   * editor's document. Pulls on demand (the same report streams via `fonts-changed`).
+   * Stable identity; the closures always read the current `activeEditor`. Returns empty
+   * arrays when no editor is active or layout mode is off.
    */
-  setActiveEditor(editor: Editor) {
+  get fonts(): SuperDocFontsApi {
+    if (!this.#fontsApi) {
+      this.#fontsApi = {
+        getReport: () => this.activeEditor?.presentationEditor?.getFontReport() ?? [],
+        getMissingFonts: () => this.activeEditor?.presentationEditor?.getMissingFonts() ?? [],
+        getDocumentFontOptions: () => this.activeEditor?.presentationEditor?.getDocumentFontOptions() ?? [],
+        getDocumentFonts: () => [
+          // Deduped by logical family: the report can now carry multiple FACE rows per family.
+          ...new Set(
+            (this.activeEditor?.presentationEditor?.getFontReport() ?? []).map((record) => record.logicalFamily),
+          ),
+        ],
+        onReport: (callback) => {
+          // Snapshot-then-subscribe: the report may already have resolved (it fires during
+          // load, before a consumer subscribes - and a document swap creates a fresh editor),
+          // so deliver the current one immediately, then stream future changes. The active
+          // editor is the source of truth for "current": use ITS cached report so a snapshot
+          // matches `getReport()` for the active document. The instance-level cache can hold a
+          // PRIOR document's payload after an active-editor switch, so it is only a fallback
+          // for when no editor is active. When an active editor exists but has not produced a
+          // report yet, deliver nothing (the subscription catches its first one) rather than
+          // replaying a stale prior-editor payload. Returns an unsubscribe.
+          const activeEditor = this.activeEditor;
+          const current = activeEditor
+            ? (activeEditor.presentationEditor?.getLastFontsChangedPayload?.() ?? null)
+            : (this.#lastFontsChangedPayload ?? null);
+          if (current) callback(current);
+          this.on('fonts-changed', callback);
+          return () => this.off('fonts-changed', callback);
+        },
+        // Active-editor scoped like the read methods, but these are WRITES. Route through the
+        // document font controller; with no active editor, fail loudly rather than silently no-op.
+        map: (mappings) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.map requires an active editor');
+          pe.mapFonts(mappings);
+        },
+        unmap: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.unmap requires an active editor');
+          pe.unmapFonts(families);
+        },
+        add: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.add requires an active editor');
+          pe.addFonts(Array.isArray(families) ? families : [families]);
+        },
+        preload: (families) => {
+          const pe = this.activeEditor?.presentationEditor;
+          if (!pe) throw new Error('superdoc.fonts.preload requires an active editor');
+          return pe.preloadFonts(families);
+        },
+      };
+    }
+    return this.#fontsApi;
+  }
+
+  /**
+   * Clear the legacy `activeEditor` projection and detach the v1 toolbar. Used
+   * when active state clears and when an active runtime is unsupported for the
+   * v1 shell path (v2-shaped, null, or command-incapable projection).
+   */
+  #clearActiveEditorProjection() {
+    this.activeEditor = null;
+    if (this.toolbar?.setActiveEditor) {
+      this.toolbar.setActiveEditor(null as unknown as Editor);
+    } else if (this.toolbar) {
+      this.toolbar.activeEditor = null;
+    }
+  }
+
+  /**
+   * Apply a v1 legacy projection to `activeEditor` and rebind the v1 toolbar.
+   * This is the legacy assignment side effect, kept separate from the registry
+   * routing in `setActiveEditor(...)` so the registry bridge can apply a
+   * projection without re-entering activation.
+   *
+   * @param editor The v1 legacy editor projection.
+   */
+  #applyActiveEditorProjection(editor: ActiveEditor) {
     this.activeEditor = editor;
+    if (editor?.editorVersion === 2) return;
     if (this.toolbar) {
       this.activeEditor.toolbar = this.toolbar;
       this.toolbar.setActiveEditor(editor);
     }
+  }
+
+  /**
+   * Reconcile the legacy `activeEditor` projection with a registry active-runtime
+   * change. SuperDoc owns the invariant that `activeEditor` is either the active
+   * runtime's supported v1 projection, or `null` when the active runtime has no
+   * supported legacy projection.
+   *
+   * @param nextRuntimeId The newly active runtime id, or `null` when cleared.
+   * @param projection The next runtime's legacy projection, if any.
+   */
+  #applyActiveRuntimeChange(nextRuntimeId: EditorRuntimeId | null, projection: unknown) {
+    this.#applyingRuntimeActiveChange = true;
+    try {
+      if (nextRuntimeId === null) {
+        this.#clearActiveEditorProjection();
+        return;
+      }
+      const runtime = this.#editorRuntimeRegistry.get(nextRuntimeId);
+      if (runtime?.kind === 'v1' && isCommandCapableV1LegacyProjection(projection)) {
+        this.setActiveEditor(projection);
+      } else {
+        // Fail closed: a non-v1 runtime, or a runtime with a v2-shaped / null /
+        // command-incapable projection, must not leave a stale v1 editor or
+        // toolbar bound.
+        this.#clearActiveEditorProjection();
+      }
+    } finally {
+      this.#applyingRuntimeActiveChange = false;
+    }
+  }
+
+  /**
+   * Resolve the registered v1 runtime id that owns a legacy editor, preferring
+   * projection identity and falling back to document id only when it maps to
+   * exactly one v1 runtime (never guess when more than one runtime shares a doc).
+   *
+   * @param editor The legacy editor to resolve a runtime for.
+   * @returns The owning runtime id, or `null` when none can be resolved.
+   */
+  #resolveRuntimeIdForEditor(editor: ActiveEditor | null): EditorRuntimeId | null {
+    if (!editor) return null;
+    for (const runtime of this.#editorRuntimeRegistry.getAll()) {
+      if (runtime.kind !== 'v1') continue;
+      if (runtime.getLegacyEditorProjection?.() === editor) return runtime.id;
+    }
+    const documentId = editor.options?.documentId;
+    if (typeof documentId === 'string' && documentId.length > 0) {
+      const matches = this.#editorRuntimeRegistry
+        .getAllByDocumentId(documentId)
+        .filter((runtime) => runtime.kind === 'v1');
+      if (matches.length === 1) return matches[0].id;
+    }
+    return null;
+  }
+
+  /**
+   * Set the active editor (legacy entry point). When the editor maps to a
+   * registered runtime this routes through the registry so the active runtime
+   * and `activeEditor` cannot drift apart; the registry bridge then applies the
+   * projection. Direct legacy assignment is used only before runtime
+   * registration (startup) or when no owning runtime can be resolved.
+   *
+   * @param editor The editor to set as active
+   */
+  setActiveEditor(editor: ActiveEditor | null) {
+    if (!isCommandCapableV1LegacyProjection(editor)) {
+      this.#clearActiveEditorProjection();
+      return;
+    }
+    if (!this.#applyingRuntimeActiveChange) {
+      const runtimeId = this.#resolveRuntimeIdForEditor(editor);
+      if (runtimeId !== null) {
+        const wasAlreadyActive = this.#editorRuntimeRegistry.getActive()?.id === runtimeId;
+        // Activate the owning runtime; the registry bridge applies the
+        // projection (and rebinds the toolbar) for us.
+        this.#editorRuntimeRegistry.setActive(runtimeId, 'set-active-editor');
+        if (wasAlreadyActive) {
+          // `setActive` is idempotent and emits no bridge event when the runtime
+          // is already active. Re-apply the projection so legacy callers can
+          // rebind surfaces that were intentionally detached (for example,
+          // viewing mode keeps the active runtime but disables the toolbar).
+          // Always use the runtime's canonical projection; document-id fallback
+          // may have resolved from a same-document editor that is not the active
+          // runtime's legacy projection.
+          const projection = this.#editorRuntimeRegistry.get(runtimeId)?.getLegacyEditorProjection?.() ?? null;
+          if (isCommandCapableV1LegacyProjection(projection)) {
+            this.#applyActiveEditorProjection(projection);
+          } else {
+            this.#clearActiveEditorProjection();
+          }
+        }
+        return;
+      }
+    }
+    this.#applyActiveEditorProjection(editor);
+  }
+
+  /**
+   * Register a mounted editor runtime with the shell-owned registry.
+   *
+   * @param runtime
+   * @internal
+   */
+  private registerEditorRuntime(runtime: EditorRuntime): void {
+    this.#editorRuntimeRegistry.register(runtime);
+  }
+
+  /**
+   * Unregister a mounted editor runtime by id. If it was active, active state
+   * clears and the registry does not auto-promote a different runtime.
+   *
+   * @param runtimeId
+   * @returns Whether a runtime was removed.
+   * @internal
+   */
+  private unregisterEditorRuntime(runtimeId: EditorRuntimeId): boolean {
+    return this.#editorRuntimeRegistry.unregister(runtimeId);
+  }
+
+  /**
+   * Return the active editor runtime, or null.
+   *
+   * @internal
+   */
+  private getActiveRuntime(): EditorRuntime | null {
+    return this.#editorRuntimeRegistry.getActive();
+  }
+
+  /**
+   * Select the active editor runtime, or clear it with null.
+   *
+   * @param runtimeId
+   * @param reason
+   * @internal
+   */
+  private setActiveRuntime(runtimeId: EditorRuntimeId | null, reason: string): void {
+    this.#editorRuntimeRegistry.setActive(runtimeId, reason);
+  }
+
+  /**
+   * Resolve which mounted runtime owns a DOM event target.
+   *
+   * @param target
+   * @internal
+   */
+  private resolveRuntimeFromEventTarget(target: EventTarget | null): EditorRuntime | null {
+    return this.#editorRuntimeRegistry.resolveFromEventTarget(target);
+  }
+
+  /**
+   * Resolve and activate the runtime that owns a DOM event target.
+   *
+   * @param target
+   * @param reason
+   * @returns Whether a runtime was resolved and activated.
+   * @internal
+   */
+  private activateRuntimeFromEventTarget(target: EventTarget | null, reason: string): boolean {
+    const runtime = this.#editorRuntimeRegistry.resolveFromEventTarget(target);
+    if (!runtime) return false;
+    this.#editorRuntimeRegistry.setActive(runtime.id, reason);
+    return true;
   }
 
   /**
@@ -1899,7 +2270,11 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // mode changes are reachable the toolbar is non-null. The guard
     // keeps TS satisfied and stays a no-op if a future destroy/teardown
     // ever clears the field.
-    if (this.toolbar) this.toolbar.activeEditor = null;
+    if (this.toolbar?.setActiveEditor) {
+      this.toolbar.setActiveEditor(null as unknown as Editor);
+    } else if (this.toolbar) {
+      this.toolbar.activeEditor = null;
+    }
 
     const commentsVisible = this.config.comments?.visible === true;
     const trackChangesVisible = this.config.trackChanges?.visible === true;
@@ -1957,10 +2332,15 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * (possibly empty).
    *
    * @param text The text or regex to search for
-   * @returns The search results
+   * @returns The search results, or `undefined` when there is no active editor
+   *   or the active legacy projection exposes no `search` command (e.g. a
+   *   v2-shaped runtime with `commands: null`).
    */
   search(text: string | RegExp): SearchMatch[] | undefined {
-    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
+    const commands = this.activeEditor?.commands;
+    const search = commands?.search;
+    if (typeof search !== 'function') return undefined;
+    return search.call(commands, text, { searchModel: 'visible' });
   }
 
   /**
@@ -1971,10 +2351,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * tracker ids.
    *
    * @param match The match object returned by `superdoc.search()`.
-   * @returns Whether the command dispatched, or `undefined` if no active editor.
+   * @returns Whether the command dispatched, or `undefined` when there is no
+   *   active editor or the active legacy projection exposes no
+   *   `goToSearchResult` command (e.g. a v2-shaped runtime with `commands:
+   *   null`).
    */
   goToSearchResult(match: SearchMatch) {
-    return this.activeEditor?.commands.goToSearchResult(match);
+    const commands = this.activeEditor?.commands;
+    const goToSearchResult = commands?.goToSearchResult;
+    if (typeof goToSearchResult !== 'function') return undefined;
+    return goToSearchResult.call(commands, match);
   }
 
   /**
@@ -1988,12 +2374,14 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
-   * Set the zoom level for all documents.
+   * Set the zoom level for all documents and switch the zoom mode to
+   * `manual` (an explicit numeric zoom expresses intent to leave
+   * `fit-width`; use `setZoomMode('fit-width')` to re-enter fitting).
    * Updates the centralized activeZoom state, which propagates to all
    * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
    * @param percent - The zoom level as a percentage (e.g., 100, 150, 200)
    * @example
-   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(150); // Set zoom to 150%, mode becomes 'manual'
    * superdoc.setZoom(50);  // Set zoom to 50%
    */
   setZoom(percent: number) {
@@ -2001,14 +2389,86 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
       return;
     }
+    // Before async init attaches the store there is nothing to write, and
+    // emitting anyway would tell listeners about a zoom that never
+    // happened. Use config.zoom.initial for pre-init zoom instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoom called before initialization; use config.zoom.initial for the starting zoom');
+      return;
+    }
 
     // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
     // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
-    if (this.superdocStore) {
-      this.superdocStore.activeZoom = percent;
-    }
+    this.superdocStore.activeZoom = percent;
+    this.superdocStore.zoomMode = 'manual';
 
-    this.emit('zoomChange', { zoom: percent });
+    this.emit('zoomChange', { zoom: percent, mode: 'manual' });
+  }
+
+  /**
+   * Switch the zoom mode. `fit-width` continuously re-fits the
+   * document to the available container width (clamped by
+   * `config.zoom.fitWidth`); `manual` holds the current value.
+   * Switching to `fit-width` applies the fit immediately when
+   * viewport metrics are available. Emits `zoomChange` (with the
+   * current value) so zoom UIs observe mode-only transitions; a
+   * same-mode call is a no-op.
+   * @param mode - The zoom mode: `'manual'` or `'fit-width'`
+   * @example
+   * superdoc.setZoomMode('fit-width'); // start fitting to the container
+   * superdoc.setZoomMode('manual');    // hold the current zoom value
+   */
+  setZoomMode(mode: SuperDocZoomMode) {
+    if (mode !== 'manual' && mode !== 'fit-width') {
+      console.warn("[SuperDoc] setZoomMode expects 'manual' or 'fit-width'");
+      return;
+    }
+    // Before async init attaches the store the mode cannot persist, and
+    // emitting anyway would advertise a mode change that never happened.
+    // Use config.zoom.mode for the starting mode instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoomMode called before initialization; use config.zoom.mode for the starting mode');
+      return;
+    }
+    if (this.superdocStore.zoomMode === mode) return;
+    this.superdocStore.zoomMode = mode;
+    this.emit('zoomChange', { zoom: this.getZoom(), mode });
+  }
+
+  /**
+   * Get a snapshot of the current zoom state: mode, value, the latest
+   * computed fit zoom (null before the first viewport measurement),
+   * and the effective fit bounds.
+   * @returns The current zoom state snapshot
+   * @example
+   * const { mode, value, fitZoom } = superdoc.getZoomState();
+   */
+  getZoomState(): SuperDocZoomState {
+    // Same resolver the fit policy applies, so the reported bounds cannot
+    // drift from the clamping behavior.
+    const fit = resolveFitWidthOptions(this.config.zoom?.fitWidth);
+    return {
+      mode: this.superdocStore?.zoomMode ?? 'manual',
+      value: this.superdocStore?.activeZoom ?? 100,
+      fitZoom: this.superdocStore?.viewportMetrics?.fitZoom ?? null,
+      min: fit.min,
+      max: fit.max,
+    };
+  }
+
+  /**
+   * Get the latest viewport measurements: the width available to the
+   * document, the document's base page width at 100% zoom, and the
+   * unclamped fit zoom. Returns `null` until the first measurement
+   * (editors still mounting). Subscribe to `viewport-change` (or pass
+   * `Config.onViewportChange`) for updates.
+   * @returns The latest viewport metrics, or `null` before the first measurement
+   * @example
+   * const metrics = superdoc.getViewportMetrics();
+   * if (metrics) superdoc.setZoom(Math.min(100, metrics.fitZoom));
+   */
+  getViewportMetrics(): SuperDocViewportMetrics | null {
+    return this.superdocStore?.viewportMetrics ?? null;
   }
 
   /**
@@ -2164,39 +2624,53 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // else: UI store unhydrated → leave `comments` undefined and
     // let the engine's `converter.comments` fallback fire.
 
-    const docxPromises = this.#requireSuperdocStore('exportEditorsToDOCX').documents.map(
-      async (doc: RuntimeDocument) => {
-        if (!doc || doc.type !== DOCX) return null;
+    const bridgedExportErrors = new WeakSet<object>();
+    const rememberBridgedExportError = (payload: SuperDocExceptionPayload) => {
+      if ('editor' in payload && payload.error && typeof payload.error === 'object') {
+        bridgedExportErrors.add(payload.error);
+      }
+    };
 
-        const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
-        const fallbackDocx = () => {
-          if (!doc.data) return null;
-          if (doc.data.type && doc.data.type !== DOCX) return null;
-          return doc.data;
-        };
+    this.on('exception', rememberBridgedExportError);
+    try {
+      const docxPromises = this.#requireSuperdocStore('exportEditorsToDOCX').documents.map(
+        async (doc: RuntimeDocument) => {
+          if (!doc || doc.type !== DOCX) return null;
 
-        if (!editor) return fallbackDocx();
+          const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
+          const fallbackDocx = () => {
+            if (!doc.data) return null;
+            if (doc.data.type && doc.data.type !== DOCX) return null;
+            return doc.data;
+          };
 
-        try {
-          const exported = await editor.exportDocx({
-            isFinalDoc,
-            comments: comments as import('@superdoc/super-editor').Comment[] | undefined,
-            commentsType,
-            fieldsHighlightColor,
-          });
-          if (exported) return exported;
-        } catch (error) {
-          this.emit('exception', { error, document: doc });
-        }
+          if (!editor) return fallbackDocx();
 
-        return fallbackDocx();
-      },
-    );
+          try {
+            const exported = await editor.exportDocx({
+              isFinalDoc,
+              comments: comments as import('@superdoc/super-editor').Comment[] | undefined,
+              commentsType,
+              fieldsHighlightColor,
+            });
+            if (exported) return exported;
+          } catch (error) {
+            if (!error || typeof error !== 'object' || !bridgedExportErrors.has(error)) {
+              this.emit('exception', { error, document: doc });
+            }
+          }
 
-    const docxFiles = await Promise.all(docxPromises);
-    // Type-predicate filter so callers see `Blob[]` instead of `(Blob | null)[]`.
-    // `filter(Boolean)` narrows at runtime but not in the type system.
-    return docxFiles.filter((file): file is Blob => file != null);
+          return fallbackDocx();
+        },
+      );
+
+      const docxFiles = await Promise.all(docxPromises);
+      // Type-predicate filter so callers see `Blob[]` instead of `(Blob | null)[]`.
+      // `filter(Boolean)` narrows at runtime but not in the type system.
+      return docxFiles.filter((file): file is Blob => file != null);
+    } finally {
+      this.off('exception', rememberBridgedExportError);
+    }
   }
 
   /**
@@ -2334,6 +2808,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.#cleanupCollaboration();
 
+    this.#editorRuntimeRegistryUnsub?.();
+    this.#editorRuntimeRegistryUnsub = null;
+    this.#editorRuntimeRegistry.clear();
+
     // Remove the internal wrapper element from the user's container
     if (this.#mountWrapper) {
       this.#mountWrapper.remove();
@@ -2345,14 +2823,21 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Focus the active editor or the first editor in the superdoc
    */
   focus() {
+    const runtime = this.getActiveRuntime();
+    if (runtime?.getCapabilities().lifecycle.canFocus) {
+      void runtime.focus().catch((err) => {
+        console.warn('[SuperDoc] active editor runtime focus failed', err);
+      });
+      return;
+    }
     if (this.activeEditor) {
-      this.activeEditor.focus();
+      this.activeEditor.focus?.();
     } else {
       this.#requireSuperdocStore('focus').documents.find((doc: RuntimeDocument) => {
         const editor = doc.getEditor?.();
-        if (editor) {
-          editor.focus();
-        }
+        if (!editor) return false;
+        editor.focus?.();
+        return true;
       });
     }
   }

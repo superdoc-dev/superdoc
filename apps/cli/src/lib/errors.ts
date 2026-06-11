@@ -49,6 +49,9 @@ export type CliErrorCode =
   | 'INVALID_TARGET'
   | 'AMBIGUOUS_TARGET'
   | 'CAPABILITY_UNSUPPORTED'
+  | 'UNSUPPORTED_SOURCE'
+  | 'INVALID_PACKAGE'
+  | 'UNSUPPORTED_TEMPLATE_CONTENT'
   // DOCX encryption error codes — passed through from super-editor
   | 'DOCX_PASSWORD_REQUIRED'
   | 'DOCX_PASSWORD_INVALID'

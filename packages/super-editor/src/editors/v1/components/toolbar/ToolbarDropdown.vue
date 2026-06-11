@@ -36,7 +36,7 @@ const emit = defineEmits(['update:show', 'select']);
 
 const triggerRef = ref(null);
 const menuRef = ref(null);
-const menuPosition = ref({ top: '0px', left: '0px' });
+const menuPosition = ref({ top: '0px', left: '0px', maxHeight: 'none' });
 const optionRefs = ref([]);
 const keyboardIndex = ref(-1);
 
@@ -71,6 +71,7 @@ const menuStyle = computed(() => {
     position: 'fixed',
     top: menuPosition.value.top,
     left: menuPosition.value.left,
+    maxHeight: menuPosition.value.maxHeight,
     zIndex: 2000,
   };
 });
@@ -89,8 +90,19 @@ const updateMenuPosition = () => {
   const rect = triggerRef.value.getBoundingClientRect();
   const menuEl = menuRef.value;
   const menuWidth = menuEl?.offsetWidth ?? 0;
+  const menuHeight = menuEl?.scrollHeight ?? menuEl?.offsetHeight ?? 0;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;
+  const gap = 4;
+  const belowTop = rect.bottom + gap;
+  const aboveBottom = rect.top - gap;
+  const availableBelow = Math.max(0, viewportHeight - belowTop - gutter);
+  const availableAbove = Math.max(0, aboveBottom - gutter);
+  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow;
+  const maxHeight = openAbove ? availableAbove : availableBelow;
+  const menuRenderHeight = menuHeight ? Math.min(menuHeight, maxHeight) : maxHeight;
+  const top = openAbove ? Math.max(gutter, aboveBottom - menuRenderHeight) : belowTop;
   let left = rect.left;
 
   if (props.placement === 'bottom-end') {
@@ -102,8 +114,9 @@ const updateMenuPosition = () => {
   left = Math.min(Math.max(gutter, left), maxLeft);
 
   menuPosition.value = {
-    top: `${rect.bottom + 4}px`,
+    top: `${top}px`,
     left: `${left}px`,
+    maxHeight: `${maxHeight}px`,
   };
 };
 
@@ -135,13 +148,13 @@ const renderIcon = (option) => {
 const classHasSelected = (value) => {
   if (!value) return false;
   if (typeof value === 'string') {
-    return value.split(/\s+/).includes('selected');
+    return value.split(/\s+/).includes('sd-selected');
   }
   if (Array.isArray(value)) {
     return value.some(classHasSelected);
   }
   if (typeof value === 'object') {
-    return Boolean(value.selected);
+    return Boolean(value['sd-selected']);
   }
   return false;
 };
@@ -177,6 +190,7 @@ const focusKeyboardIndex = () => {
   const target = optionRefs.value[keyboardIndex.value];
   if (target && typeof target.focus === 'function') {
     target.focus();
+    target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }
 };
 
@@ -343,6 +357,7 @@ watch(
     if (hasRenderOptions.value) return;
 
     keyboardIndex.value = getInitialKeyboardIndex();
+    await nextTick();
     focusKeyboardIndex();
   },
   { immediate: true },
@@ -376,19 +391,30 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="toolbar-dropdown">
-    <div ref="triggerRef" class="toolbar-dropdown-trigger" @click="onTriggerClick">
+    <div ref="triggerRef" class="toolbar-dropdown-trigger" data-sd-part="dropdown-trigger" @click="onTriggerClick">
       <slot name="trigger" />
     </div>
 
     <Teleport to="body">
       <Transition name="fade-in-scale-up-transition">
-        <div v-if="isOpen" ref="menuRef" :class="mergedMenuClass" :style="menuStyle" v-bind="computedMenuAttrs">
+        <div
+          v-if="isOpen"
+          ref="menuRef"
+          data-sd-part="dropdown-menu"
+          :class="mergedMenuClass"
+          :style="menuStyle"
+          v-bind="computedMenuAttrs"
+        >
           <div
             v-for="(option, index) in options"
             :key="option.key"
             :ref="(el) => setOptionRef(el, index)"
             class="toolbar-dropdown-option"
-            :class="[option.class, option.props?.class, { disabled: option.disabled, render: isRenderOption(option) }]"
+            :class="[
+              option.class,
+              option.props?.class,
+              { 'sd-disabled': option.disabled, 'sd-render': isRenderOption(option) },
+            ]"
             tabindex="-1"
             @click="onOptionClick(option)"
             v-bind="{ ...option.props, ...getNodeProps(option) }"
@@ -424,6 +450,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--sd-ui-dropdown-border, #e4e6eb);
   box-shadow: var(--sd-ui-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.16));
   box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .toolbar-dropdown-menu.toolbar-dropdown-menu--render-only {
@@ -464,35 +492,35 @@ onBeforeUnmount(() => {
   color: var(--sd-ui-dropdown-hover-text, #47484a);
 }
 
-.toolbar-dropdown-option.selected {
+.toolbar-dropdown-option.sd-selected {
   background: var(--sd-ui-dropdown-active-bg, #d8dee5);
   color: var(--sd-ui-dropdown-selected-text, #47484a);
 }
 
-.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.render):hover {
+.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.sd-render):hover {
   background: #000;
   color: #fff;
 }
 
-.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.render).selected {
+.toolbar-dropdown-menu.high-contrast .toolbar-dropdown-option:not(.sd-render).sd-selected {
   background: #000;
   color: #fff;
 }
 
-.toolbar-dropdown-option.disabled {
+.toolbar-dropdown-option.sd-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.toolbar-dropdown-option.render {
+.toolbar-dropdown-option.sd-render {
   padding: 0;
   cursor: default;
   background: transparent;
   color: inherit;
 }
 
-.toolbar-dropdown-option.render:hover,
-.toolbar-dropdown-option.render.selected {
+.toolbar-dropdown-option.sd-render:hover,
+.toolbar-dropdown-option.sd-render.sd-selected {
   background: transparent;
   color: inherit;
 }

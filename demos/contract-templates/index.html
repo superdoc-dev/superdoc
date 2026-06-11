@@ -15,15 +15,16 @@
             <button class="btn primary" id="export-clean" type="button">Export clean DOCX</button>
           </div>
         </header>
+        <div id="superdoc-toolbar"></div>
         <div id="editor"></div>
       </section>
       <aside class="sidebar">
         <nav class="tabs" role="tablist">
-          <button class="tab active" data-tab="fields" type="button" role="tab">Fields</button>
-          <button class="tab" data-tab="clauses" type="button" role="tab">Clauses</button>
+          <button class="tab active" data-tab="fields" type="button" role="tab">Template</button>
+          <button class="tab" data-tab="values" type="button" role="tab">Values</button>
         </nav>
         <section class="panel" data-panel="fields" id="fields-panel"></section>
-        <section class="panel hidden" data-panel="clauses" id="clauses-panel"></section>
+        <section class="panel hidden" data-panel="values" id="values-panel"></section>
         <p class="status" id="status">Loading</p>
       </aside>
     </div>

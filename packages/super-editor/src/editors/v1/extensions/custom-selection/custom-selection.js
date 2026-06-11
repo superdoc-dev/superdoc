@@ -127,6 +127,13 @@ function mapPreservedSelection(selection, tr) {
   }
 }
 
+function shouldClearPreservedSelectionOnSelectionMove(tr, nextState) {
+  if (!nextState?.preservedSelection) return false;
+  if (tr.docChanged || !tr.selectionSet) return false;
+  if (getFocusMeta(tr) !== undefined) return false;
+  return true;
+}
+
 /**
  * Check if target is a toolbar input
  * @private
@@ -144,7 +151,12 @@ const isToolbarInput = (target) => {
  * @returns {boolean} True if toolbar button
  */
 const isToolbarButton = (target) => {
-  return !!target?.closest('.toolbar-button') || target?.classList?.contains('toolbar-button');
+  return (
+    !!target?.closest('.sd-toolbar-button') ||
+    !!target?.closest('.toolbar-button') ||
+    target?.classList?.contains('sd-toolbar-button') ||
+    target?.classList?.contains('toolbar-button')
+  );
 };
 
 /**
@@ -165,6 +177,13 @@ export const CustomSelection = Extension.create({
           const meta = getFocusMeta(tr);
           const nextState = meta !== undefined ? normalizeSelectionState({ ...value, ...meta }) : value;
           if (!nextState?.preservedSelection) return nextState;
+          if (shouldClearPreservedSelectionOnSelectionMove(tr, nextState)) {
+            return {
+              ...nextState,
+              preservedSelection: null,
+              showVisualSelection: false,
+            };
+          }
           if (!tr.docChanged) return nextState;
 
           const mappedSelection = mapPreservedSelection(nextState.preservedSelection, tr);

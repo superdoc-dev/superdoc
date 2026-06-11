@@ -201,12 +201,18 @@ const resizeHandles = computed(() => {
 const guidelineStyle = computed(() => {
   if (!dragState.value) return { display: 'none' };
 
+  const { handle, initialWidth, initialHeight, width, height } = dragState.value;
+  // For handles that anchor the bottom-right corner (NW, NE, SW), offset the
+  // guideline so the fixed corner stays visually pinned during drag.
+  const left = OVERLAY_EXPANSION_PX + (handle === 'nw' || handle === 'sw' ? initialWidth - width : 0);
+  const top = OVERLAY_EXPANSION_PX + (handle === 'nw' || handle === 'ne' ? initialHeight - height : 0);
+
   return {
     position: 'absolute',
-    left: `${OVERLAY_EXPANSION_PX}px`,
-    top: `${OVERLAY_EXPANSION_PX}px`,
-    width: `${dragState.value.width}px`,
-    height: `${dragState.value.height}px`,
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
     border: '2px solid #4A90E2',
     backgroundColor: 'rgba(74, 144, 226, 0.1)',
     pointerEvents: 'none',
@@ -228,6 +234,7 @@ function onHandleMouseDown(event, handlePosition) {
   }
 
   const rect = props.textboxElement.getBoundingClientRect();
+  const initialMarginOffset = resolvedShape.node.attrs?.marginOffset ?? null;
   dragState.value = {
     handle: handlePosition,
     initialX: event.clientX,
@@ -236,6 +243,7 @@ function onHandleMouseDown(event, handlePosition) {
     initialHeight: rect.height,
     width: rect.width,
     height: rect.height,
+    initialMarginOffset,
   };
 
   editor.view.dom.style.pointerEvents = 'none';
@@ -404,6 +412,28 @@ function dispatchResizeTransaction(newWidth, newHeight) {
   const tr = state.tr;
   tr.setNodeAttribute(pos, 'width', newWidth);
   tr.setNodeAttribute(pos, 'height', newHeight);
+
+  // NW/SW handles anchor the bottom-right corner: the origin must shift by the
+  // same amount the dimension grew, so the opposite corner stays fixed.
+  const handle = dragState.value?.handle;
+  const initialMarginOffset = dragState.value?.initialMarginOffset;
+  // NW/SW handles anchor the bottom-right corner; NE anchors the bottom-left.
+  // The origin must shift by the same amount the leading edge grew.
+  if (initialMarginOffset && (handle === 'nw' || handle === 'sw' || handle === 'ne')) {
+    const effectiveDeltaX = newWidth - (dragState.value?.initialWidth ?? newWidth);
+    const effectiveDeltaY = newHeight - (dragState.value?.initialHeight ?? newHeight);
+    tr.setNodeAttribute(pos, 'marginOffset', {
+      ...initialMarginOffset,
+      horizontal:
+        handle === 'nw' || handle === 'sw'
+          ? (initialMarginOffset.horizontal ?? 0) - effectiveDeltaX
+          : (initialMarginOffset.horizontal ?? 0),
+      top:
+        handle === 'nw' || handle === 'ne'
+          ? (initialMarginOffset.top ?? 0) - effectiveDeltaY
+          : (initialMarginOffset.top ?? 0),
+    });
+  }
 
   const $shapePos = state.doc.resolve(pos);
   for (let depth = $shapePos.depth; depth > 0; depth -= 1) {

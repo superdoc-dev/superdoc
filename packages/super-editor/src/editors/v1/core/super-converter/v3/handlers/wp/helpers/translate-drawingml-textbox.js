@@ -23,7 +23,7 @@ export function translateDrawingMLTextbox(params) {
     const emuCx = pxWidth != null ? String(pixelsToEmu(pxWidth)) : null;
     const emuCy = pxHeight != null ? String(pixelsToEmu(pxHeight)) : null;
     patchNodeAttributes(drawing, 'wp:extent', emuCx, emuCy);
-    patchNodeAttributes(drawing, 'a:ext', emuCx, emuCy);
+    patchShapeGeometryExt(drawing, emuCx, emuCy);
   }
 
   // Patch position when the user moved the textbox (marginOffset.horizontal/top are in px).
@@ -91,6 +91,22 @@ function patchPositionOffset(node, posNodeName, emuValue) {
     if (patchPositionOffset(child, posNodeName, emuValue)) return true;
   }
   return false;
+}
+
+// Navigates directly to wps:spPr > a:xfrm > a:ext to patch cx/cy.
+// Avoids DFS first-match hitting a:ext elements in extension lists (which carry a uri attribute, not cx/cy).
+function patchShapeGeometryExt(root, cx, cy) {
+  const PATH = ['wp:anchor', 'a:graphic', 'a:graphicData', 'wps:wsp', 'wps:spPr', 'a:xfrm', 'a:ext'];
+  let node = root;
+  for (const name of PATH) {
+    if (!node || !Array.isArray(node.elements)) return false;
+    node = node.elements.find((el) => el.name === name) ?? null;
+    if (!node) return false;
+  }
+  if (!node.attributes) node.attributes = {};
+  if (cx != null) node.attributes.cx = cx;
+  if (cy != null) node.attributes.cy = cy;
+  return true;
 }
 
 // Patches cx/cy on the first element matching targetName found anywhere in the tree.

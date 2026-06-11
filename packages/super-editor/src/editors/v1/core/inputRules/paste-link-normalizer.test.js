@@ -246,13 +246,6 @@ describe('detectPasteUrl', () => {
   });
 
   it('does not allow configured protocols to expand plain-text auto-link detection', () => {
-    sanitizeHref.mockImplementationOnce((raw, config) => {
-      if (raw === 'ftp://files.example.com' && config?.allowedProtocols?.includes('ftp')) {
-        return { href: 'ftp://files.example.com', protocol: 'ftp', isExternal: true };
-      }
-      return null;
-    });
-
     const result = detectPasteUrl('ftp://files.example.com', [{ scheme: 'FTP' }]);
     expect(result).toBeNull();
     expect(sanitizeHref).not.toHaveBeenCalled();

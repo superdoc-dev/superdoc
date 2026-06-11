@@ -13436,6 +13436,88 @@ describe('applyRunDataAttributes', () => {
       expect(logoPageLevel.style.left).toBe('619px');
     });
 
+    it('toggles wrapNone overlay pointer events with the active header/footer session', () => {
+      const mainBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'main-1',
+        runs: [{ text: 'Main', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 }],
+      };
+      const mainMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      };
+      const footerLogoBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-logo',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          offsetH: 575,
+          offsetV: -388,
+          behindDoc: false,
+        },
+        wrap: { type: 'None' },
+      };
+      const footerLogoMeasure: Measure = { kind: 'image', width: 533, height: 408 };
+      const footerLogoFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-logo',
+        x: 575,
+        y: -388,
+        width: 533,
+        height: 408,
+        isAnchored: true,
+        behindDoc: false,
+      };
+      const layoutData: Layout = {
+        pageSize: { w: 960, h: 540 },
+        pages: [
+          {
+            number: 1,
+            margins: { footer: 100 },
+            fragments: [{ kind: 'para', blockId: 'main-1', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300 }],
+          },
+        ],
+      };
+
+      let isActiveHeaderFooter = false;
+      const painter = createTestPainter({
+        blocks: [mainBlock],
+        measures: [mainMeasure],
+        footerProvider: () => ({
+          fragments: [footerLogoFragment],
+          height: 16,
+          contentHeight: 16,
+          offset: 514,
+          marginLeft: 44,
+          isActiveHeaderFooter,
+        }),
+      });
+
+      painter.setData([mainBlock], [mainMeasure], undefined, undefined, [footerLogoBlock], [footerLogoMeasure]);
+      painter.paint(layoutData, mount);
+
+      const overlaySelector = '[data-header-footer-overlay-section="footer"][data-block-id="footer-logo"]';
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const inertOverlay = pageEl.querySelector(overlaySelector) as HTMLElement;
+      expect(inertOverlay).toBeTruthy();
+      expect(inertOverlay.style.pointerEvents).toBe('none');
+
+      // Activating the footer session makes the overlay clickable (Word parity:
+      // header/footer objects become editable only inside an active session).
+      isActiveHeaderFooter = true;
+      painter.paint(layoutData, mount);
+
+      const activeOverlay = (mount.querySelector('.superdoc-page') as HTMLElement).querySelector(
+        overlaySelector,
+      ) as HTMLElement;
+      expect(activeOverlay).toBeTruthy();
+      expect(activeOverlay.style.pointerEvents).not.toBe('none');
+    });
+
     it('positions paragraph-relative footer wrapNone foreground media from the footer origin', () => {
       const mainBlock: FlowBlock = {
         kind: 'paragraph',

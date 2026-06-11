@@ -2366,16 +2366,18 @@ export class EditorInputManager {
       visiblePointerSurface?.kind === 'headerFooter' &&
       visiblePointerSurface.surface.closest(activeSurfaceSelector) != null;
 
-    // behindDoc fragments are placed directly on the page element (not inside
-    // .superdoc-page-footer/header), so resolveVisibleSurfaceAtPointer classifies
-    // them as 'bodyContent'. Detect them via data-behind-doc-section and let the
-    // active H/F editor handle the click instead of exiting the session.
+    // behindDoc and wrapNone-overlay fragments are placed directly on the page
+    // element (not inside .superdoc-page-footer/header), so
+    // resolveVisibleSurfaceAtPointer classifies them as 'bodyContent'. Detect
+    // them via data-behind-doc-section / data-header-footer-overlay-section and
+    // let the active H/F editor handle the click instead of exiting the session.
     if (visiblePointerSurface?.kind === 'bodyContent') {
-      const behindDocSection = (
-        event.target instanceof Element ? event.target.closest<HTMLElement>('[data-behind-doc-section]') : null
-      )?.dataset.behindDocSection;
+      const targetElement = event.target instanceof Element ? event.target : null;
+      const pageLevelSection =
+        targetElement?.closest<HTMLElement>('[data-behind-doc-section]')?.dataset.behindDocSection ??
+        targetElement?.closest<HTMLElement>('[data-header-footer-overlay-section]')?.dataset.headerFooterOverlaySection;
       const sessionMode = session?.session?.mode;
-      if (behindDocSection && behindDocSection === sessionMode) {
+      if (pageLevelSection && pageLevelSection === sessionMode) {
         return false; // Fall through to normal hit testing in the active H/F editor
       }
       this.#callbacks.exitHeaderFooterMode?.();

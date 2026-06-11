@@ -2406,7 +2406,11 @@ export class DomPainter {
       // keep their authored z-order within that story, but do not let their high
       // OOXML z-index lift them above body content.
       fragEl.style.zIndex = '0';
-      fragEl.style.pointerEvents = 'none';
+      // Word parity: header/footer overlay content is inert while editing the
+      // body, but becomes clickable once its header/footer session is active.
+      if (data.isActiveHeaderFooter !== true) {
+        fragEl.style.pointerEvents = 'none';
+      }
       fragEl.dataset.headerFooterOverlaySection = kind;
       this.insertPageBackgroundDecoration(
         pageEl,

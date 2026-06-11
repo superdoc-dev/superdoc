@@ -2543,9 +2543,13 @@ describe('getVectorShape', () => {
       expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
     });
 
-    it('honors first and last paragraph spacing when spcFirstLastPara is absent', () => {
-      const graphicData = makeGraphicDataWithTextbox('Hello', {
-        pPrElements: [{ name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } }],
+    it('suppresses first and last paragraph spacing when spcFirstLastPara is absent', () => {
+      const spacing = { name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } };
+      const graphicData = makeGraphicDataWithTextbox('', {
+        paragraphs: [
+          makeParagraph({ text: 'First', pPrElements: [spacing] }),
+          makeParagraph({ text: 'Second', pPrElements: [spacing] }),
+        ],
       });
 
       const result = getVectorShape({
@@ -2555,8 +2559,10 @@ describe('getVectorShape', () => {
         size: { width: 100, height: 100 },
       });
 
-      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBeUndefined();
       expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+      expect(result.attrs.textContent.paragraphs[1].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[1].spacing.after).toBeUndefined();
     });
 
     it('marks paragraph separators without marking intra-paragraph line breaks', () => {

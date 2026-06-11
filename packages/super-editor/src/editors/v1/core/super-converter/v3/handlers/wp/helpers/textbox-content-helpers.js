@@ -408,13 +408,14 @@ export function extractTextBoxParagraphSpacing(
   const spacing = paragraphProperties?.spacing;
   if (!spacing) return undefined;
 
-  const honorFirstLast = !(
-    spcFirstLastPara === '0' ||
-    spcFirstLastPara === 0 ||
-    spcFirstLastPara === false ||
-    spcFirstLastPara === 'false' ||
-    spcFirstLastPara === 'off'
-  );
+  // ECMA-376 §21.1.2.1.1: an omitted spcFirstLastPara implies false, so edge
+  // spacing is suppressed unless the attribute explicitly enables it.
+  const honorFirstLast =
+    spcFirstLastPara === '1' ||
+    spcFirstLastPara === 1 ||
+    spcFirstLastPara === true ||
+    spcFirstLastPara === 'true' ||
+    spcFirstLastPara === 'on';
   const isFirst = paragraphIndex === 0;
   const isLast = paragraphCount != null && paragraphIndex === paragraphCount - 1;
 

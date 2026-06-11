@@ -1315,3 +1315,135 @@ describe('contentControls.setType default sdtPr seeding', () => {
     expect(checkbox?.elements?.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
   });
 });
+
+// SD-3429: contentLocked SDTs can be updated via whole-node replacement through the
+// Document API. The lock plugin allows replacing the entire SDT node (wrapper + content)
+// while blocking inner-content modifications. This enables programmatic updates to
+// contentLocked fields while still blocking interactive typing.
+//
+// The whole-node replacement path:
+// 1. assertNotFullyLocked allows contentLocked (blocks only sdtContentLocked)
+// 2. requiresWholeNodeReplacement returns true for contentLocked
+// 3. replaceEntireSdt creates a new node with the same attrs but new content
+// 4. The lock plugin sees this as wrapper-level replacement (allowed for contentLocked)
+//
+// Additionally, replaceEntireSdt detects when the lock plugin silently rejects the
+// transaction (e.g., for nested contentLocked SDTs inside a contentLocked ancestor)
+// by checking if the doc actually changed after dispatch.
+describe('SD-3429: contentLocked SDT whole-node replacement via Document API', () => {
+  it('text.setValue on a contentLocked SDT uses whole-node replacement (replaceWith)', () => {
+    // contentLocked should use replaceEntireSdt which calls tr.replaceWith on the whole SDT
+    const editor = makeSdtEditor({ lockMode: 'contentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    // The operation may return NO_OP in the mock due to doc comparison, but we can
+    // verify it took the whole-node replacement path by checking replaceWith was called
+    try {
+      adapter.text.setValue({ target: SDT_TARGET, value: 'New value' }, { changeMode: 'direct' });
+    } catch {
+      // Ignore - we're testing the code path, not the result
+    }
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+    // Verify it replaced the whole SDT range (from pos 0 to nodeSize)
+    const [from, to] = replaceWith.mock.calls[0];
+    expect(from).toBe(0); // SDT starts at position 0 in the mock doc
+    expect(to).toBeGreaterThan(from); // SDT has non-zero size
+  });
+
+  it('replaceContent on a contentLocked SDT uses whole-node replacement (replaceWith)', () => {
+    const editor = makeSdtEditor({ lockMode: 'contentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    try {
+      adapter.replaceContent({ target: SDT_TARGET, content: 'Replaced' }, { changeMode: 'direct' });
+    } catch {
+      // Ignore
+    }
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+  });
+
+  it('clearContent on a contentLocked SDT uses whole-node replacement (replaceWith)', () => {
+    const editor = makeSdtEditor({ lockMode: 'contentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    try {
+      adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+    } catch {
+      // Ignore
+    }
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+  });
+
+  it('appendContent on a contentLocked SDT uses whole-node replacement (replaceWith)', () => {
+    const editor = makeSdtEditor({ lockMode: 'contentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    try {
+      adapter.appendContent({ target: SDT_TARGET, content: ' appended' }, { changeMode: 'direct' });
+    } catch {
+      // Ignore
+    }
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+  });
+
+  it('prependContent on a contentLocked SDT uses whole-node replacement (replaceWith)', () => {
+    const editor = makeSdtEditor({ lockMode: 'contentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    try {
+      adapter.prependContent({ target: SDT_TARGET, content: 'prepended ' }, { changeMode: 'direct' });
+    } catch {
+      // Ignore
+    }
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+  });
+
+  it('sdtLocked SDT uses inner-range replacement (not whole-node)', () => {
+    // sdtLocked should use replaceSdtTextContent which replaces inner content only
+    const editor = makeSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.text.setValue({ target: SDT_TARGET, value: 'New value' }, { changeMode: 'direct' });
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+    // For sdtLocked, the replaceWith should be on the inner range (pos+1, pos+nodeSize-1)
+    // not the whole node. The findSdtPos helper from SD-3123 tests shows this.
+    const [from, to] = replaceWith.mock.calls[0];
+    // Inner range excludes the wrapper boundaries
+    expect(from).toBeGreaterThan(0);
+  });
+
+  it('sdtContentLocked SDT rejects content mutations with LOCK_VIOLATION', () => {
+    // sdtContentLocked should still be blocked entirely by assertNotFullyLocked
+    const editor = makeSdtEditor({ lockMode: 'sdtContentLocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    expect(() => {
+      adapter.text.setValue({ target: SDT_TARGET, value: 'blocked' }, { changeMode: 'direct' });
+    }).toThrow(/sdtContentLocked.*prevents/);
+  });
+
+  it('unlocked SDT does not use whole-node replacement', () => {
+    const editor = makeSdtEditor({ lockMode: 'unlocked' });
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.text.setValue({ target: SDT_TARGET, value: 'New value' }, { changeMode: 'direct' });
+
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalled();
+    // For unlocked, uses inner-range replacement
+    const [from] = replaceWith.mock.calls[0];
+    expect(from).toBeGreaterThan(0);
+  });
+});

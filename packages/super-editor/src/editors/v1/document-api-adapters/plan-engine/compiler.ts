@@ -1580,6 +1580,81 @@ function assertSingleStoryKey(steps: MutationStep[]): void {
   }
 }
 
+/**
+ * Collect every block id a step's `where` clause references explicitly —
+ * decoded text-ref segments (V3 + V4), V4 node-scope ids, raw block refs,
+ * `by: 'block'` addresses, and SelectionTarget text/nodeEdge points.
+ * Selector-based wheres (`by: 'select'`) re-resolve against the current doc
+ * and are inherently repair-safe, so they contribute nothing here.
+ */
+function collectReferencedBlockIds(step: MutationStep): string[] {
+  const where = step.where;
+  const ids: string[] = [];
+
+  if (isRefWhere(where)) {
+    const ref = where.ref;
+    if (ref.startsWith('text:')) {
+      const decoded = decodeRef(ref);
+      if (decoded) {
+        for (const seg of decoded.segments ?? []) {
+          if (seg?.blockId) ids.push(seg.blockId);
+        }
+        const nodeId = (decoded as StoryRefV4).node?.nodeId;
+        if (nodeId) ids.push(nodeId);
+      }
+    } else {
+      // Raw block refs: the ref string IS the nodeId.
+      ids.push(ref);
+    }
+    return ids;
+  }
+
+  if (isBlockWhere(where)) {
+    ids.push(where.nodeId);
+    return ids;
+  }
+
+  if (isTargetWhere(where)) {
+    for (const point of [where.target?.start, where.target?.end]) {
+      const blockId = (point as { blockId?: string } | undefined)?.blockId;
+      if (blockId) ids.push(blockId);
+      const nodeId = (point as { nodeId?: string } | undefined)?.nodeId;
+      if (nodeId) ids.push(nodeId);
+    }
+  }
+
+  return ids;
+}
+
+/**
+ * After the runtime identity repair has renamed duplicate block ids, any step
+ * whose `where` references one of the ORIGINAL colliding ids is ambiguous —
+ * the id now names only the first occurrence, and the ref may have meant a
+ * renamed one. Throws `STALE_REF` so the caller re-runs discovery instead of
+ * silently mutating the surviving block.
+ */
+function assertNoStaleRefsAfterRepair(steps: MutationStep[], repairedIds: ReadonlySet<string>): void {
+  if (repairedIds.size === 0) return;
+
+  for (const step of steps) {
+    for (const blockId of collectReferencedBlockIds(step)) {
+      if (!repairedIds.has(blockId)) continue;
+      throw planError(
+        'STALE_REF',
+        `Step "${step.id}" references block id "${blockId}", which was duplicated in this document and has just ` +
+          `been repaired (the duplicate occurrence was renamed). The reference is ambiguous — it may have pointed ` +
+          `at the renamed block. Re-run query.match / doc.find against the repaired document and retry with a fresh ref.`,
+        step.id,
+        {
+          blockId,
+          repairedBlockIds: [...repairedIds],
+          remediation: 'Re-run query.match() or doc.find() to obtain fresh refs, then retry the mutation.',
+        },
+      );
+    }
+  }
+}
+
 export function compilePlan(editor: Editor, steps: MutationStep[], options: CompilePlanOptions = {}): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
@@ -1620,6 +1695,18 @@ export function compilePlan(editor: Editor, steps: MutationStep[], options: Comp
           `before plan compilation. Original ids: ${repair.duplicateBlockIds.slice(0, 4).join(', ')}` +
           `${repair.duplicateBlockIds.length > 4 ? `, +${repair.duplicateBlockIds.length - 4} more` : ''}.`,
       );
+      // Refs minted against the pre-repair doc carry only a blockId — no
+      // occurrence index — so a ref naming a just-renamed duplicate is
+      // ambiguous: it may have meant the occurrence that no longer carries
+      // that id. Resolving it against the surviving block would silently
+      // mutate the wrong content. Reject loudly instead; the caller re-runs
+      // discovery against the now-clean doc and retries.
+      //
+      // This one-compile guard closes the entire wrong-block window: the
+      // repair is revision-invisible, but any *successful* mutation bumps the
+      // revision, so refs from earlier calls already die in the existing
+      // `rev` checks of resolveV3TextRef / resolveV4TextRef.
+      assertNoStaleRefsAfterRepair(steps, new Set(repair.duplicateBlockIds));
     }
   }
 

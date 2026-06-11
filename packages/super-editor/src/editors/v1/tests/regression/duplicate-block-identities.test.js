@@ -123,14 +123,14 @@ describe('runtime repair of in-session duplicate paraIds', () => {
     try {
       // Compile any well-formed plan. The repair must run first, dedupe in
       // place, then compilePlan succeeds with no DOCUMENT_IDENTITY_CONFLICT.
-      const targetId = dupesBefore[0][0];
+      // A selector-based where re-resolves against the freshly repaired doc,
+      // so it is immune to the rename (refs naming the duplicated id are
+      // rejected with STALE_REF in the repairing compile — covered by
+      // stale-refs-after-identity-repair.test.js).
       const step = {
         id: 'rewrite-1',
         op: 'text.rewrite',
-        // After repair, the first paragraph keeps the original id; the
-        // duplicate gets a fresh deterministic 8-hex id. Either id resolves,
-        // because at least one node still carries the original value.
-        where: { by: 'ref', ref: targetId },
+        where: { by: 'select', select: { type: 'text', pattern: 'second' }, require: 'first' },
         args: { replacement: { text: 'rewritten' } },
       };
 
@@ -190,14 +190,13 @@ describe('compile + execute round-trips on a duplicate-laden doc', () => {
     // tracker → executor's D3 drift check threw on every corrupted doc.
     editor = await makeEditorWithDuplicateParaId('DUPDUPID');
 
-    const dupIndex = buildBlockIndex(editor);
-    const target = dupIndex.candidates.find((c) => c.nodeType === 'paragraph');
-    expect(target, 'expected a paragraph to target').toBeTruthy();
-
+    // Selector-based where: re-resolves against the repaired doc. Refs naming
+    // the duplicated id are rejected with STALE_REF in the repairing compile
+    // (covered by stale-refs-after-identity-repair.test.js).
     const step = {
       id: 'rewrite-1',
       op: 'text.rewrite',
-      where: { by: 'ref', ref: target.nodeId },
+      where: { by: 'select', select: { type: 'text', pattern: 'second' }, require: 'first' },
       args: { replacement: { text: 'rewritten' } },
     };
 
@@ -235,12 +234,10 @@ describe('previewPlan must remain non-mutating on a duplicate-laden doc', () => 
     // Snapshot the doc identity (PM doc instance) before preview.
     const docBefore = editor.state.doc;
 
-    const dupIndex = buildBlockIndex(editor);
-    const dupTarget = dupIndex.candidates.find((c) => c.nodeType === 'paragraph');
     const step = {
       id: 'rewrite-1',
       op: 'text.rewrite',
-      where: { by: 'ref', ref: dupTarget.nodeId },
+      where: { by: 'select', select: { type: 'text', pattern: 'second' }, require: 'first' },
       args: { replacement: { text: 'rewritten' } },
     };
 
@@ -292,10 +289,6 @@ describe('caller-supplied expectedRevision survives identity repair', () => {
   it('executePlan succeeds when expectedRevision matches the pre-repair revision', async () => {
     editor = await makeEditorWithDuplicateParaId('DUPCONC1');
 
-    const dupIndex = buildBlockIndex(editor);
-    const target = dupIndex.candidates.find((c) => c.nodeType === 'paragraph');
-    expect(target, 'expected a paragraph to target').toBeTruthy();
-
     // Snapshot the revision the caller would see if they queried before
     // submitting the mutation — this is the value the SDK round-trips back
     // as `expectedRevision`.
@@ -304,7 +297,7 @@ describe('caller-supplied expectedRevision survives identity repair', () => {
     const step = {
       id: 'rewrite-1',
       op: 'text.rewrite',
-      where: { by: 'ref', ref: target.nodeId },
+      where: { by: 'select', select: { type: 'text', pattern: 'second' }, require: 'first' },
       args: { replacement: { text: 'rewritten' } },
     };
 
@@ -340,13 +333,11 @@ describe('caller-supplied expectedRevision survives identity repair', () => {
       // compilePlan will internally invoke repairDuplicateBlockIdentities. The
       // assertion below pins that the repair leg of compile keeps revision
       // pinned at `before`, even though the doc DID change.
-      const dupIndex = buildBlockIndex(editor);
-      const target = dupIndex.candidates.find((c) => c.nodeType === 'paragraph');
       compilePlan(editor, [
         {
           id: 'rewrite-1',
           op: 'text.rewrite',
-          where: { by: 'ref', ref: target.nodeId },
+          where: { by: 'select', select: { type: 'text', pattern: 'second' }, require: 'first' },
           args: { replacement: { text: 'noop' } },
         },
       ]);

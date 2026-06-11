@@ -155,6 +155,85 @@ describe('repairDuplicateBlockIdentities', () => {
     }
   });
 
+  it('renames only the colliding paraId when paragraphs carry distinct sdBlockIds', async () => {
+    // The customer-shape case from the original escalation: Word-imported
+    // paragraphs share a w14:paraId while each session assigned them unique
+    // sdBlockIds. The repair must rename ONLY the colliding attr group and
+    // leave the distinct sdBlockIds untouched (they remain valid aliases).
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+
+    try {
+      const schema = editor.state.schema;
+      const tr1 = editor.state.tr;
+      tr1.insert(
+        editor.state.doc.content.size,
+        schema.nodes.paragraph.create({ paraId: 'SHAREDPI', sdBlockId: 'sd-block-aaa' }, schema.text('first')),
+      );
+      tr1.insert(
+        editor.state.doc.content.size + tr1.doc.lastChild!.nodeSize,
+        schema.nodes.paragraph.create({ paraId: 'SHAREDPI', sdBlockId: 'sd-block-bbb' }, schema.text('second')),
+      );
+      editor.dispatch(tr1);
+
+      const report = repairDuplicateBlockIdentities(editor);
+      expect(report).not.toBeNull();
+      expect(report!.duplicateBlockIds).toEqual(['SHAREDPI']);
+      expect(report!.renames).toHaveLength(1);
+      // The rename targets paraId ONLY — the distinct sdBlockIds were never
+      // part of the colliding identity group.
+      expect(report!.renames[0].attrs).toEqual(['paraId']);
+
+      // Both sdBlockIds survive untouched; exactly one paragraph keeps the
+      // original paraId and the other carries the 8-hex replacement.
+      const observed: Array<{ paraId?: string; sdBlockId?: string }> = [];
+      editor.state.doc.descendants((node) => {
+        if (node.type.name !== 'paragraph') return;
+        if (node.attrs?.sdBlockId === 'sd-block-aaa' || node.attrs?.sdBlockId === 'sd-block-bbb') {
+          observed.push({ paraId: node.attrs.paraId, sdBlockId: node.attrs.sdBlockId });
+        }
+      });
+      expect(observed).toHaveLength(2);
+      expect(observed.map((o) => o.sdBlockId).sort()).toEqual(['sd-block-aaa', 'sd-block-bbb']);
+      const paraIds = observed.map((o) => o.paraId);
+      expect(paraIds.filter((id) => id === 'SHAREDPI')).toHaveLength(1);
+      expect(paraIds.find((id) => id !== 'SHAREDPI')).toMatch(/^[0-9A-F]{8}$/);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('throws REPAIR_BLOCKED when the dispatched repair transaction does not apply', async () => {
+    // Defensive contract: if some transaction filter vetoes the repair (the
+    // dispatch is observed but the state never changes), the repair must NOT
+    // silently report success — the post-dispatch verification throws an
+    // explicit REPAIR_BLOCKED whose message carries the blocked ids (the
+    // Python SDK strips structured details, so the message is the contract).
+    const editor = await makeEditorWithDuplicateParaId('BLOCKED1');
+    try {
+      // Observe-but-drop dispatch: the repair tr never reaches the state.
+      editor.dispatch = () => {};
+
+      let thrown: unknown = null;
+      try {
+        repairDuplicateBlockIdentities(editor);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).not.toBeNull();
+      const planErr = thrown as { code?: string; message: string; details?: { blockedNodeIds?: string[] } };
+      expect(planErr.code).toBe('REPAIR_BLOCKED');
+      // Message is the SDK-facing contract (Python strips details): it names
+      // the rejection and carries a bounded preview of the blocked node ids.
+      expect(planErr.message).toMatch(/identity repair was rejected/i);
+      expect(planErr.message).toMatch(/doc\.open/);
+      expect(planErr.details?.blockedNodeIds?.length).toBeGreaterThan(0);
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it('buildBlockIndex populates explicitIdentities for the runtime repair fast path', async () => {
     // Pins the walk consolidation: the block index build
     // produces a side-channel map keyed by identity-attr value, so the repair

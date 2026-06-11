@@ -648,6 +648,15 @@ export function selectionMutationWrapper(
     const where = buildSelectionWhere(request);
     const step = buildSelectionStepDef(stepId, request, where);
 
+    // Reject stale optimistic-concurrency requests BEFORE compilePlan can
+    // dispatch the identity-repair transaction. Without this, a stale
+    // selection mutation (or dry run) would surface REVISION_MISMATCH only
+    // *after* the repair already rewrote block identities — rejecting the
+    // user's intent but still leaving the document mutated. Mirrors the
+    // pre-compile guard in `executePlan`. This also covers dry-run: callers
+    // need to know the document drifted regardless of execution.
+    checkRevision(storyEditor, options?.expectedRevision);
+
     // Compile the one-step plan through the real compiler.
     // Compilation is side-effect-free on clean docs: it resolves targets
     // against the current document state without mutating anything. On a doc
@@ -706,11 +715,8 @@ export function selectionMutationWrapper(
       }
     }
 
-    // Enforce expectedRevision even on dry-run — callers need to know if the
-    // document has drifted since their last query, regardless of execution.
-    checkRevision(storyEditor, options?.expectedRevision);
-
     // Dry-run: compile and resolve, but do NOT execute.
+    // (expectedRevision was already enforced before compile, above.)
     if (options?.dryRun) {
       const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
       if (request.kind === 'insert' && !request.text) {

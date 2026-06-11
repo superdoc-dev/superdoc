@@ -1005,8 +1005,28 @@ export const useCommentsStore = defineStore('comments', () => {
     }, delay);
   };
 
+  const getPendingSelectionSnapshot = (superdoc, selection) => {
+    if (selection?.source !== 'super-editor') return null;
+
+    const editor = superdoc?.activeEditor;
+    const selectionDocumentId = selection?.documentId ?? null;
+    const editorDocumentId = editor?.options?.documentId ?? null;
+    if (!selectionDocumentId || !editorDocumentId || selectionDocumentId !== editorDocumentId) return null;
+
+    try {
+      return editor?.doc?.selection?.current?.() ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const showAddComment = (superdoc, targetClientY = null) => {
-    const event = { type: COMMENT_EVENTS.PENDING };
+    // Snapshot the selection BEFORE `insertComment('pending')` below adds
+    // the pending mark and the floating-bubble click clears the live DOM
+    // selection. Only SuperEditor selections have a Document API text
+    // target; PDF / non-editor selections intentionally emit null.
+    const pendingSelection = getPendingSelectionSnapshot(superdoc, superdocStore.activeSelection);
+    const event = { type: COMMENT_EVENTS.PENDING, pendingSelection };
     superdoc.emit('comments-update', event);
 
     const selection = { ...superdocStore.activeSelection };

@@ -20,7 +20,7 @@ const DOC_PATH_CANDIDATES = [
 ];
 const DOC_PATH = DOC_PATH_CANDIDATES.find((candidate) => fs.existsSync(candidate)) ?? DOC_PATH_CANDIDATES[0];
 
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
 const snapshotTrackDeletes = async (superdoc: any) =>
   superdoc.page.evaluate(() => {

@@ -51,8 +51,8 @@ describe('buildFontReport', () => {
 
   it('an as_requested font that did load is not missing', () => {
     const reg = new FakeRegistry();
-    reg.statuses.set('Verdana', 'loaded');
-    expect(buildFontReport(['Verdana'], reg.asRegistry())[0].missing).toBe(false);
+    reg.statuses.set('BrandSans', 'loaded');
+    expect(buildFontReport(['BrandSans'], reg.asRegistry())[0].missing).toBe(false);
   });
 
   it('does not mark a transient unloaded state as missing (no early-pull over-report)', () => {
@@ -82,11 +82,17 @@ describe('buildFontReport', () => {
       'Liberation Serif',
       'Liberation Mono',
       'Caprasimo',
+      'Archivo Black',
+      'URW Gothic',
       'Bacasime Antique',
+      'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
+      'Inconsolata SemiExpanded',
       'Noto Sans',
       'Noto Sans Mono',
+      'Selawik',
+      'PT Sans Narrow',
     ]) {
       reg.statuses.set(family, 'loaded');
     }
@@ -95,14 +101,22 @@ describe('buildFontReport', () => {
         'Calibri',
         'Cambria',
         'Arial',
+        'Arial Black',
+        'Century Gothic',
         'Times New Roman',
         'Courier New',
         'Cooper Black',
         'Baskerville Old Face',
+        'Bookman Old Style',
+        'ITC Bookman',
         'Brush Script MT',
         'Georgia',
+        'Segoe UI',
+        'Consolas',
         'Lucida Console',
         'Tahoma',
+        'Verdana',
+        'Gill Sans MT Condensed',
         'Calibri',
       ],
       reg.asRegistry(),
@@ -111,14 +125,22 @@ describe('buildFontReport', () => {
       'Carlito',
       'Caladea',
       'Liberation Sans',
+      'Archivo Black',
+      'URW Gothic',
       'Liberation Serif',
       'Liberation Mono',
       'Caprasimo',
       'Bacasime Antique',
+      'TeX Gyre Bonum',
+      'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
+      'Selawik',
+      'Inconsolata SemiExpanded',
       'Noto Sans Mono',
       'Noto Sans',
+      'Noto Sans',
+      'PT Sans Narrow',
     ]);
     expect(report.find((r) => r.logicalFamily === 'Georgia')).toMatchObject({
       reason: 'bundled_substitute',
@@ -128,6 +150,26 @@ describe('buildFontReport', () => {
       reason: 'bundled_substitute',
       missing: false,
     });
+    expect(report.find((r) => r.logicalFamily === 'Bookman Old Style')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'ITC Bookman')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Arial Black')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Century Gothic')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Segoe UI')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
     expect(report.find((r) => r.logicalFamily === 'Brush Script MT')).toMatchObject({
       reason: 'category_fallback',
       missing: true,
@@ -136,7 +178,19 @@ describe('buildFontReport', () => {
       reason: 'category_fallback',
       missing: true,
     });
+    expect(report.find((r) => r.logicalFamily === 'Consolas')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
     expect(report.find((r) => r.logicalFamily === 'Tahoma')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Verdana')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Gill Sans MT Condensed')).toMatchObject({
       reason: 'category_fallback',
       missing: true,
     });

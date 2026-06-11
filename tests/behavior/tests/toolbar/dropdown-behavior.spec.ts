@@ -3,7 +3,7 @@ import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 test.use({ config: { toolbar: 'full', showSelection: true } });
 
 async function openFontSizeDropdown(superdoc: SuperDocFixture): Promise<void> {
-  await superdoc.page.locator('[data-item="btn-fontSize"]').click();
+  await superdoc.page.locator('[data-item="btn-fontSize"] .sd-dropdown-caret').click();
   await superdoc.waitForStable();
 }
 
@@ -41,7 +41,7 @@ test('same trigger click toggles dropdown open/close', async ({ superdoc }) => {
   await openFontSizeDropdown(superdoc);
   await expectFontSizeDropdownOpen(superdoc);
 
-  await superdoc.page.locator('[data-item="btn-fontSize"]').click();
+  await superdoc.page.locator('[data-item="btn-fontSize"] .sd-dropdown-caret').click();
   await superdoc.waitForStable();
   await expectFontSizeDropdownClosed(superdoc);
 });

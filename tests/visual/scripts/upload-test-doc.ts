@@ -20,7 +20,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { intro, outro, text, confirm, cancel, isCancel } from '@clack/prompts';
 
-const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
+const PUSH_SCRIPT = path.resolve(import.meta.dirname, 'corpus/push.mjs');
 
 function toKebab(str: string): string {
   return str
@@ -131,16 +131,15 @@ async function main() {
     }
   }
 
-  const uploadArgs = ['run', 'corpus:push', '--', '--path', targetRelativePath, resolved];
-  const uploadChild = spawn('pnpm', uploadArgs, {
-    cwd: REPO_ROOT,
+  const uploadArgs = [PUSH_SCRIPT, '--path', targetRelativePath, resolved];
+  const uploadChild = spawn(process.execPath, uploadArgs, {
     env: process.env,
     stdio: 'inherit',
   });
   const uploadExitCode = await new Promise<number>((resolve) => {
     uploadChild.on('close', (code) => resolve(code ?? 1));
     uploadChild.on('error', (err) => {
-      console.error(`Failed to spawn corpus:push: ${err.message}`);
+      console.error(`Failed to spawn corpus push: ${err.message}`);
       resolve(1);
     });
   });
@@ -149,9 +148,9 @@ async function main() {
   }
 
   const nextSteps =
-    `Uploaded! Next:\n` +
-    `  1. pnpm corpus:pull             # pull the new file locally\n` +
-    `  2. pnpm test:visual             # verify it renders correctly`;
+    `Uploaded! Next (from tests/visual):\n` +
+    `  1. pnpm docs:download           # pull the new file locally\n` +
+    `  2. pnpm test                    # verify it renders correctly`;
 
   if (nonInteractive) {
     console.log(nextSteps);

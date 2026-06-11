@@ -1015,45 +1015,57 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Execute and clear any queued mark commands immediately. Queued commands
+   * normally replay on the editor's next 'selectionUpdate', which is
+   * asynchronous; toolbar focus handoffs (Tab from the font inputs back to
+   * the editor) call this directly so a fast first keystroke cannot outrun
+   * the queued setFontFamily/setFontSize replay.
+   * @returns {boolean} True when pending commands were flushed.
+   */
+  flushPendingMarkCommands() {
+    if (!this.activeEditor) return false;
+    if (!this.pendingMarkCommands.length) return false;
+
+    const pending = this.pendingMarkCommands;
+    this.pendingMarkCommands = [];
+
+    pending.forEach(({ command, argument, item }) => {
+      if (!command) return;
+
+      try {
+        if (HEADLESS_EXECUTE_ITEMS.has(item?.name?.value)) {
+          const handledByHeadless = this.#executeHeadlessCommand(item, argument);
+          if (handledByHeadless) {
+            this.#ensureStoredMarksForMarkToggle({ command, argument });
+            return;
+          }
+        }
+
+        if (this.activeEditor.commands && command in this.activeEditor.commands) {
+          this.activeEditor.commands[command](argument);
+        }
+        this.#ensureStoredMarksForMarkToggle({ command, argument });
+      } catch (error) {
+        const err = new Error(`[super-toolbar 🎨] Failed to execute pending command: ${command}`);
+        this.emit('exception', { error: err, editor: this.activeEditor, originalError: error });
+        console.error(err, error);
+      }
+    });
+
+    this.#syncStickyMarksFromState();
+    this.updateToolbarState();
+    return true;
+  }
+
+  /**
    * Processes and executes pending mark commands when editor selection updates.
    * This is triggered by the editor's 'selectionUpdate' event after focus is restored.
-   * Clears the pending queue after execution.
    * @returns {void}
    */
   onEditorSelectionUpdate() {
     if (!this.activeEditor) return;
 
-    if (this.pendingMarkCommands.length) {
-      const pending = this.pendingMarkCommands;
-      this.pendingMarkCommands = [];
-
-      pending.forEach(({ command, argument, item }) => {
-        if (!command) return;
-
-        try {
-          if (HEADLESS_EXECUTE_ITEMS.has(item?.name?.value)) {
-            const handledByHeadless = this.#executeHeadlessCommand(item, argument);
-            if (handledByHeadless) {
-              this.#ensureStoredMarksForMarkToggle({ command, argument });
-              return;
-            }
-          }
-
-          if (this.activeEditor.commands && command in this.activeEditor.commands) {
-            this.activeEditor.commands[command](argument);
-          }
-          this.#ensureStoredMarksForMarkToggle({ command, argument });
-        } catch (error) {
-          const err = new Error(`[super-toolbar 🎨] Failed to execute pending command: ${command}`);
-          this.emit('exception', { error: err, editor: this.activeEditor, originalError: error });
-          console.error(err, error);
-        }
-      });
-
-      this.#syncStickyMarksFromState();
-      this.updateToolbarState();
-      return;
-    }
+    if (this.flushPendingMarkCommands()) return;
 
     const restored = this.#restoreStickyMarksIfNeeded();
     if (restored) this.updateToolbarState();

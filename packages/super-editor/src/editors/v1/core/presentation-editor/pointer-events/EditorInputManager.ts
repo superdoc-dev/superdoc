@@ -2314,7 +2314,18 @@ export class EditorInputManager {
       visiblePointerSurface?.kind === 'headerFooter' &&
       visiblePointerSurface.surface.closest(activeSurfaceSelector) != null;
 
+    // behindDoc fragments are placed directly on the page element (not inside
+    // .superdoc-page-footer/header), so resolveVisibleSurfaceAtPointer classifies
+    // them as 'bodyContent'. Detect them via data-behind-doc-section and let the
+    // active H/F editor handle the click instead of exiting the session.
     if (visiblePointerSurface?.kind === 'bodyContent') {
+      const behindDocSection = (
+        event.target instanceof Element ? event.target.closest<HTMLElement>('[data-behind-doc-section]') : null
+      )?.dataset.behindDocSection;
+      const sessionMode = session?.session?.mode;
+      if (behindDocSection && behindDocSection === sessionMode) {
+        return false; // Fall through to normal hit testing in the active H/F editor
+      }
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling after exiting the active H/F session
     }
@@ -2479,6 +2490,10 @@ export class EditorInputManager {
   ): boolean {
     if (!fragmentHit) return false;
     if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+    // Textboxes use text selection (caret), not image-style anchor drag selection.
+    if (fragmentHit.fragment.kind === 'drawing' && fragmentHit.fragment.drawingKind === 'textboxShape') {
+      return false;
+    }
 
     const editor = this.#deps?.getEditor();
     try {

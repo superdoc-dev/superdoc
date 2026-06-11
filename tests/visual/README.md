@@ -127,8 +127,11 @@ pnpm install
 # Authenticate with Cloudflare R2 (one-time)
 npx wrangler login
 
+# Point the scripts at your R2 account/buckets (see .env.example)
+cp .env.example .env  # then fill in the values
+
 # Download test documents
 pnpm docs:download
 ```
 
-R2 auth is automatic via your Cloudflare account — no `.env` needed for local dev. CI uses S3 API credentials instead (see `.env.example`).
+R2 account ids and bucket names are configured via environment variables only (see `.env.example`) — there are no in-repo defaults. Local auth uses your `wrangler login` token; CI uses S3 API credentials instead.

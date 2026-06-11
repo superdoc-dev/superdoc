@@ -1,7 +1,7 @@
 ---
 title: Font support
 sidebarTitle: Font Support
-keywords: "fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts"
+keywords: 'fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts'
 ---
 
 SuperDoc keeps the font name from the Word document. When SuperDoc ships an approved fallback for that font, it renders with the fallback but keeps the original name for export. When no fallback is available, load the real font in your app.
@@ -44,14 +44,17 @@ new SuperDoc({
 
 Registering a custom toolbar font makes it selectable. It does not load the font file. You still need the `@font-face` (or equivalent) on your host page.
 
-For custom UI, use `useSuperDocFontOptions()` or `ui.fonts` to get the same default-plus-document font list.
+For custom UI, use `useSuperDocFontOptions()` or `ui.fonts` to get the same default-plus-document font list. Use `useSuperDocFontSizeOptions()` or `ui.fonts.getSizeOptions()` for size pickers.
 
 ## Programmatic font changes
 
 For AI agents or scripts setting a brand font:
 
 ```javascript
-editor.doc.format.fontFamily({ target, value: 'Inter' });
+editor.doc.format.apply({
+  target,
+  inline: { fontFamily: 'Inter', fontSize: 15 },
+});
 ```
 
 ## Common pitfalls

@@ -64,7 +64,7 @@ test('contiguous Backspace deletion in suggesting mode is ONE tracked deletion (
 test('Backspace deletion across a run seam (Google-Docs comment anchors) is ONE tracked deletion', async ({
   superdoc,
 }) => {
-  test.skip(!fs.existsSync(GD_DOC_PATH), 'Corpus document not available — run pnpm corpus:pull');
+  test.skip(!fs.existsSync(GD_DOC_PATH), 'Corpus document not available — run pnpm --dir tests/visual docs:download');
 
   // Imported Google-Docs paragraph "Open comment from Google Docs." is stored
   // as two runs ("Open comment " + "from Google Docs.") with a comment anchored

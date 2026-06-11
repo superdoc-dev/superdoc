@@ -1,21 +1,20 @@
 /**
- * Proxy to the repo-level corpus downloader.
+ * Proxy to the shared corpus downloader (tests/visual/scripts/corpus/pull.mjs).
  *
- * This keeps `pnpm docs:download` stable for tests/visual while using the
- * shared corpus root consumed by layout snapshots.
+ * This keeps `pnpm docs:download` stable for tests/visual while syncing the
+ * shared corpus root (`<repo>/test-corpus`) consumed by all test suites.
  */
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 
-const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
+const PULL_SCRIPT = path.resolve(import.meta.dirname, 'corpus/pull.mjs');
 
 async function main() {
   const passthroughArgs = process.argv.slice(2).filter((arg) => arg !== '--');
-  const commandArgs = ['run', 'corpus:pull', '--', '--link-visual', ...passthroughArgs];
+  const commandArgs = [PULL_SCRIPT, '--link-visual', ...passthroughArgs];
 
-  const child = spawn('pnpm', commandArgs, {
-    cwd: REPO_ROOT,
+  const child = spawn(process.execPath, commandArgs, {
     env: process.env,
     stdio: 'inherit',
   });
@@ -23,7 +22,7 @@ async function main() {
   const exitCode = await new Promise<number>((resolve) => {
     child.on('close', (code) => resolve(code ?? 1));
     child.on('error', (err) => {
-      console.error(`Failed to spawn corpus:pull: ${err.message}`);
+      console.error(`Failed to spawn corpus pull: ${err.message}`);
       resolve(1);
     });
   });

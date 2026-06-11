@@ -10,8 +10,13 @@
  * to space-free file prefixes (e.g. "Liberation Sans" -> `LiberationSans-*.woff2`).
  */
 
-/** SPDX identifier of a bundled font's license, for provenance + diagnostics. */
-export type BundledLicense = 'OFL-1.1' | 'Apache-2.0';
+/** License identifier or expression for provenance and diagnostics. */
+export type BundledLicense =
+  | 'OFL-1.1'
+  | 'Apache-2.0'
+  | 'AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817'
+  | 'GPL-2.0-only WITH Font-exception-2.0'
+  | 'LicenseRef-GUST-Font-License-1.0';
 
 /** One shippable face of a bundled family: its style axis + the asset filename. */
 export interface BundledFaceFile {
@@ -59,9 +64,25 @@ export const BUNDLED_MANIFEST: readonly BundledFamilyManifest[] = Object.freeze(
   family('Carlito', 'Carlito', 'OFL-1.1'),
   family('Caladea', 'Caladea', 'Apache-2.0'),
   family('Liberation Sans', 'LiberationSans', 'OFL-1.1'),
+  family('Liberation Sans Narrow', 'LiberationSansNarrow', 'GPL-2.0-only WITH Font-exception-2.0'),
   family('Liberation Serif', 'LiberationSerif', 'OFL-1.1'),
   family('Liberation Mono', 'LiberationMono', 'OFL-1.1'),
   familyWithFaces('Caprasimo', 'OFL-1.1', [{ weight: 'normal', style: 'normal', file: 'Caprasimo-Regular.woff2' }]),
+  familyWithFaces('Archivo Black', 'OFL-1.1', [
+    { weight: 'normal', style: 'normal', file: 'ArchivoBlack-Regular.woff2' },
+  ]),
+  familyWithFaces('C059', 'AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817', [
+    { weight: 'normal', style: 'normal', file: 'C059-Roman.woff2' },
+    { weight: 'bold', style: 'normal', file: 'C059-Bold.woff2' },
+    { weight: 'normal', style: 'italic', file: 'C059-Italic.woff2' },
+    { weight: 'bold', style: 'italic', file: 'C059-BdIta.woff2' },
+  ]),
+  familyWithFaces('URW Gothic', 'AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817', [
+    { weight: 'normal', style: 'normal', file: 'URWGothic-Book.woff2' },
+    { weight: 'bold', style: 'normal', file: 'URWGothic-Demi.woff2' },
+    { weight: 'normal', style: 'italic', file: 'URWGothic-BookOblique.woff2' },
+    { weight: 'bold', style: 'italic', file: 'URWGothic-DemiOblique.woff2' },
+  ]),
   familyWithFaces('Bacasime Antique', 'OFL-1.1', [
     { weight: 'normal', style: 'normal', file: 'BacasimeAntique-Regular.woff2' },
   ]),
@@ -79,9 +100,22 @@ export const BUNDLED_MANIFEST: readonly BundledFamilyManifest[] = Object.freeze(
     { weight: 'bold', style: 'normal', file: 'ComicRelief-Bold.woff2' },
   ]),
   family('Noto Sans', 'NotoSans', 'OFL-1.1'),
+  familyWithFaces('Selawik', 'OFL-1.1', [
+    { weight: 'normal', style: 'normal', file: 'Selawik-Regular.woff2' },
+    { weight: 'bold', style: 'normal', file: 'Selawik-Bold.woff2' },
+  ]),
   familyWithFaces('Noto Sans Mono', 'OFL-1.1', [
     { weight: 'normal', style: 'normal', file: 'NotoSansMono-Regular.woff2' },
     { weight: 'bold', style: 'normal', file: 'NotoSansMono-Bold.woff2' },
   ]),
+  familyWithFaces('Inconsolata SemiExpanded', 'OFL-1.1', [
+    { weight: 'normal', style: 'normal', file: 'InconsolataSemiExpanded-Regular.woff2' },
+    { weight: 'bold', style: 'normal', file: 'InconsolataSemiExpanded-Bold.woff2' },
+  ]),
   family('PT Sans', 'PTSans', 'OFL-1.1'),
+  familyWithFaces('PT Sans Narrow', 'OFL-1.1', [
+    { weight: 'normal', style: 'normal', file: 'PTSansNarrow-Regular.woff2' },
+    { weight: 'bold', style: 'normal', file: 'PTSansNarrow-Bold.woff2' },
+  ]),
+  family('TeX Gyre Bonum', 'TeXGyreBonum', 'LicenseRef-GUST-Font-License-1.0'),
 ]);

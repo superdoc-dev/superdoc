@@ -1,7 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createSuperDocUI } from './create-super-doc-ui.js';
 import type { SuperDocLike } from './types.js';
+import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
+
+// getRect's text-target path resolves block ids against the real editor's
+// block index, which the lightweight stubs here don't model. Stub just
+// that resolver; keep the module's other exports intact.
+vi.mock('../editors/v1/document-api-adapters/helpers/adapter-utils.js', async (importActual) => {
+  const actual = await importActual<typeof import('../editors/v1/document-api-adapters/helpers/adapter-utils.js')>();
+  return { ...actual, resolveTextTarget: vi.fn() };
+});
+const mockResolveTextTarget = vi.mocked(resolveTextTarget);
 
 /**
  * Stub for `ui.viewport` tests. Models the minimal surface the
@@ -30,6 +40,16 @@ function makeStubs(
     if (typeof target.entityId !== 'string') return [];
     return rectsById[target.entityId] ?? [];
   });
+  type StubRect = {
+    pageIndex: number;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
+  const getBodyRangeRects = vi.fn((_from: number, _to: number): StubRect[] => []);
   const navigateTo = vi.fn(async (_target: unknown) => true);
 
   const editor: {
@@ -39,6 +59,7 @@ function makeStubs(
     presentationEditor:
       | {
           getEntityRects: typeof getEntityRects;
+          getBodyRangeRects: typeof getBodyRangeRects;
           navigateTo: typeof navigateTo;
           getActiveEditor: () => unknown;
         }
@@ -71,6 +92,7 @@ function makeStubs(
   // same stub editor the toolbar source resolver expects when present.
   editor.presentationEditor = {
     getEntityRects,
+    getBodyRangeRects,
     navigateTo,
     getActiveEditor: () => editor,
   };
@@ -82,7 +104,7 @@ function makeStubs(
     off: vi.fn(),
   };
 
-  return { superdoc, editor, mocks: { getEntityRects, navigateTo } };
+  return { superdoc, editor, mocks: { getEntityRects, getBodyRangeRects, navigateTo } };
 }
 
 describe('ui.viewport.getRect — entity targets', () => {
@@ -191,12 +213,12 @@ describe('ui.viewport.getRect — entity targets', () => {
     ui.destroy();
   });
 
-  it('returns invalid-target for text-anchored targets (deferred path)', () => {
+  it('returns invalid-target for an unknown target kind (neither entity nor text)', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
     const result = ui.viewport.getRect({
-      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } } as never,
+      target: { kind: 'mystery', id: 'x' } as never,
     });
 
     expect(result).toEqual({ success: false, reason: 'invalid-target' });
@@ -272,6 +294,179 @@ describe('ui.viewport.getRect — entity targets', () => {
     if (!result.success) return;
     expect(result.rect.width).toBe(20);
     expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.getRect — text targets (SD-3329)', () => {
+  const rect = (pageIndex: number, top: number) => ({
+    pageIndex,
+    left: 10,
+    top,
+    right: 110,
+    bottom: top + 20,
+    width: 100,
+    height: 20,
+  });
+
+  beforeEach(() => {
+    mockResolveTextTarget.mockReset();
+  });
+
+  it('resolves a TextAddress to rects and returns { rect, rects, pageIndex }', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue({ from: 5, to: 10 });
+    mocks.getBodyRangeRects.mockReturnValue([rect(0, 200)]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rect).toEqual({ top: 200, left: 10, width: 100, height: 20, pageIndex: 0 });
+    expect(result.rects).toHaveLength(1);
+    expect(result.pageIndex).toBe(0);
+    // Resolved against the text address; body-surface rects requested for the range.
+    expect(mockResolveTextTarget).toHaveBeenCalledWith(expect.anything(), {
+      kind: 'text',
+      blockId: 'b1',
+      range: { start: 0, end: 5 },
+    });
+    expect(mocks.getBodyRangeRects).toHaveBeenCalledWith(5, 10);
+
+    ui.destroy();
+  });
+
+  it('resolves a multi-segment TextTarget per segment and concatenates rects', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValueOnce({ from: 5, to: 10 }).mockReturnValueOnce({ from: 40, to: 55 });
+    mocks.getBodyRangeRects.mockReturnValueOnce([rect(0, 200)]).mockReturnValueOnce([rect(1, 300)]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'text',
+        segments: [
+          { blockId: 'b1', range: { start: 0, end: 5 } },
+          { blockId: 'b2', range: { start: 0, end: 8 } },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rects).toHaveLength(2);
+    expect(result.rect.pageIndex).toBe(0); // primary = first segment's first rect
+    expect(result.rects[1].pageIndex).toBe(1);
+    expect(mocks.getBodyRangeRects).toHaveBeenNthCalledWith(1, 5, 10);
+    expect(mocks.getBodyRangeRects).toHaveBeenNthCalledWith(2, 40, 55);
+
+    ui.destroy();
+  });
+
+  it('returns unresolved when a segment block id cannot be resolved', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue(null);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'gone', range: { start: 0, end: 5 } },
+    });
+
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns a structured failure (does not throw) when resolveTextTarget throws (ambiguous block id)', () => {
+    const { superdoc, mocks } = makeStubs();
+    // resolveTextTarget throws DocumentApiAdapterError('INVALID_TARGET') on
+    // ambiguous block ids; a public geometry read must not throw out.
+    mockResolveTextTarget.mockImplementation(() => {
+      throw new Error('Block ID "b1" is ambiguous: matched 2 text blocks.');
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    let result: ReturnType<typeof ui.viewport.getRect> | undefined;
+    expect(() => {
+      result = ui.viewport.getRect({
+        target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+      });
+    }).not.toThrow();
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns not-mounted when the range resolves but paints no rects (virtualized)', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue({ from: 5, to: 10 });
+    mocks.getBodyRangeRects.mockReturnValue([]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+    });
+
+    expect(result).toEqual({ success: false, reason: 'not-mounted' });
+
+    ui.destroy();
+  });
+
+  it('returns invalid-target for a malformed text target (missing block id / range)', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({ target: { kind: 'text' } as never });
+
+    expect(result).toEqual({ success: false, reason: 'invalid-target' });
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns unresolved for a non-body story target (story-aware text rects deferred)', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'text',
+        blockId: 'h1',
+        range: { start: 0, end: 5 },
+        story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId1' },
+      } as never,
+    });
+
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    // Short-circuits before touching the resolver / rect engine.
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('leaves entity-target behavior unchanged', () => {
+    const { superdoc, mocks } = makeStubs({
+      rectsById: { c1: [rect(0, 200)] },
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'comment', entityId: 'c1' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+    // The text path must not run for entity targets.
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
 
     ui.destroy();
   });
@@ -384,6 +579,42 @@ describe('ui.viewport.getHost', () => {
     (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
     const ui = createSuperDocUI({ superdoc });
     expect(ui.viewport.getHost()).toBeNull();
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.getScrollContainer', () => {
+  it('returns the resolved scroll container when one is mounted', () => {
+    const { superdoc } = makeStubs();
+    const scroller = document.createElement('div');
+    document.body.appendChild(scroller);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement } }
+    ).presentationEditor.scrollContainer = scroller;
+
+    const ui = createSuperDocUI({ superdoc });
+    // Distinct from getHost(): the scroller is not the painted host.
+    expect(ui.viewport.getScrollContainer()).toBe(scroller);
+
+    scroller.remove();
+    ui.destroy();
+  });
+
+  it('returns null when the document/window scrolls (no element scroller)', () => {
+    const { superdoc } = makeStubs();
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement | null } }
+    ).presentationEditor.scrollContainer = null;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
+    ui.destroy();
+  });
+
+  it('returns null when no editor is mounted', () => {
+    const { superdoc } = makeStubs();
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
     ui.destroy();
   });
 });
@@ -693,6 +924,21 @@ describe('ui.viewport.observe — repaint reason (SD-3311 regression)', () => {
 
     emitPresentation('layoutUpdated');
     emitPresentation('paginationUpdate');
+    await nextFrame();
+
+    expect(events).toEqual([{ reason: 'layout' }]);
+    ui.destroy();
+  });
+
+  it('fires a geometry invalidation on sidebar-toggle (reason "layout")', async () => {
+    // The comments rail toggling shifts geometry without a guaranteed
+    // layout repaint; observe must still notify so cached rects re-query.
+    const { superdoc, emitSuperdoc } = makeGeometryStub();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    emitSuperdoc('sidebar-toggle', true);
     await nextFrame();
 
     expect(events).toEqual([{ reason: 'layout' }]);

@@ -53,7 +53,7 @@ export type FaceSlot = 'regular' | 'bold' | 'italic' | 'boldItalic';
 /** Advance-width divergence vs the proprietary oracle, as fractions (0 = identical advances). */
 export interface AdvanceDelta {
   /** sample/model used for the advance comparison, e.g. Latin glyph advances vs monospace cell width. */
-  basis: 'latin_full' | 'latin_text' | 'monospace_cell';
+  basis: 'latin_full' | 'latin_text' | 'monospace_cell' | 'cjk_jp_text';
   meanDelta: number;
   /** the worst-case delta, not the mean, is what gates line-break fidelity. */
   maxDelta: number;

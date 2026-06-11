@@ -8,7 +8,7 @@ A custom toolbar binds controls to commands. The same surface holds built-ins (`
 
 `ui.commands.register({ id, execute, getState })` puts a custom command on the same surface as built-ins. The example registers one and binds a button to it the same way it binds the bold button.
 
-The font-family picker uses `ui.fonts.observe(...)` for its options and applies the chosen value with `ui.toolbar.execute('font-family', value)`. The options include bundled defaults and fonts used by the active document. The picker uses a button menu so opening it does not move focus away from the editor selection.
+The font-family picker uses `ui.fonts.observe(...)` for its options and applies the chosen value with `ui.toolbar.execute('font-family', value)`. The font-size picker uses `snapshot.sizeOptions` from the same handle and applies with `ui.toolbar.execute('font-size', value)`. The family options include bundled defaults and fonts used by the active document. Both pickers use button menus so opening them does not move focus away from the editor selection.
 
 This example shows that flow and nothing else. No threading, no resolve / reopen, no comments, no mode toggle. For the full Custom UI sidebar pattern, see [`demos/custom-ui`](../../../../../demos/custom-ui).
 
@@ -19,7 +19,7 @@ pnpm install
 pnpm dev
 ```
 
-Click the buttons. Bold, Italic, Underline toggle on the current selection. The font picker changes the selected text's font family. Insert clause inserts a fixed snippet at the cursor.
+Click the buttons. Bold, Italic, Underline toggle on the current selection. The font pickers change the selected text's font family and size. Insert clause inserts a fixed snippet at the cursor.
 
 ## See also
 

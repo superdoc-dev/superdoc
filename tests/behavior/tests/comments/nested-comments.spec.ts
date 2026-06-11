@@ -17,7 +17,7 @@ test.use({ config: { toolbar: 'full', comments: 'panel' } });
 // ---------------------------------------------------------------------------
 
 test.describe('nested comments from Google Docs', () => {
-  test.skip(!fs.existsSync(GDOCS_PATH), 'Test document not available — run pnpm corpus:pull');
+  test.skip(!fs.existsSync(GDOCS_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
   test('overlapping comment highlights exist and dialogs activate on click', async ({ superdoc }) => {
     await superdoc.loadDocument(GDOCS_PATH);
@@ -75,7 +75,7 @@ test.describe('nested comments from Google Docs', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('nested comments from MS Word', () => {
-  test.skip(!fs.existsSync(WORD_PATH), 'Test document not available — run pnpm corpus:pull');
+  test.skip(!fs.existsSync(WORD_PATH), 'Test document not available — run pnpm --dir tests/visual docs:download');
 
   test('overlapping comment highlights exist and dialogs activate on click', async ({ superdoc }) => {
     await superdoc.loadDocument(WORD_PATH);

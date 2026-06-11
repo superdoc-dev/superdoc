@@ -19,7 +19,13 @@ async function clickToolbarButton(superdoc: SuperDocFixture, dataItem: string): 
 }
 
 async function selectDropdownOption(superdoc: SuperDocFixture, dataItem: string, optionText: string): Promise<void> {
-  await superdoc.page.locator(`[data-item="btn-${dataItem}"]`).click();
+  const trigger =
+    dataItem === 'fontFamily'
+      ? superdoc.page.locator('[data-item="btn-fontFamily-toggle"]')
+      : dataItem === 'fontSize'
+        ? superdoc.page.locator('[data-item="btn-fontSize"] .sd-dropdown-caret')
+        : superdoc.page.locator(`[data-item="btn-${dataItem}"]`);
+  await trigger.click();
   await superdoc.waitForStable();
   await superdoc.page.locator(`[data-item="btn-${dataItem}-option"]`).filter({ hasText: optionText }).click();
   await superdoc.waitForStable();

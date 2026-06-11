@@ -79,6 +79,7 @@ export type {
   // Substrate
   EqualityFn,
   FontFamilyOption,
+  FontSizeOption,
   SelectorFn,
   Subscribable,
 
@@ -118,6 +119,7 @@ export type {
   UIToolbarCommandState,
 
   // Comments
+  CommentAnchorCapture,
   CommentsHandle,
   CommentsSlice,
 

@@ -18,10 +18,9 @@ const ANCHOR_GAP = 8;
  * the wrong place. `ui.selection.getAnchorRect()` reads from the
  * painted layout instead.
  *
- * The popover only re-positions when the selection slice meaningfully
- * changes (range / quoted text). Scroll and resize trigger a refresh
- * so the anchor stays glued through layout shifts; the rect is
- * viewport-relative so `position: fixed` is enough.
+ * The popover re-positions when the selection changes or viewport
+ * geometry invalidates. Rects are viewport-relative, so
+ * `position: fixed` is enough.
  */
 export function SelectionPopover({ onComposeComment }: Props) {
   const ui = useSuperDocUI();
@@ -39,16 +38,7 @@ export function SelectionPopover({ onComposeComment }: Props) {
       setRect(ui.selection.getAnchorRect({ placement: 'start' }));
     };
     update();
-    // Scroll-capture listener so the popover follows the page when the
-    // user scrolls. The document is paginated so scroll happens
-    // somewhere up the DOM chain; `capture: true` catches scroll on
-    // any scrollable ancestor.
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
+    return ui.viewport.observe(update);
   }, [ui, selection.empty, selection.target, selection.quotedText]);
 
   // Clamp horizontally inside the viewport and flip below the selection

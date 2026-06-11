@@ -34,6 +34,7 @@ const scope = ui.createScope();
 const toolbar = document.querySelector<HTMLElement>('#toolbar')!;
 
 type FontOption = { label: string; value: string; previewFamily: string };
+type SizeOption = { label: string; value: string };
 
 function normalizeFontToken(value: unknown): string {
   return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
@@ -51,6 +52,14 @@ function optionValueForCurrentFont(value: unknown, options: readonly FontOption[
   });
 
   return match?.value ?? '';
+}
+
+function normalizeFontSize(value: unknown): string {
+  if (typeof value === 'number') return `${value}pt`;
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return /^\d+(\.\d+)?$/.test(trimmed) ? `${trimmed}pt` : trimmed;
 }
 
 // Built-in command buttons. Same shape, different ids. Each one
@@ -169,14 +178,6 @@ const renderFontOptions = () => {
   );
 };
 
-scope.add(
-  ui.fonts.observe((snapshot) => {
-    currentFontOptions = [...snapshot.options];
-    renderFontOptions();
-    refreshFontButton();
-  }),
-);
-
 fontButton.addEventListener('mousedown', (event) => {
   event.preventDefault();
   rememberFontSelection();
@@ -186,14 +187,9 @@ fontButton.addEventListener('click', () => setFontMenuOpen(fontMenu.hidden));
 const closeFontMenuOnOutsideClick = (event: MouseEvent) => {
   if (!fontPicker.contains(event.target as Node | null)) setFontMenuOpen(false);
 };
-const closeFontMenuOnEscape = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') setFontMenuOpen(false);
-};
 document.addEventListener('mousedown', closeFontMenuOnOutsideClick);
-document.addEventListener('keydown', closeFontMenuOnEscape);
 scope.add(() => {
   document.removeEventListener('mousedown', closeFontMenuOnOutsideClick);
-  document.removeEventListener('keydown', closeFontMenuOnEscape);
 });
 
 const fontCommand = ui.commands.get('font-family');
@@ -211,6 +207,130 @@ if (fontCommand) {
 const fontSep = document.createElement('span');
 fontSep.className = 'sep';
 toolbar.appendChild(fontSep);
+
+const sizePicker = document.createElement('div');
+sizePicker.className = 'font-picker size-picker';
+toolbar.appendChild(sizePicker);
+
+const sizeButton = document.createElement('button');
+sizeButton.type = 'button';
+sizeButton.className = 'font-picker-trigger size-picker-trigger';
+sizeButton.title = 'Font size';
+sizeButton.setAttribute('aria-label', 'Font size');
+sizeButton.setAttribute('aria-haspopup', 'listbox');
+sizeButton.setAttribute('aria-expanded', 'false');
+sizePicker.appendChild(sizeButton);
+
+const sizeMenu = document.createElement('div');
+sizeMenu.className = 'font-picker-menu size-picker-menu';
+sizeMenu.setAttribute('role', 'listbox');
+sizeMenu.hidden = true;
+sizePicker.appendChild(sizeMenu);
+
+let currentFontSizeValue = '';
+let currentFontSizeOptions: SizeOption[] = [];
+let capturedFontSizeSelection: ReturnType<typeof ui.selection.capture> | null = null;
+
+const rememberFontSizeSelection = () => {
+  const capture = ui.selection.capture();
+  if (capture) capturedFontSizeSelection = capture;
+};
+
+const selectedFontSizeOption = () => {
+  const value = normalizeFontSize(currentFontSizeValue);
+  return currentFontSizeOptions.find((option) => option.value === value || option.label === value) ?? null;
+};
+
+const setFontSizeMenuOpen = (open: boolean) => {
+  sizeMenu.hidden = !open;
+  sizeButton.setAttribute('aria-expanded', String(open));
+};
+
+const refreshFontSizeButton = () => {
+  const selected = selectedFontSizeOption();
+  const fallback = normalizeFontSize(currentFontSizeValue).replace(/pt$/i, '') || '12';
+  sizeButton.textContent = selected?.label ?? fallback;
+};
+
+const applyFontSizeValue = (value: string) => {
+  if (capturedFontSizeSelection) {
+    ui.selection.restore(capturedFontSizeSelection);
+    capturedFontSizeSelection = null;
+  }
+  setFontSizeMenuOpen(false);
+  ui.toolbar.execute('font-size', value);
+};
+
+const renderFontSizeOptions = () => {
+  const selectedValue = selectedFontSizeOption()?.value ?? '';
+  sizeMenu.replaceChildren(
+    ...currentFontSizeOptions.map((size) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'font-picker-option size-picker-option';
+      option.textContent = size.label;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(size.value === selectedValue));
+      option.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        rememberFontSizeSelection();
+      });
+      option.addEventListener('click', () => applyFontSizeValue(size.value));
+      return option;
+    }),
+  );
+};
+
+sizeButton.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+  rememberFontSizeSelection();
+});
+sizeButton.addEventListener('click', () => setFontSizeMenuOpen(sizeMenu.hidden));
+
+const closeFontSizeMenuOnOutsideClick = (event: MouseEvent) => {
+  if (!sizePicker.contains(event.target as Node | null)) setFontSizeMenuOpen(false);
+};
+document.addEventListener('mousedown', closeFontSizeMenuOnOutsideClick);
+scope.add(() => {
+  document.removeEventListener('mousedown', closeFontSizeMenuOnOutsideClick);
+});
+
+const closePickerMenusOnEscape = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape') return;
+  setFontMenuOpen(false);
+  setFontSizeMenuOpen(false);
+};
+document.addEventListener('keydown', closePickerMenusOnEscape);
+scope.add(() => {
+  document.removeEventListener('keydown', closePickerMenusOnEscape);
+});
+
+const fontSizeCommand = ui.commands.get('font-size');
+if (fontSizeCommand) {
+  scope.add(
+    fontSizeCommand.observe((state) => {
+      sizeButton.disabled = state.disabled;
+      currentFontSizeValue = typeof state.value === 'string' || typeof state.value === 'number' ? String(state.value) : '';
+      renderFontSizeOptions();
+      refreshFontSizeButton();
+    }),
+  );
+}
+
+scope.add(
+  ui.fonts.observe((snapshot) => {
+    currentFontOptions = [...snapshot.options];
+    currentFontSizeOptions = [...snapshot.sizeOptions];
+    renderFontOptions();
+    refreshFontButton();
+    renderFontSizeOptions();
+    refreshFontSizeButton();
+  }),
+);
+
+const sizeSep = document.createElement('span');
+sizeSep.className = 'sep';
+toolbar.appendChild(sizeSep);
 
 // Custom command. Same surface as built-ins. The id is namespaced so
 // it won't collide with future built-ins.

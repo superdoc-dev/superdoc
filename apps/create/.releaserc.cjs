@@ -36,7 +36,7 @@ if (!isPrerelease) {
 }
 
 config.plugins.push([
-  'semantic-release-linear-app',
+  '../../scripts/semantic-release/linear-commit-sync.cjs',
   {
     teamKeys: ['SD'],
     addComment: shouldCommentOnRelease,

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { AllSelection, EditorState, TextSelection } from 'prosemirror-state';
 import { Schema } from 'prosemirror-model';
 
 import {
@@ -15,6 +15,7 @@ import {
   captureSelectionHandle,
   resolveHandleToSelection,
   releaseSelectionHandle,
+  prepareSelectionForTextInputHandoff,
   _resetHandleIdCounter,
 } from './selection-state.js';
 import type { SelectionHandleOwner } from './selection-state.js';
@@ -183,6 +184,32 @@ describe('releaseSelectionHandle', () => {
     releaseSelectionHandle(handle);
 
     expect(resolveHandleToSelection(handle)).toBeNull();
+  });
+});
+
+describe('prepareSelectionForTextInputHandoff', () => {
+  it('turns an all-selection into the selected text range for browser typing', () => {
+    const owner = createOwner(createState('Hello'));
+    owner.dispatch(owner.state.tr.setSelection(new AllSelection(owner.state.doc)));
+
+    const optionUpdates: Array<{ preservedSelection: null; lastSelection: null }> = [];
+    const handled = prepareSelectionForTextInputHandoff({
+      get state() {
+        return owner.state;
+      },
+      dispatch(tr) {
+        owner.dispatch(tr);
+      },
+      setOptions(options) {
+        optionUpdates.push(options);
+      },
+    });
+
+    expect(handled).toBe(true);
+    expect(owner.state.selection).toBeInstanceOf(TextSelection);
+    expect(owner.state.selection.empty).toBe(false);
+    expect(owner.state.doc.textBetween(owner.state.selection.from, owner.state.selection.to)).toBe('Hello');
+    expect(optionUpdates).toEqual([{ preservedSelection: null, lastSelection: null }]);
   });
 });
 

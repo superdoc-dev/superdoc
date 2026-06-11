@@ -18,6 +18,7 @@ import {
   type TableAttrs,
   type TableBlock,
   type TableCellAttrs,
+  type TextboxDrawing,
   type TrackedChangeMeta,
   type TextRun,
   type VectorShapeDrawing,
@@ -119,6 +120,26 @@ const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
   return [lum.bright ?? '', lum.contrast ?? ''].join(':');
 };
 
+const drawingTextVersion = (block: VectorShapeDrawing | TextboxDrawing): string => {
+  const textboxContentBlocks =
+    'contentBlocks' in block && Array.isArray(block.contentBlocks)
+      ? block.contentBlocks.map((contentBlock: ParagraphBlock) => deriveBlockVersion(contentBlock)).join(';')
+      : '';
+
+  return JSON.stringify([
+    block.textAlign ?? '',
+    block.textVerticalAlign ?? '',
+    block.textInsets ?? null,
+    block.textContent ?? null,
+    textboxContentBlocks,
+  ]);
+};
+
+const imageAlphaModFixVersion = (alphaModFix: ImageBlock['alphaModFix'] | undefined): string => {
+  if (!alphaModFix) return '';
+  return String(alphaModFix.amt ?? '');
+};
+
 const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
   [
     image.src ?? '',
@@ -132,6 +153,7 @@ const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
     image.blacklevel ?? '',
     image.grayscale ? 1 : 0,
     imageLuminanceVersion(image.lum),
+    imageAlphaModFixVersion(image.alphaModFix),
     image.rotation ?? '',
     image.flipH ? 1 : 0,
     image.flipV ? 1 : 0,
@@ -157,6 +179,7 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.blacklevel ?? '',
     image.grayscale ? 1 : 0,
     imageLuminanceVersion(image.lum),
+    imageAlphaModFixVersion(image.alphaModFix),
     image.rotation ?? '',
     image.flipH ? 1 : 0,
     image.flipV ? 1 : 0,
@@ -434,10 +457,10 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       const imageLike = block as ImageDrawing;
       return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
-    if (block.drawingKind === 'vectorShape') {
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
       const vector = block as VectorShapeDrawing;
       return [
-        'drawing:vector',
+        block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
         vector.fillColor ?? '',
         vector.strokeColor ?? '',
@@ -447,6 +470,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         vector.geometry.rotation ?? 0,
         vector.geometry.flipH ? 1 : 0,
         vector.geometry.flipV ? 1 : 0,
+        drawingTextVersion(vector),
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {

@@ -168,9 +168,8 @@ const FACADE_ENTRIES = [
     ticket: 'SD-3180',
   },
   // SD-3182: first supported-surface facade entry. The `superdoc/ui/react`
-  // subpath is the strategic React binding surface. SD-3147 classification:
-  // 12 public + 1 legacy/public-compat. Matches the existing `./ui/react`
-  // single-`types` shape, so `cjs: null`.
+  // subpath is the strategic React binding surface. Matches the existing
+  // `./ui/react` single-`types` shape, so `cjs: null`.
   {
     name: 'ui-react',
     esm: path.join(PUBLIC_DIST, 'ui-react.d.ts'),
@@ -180,9 +179,8 @@ const FACADE_ENTRIES = [
     ticket: 'SD-3182',
   },
   // SD-3183: largest supported-surface facade entry. The `superdoc/ui`
-  // subpath is the strategic UI controller surface. SD-3147 classification:
-  // 49 public + 21 legacy/public-compat. Matches the existing `./ui`
-  // single-`types` shape, so `cjs: null`. The shape of the emitted
+  // subpath is the strategic UI controller surface. Matches the existing
+  // `./ui` single-`types` shape, so `cjs: null`. The shape of the emitted
   // `dist/public/ui.es.js` is additionally guarded by `audit-bundle.cjs`
   // (must not pull the editor main barrel).
   {
@@ -272,8 +270,7 @@ function parseFacadeSourceExports(filePath) {
     const { line, character } = src.getLineAndCharacterOfPosition(node.getStart(src));
     rejections.push(`${path.relative(repoRoot, filePath)}:${line + 1}:${character + 1} ${msg}`);
   };
-  const hasModifier = (node, kind) =>
-    (node.modifiers ?? []).some((m) => m.kind === kind);
+  const hasModifier = (node, kind) => (node.modifiers ?? []).some((m) => m.kind === kind);
 
   for (const stmt of src.statements) {
     if (ts.isExportDeclaration(stmt)) {
@@ -360,12 +357,16 @@ function listExportedNames(entry, file) {
 
 function checkSymbolSet(entry) {
   if (!fs.existsSync(entry.source)) {
-    console.error(`[verify-public-facade-emit] ${entry.name}: facade source missing at ${path.relative(repoRoot, entry.source)}`);
+    console.error(
+      `[verify-public-facade-emit] ${entry.name}: facade source missing at ${path.relative(repoRoot, entry.source)}`,
+    );
     return { ok: false, actual: [] };
   }
   const parsed = parseFacadeSourceExports(entry.source);
   if (parsed.rejections.length > 0) {
-    console.error(`[verify-public-facade-emit] ${entry.name}: facade source uses constructs not allowed in a public facade:`);
+    console.error(
+      `[verify-public-facade-emit] ${entry.name}: facade source uses constructs not allowed in a public facade:`,
+    );
     for (const r of parsed.rejections) console.error('  - ' + r);
     return { ok: false, actual: [] };
   }
@@ -383,7 +384,9 @@ function checkSymbolSet(entry) {
   console.error(`  emit:   ${path.relative(repoRoot, entry.esm)}`);
   if (missingFromEmit.length) console.error('  missing from emit: ' + missingFromEmit.join(', '));
   if (extraInEmit.length) console.error('  extra in emit:     ' + extraInEmit.join(', '));
-  console.error(`  The facade source is the contract. Either fix the dts pipeline (ensure-types.cjs, tsconfig include, vite.config.js)`);
+  console.error(
+    `  The facade source is the contract. Either fix the dts pipeline (ensure-types.cjs, tsconfig include, vite.config.js)`,
+  );
   console.error(`  or update the source file under packages/superdoc/src/public/** to match the intended surface.`);
   return { ok: false, actual };
 }
@@ -434,31 +437,31 @@ function checkCommandSignatureProbe(entry) {
         types: [],
       },
     });
-    const diagnostics = [
-      ...program.getSemanticDiagnostics(),
-      ...program.getDeclarationDiagnostics(),
-    ];
+    const diagnostics = [...program.getSemanticDiagnostics(), ...program.getDeclarationDiagnostics()];
     if (diagnostics.length === 0) return true;
     console.error(`[verify-public-facade-emit] ${entry.name}: legacy command-signature compatibility check failed.`);
     console.error('  A command (setBold or insertComment) does not return `boolean` through the facade.');
-    console.error('  This is the SD-2965 regression vector: specific command signatures were dropped or failed to flow through the facade, and EditorCommands fell back to the `AnyCommand` indexer.');
-    console.error('  Note: `editor.commands.*` is deprecated (use `editor.doc.*`). This check guards backward compatibility of the legacy typed surface; it is not a supported-API guarantee.');
+    console.error(
+      '  This is the SD-2965 regression vector: specific command signatures were dropped or failed to flow through the facade, and EditorCommands fell back to the `AnyCommand` indexer.',
+    );
+    console.error(
+      '  Note: `editor.commands.*` is deprecated (use `editor.doc.*`). This check guards backward compatibility of the legacy typed surface; it is not a supported-API guarantee.',
+    );
     for (const d of diagnostics) {
-      const msg = typeof d.messageText === 'string'
-        ? d.messageText
-        : ts.flattenDiagnosticMessageText(d.messageText, '\n');
+      const msg =
+        typeof d.messageText === 'string' ? d.messageText : ts.flattenDiagnosticMessageText(d.messageText, '\n');
       console.error('  - ' + msg);
     }
     return false;
   } finally {
-    try { fs.unlinkSync(probePath); } catch (_) {}
+    try {
+      fs.unlinkSync(probePath);
+    } catch (_) {}
   }
 }
 
 function stripComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
 const LEAK_PATTERNS = [
@@ -501,7 +504,9 @@ function checkTypeOnlyShape(entry) {
   for (const decl of valueDecls.slice(0, 10)) {
     console.error('  - ' + decl.trim());
   }
-  console.error('  Fix `emitCjsDeclarationShim` in `packages/superdoc/scripts/ensure-types.cjs` so the typeOnly branch emits `export type` for every name.');
+  console.error(
+    '  Fix `emitCjsDeclarationShim` in `packages/superdoc/scripts/ensure-types.cjs` so the typeOnly branch emits `export type` for every name.',
+  );
   return false;
 }
 
@@ -530,4 +535,6 @@ if (failed) {
   process.exit(1);
 }
 
-console.log(`[verify-public-facade-emit] OK. Facade emits cleanly across ${FACADE_ENTRIES.length} entries (${summaryLines.join('; ')}).`);
+console.log(
+  `[verify-public-facade-emit] OK. Facade emits cleanly across ${FACADE_ENTRIES.length} entries (${summaryLines.join('; ')}).`,
+);

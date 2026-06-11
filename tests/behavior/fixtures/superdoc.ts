@@ -484,7 +484,21 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
     async tripleClickLine(lineIndex: number) {
       const line = page.locator('.superdoc-line').nth(lineIndex);
+      // Probe from the line's tail so leading list markers or decorations cannot break the match.
+      const probe = ((await line.textContent()) ?? '').trim().slice(-8);
       await line.click({ clickCount: 3, timeout: 10_000 });
+      // The editor maps the native triple-click DOM selection to its own selection asynchronously;
+      // on slow CI (webkit especially) a keystroke right after the click can act on the PREVIOUS
+      // selection. Wait until the editor selection holds this line's text before returning.
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const { state } = (window as any).editor;
+            const { from, to, empty } = state.selection;
+            return empty ? '' : state.doc.textBetween(from, to, ' ');
+          }),
+        )
+        .toContain(probe);
     },
 
     async setDocumentMode(mode: DocumentMode) {

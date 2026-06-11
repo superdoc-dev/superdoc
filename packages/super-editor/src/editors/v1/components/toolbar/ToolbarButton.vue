@@ -3,7 +3,7 @@ import ToolbarButtonIcon from './ToolbarButtonIcon.vue';
 import { ref, computed, nextTick } from 'vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
-const emit = defineEmits(['buttonClick', 'textSubmit', 'mainClick']);
+const emit = defineEmits(['buttonClick', 'textSubmit', 'mainClick', 'tabOut']);
 
 const props = defineProps({
   iconColor: {
@@ -67,16 +67,25 @@ const {
 } = props.toolbarItem;
 
 const isSplit = computed(() => Boolean(splitButton?.value) && Boolean(hasCaret?.value));
+const isInlineSplitField = computed(
+  () => name?.value === 'fontSize' && Boolean(hasInlineTextInput?.value) && Boolean(hasCaret?.value),
+);
 
 const inlineTextInput = ref(label);
 const inlineInput = ref(null);
 const { isHighContrastMode } = useHighContrastMode();
 
+const selectInlineInput = () => {
+  nextTick(() => {
+    inlineInput.value?.select();
+  });
+};
+
 const handleClick = () => {
   if (hasInlineTextInput) {
     nextTick(() => {
       inlineInput.value?.focus();
-      inlineInput.value?.select();
+      selectInlineInput();
     });
   }
   emit('buttonClick');
@@ -111,6 +120,14 @@ const handleInputSubmit = () => {
   const cleanValue = value.match(/^\d+(\.5)?$/) ? value : Math.floor(parseFloat(value)).toString();
   emit('textSubmit', cleanValue);
   inlineTextInput.value = cleanValue;
+};
+
+const handleInputTab = (event) => {
+  if (name?.value !== 'fontSize') return;
+  event.preventDefault();
+  handleInputSubmit();
+  inlineInput.value?.blur();
+  emit('tabOut', event);
 };
 
 const getStyle = computed(() => {
@@ -149,6 +166,8 @@ const caretIcon = computed(() => {
         narrow: isNarrow,
         wide: isWide,
         split: isSplit,
+        'split-field': isInlineSplitField,
+        'sd-toolbar-split-field': isInlineSplitField,
         'has-inline-text-input': hasInlineTextInput,
         'high-contrast': isHighContrastMode,
       }"
@@ -184,11 +203,14 @@ const caretIcon = computed(() => {
           {{ label }}
         </div>
 
-        <span v-if="inlineTextInputVisible">
+        <span v-if="inlineTextInputVisible" class="sd-toolbar-button__field sd-toolbar-split-field__main">
           <input
             v-if="name === 'fontSize'"
             v-model="inlineTextInput"
             @keydown.enter.prevent="handleInputSubmit"
+            @keydown.tab="handleInputTab"
+            @focus="selectInlineInput"
+            @click.stop
             type="text"
             class="button-text-input button-text-input--font-size"
             :class="{ 'high-contrast': isHighContrastMode }"
@@ -209,8 +231,21 @@ const caretIcon = computed(() => {
           />
         </span>
 
+        <button
+          v-if="isInlineSplitField"
+          type="button"
+          class="sd-toolbar-button__field-caret sd-toolbar-split-field__caret"
+          :data-item="`btn-${name || ''}-caret`"
+          :aria-label="`${attributes.ariaLabel} options`"
+          :disabled="disabled"
+          tabindex="-1"
+          @mousedown.prevent
+        >
+          <span class="sd-dropdown-caret" v-html="caretIcon" :style="{ opacity: disabled ? 0.6 : 1 }"></span>
+        </button>
+
         <div
-          v-if="hasCaret"
+          v-else-if="hasCaret"
           class="sd-dropdown-caret"
           v-html="caretIcon"
           :style="{ opacity: disabled ? 0.6 : 1 }"
@@ -293,6 +328,11 @@ const caretIcon = computed(() => {
 }
 
 .sd-toolbar-button.split {
+  padding: 0;
+  gap: 0;
+}
+
+.sd-toolbar-button.split-field {
   padding: 0;
   gap: 0;
 }
@@ -414,7 +454,12 @@ const caretIcon = computed(() => {
 }
 
 .button-text-input--font-size {
-  width: 36px;
+  width: 34px;
+  margin-right: 0;
+  padding: 0;
+  border-color: transparent;
+  background-color: transparent;
+  font-size: var(--sd-ui-font-size-500, 15px);
 }
 
 .button-text-input::placeholder {

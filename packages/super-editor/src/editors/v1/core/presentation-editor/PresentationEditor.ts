@@ -1942,20 +1942,38 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Alias for the visible host container so callers can attach listeners explicitly.
    *
-   * This is the main scrollable container that hosts the rendered pages.
-   * Use this element to attach scroll listeners, measure viewport bounds, or
-   * position floating UI elements relative to the editor.
+   * The painted host element that contains the rendered pages. This is
+   * NOT necessarily the scroll container — the scrollable element is
+   * often an ancestor. Use {@link scrollContainer} to attach scroll
+   * listeners or measure the scroll viewport; use the host to position
+   * floating UI relative to the painted content.
    *
    * @returns The visible host HTMLElement
    *
    * @example
    * ```typescript
    * const host = presentation.visibleHost;
-   * host.addEventListener('scroll', () => console.log('Scrolled!'));
+   * const rect = host.getBoundingClientRect();
    * ```
    */
   get visibleHost(): HTMLElement {
     return this.#visibleHost;
+  }
+
+  /**
+   * The resolved scroll container: the nearest ancestor of the visible
+   * host with `overflow: auto`/`scroll` (it may be the host itself). It
+   * can change after the first layout if a closer scrollable ancestor is
+   * detected. Returns `null` when the document/window scrolls instead of
+   * a dedicated element — callers should fall back to `window` then.
+   *
+   * @returns The scroll container element, or `null` when the window scrolls
+   */
+  get scrollContainer(): HTMLElement | null {
+    const container = this.#scrollContainer;
+    if (!container || !('ownerDocument' in container)) return null;
+    const HTMLElementCtor = container.ownerDocument?.defaultView?.HTMLElement;
+    return HTMLElementCtor && container instanceof HTMLElementCtor ? (container as HTMLElement) : null;
   }
 
   /**
@@ -2361,6 +2379,22 @@ export class PresentationEditor extends EventEmitter {
    */
   getRangeRects(from: number, to: number, relativeTo?: HTMLElement): RangeRect[] {
     return this.#computeRangeRects(from, to, relativeTo);
+  }
+
+  /**
+   * Like {@link getRangeRects} but pins the body surface, ignoring any
+   * active header/footer/note session. Used by `ui.viewport.getRect`'s
+   * text-target path (SD-3329): a body-anchored target must return body
+   * geometry even while the user is editing a header/footer, where
+   * `getRangeRects` would otherwise route to the active non-body surface.
+   *
+   * @param from - Start position in the body ProseMirror document
+   * @param to - End position in the body ProseMirror document
+   * @param relativeTo - Optional element for coordinate reference (see {@link getRangeRects})
+   * @returns Array of body-surface rects (pageIndex + position data)
+   */
+  getBodyRangeRects(from: number, to: number, relativeTo?: HTMLElement): RangeRect[] {
+    return this.#computeRangeRects(from, to, relativeTo, { forceBodySurface: true });
   }
 
   /**
@@ -3651,6 +3685,18 @@ export class PresentationEditor extends EventEmitter {
       const localX = normalized.x - context.region.localX;
       const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
       const localY = pageLocalY - context.region.localY;
+
+      // Try DOM hit first — handles page-relative behindDoc fragments that are positioned
+      // outside the H/F region's local coordinate band and would fail the bounds check.
+      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
+      if (domHit) {
+        const doc = this.getActiveEditor().state?.doc;
+        return {
+          ...domHit,
+          pos: doc ? Math.max(0, Math.min(domHit.pos, doc.content.size)) : domHit.pos,
+        };
+      }
+
       if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
         return null;
       }
@@ -3660,8 +3706,7 @@ export class PresentationEditor extends EventEmitter {
       };
       const geometryHit =
         clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
-      const hit = domHit ?? geometryHit;
+      const hit = geometryHit;
       if (!hit) {
         return null;
       }

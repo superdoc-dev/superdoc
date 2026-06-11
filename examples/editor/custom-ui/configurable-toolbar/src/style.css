@@ -56,6 +56,11 @@ button { font: inherit; cursor: pointer; }
 }
 .font-picker-trigger:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
 
+.size-picker-trigger {
+  min-width: 58px;
+  text-align: center;
+}
+
 .font-picker-menu {
   position: absolute;
   z-index: 20;
@@ -67,6 +72,10 @@ button { font: inherit; cursor: pointer; }
   border-radius: 6px;
   background: var(--bg);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.size-picker-menu {
+  min-width: 72px;
 }
 
 .font-picker-option {

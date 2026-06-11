@@ -44,7 +44,7 @@ The demo composes anchored citation pointers on top of `editor.doc.metadata.*` a
 | **Mock RAG output** | Pre-canned text + per-citation payloads (sourceId, displayText, locator, excerpt, confidence). Stand-in for a real generation pipeline. | `mockDraft.ts` |
 | **Insert + attach** | Inserts the text via `editor.doc.insert`, then computes a `SelectionTarget` for each cited span and calls `editor.doc.metadata.attach` per citation. | `GenerateDraftButton.tsx`, `useCitations.ts` |
 | **Sources panel** | Lists citations grouped by `sourceId`. Scroll-to navigation uses `ui.metadata.scrollIntoView({ id })`. Edit form calls `editor.doc.metadata.update`. | `CitationsPanel.tsx` |
-| **Highlight overlay** | Renders one absolute-positioned rectangle per painted line of each cited span. Rects come from `ui.metadata.getRect({ id })`. Remeasures on scroll, resize, ResizeObserver, and MutationObserver. | `CitationHighlights.tsx` |
+| **Highlight overlay** | Renders one absolute-positioned rectangle per painted line of each cited span. Rects come from `ui.metadata.getRect({ id })` and remeasure through `ui.viewport.observe`. | `CitationHighlights.tsx` |
 | **Hover popover** | `ui.viewport.entityAt({ x, y })` returns the content control under the cursor; `metadata.get({ id })` fetches the payload to render. | `CitationPopover.tsx` |
 | **Persistence** | Hidden inline content controls in the body carry the stable id in `w:tag`; payloads live in a namespaced custom XML data part. Survives DOCX export, reopen, and Word save (validated by the `word-roundtrip` fixtures in the monorepo). | `editor.doc.metadata.*` |
 

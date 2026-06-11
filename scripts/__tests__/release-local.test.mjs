@@ -527,9 +527,15 @@ test('release configs suppress per-PR comment spam on prereleases', async () => 
     const content = await readRepoFile(releasercPath);
 
     const usesGithubPlugin = content.includes("'@semantic-release/github'");
-    const usesLinearPlugin = content.includes("'semantic-release-linear-app'");
+    const usesLinearPlugin = content.includes("'../../scripts/semantic-release/linear-commit-sync.cjs'");
 
     if (!usesGithubPlugin && !usesLinearPlugin) continue;
+
+    assert.equal(
+      content.includes("'semantic-release-linear-app'"),
+      false,
+      `${releasercPath}: must use the commit-message Linear sync plugin, not the PR-branch-based external plugin`,
+    );
 
     assert.ok(
       content.includes('const shouldCommentOnRelease = !isPrerelease'),
@@ -546,12 +552,12 @@ test('release configs suppress per-PR comment spam on prereleases', async () => 
     if (usesLinearPlugin) {
       assert.ok(
         content.includes('addComment: shouldCommentOnRelease'),
-        `${releasercPath}: semantic-release-linear-app addComment must be gated through shouldCommentOnRelease so prereleases don't post duplicate Linear comments after a stable -> main sync`,
+        `${releasercPath}: Linear addComment must be gated through shouldCommentOnRelease so prereleases don't post duplicate Linear comments after a stable -> main sync`,
       );
       assert.equal(
         content.includes('addComment: true'),
         false,
-        `${releasercPath}: semantic-release-linear-app must not hardcode addComment: true`,
+        `${releasercPath}: Linear plugin must not hardcode addComment: true`,
       );
     }
   }

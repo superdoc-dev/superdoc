@@ -9,6 +9,7 @@ import { replaceAroundStep } from './replaceAroundStep.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import {
   getCurrentUserIdentity,
@@ -41,6 +42,7 @@ const TRACKABLE_META_KEYS = [
   'superdocSlicePaste',
   'forceTrackChanges',
   'protectTrackedReviewState',
+  CustomSelectionPluginKey.key,
 ];
 
 const PASSTHROUGH_META_KEYS = [
@@ -51,6 +53,7 @@ const PASSTHROUGH_META_KEYS = [
   'composition',
   'addToHistory',
   'superdocSlicePaste',
+  CustomSelectionPluginKey.key,
 ];
 
 const ALLOWED_META_KEYS = new Set([...TRACKABLE_META_KEYS, ySyncPluginKey.key]);

@@ -33,7 +33,7 @@ async function listHighlightTexts(page: import('@playwright/test').Page): Promis
   );
 }
 
-test.skip(!fs.existsSync(COMMENTS_TCS_DIR), 'Test documents not available — run pnpm corpus:pull');
+test.skip(!fs.existsSync(COMMENTS_TCS_DIR), 'Test documents not available — run pnpm --dir tests/visual docs:download');
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 

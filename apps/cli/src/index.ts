@@ -7,6 +7,7 @@ import { normalizeJsonValue } from './lib/input-readers';
 import type { CliIO, CommandContext, CommandExecution, ExecutionMode, GlobalOptions, OutputMode } from './lib/types';
 import { runCall } from './commands/call';
 import { runClose } from './commands/close';
+import { runInteractive, runScript } from './commands/interactive';
 import { runInsertLineBreak, runInsertTab } from './commands/insert-inline-special';
 import { runOpen } from './commands/open';
 import { runSessionClose } from './commands/session-close';
@@ -49,6 +50,8 @@ const HELP = [
   '  --session <id>',
   '  --timeout-ms <n>',
   '  --quiet',
+  '  -i, --interactive   Start interactive REPL',
+  '  -s, --script <file> Run a script file',
   '  --help, -h',
   '  --version, -v',
 ].join('\n');
@@ -377,6 +380,14 @@ export async function run(
 
       if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
         return await runUninstall(parsed.rest.slice(1), io);
+      }
+
+      if (parsed.globals.script) {
+        return await runScript(parsed.globals.script, io);
+      }
+
+      if (parsed.globals.interactive) {
+        return await runInteractive(parsed.rest, io);
       }
 
       if (parsed.rest[0] === 'call' && outputMode !== 'json') {

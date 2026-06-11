@@ -60,6 +60,8 @@ export interface GlobalOptions {
   quiet: boolean;
   help: boolean;
   version: boolean;
+  interactive: boolean;
+  script?: string;
 }
 
 export interface CliIO {

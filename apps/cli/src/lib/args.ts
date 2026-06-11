@@ -50,6 +50,8 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
   let quiet = false;
   let help = false;
   let version = false;
+  let interactive = false;
+  let script: string | undefined;
   const rest: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -82,6 +84,26 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
 
     if (token === '--version' || token === '-v') {
       version = true;
+      continue;
+    }
+
+    if (token === '--interactive' || token === '-i') {
+      interactive = true;
+      continue;
+    }
+
+    if (token === '--script' || token === '-s') {
+      const next = argv[index + 1];
+      if (!next) {
+        throw new CliError('MISSING_REQUIRED', '--script requires a file path.');
+      }
+      script = next;
+      index += 1;
+      continue;
+    }
+
+    if (token.startsWith('--script=')) {
+      script = token.slice('--script='.length);
       continue;
     }
 
@@ -151,6 +173,8 @@ export function parseGlobalArgs(argv: string[]): { globals: GlobalOptions; rest:
       quiet,
       help,
       version,
+      interactive,
+      script,
     },
     rest,
   };

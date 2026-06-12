@@ -142,18 +142,44 @@ jobs:
       # `git tag --points-at HEAD`. After CLI -> SDK -> MCP, HEAD lands on
       # MCP's version commit and the SDK tag is no longer at HEAD.
       #
+      # The orchestrator writes recovered Python wheels to a temp dir under the
+      # runner's /tmp. The pypa publish action runs in a Docker container that
+      # only mounts the workspace and runner_temp (not /tmp), so an absolute
+      # /tmp packages-dir is invisible inside the container. Stage the snapshot
+      # into the workspace and publish from a workspace-relative path, like the
+      # non-recovery publish steps below.
+      - name: Stage recovered SDK Python snapshot into workspace
+        id: stage_recovered_python
+        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != '' || steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+        env:
+          COMPANION_SRC: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+          MAIN_SRC: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+        run: |
+          set -euo pipefail
+          stage_dir="$GITHUB_WORKSPACE/.recovered-python-snapshot"
+          rm -rf "$stage_dir"
+          mkdir -p "$stage_dir"
+          if [ -n "${COMPANION_SRC:-}" ]; then
+            cp -R "$COMPANION_SRC" "$stage_dir/companion-dist"
+            echo "companion_dir=.recovered-python-snapshot/companion-dist" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${MAIN_SRC:-}" ]; then
+            cp -R "$MAIN_SRC" "$stage_dir/dist"
+            echo "main_dir=.recovered-python-snapshot/dist" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish recovered SDK companion Python packages to PyPI
-        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
+        if: steps.stage_recovered_python.outputs.companion_dir != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+          packages-dir: ${{ steps.stage_recovered_python.outputs.companion_dir }}
           skip-existing: true
 
       - name: Publish recovered SDK main Python package to PyPI
-        if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+        if: steps.stage_recovered_python.outputs.main_dir != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+          packages-dir: ${{ steps.stage_recovered_python.outputs.main_dir }}
           skip-existing: true
 
       - name: Build and verify Python SDK

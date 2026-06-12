@@ -876,6 +876,7 @@ const CONNECTOR_PRESET_SHAPES = new Set([
   'curvedConnector4',
   'curvedConnector5',
 ]);
+const CONNECTOR_SVG_ELEMENTS = 'path, line, polyline';
 // Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
 
 /**
@@ -3320,7 +3321,7 @@ export class DomPainter {
   }
 
   private applyNonScalingStrokeToConnector(svgElement: SVGElement): void {
-    svgElement.querySelectorAll('path, line, polyline').forEach((target) => {
+    svgElement.querySelectorAll(CONNECTOR_SVG_ELEMENTS).forEach((target) => {
       const stroke = target.getAttribute('stroke');
       if (!stroke || stroke === 'none') return;
       target.setAttribute('vector-effect', 'non-scaling-stroke');
@@ -3771,6 +3772,15 @@ export class DomPainter {
 </svg>`;
       }
 
+      if (this.isConnectorPresetShape(block.shapeKind)) {
+        const connectorSvg = this.tryCreateConnectorPresetSvg(
+          block,
+          widthOverride ?? block.geometry.width,
+          heightOverride ?? block.geometry.height,
+        );
+        if (connectorSvg) return connectorSvg;
+      }
+
       return getPresetShapeSvg({
         preset: block.shapeKind ?? '',
         styleOverrides: () => ({
@@ -3784,6 +3794,63 @@ export class DomPainter {
     } catch (error) {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
+    }
+  }
+
+  private tryCreateConnectorPresetSvg(
+    block: ShapeTextDrawingWithEffects,
+    width: number,
+    height: number,
+  ): string | null {
+    const pathD = this.getConnectorPresetPath(block.shapeKind, width, height);
+    if (!pathD) return null;
+
+    const stroke =
+      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : '#000000';
+    const strokeWidth = block.strokeWidth ?? 1;
+    const formattedWidth = this.formatSvgNumber(width);
+    const formattedHeight = this.formatSvgNumber(height);
+    const strokePadding = stroke !== 'none' && strokeWidth > 0 ? strokeWidth / 2 : 0;
+    const viewBoxX = this.formatSvgNumber(-strokePadding);
+    const viewBoxY = this.formatSvgNumber(-strokePadding);
+    const viewBoxWidth = this.formatSvgNumber(width + strokePadding * 2);
+    const viewBoxHeight = this.formatSvgNumber(height + strokePadding * 2);
+
+    return `<svg xmlns="${SVG_NS}" width="${formattedWidth}" height="${formattedHeight}" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}">
+  <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="${this.formatSvgNumber(strokeWidth)}" vector-effect="non-scaling-stroke" />
+</svg>`;
+  }
+
+  private getConnectorPresetPath(shapeKind: string | null | undefined, width: number, height: number): string | null {
+    const w = Math.max(0, width);
+    const h = Math.max(0, height);
+    const xMid = w / 2;
+    const yMid = h / 2;
+    const xQuarter = w * 0.25;
+    const xThreeQuarter = w * 0.75;
+    const yQuarter = h * 0.25;
+    const yThreeQuarter = h * 0.75;
+    const fmt = (value: number): string => this.formatSvgNumber(value);
+
+    switch (shapeKind) {
+      case 'bentConnector2':
+        return `M 0 0 L ${fmt(w)} 0 L ${fmt(w)} ${fmt(h)}`;
+      case 'bentConnector3':
+        return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+      case 'bentConnector4':
+        return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(w)} ${fmt(yMid)} L ${fmt(w)} ${fmt(h)}`;
+      case 'bentConnector5':
+        return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+      case 'curvedConnector2':
+        return `M 0 0 C ${fmt(xMid)} 0 ${fmt(w)} ${fmt(yMid)} ${fmt(w)} ${fmt(h)}`;
+      case 'curvedConnector3':
+        return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(yQuarter)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yThreeQuarter)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+      case 'curvedConnector4':
+        return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(w * 0.625)} ${fmt(yMid)} ${fmt(xThreeQuarter)} ${fmt(yMid)} C ${fmt(w * 0.875)} ${fmt(yMid)} ${fmt(w)} ${fmt(yThreeQuarter)} ${fmt(w)} ${fmt(h)}`;
+      case 'curvedConnector5':
+        return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(h * 0.625)} ${fmt(xMid)} ${fmt(yThreeQuarter)} C ${fmt(xMid)} ${fmt(h * 0.875)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+      default:
+        return null;
     }
   }
 

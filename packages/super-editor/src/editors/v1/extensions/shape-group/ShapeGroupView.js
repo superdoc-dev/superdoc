@@ -13,7 +13,6 @@ const CONNECTOR_PRESET_SHAPES = new Set([
   'curvedConnector4',
   'curvedConnector5',
 ]);
-
 function isConnectorPresetShape(kind) {
   return typeof kind === 'string' && CONNECTOR_PRESET_SHAPES.has(kind);
 }
@@ -22,6 +21,47 @@ function applyNonScalingStrokeToConnectorTarget(target) {
   const stroke = target.getAttribute('stroke');
   if (!stroke || stroke === 'none') return;
   target.setAttribute('vector-effect', 'non-scaling-stroke');
+}
+
+function formatSvgNumber(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '0';
+}
+
+function getConnectorPresetPath(kind, width, height) {
+  const w = Math.max(0, width);
+  const h = Math.max(0, height);
+  const xMid = w / 2;
+  const yMid = h / 2;
+  const xQuarter = w * 0.25;
+  const xThreeQuarter = w * 0.75;
+  const yQuarter = h * 0.25;
+  const yThreeQuarter = h * 0.75;
+  const fmt = formatSvgNumber;
+
+  switch (kind) {
+    case 'bentConnector2':
+      return `M 0 0 L ${fmt(w)} 0 L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector3':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector4':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(w)} ${fmt(yMid)} L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector5':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector2':
+      return `M 0 0 C ${fmt(xMid)} 0 ${fmt(w)} ${fmt(yMid)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector3':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(yQuarter)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yThreeQuarter)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector4':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(w * 0.625)} ${fmt(yMid)} ${fmt(xThreeQuarter)} ${fmt(yMid)} C ${fmt(w * 0.875)} ${fmt(yMid)} ${fmt(w)} ${fmt(yThreeQuarter)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector5':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(h * 0.625)} ${fmt(xMid)} ${fmt(yThreeQuarter)} C ${fmt(xMid)} ${fmt(h * 0.875)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+    default:
+      return null;
+  }
+}
+
+function getConnectorStrokePadding(strokeColor, strokeWidth) {
+  return strokeColor !== null && strokeWidth > 0 ? strokeWidth / 2 : 0;
 }
 
 export class ShapeGroupView {
@@ -386,6 +426,58 @@ export class ShapeGroupView {
       }
 
       // Add text content if present
+      if (attrs.textContent && attrs.textContent.parts) {
+        const pageNumber = this.editor?.options?.currentPageNumber;
+        const pageNumberText = this.editor?.options?.currentPageNumberText;
+        const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+        const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+        const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
+        const totalPages = this.editor?.options?.totalPageCount;
+        const sectionPageCount = this.editor?.options?.sectionPageCount;
+        const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
+          textVerticalAlign: attrs.textVerticalAlign,
+          textInsets: attrs.textInsets,
+          pageNumber,
+          pageNumberText,
+          pageNumberDisplayNumber,
+          pageNumberChapterText,
+          pageNumberChapterSeparator,
+          totalPages,
+          sectionPageCount,
+        });
+        if (textGroup) {
+          g.appendChild(textGroup);
+        }
+      }
+      return g;
+    }
+
+    if (isConnectorPresetShape(shapeKind)) {
+      const strokePadding = getConnectorStrokePadding(strokeColor, strokeWidth);
+      const pathWidth = Math.max(0, width - strokePadding * 2);
+      const pathHeight = Math.max(0, height - strokePadding * 2);
+      const pathD = getConnectorPresetPath(shapeKind, pathWidth, pathHeight);
+      if (pathD) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', strokeColor === null ? 'none' : strokeColor || '#000000');
+        path.setAttribute('stroke-width', (strokeColor === null ? 0 : strokeWidth).toString());
+        if (strokePadding > 0) {
+          path.setAttribute(
+            'transform',
+            `translate(${formatSvgNumber(strokePadding)}, ${formatSvgNumber(strokePadding)})`,
+          );
+        }
+        applyNonScalingStrokeToConnectorTarget(path);
+
+        if (lineEnds && strokeColor !== null) {
+          const markerBase = `line-end-${shapeIndex}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+          this.applyLineEndsToTarget(path, lineEnds, strokeColor, strokeWidth, defs, markerBase);
+        }
+        g.appendChild(path);
+      }
+
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
         const pageNumberText = this.editor?.options?.currentPageNumberText;

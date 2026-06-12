@@ -180,7 +180,7 @@ describe('DomPainter shape regressions', () => {
     expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 10 0 L 0 5 L 10 10 Z');
   });
 
-  it('keeps bent connector stroke thickness uniform under non-uniform SVG scaling', () => {
+  it('renders bent connector strokes in target coordinates', () => {
     const geometry: DrawingGeometry = { width: 427, height: 28, rotation: 0, flipH: false, flipV: false };
     const drawingBlock: DrawingFlowBlock = {
       kind: 'drawing',
@@ -198,9 +198,44 @@ describe('DomPainter shape regressions', () => {
     painter.paint(layout, mount);
 
     const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
-    expect(path?.getAttribute('d')).toBe('M 0 0 L 50 0 L 50 100 L 100 100');
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('-0.5 -0.5 428 29');
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 213.5 0 L 213.5 28 L 427 28');
     expect(path?.getAttribute('stroke-width')).toBe('1');
     expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
+  it('renders bent connector arrowheads without a stretched 100x100 connector viewBox', () => {
+    const geometry: DrawingGeometry = { width: 418, height: 169, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'bent-connector-arrow-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'bentConnector3',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const path = Array.from(svg?.querySelectorAll('path') ?? []).find((candidate) => !candidate.closest('marker')) as
+      | SVGPathElement
+      | undefined;
+    const marker = svg?.querySelector('marker[id*="tail"]') as SVGMarkerElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('-0.5 -0.5 419 170');
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 209 0 L 209 169 L 418 169');
+    expect(path?.getAttribute('marker-end')).toContain('bent-connector-arrow-uniform-stroke');
+    expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+    expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
+    expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 0 0 L 10 5 L 0 10 Z');
   });
 
   it('generates roundRect preset geometry in the target coordinate space', () => {

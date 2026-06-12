@@ -213,9 +213,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     throw new Error('Document is required for table rendering');
   }
   const tableBorders = block.attrs?.borders;
-  const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
-  const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
-
   // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
   // table-level properties (borders, margins, indent) are mirrored.
   const isRtl = getTableVisualDirection(block.attrs) === 'rtl';
@@ -530,7 +527,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         tableBorders,
         columnWidths: effectiveColumnWidths,
         allRowHeights,
-        tableIndent,
         isRtl,
         context,
         renderLine,
@@ -708,7 +704,6 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       tableBorders,
       columnWidths: effectiveColumnWidths,
       allRowHeights,
-      tableIndent,
       isRtl,
       context,
       renderLine,

@@ -268,8 +268,6 @@ type TableRowRenderDependencies = {
   columnWidths: number[];
   /** All row heights for calculating rowspan cell heights */
   allRowHeights: number[];
-  /** Table indent in pixels (applied to table fragment positioning) */
-  tableIndent?: number;
   /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
   isRtl?: boolean;
   /** Rendering context */
@@ -540,7 +538,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     tableBorders,
     columnWidths,
     allRowHeights,
-    tableIndent,
     isRtl,
     context,
     renderLine,
@@ -902,7 +899,6 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       onSdtContainerChrome,
       fromLine,
       toLine,
-      tableIndent,
       isRtl,
       cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
       chrome,

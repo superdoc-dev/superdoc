@@ -20,17 +20,73 @@ const CONNECTOR_PRESET_SHAPES = new Set([
   'curvedConnector4',
   'curvedConnector5',
 ]);
+const CONNECTOR_SVG_ELEMENTS = 'path, line, polyline';
 
 function isConnectorPresetShape(kind) {
   return typeof kind === 'string' && CONNECTOR_PRESET_SHAPES.has(kind);
 }
 
 function applyNonScalingStrokeToConnector(svgElement) {
-  svgElement.querySelectorAll('path, line, polyline').forEach((target) => {
+  svgElement.querySelectorAll(CONNECTOR_SVG_ELEMENTS).forEach((target) => {
     const stroke = target.getAttribute('stroke');
     if (!stroke || stroke === 'none') return;
     target.setAttribute('vector-effect', 'non-scaling-stroke');
   });
+}
+
+function formatSvgNumber(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '0';
+}
+
+function getConnectorPresetPath(kind, width, height) {
+  const w = Math.max(0, width);
+  const h = Math.max(0, height);
+  const xMid = w / 2;
+  const yMid = h / 2;
+  const xQuarter = w * 0.25;
+  const xThreeQuarter = w * 0.75;
+  const yQuarter = h * 0.25;
+  const yThreeQuarter = h * 0.75;
+  const fmt = formatSvgNumber;
+
+  switch (kind) {
+    case 'bentConnector2':
+      return `M 0 0 L ${fmt(w)} 0 L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector3':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector4':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(w)} ${fmt(yMid)} L ${fmt(w)} ${fmt(h)}`;
+    case 'bentConnector5':
+      return `M 0 0 L ${fmt(xMid)} 0 L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(yMid)} L ${fmt(xMid)} ${fmt(h)} L ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector2':
+      return `M 0 0 C ${fmt(xMid)} 0 ${fmt(w)} ${fmt(yMid)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector3':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(yQuarter)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yThreeQuarter)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector4':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(w * 0.625)} ${fmt(yMid)} ${fmt(xThreeQuarter)} ${fmt(yMid)} C ${fmt(w * 0.875)} ${fmt(yMid)} ${fmt(w)} ${fmt(yThreeQuarter)} ${fmt(w)} ${fmt(h)}`;
+    case 'curvedConnector5':
+      return `M 0 0 C ${fmt(xQuarter)} 0 ${fmt(xMid)} ${fmt(h * 0.125)} ${fmt(xMid)} ${fmt(yQuarter)} C ${fmt(xMid)} ${fmt(h * 0.375)} ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(yMid)} C ${fmt(xMid)} ${fmt(yMid)} ${fmt(xMid)} ${fmt(h * 0.625)} ${fmt(xMid)} ${fmt(yThreeQuarter)} C ${fmt(xMid)} ${fmt(h * 0.875)} ${fmt(xThreeQuarter)} ${fmt(h)} ${fmt(w)} ${fmt(h)}`;
+    default:
+      return null;
+  }
+}
+
+function createConnectorPresetSvg({ kind, strokeColor, strokeWidth, width, height }) {
+  const pathD = getConnectorPresetPath(kind, width, height);
+  if (!pathD) return null;
+
+  const stroke = strokeColor === null ? 'none' : strokeColor || '#000000';
+  const resolvedStrokeWidth = strokeWidth ?? 1;
+  const formattedWidth = formatSvgNumber(width);
+  const formattedHeight = formatSvgNumber(height);
+  const strokePadding = stroke !== 'none' && resolvedStrokeWidth > 0 ? resolvedStrokeWidth / 2 : 0;
+  const viewBoxX = formatSvgNumber(-strokePadding);
+  const viewBoxY = formatSvgNumber(-strokePadding);
+  const viewBoxWidth = formatSvgNumber(width + strokePadding * 2);
+  const viewBoxHeight = formatSvgNumber(height + strokePadding * 2);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formattedWidth}" height="${formattedHeight}" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}">
+  <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="${formatSvgNumber(resolvedStrokeWidth)}" vector-effect="non-scaling-stroke" />
+</svg>`;
 }
 
 export class VectorShapeView {
@@ -571,6 +627,10 @@ export class VectorShapeView {
 
   generateSVG({ kind, fillColor, strokeColor, strokeWidth, width, height }) {
     try {
+      if (isConnectorPresetShape(kind)) {
+        return createConnectorPresetSvg({ kind, strokeColor, strokeWidth, width, height });
+      }
+
       // For complex fill types (gradients, alpha), use a placeholder or extract the color
       let fill = fillColor || 'none';
       if (fillColor && typeof fillColor === 'object') {

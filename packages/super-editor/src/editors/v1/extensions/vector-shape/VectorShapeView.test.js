@@ -410,7 +410,7 @@ describe('VectorShapeView', () => {
       expect(svg.getAttribute('height')).toBe('50');
     });
 
-    it('keeps connector preset strokes non-scaling under non-uniform scaling', () => {
+    it('renders connector presets in target coordinates with non-scaling strokes and line ends', () => {
       const connectorNode = {
         attrs: {
           kind: 'bentConnector3',
@@ -419,12 +419,11 @@ describe('VectorShapeView', () => {
           fillColor: null,
           strokeColor: '#5b9bd5',
           strokeWidth: 1,
+          lineEnds: {
+            tail: { type: 'triangle' },
+          },
         },
       };
-
-      const mockSvgTemplate =
-        '<svg viewBox="0 0 100 100"><path d="M 0 0 L 50 0 L 50 100 L 100 100" fill="none" stroke="#5b9bd5" stroke-width="1" /></svg>';
-      presetGeometry.getPresetShapeSvg.mockReturnValue(mockSvgTemplate);
 
       const view = new VectorShapeView({
         node: connectorNode,
@@ -436,8 +435,15 @@ describe('VectorShapeView', () => {
         htmlAttributes: {},
       });
 
-      const path = view.dom.querySelector('svg path');
+      const svg = view.dom.querySelector('svg');
+      const path = [...view.dom.querySelectorAll('svg path')].find((candidate) => !candidate.closest('marker'));
+      const marker = view.dom.querySelector('svg marker');
+      expect(presetGeometry.getPresetShapeSvg).not.toHaveBeenCalled();
+      expect(svg.getAttribute('viewBox')).toBe('-0.5 -0.5 428 29');
+      expect(path.getAttribute('d')).toBe('M 0 0 L 213.5 0 L 213.5 28 L 427 28');
       expect(path.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+      expect(path.getAttribute('marker-end')).toContain('tail');
+      expect(marker.getAttribute('markerUnits')).toBe('strokeWidth');
     });
   });
 

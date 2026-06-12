@@ -438,7 +438,7 @@ export class VectorShapeView {
   /**
    * Applies line end markers (arrowheads) to an SVG element.
    * @param {SVGElement} svg - The SVG element to apply markers to
-   * @param {Object} attrs - Shape attributes containing lineEnds, strokeColor, strokeWidth, effectExtent
+   * @param {Object} attrs - Shape attributes containing lineEnds, strokeColor, strokeWidth
    */
   applyLineEnds(svg, attrs) {
     const lineEnds = attrs.lineEnds;
@@ -458,13 +458,13 @@ export class VectorShapeView {
 
     if (lineEnds.head) {
       const id = `${idBase}-head`;
-      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true, attrs.effectExtent);
+      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true);
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
     if (lineEnds.tail) {
       const id = `${idBase}-tail`;
-      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false, attrs.effectExtent);
+      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false);
       target.setAttribute('marker-end', `url(#${id})`);
     }
   }
@@ -477,9 +477,8 @@ export class VectorShapeView {
    * @param {string} strokeColor - Color to use for the marker fill
    * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
    * @param {boolean} isStart - Whether this is a start marker (head) or end marker (tail)
-   * @param {Object|null} effectExtent - Effect extent for sizing, or null
    */
-  createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {
+  createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart) {
     if (defs.querySelector(`#${id}`)) return;
 
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
@@ -492,13 +491,9 @@ export class VectorShapeView {
       if (value === 'lg') return 1.25;
       return 1;
     };
-    const effectMax = effectExtent
-      ? Math.max(effectExtent.left || 0, effectExtent.right || 0, effectExtent.top || 0, effectExtent.bottom || 0)
-      : 0;
-    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
-    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
-    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
-    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
+    const markerWidth = 8 * sizeScale(lineEnd.length);
+    const markerHeight = 8 * sizeScale(lineEnd.width);
+    marker.setAttribute('markerUnits', 'strokeWidth');
     marker.setAttribute('markerWidth', markerWidth.toString());
     marker.setAttribute('markerHeight', markerHeight.toString());
     marker.setAttribute('refX', isStart ? '0' : '10');

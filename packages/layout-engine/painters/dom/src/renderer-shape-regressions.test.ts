@@ -126,6 +126,33 @@ describe('DomPainter shape regressions', () => {
     expect(line?.getAttribute('marker-end')).toContain('straight-connector-tail-end');
   });
 
+  it('keeps straight connector line-end markers stroke-relative when effect extent is present', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 16, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-effect-extent-tail-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const marker = mount.querySelector('.superdoc-vector-shape svg marker[id*="tail"]') as SVGMarkerElement | null;
+    expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
+    expect(marker?.getAttribute('markerWidth')).toBe('8');
+    expect(marker?.getAttribute('markerHeight')).toBe('8');
+  });
+
   it('renders DrawingML headEnd on the visual start of a straight connector', () => {
     const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
     const drawingBlock: DrawingFlowBlock = {
@@ -1116,8 +1143,8 @@ describe('DomPainter shape regressions', () => {
     const marker = childWrapper?.querySelector('marker') as SVGMarkerElement | null;
     expect(marker).toBeTruthy();
     expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
-    expect(marker?.getAttribute('markerWidth')).toBe('4');
-    expect(marker?.getAttribute('markerHeight')).toBe('4');
+    expect(marker?.getAttribute('markerWidth')).toBe('8');
+    expect(marker?.getAttribute('markerHeight')).toBe('8');
     expect(childWrapper?.querySelector('feDropShadow')).toBeTruthy();
   });
 

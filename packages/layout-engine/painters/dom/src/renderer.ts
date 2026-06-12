@@ -3899,29 +3899,13 @@ export class DomPainter {
 
     if (lineEnds.head) {
       const id = `${baseId}-head`;
-      this.appendLineEndMarker(
-        defs,
-        id,
-        lineEnds.head,
-        strokeColor,
-        strokeWidth,
-        true,
-        block.effectExtent ?? undefined,
-      );
+      this.appendLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true);
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
     if (lineEnds.tail) {
       const id = `${baseId}-tail`;
-      this.appendLineEndMarker(
-        defs,
-        id,
-        lineEnds.tail,
-        strokeColor,
-        strokeWidth,
-        false,
-        block.effectExtent ?? undefined,
-      );
+      this.appendLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false);
       target.setAttribute('marker-end', `url(#${id})`);
     }
   }
@@ -4076,7 +4060,6 @@ export class DomPainter {
     strokeColor: string,
     _strokeWidth: number,
     isStart: boolean,
-    effectExtent?: EffectExtent,
   ): void {
     if (defs.querySelector(`#${id}`)) return;
 
@@ -4090,13 +4073,9 @@ export class DomPainter {
       if (value === 'lg') return 1.25;
       return 1;
     };
-    const effectMax = effectExtent
-      ? Math.max(effectExtent.left ?? 0, effectExtent.right ?? 0, effectExtent.top ?? 0, effectExtent.bottom ?? 0)
-      : 0;
-    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
-    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
-    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
-    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
+    const markerWidth = 8 * sizeScale(lineEnd.length);
+    const markerHeight = 8 * sizeScale(lineEnd.width);
+    marker.setAttribute('markerUnits', 'strokeWidth');
     marker.setAttribute('markerWidth', markerWidth.toString());
     marker.setAttribute('markerHeight', markerHeight.toString());
     marker.setAttribute('refX', isStart ? '0' : '10');
@@ -4268,7 +4247,7 @@ export class DomPainter {
     }
     const attrs = child.attrs as VectorShapeStyle;
     // Producers must include equivalent group-level effectExtent for edge children so the fragment can grow.
-    // Line-end markers use effectExtent for marker sizing; do not overload it with stroke paint room.
+    // Line-end markers use stroke-relative sizing; do not overload this with stroke paint room.
     const shadowExtent = attrs.effects?.outerShadow
       ? getSharedOuterShadowPaintExtent(attrs.effects.outerShadow)
       : { left: 0, top: 0, right: 0, bottom: 0 };

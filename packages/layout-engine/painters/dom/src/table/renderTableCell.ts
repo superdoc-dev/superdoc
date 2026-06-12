@@ -1126,8 +1126,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const objectHeight = anchoredMeasure.height;
 
       const baseLeft = anchor.offsetH ?? 0;
-      const indentOffset = typeof tableIndent === 'number' && Number.isFinite(tableIndent) ? tableIndent : 0;
-      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
+      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x : baseLeft;
       const top = anchor.offsetV ?? 0;
 
       const behindDoc =

@@ -1,0 +1,16 @@
+{
+  "name": "@superdoc-demos/basic-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "npx serve dist -l $PORT"
+  },
+  "dependencies": {
+    "superdoc": "1.40.0"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}

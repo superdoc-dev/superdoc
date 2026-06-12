@@ -3816,7 +3816,7 @@ export class DomPainter {
     const viewBoxWidth = this.formatSvgNumber(width + strokePadding * 2);
     const viewBoxHeight = this.formatSvgNumber(height + strokePadding * 2);
 
-    return `<svg xmlns="${SVG_NS}" width="${formattedWidth}" height="${formattedHeight}" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}">
+    return `<svg xmlns="${SVG_NS}" width="${formattedWidth}" height="${formattedHeight}" viewBox="${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}" preserveAspectRatio="none">
   <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="${this.formatSvgNumber(strokeWidth)}" vector-effect="non-scaling-stroke" />
 </svg>`;
   }

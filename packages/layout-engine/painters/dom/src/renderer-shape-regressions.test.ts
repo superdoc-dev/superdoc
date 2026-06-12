@@ -200,6 +200,7 @@ describe('DomPainter shape regressions', () => {
     const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
     const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
     expect(svg?.getAttribute('viewBox')).toBe('-0.5 -0.5 428 29');
+    expect(svg?.getAttribute('preserveAspectRatio')).toBe('none');
     expect(path?.getAttribute('d')).toBe('M 0 0 L 213.5 0 L 213.5 28 L 427 28');
     expect(path?.getAttribute('stroke-width')).toBe('1');
     expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');

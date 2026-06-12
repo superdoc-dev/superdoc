@@ -34,11 +34,13 @@ SuperDoc works with plain JavaScript. No framework required.
 
 ```javascript NPM/Bundler
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc/fonts';
 import 'superdoc/style.css';
 
 const superdoc = new SuperDoc({
   selector: '#editor',
-  document: 'contract.docx'
+  document: 'contract.docx',
+  fonts: superdocFonts,
 });
 ```
 

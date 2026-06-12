@@ -23,6 +23,10 @@ Replace the local `<script>` and `<link>` with jsDelivr URLs:
 
 Pin to a specific version (e.g. `superdoc@1.26.0`) in production and add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for integrity.
 
+## Fonts
+
+SuperDoc's bundled fallback fonts load from `dist/fonts/` next to the script. From the public CDN they resolve automatically (`superdoc@<version>/dist/fonts/...`), so there's nothing to configure. When you self-host the bundle, serve a `fonts/` folder beside `superdoc.min.js`. The `pnpm setup` step above copies it in for you.
+
 ## Learn more
 
 - [Vanilla JS Guide](https://docs.superdoc.dev/getting-started/frameworks/vanilla-js)

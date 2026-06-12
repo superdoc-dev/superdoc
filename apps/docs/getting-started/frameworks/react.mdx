@@ -9,7 +9,7 @@ SuperDoc provides `@superdoc-dev/react`: a first-party wrapper with lifecycle ma
 ## Install
 
 ```bash
-npm install @superdoc-dev/react
+npm install @superdoc-dev/react @superdoc/fonts
 ```
 
 <Note>
@@ -20,12 +20,14 @@ npm install @superdoc-dev/react
 
 ```jsx
 import { SuperDocEditor } from '@superdoc-dev/react';
+import { superdocFonts } from '@superdoc/fonts';
 import '@superdoc-dev/react/style.css';
 
 function App() {
   return (
     <SuperDocEditor
       document={file}
+      fonts={superdocFonts}
       documentMode="editing"
       onReady={() => console.log('Editor ready!')}
     />

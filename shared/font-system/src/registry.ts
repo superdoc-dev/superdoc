@@ -8,6 +8,18 @@ import type {
   RegisterFaceResult,
   RequiredFace,
 } from './types';
+import { BUNDLED_MANIFEST } from './bundled-manifest';
+
+/**
+ * Physical family NAMES SuperDoc ships as bundled substitutes (Carlito, Liberation Sans, ...). When a
+ * face under one of these fails to load, it is almost always the bundled `.woff2` not being served - a
+ * setup problem with one clear fix - so we route it to the actionable "install @superdoc/fonts / set
+ * assetBaseUrl" warning. This is a NAME match, not true provenance: a customer `fonts.add` face that
+ * happens to be named e.g. "Carlito" would route here too. That collision is rare and the guidance is
+ * still reasonable, so the simpler name check is preferred over threading a provenance flag through
+ * registration.
+ */
+const BUNDLED_SUBSTITUTE_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 
 /**
  * Default per-font budget the gate waits before treating a face as `timed_out`
@@ -172,6 +184,8 @@ export class FontRegistry {
   readonly #sources = new Map<string, string[]>();
   /** Families already warned about a load failure, so the warning fires at most once each. */
   readonly #warnedFailures = new Set<string>();
+  /** Whether the single actionable "bundled fonts aren't being served" warning has fired (once per registry). */
+  #warnedBundledSubstituteFailure = false;
   /** In-flight family loads, so concurrent awaits of one family share a single probe. */
   readonly #inflight = new Map<string, Promise<FontLoadResult>>();
 
@@ -546,6 +560,13 @@ export class FontRegistry {
 
   /** Warn once per face when its asset fails to load, naming the attempted URL. */
   #warnFaceFailureOnce(request: FontFaceRequest, key: string): void {
+    // A bundled substitute that fails to load is a setup problem (the .woff2 are not served),
+    // not a one-off per-face issue - route it to the single actionable warning instead of N
+    // per-face lines.
+    if (BUNDLED_SUBSTITUTE_FAMILIES.has(request.family)) {
+      this.#warnBundledSubstituteFailureOnce(request.family);
+      return;
+    }
     if (this.#warnedFaceFailures.has(key)) return;
     this.#warnedFaceFailures.add(key);
     const src = this.#faceSources.get(key);
@@ -601,6 +622,10 @@ export class FontRegistry {
    * is never silent - the report also flags it (`missing: true`, `loadStatus: 'failed'`).
    */
   #warnLoadFailureOnce(family: string): void {
+    if (BUNDLED_SUBSTITUTE_FAMILIES.has(family)) {
+      this.#warnBundledSubstituteFailureOnce(family);
+      return;
+    }
     if (this.#warnedFailures.has(family)) return;
     this.#warnedFailures.add(family);
     const sources = this.#sources.get(family);
@@ -609,6 +634,27 @@ export class FontRegistry {
     console.warn(
       `[superdoc] font asset failed to load for "${family}"${detail}. ` +
         `Check fonts.assetBaseUrl / fonts.resolveAssetUrl so the bundled .woff2 are served.`,
+    );
+  }
+
+  /**
+   * Fire a single actionable warning (once per registry) when a BUNDLED substitute face fails to
+   * load - i.e. the reviewed fallback `.woff2` are not being served. This is almost always a setup
+   * problem in an npm/bundler app: the font files sit in `node_modules` but are never exposed at a
+   * URL, so substitution silently falls back to the logical font name and text looks unchanged on
+   * machines that lack the original font. Name the two concrete fixes instead of leaving it silent.
+   */
+  #warnBundledSubstituteFailureOnce(family: string): void {
+    if (this.#warnedBundledSubstituteFailure) return;
+    this.#warnedBundledSubstituteFailure = true;
+    console.warn(
+      `[superdoc] Bundled fallback fonts failed to load (e.g. "${family}"). Text will render with ` +
+        `system fallbacks, so some fonts may look unchanged on machines that lack them. Fix one of:\n` +
+        `  - install @superdoc/fonts and pass it:\n` +
+        `      import { superdocFonts } from '@superdoc/fonts';\n` +
+        `      new SuperDoc({ /* ... */ fonts: superdocFonts });\n` +
+        `  - or set fonts.assetBaseUrl / fonts.resolveAssetUrl to where the bundled .woff2 are served.\n` +
+        `Docs: https://docs.superdoc.dev/getting-started/fonts`,
     );
   }
 }

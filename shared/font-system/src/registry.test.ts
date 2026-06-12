@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   FontRegistry,
   getFontRegistryFor,
@@ -450,5 +450,60 @@ describe('hasFace oracle (provider-only, failure-aware, weight-bucketed)', () =>
     // ...and the FontFace is built at the bucketed weight, so it renders 400 (not its true 500).
     const face = fontSet.added.find((f) => f.family === 'Heavy') as unknown as { descriptors?: { weight?: string } };
     expect(face?.descriptors?.weight).toBe('400');
+  });
+});
+
+describe('bundled-substitute load-failure warning', () => {
+  let fontSet: FakeFontSet;
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fontSet = new FakeFontSet();
+    __resetDefaultFontRegistry();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  const bundledWarnings = () =>
+    warn.mock.calls.map((c) => String(c[0])).filter((m) => /Bundled fallback fonts failed to load/.test(m));
+
+  it('routes a failed bundled substitute to one actionable warning', async () => {
+    // "Carlito" is a bundled substitute (in BUNDLED_MANIFEST).
+    fontSet.behaviors.set('Carlito', 'reject');
+    const { registry } = makeRegistry(fontSet);
+
+    const result = await registry.awaitFace('Carlito', 1000);
+
+    expect(result.status).toBe('failed');
+    const warnings = bundledWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('@superdoc/fonts');
+    expect(warnings[0]).toContain('fonts.assetBaseUrl');
+  });
+
+  it('fires the actionable warning only once across multiple bundled failures', async () => {
+    fontSet.behaviors.set('Carlito', 'reject');
+    fontSet.behaviors.set('Liberation Sans', 'reject');
+    const { registry } = makeRegistry(fontSet);
+
+    await registry.awaitFace('Carlito', 1000);
+    await registry.awaitFace('Liberation Sans', 1000);
+
+    expect(bundledWarnings()).toHaveLength(1);
+  });
+
+  it('does not fire the bundled warning for a customer font failure', async () => {
+    fontSet.behaviors.set('MyBrandFont', 'reject');
+    const { registry } = makeRegistry(fontSet);
+
+    await registry.awaitFace('MyBrandFont', 1000);
+
+    expect(bundledWarnings()).toHaveLength(0);
+    // the generic per-family warning still fires, so the failure is never silent.
+    const generic = warn.mock.calls.map((c) => String(c[0]));
+    expect(generic.some((m) => /font asset failed to load for "MyBrandFont"/.test(m))).toBe(true);
   });
 });

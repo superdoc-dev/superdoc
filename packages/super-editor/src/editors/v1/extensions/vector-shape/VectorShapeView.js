@@ -456,15 +456,15 @@ export class VectorShapeView {
       svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'defs'), svg.firstChild);
     const idBase = `line-end-${Math.random().toString(36).slice(2, 8)}-${Date.now()}`;
 
-    if (lineEnds.tail) {
-      const id = `${idBase}-tail`;
-      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, true, attrs.effectExtent);
+    if (lineEnds.head) {
+      const id = `${idBase}-head`;
+      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true, attrs.effectExtent);
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
-    if (lineEnds.head) {
-      const id = `${idBase}-head`;
-      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, false, attrs.effectExtent);
+    if (lineEnds.tail) {
+      const id = `${idBase}-tail`;
+      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false, attrs.effectExtent);
       target.setAttribute('marker-end', `url(#${id})`);
     }
   }
@@ -476,7 +476,7 @@ export class VectorShapeView {
    * @param {Object} lineEnd - Line end configuration with type, width, length
    * @param {string} strokeColor - Color to use for the marker fill
    * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
-   * @param {boolean} isStart - Whether this is a start marker (tail) or end marker (head)
+   * @param {boolean} isStart - Whether this is a start marker (head) or end marker (tail)
    * @param {Object|null} effectExtent - Effect extent for sizing, or null
    */
   createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {

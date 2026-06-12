@@ -544,15 +544,15 @@ export class ShapeGroupView {
   applyLineEndsToTarget(target, lineEnds, strokeColor, strokeWidth, defs, markerBase) {
     if (!lineEnds || strokeColor === null || strokeWidth <= 0) return;
 
-    if (lineEnds.tail) {
-      const id = `${markerBase}-tail`;
-      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, true, null);
+    if (lineEnds.head) {
+      const id = `${markerBase}-head`;
+      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true, null);
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
-    if (lineEnds.head) {
-      const id = `${markerBase}-head`;
-      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, false, null);
+    if (lineEnds.tail) {
+      const id = `${markerBase}-tail`;
+      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false, null);
       target.setAttribute('marker-end', `url(#${id})`);
     }
   }
@@ -564,7 +564,7 @@ export class ShapeGroupView {
    * @param {Object} lineEnd - Line end configuration with type, width, length
    * @param {string} strokeColor - Color to use for the marker fill
    * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
-   * @param {boolean} isStart - Whether this is a start marker (tail) or end marker (head)
+   * @param {boolean} isStart - Whether this is a start marker (head) or end marker (tail)
    * @param {Object|null} effectExtent - Effect extent for sizing, or null
    */
   createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {

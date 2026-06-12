@@ -101,6 +101,58 @@ describe('DomPainter shape regressions', () => {
     );
   });
 
+  it('renders DrawingML tailEnd on the visual end of a straight connector', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-tail-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    expect(line?.getAttribute('marker-start')).toBeNull();
+    expect(line?.getAttribute('marker-end')).toContain('straight-connector-tail-end');
+  });
+
+  it('renders DrawingML headEnd on the visual start of a straight connector', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-head-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        head: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    const marker = mount.querySelector('.superdoc-vector-shape svg marker[id*="head"]') as SVGMarkerElement | null;
+    expect(line?.getAttribute('marker-start')).toContain('straight-connector-head-end');
+    expect(line?.getAttribute('marker-end')).toBeNull();
+    expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 10 0 L 0 5 L 10 10 Z');
+  });
+
   it('generates roundRect preset geometry in the target coordinate space', () => {
     const width = 430;
     const height = 262;

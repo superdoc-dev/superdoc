@@ -3897,12 +3897,12 @@ export class DomPainter {
     const defs = this.ensureSvgDefs(svgElement);
     const baseId = this.sanitizeSvgId(`sd-line-${block.id}`);
 
-    if (lineEnds.tail) {
-      const id = `${baseId}-tail`;
+    if (lineEnds.head) {
+      const id = `${baseId}-head`;
       this.appendLineEndMarker(
         defs,
         id,
-        lineEnds.tail,
+        lineEnds.head,
         strokeColor,
         strokeWidth,
         true,
@@ -3911,12 +3911,12 @@ export class DomPainter {
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
-    if (lineEnds.head) {
-      const id = `${baseId}-head`;
+    if (lineEnds.tail) {
+      const id = `${baseId}-tail`;
       this.appendLineEndMarker(
         defs,
         id,
-        lineEnds.head,
+        lineEnds.tail,
         strokeColor,
         strokeWidth,
         false,

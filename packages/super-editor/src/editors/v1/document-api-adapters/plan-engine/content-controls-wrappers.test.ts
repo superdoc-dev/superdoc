@@ -1176,6 +1176,59 @@ describe('choiceList.setSelected visual text sync', () => {
   });
 });
 
+describe('date.setValue visual text sync', () => {
+  // Build a block date control whose visible content is the Word placeholder
+  // ("Click or tap to enter a date."), mirroring the date_control.docx fixture.
+  function makeDateControlEditor() {
+    return makeSdtEditor(
+      {
+        controlType: 'date',
+        type: 'date',
+        sdtPr: {
+          name: 'w:sdtPr',
+          elements: [
+            {
+              name: 'w:date',
+              type: 'element',
+              attributes: {},
+              elements: [{ name: 'w:dateFormat', type: 'element', attributes: { 'w:val': 'dd/MM/yyyy' } }],
+            },
+          ],
+        },
+      },
+      [createParagraphNode('Click or tap to enter a date.')],
+    );
+  }
+
+  // setValue must rewrite the SDT's visible content range, not only w:fullDate
+  // (the stored value); otherwise the control keeps showing its placeholder.
+  // Surfaced here as a tr.replaceWith.
+  it('rewrites the visible content range so the rendered date updates, not just w:fullDate', () => {
+    const editor = makeDateControlEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.date.setValue({ target: SDT_TARGET, value: '2026-05-24' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
+  });
+
+  it('still writes w:fullDate to the w:date sdtPr child (stored value)', () => {
+    const editor = makeDateControlEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.date.setValue({ target: SDT_TARGET, value: '2026-05-24' }, { changeMode: 'direct' });
+
+    // Metadata writes flow through tr.setNodeAttribute (AttrStep) as a full sdtPr replace.
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCall = setAttr.mock.calls.find((call: any[]) => call[1] === 'sdtPr');
+    expect(sdtPrCall).toBeDefined();
+    const writtenSdtPr = sdtPrCall?.[2] as { elements?: Array<{ name: string; attributes?: Record<string, unknown> }> };
+    const dateEl = writtenSdtPr?.elements?.find((el) => el.name === 'w:date');
+    expect(dateEl?.attributes?.['w:fullDate']).toBe('2026-05-24');
+  });
+});
+
 describe('create.contentControl default sdtPr seeding', () => {
   it('seeds checkbox controls with checked state + symbol pair defaults', () => {
     const editor = makeSdtEditor();

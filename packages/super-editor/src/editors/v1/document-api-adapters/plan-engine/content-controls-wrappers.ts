@@ -1333,12 +1333,19 @@ function dateSetValueWrapper(
 
   // w:fullDate is an attribute on w:date itself, not a sub-element
   return executeSdtMutation(editor, target, options, () => {
-    return updateSdtPrChild(editor, input.target, 'w:date', (existing) => ({
+    // The stored value lives in w:sdtPr/w:date/@w:fullDate.
+    const metadataUpdated = updateSdtPrChild(editor, input.target, 'w:date', (existing) => ({
       name: 'w:date',
       type: 'element',
       ...existing,
       attributes: { ...(existing?.attributes ?? {}), 'w:fullDate': input.value },
     }));
+    // ...but updating w:fullDate alone leaves the SDT showing its placeholder
+    // ("Click or tap to enter a date.") forever. Mirror textSetValueWrapper and
+    // also rewrite the visible content so the rendered date actually changes.
+    const contentUpdated = replaceSdtTextContent(editor, input.target, input.value);
+    // Either step landing a change means the mutation succeeded.
+    return metadataUpdated || contentUpdated;
   });
 }
 

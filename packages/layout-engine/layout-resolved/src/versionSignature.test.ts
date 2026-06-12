@@ -243,6 +243,20 @@ describe('deriveBlockVersion - vector shape effects', () => {
 
     expect(deriveBlockVersion(withExtent)).not.toBe(deriveBlockVersion(base));
   });
+
+  it('changes when an object fill changes', () => {
+    const base = makeVectorShape();
+    const withPictureA: VectorShapeDrawing = {
+      ...base,
+      fillColor: { type: 'picture', src: 'data:image/png;base64,AAA', rId: 'rId1', extension: 'png' },
+    };
+    const withPictureB: VectorShapeDrawing = {
+      ...base,
+      fillColor: { type: 'picture', src: 'data:image/png;base64,BBB', rId: 'rId2', extension: 'png' },
+    };
+
+    expect(deriveBlockVersion(withPictureB)).not.toBe(deriveBlockVersion(withPictureA));
+  });
 });
 
 describe('deriveBlockVersion - table image content', () => {

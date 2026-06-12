@@ -1075,14 +1075,26 @@ export type SolidFillWithAlpha = {
   alpha: number;
 };
 
+/** Picture fill for DrawingML vector shapes. */
+export type PictureFill = {
+  type: 'picture';
+  /** Image source path or hydrated data URI. */
+  src: string;
+  /** Source relationship id from the owning document part. */
+  rId?: string;
+  /** Source image extension, used when resolving media fallbacks. */
+  extension?: string;
+};
+
 /**
  * Fill color for shapes. Can be:
  * - string: Simple hex color (e.g., "#FF0000") for backward compatibility
  * - GradientFill: Linear or radial gradient
  * - SolidFillWithAlpha: Solid color with transparency
+ * - PictureFill: Image fill clipped by the shape geometry
  * - null: No fill
  */
-export type FillColor = string | GradientFill | SolidFillWithAlpha | null;
+export type FillColor = string | GradientFill | SolidFillWithAlpha | PictureFill | null;
 
 /**
  * Stroke color for shapes. Can be:

@@ -19,6 +19,7 @@ import type {
   PageNumberFormat,
   ParaFragment,
   ParagraphBlock,
+  PictureFill,
   PositionedDrawingGeometry,
   Run,
   ShapeGroupChild,
@@ -3207,7 +3208,7 @@ export class DomPainter {
     container.style.width = '100%';
     container.style.height = '100%';
     container.style.position = 'relative';
-    container.style.overflow = 'hidden';
+    container.style.overflow = 'visible';
 
     const { offsetX, offsetY, innerWidth, innerHeight } = this.getEffectExtentMetrics(block, geometry);
     const contentContainer = this.doc!.createElement('div');
@@ -3232,6 +3233,8 @@ export class DomPainter {
       if (svgElement) {
         if (!customGeomSvg && this.isConnectorPresetShape(block.shapeKind)) {
           this.applyNonScalingStrokeToConnector(svgElement);
+        } else {
+          this.expandSvgViewBoxForCenteredStroke(svgElement);
         }
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
@@ -3244,6 +3247,8 @@ export class DomPainter {
             applyGradientToSVG(svgElement, block.fillColor as GradientFill);
           } else if ('type' in block.fillColor && block.fillColor.type === 'solidWithAlpha') {
             applyAlphaToSVG(svgElement, block.fillColor as SolidFillWithAlpha);
+          } else if ('type' in block.fillColor && block.fillColor.type === 'picture') {
+            this.applyPictureFillToSVG(svgElement, block.fillColor as PictureFill, block.id);
           }
         }
 
@@ -3300,6 +3305,10 @@ export class DomPainter {
         // For CSS gradients in fallback, we'd need to convert
         // For now, use a placeholder color
         container.style.background = 'rgba(15, 23, 42, 0.1)';
+      } else if (block.fillColor.type === 'picture') {
+        container.style.backgroundImage = `url("${(block.fillColor as PictureFill).src}")`;
+        container.style.backgroundSize = '100% 100%';
+        container.style.backgroundRepeat = 'no-repeat';
       }
     } else {
       container.style.background = 'rgba(15, 23, 42, 0.1)';
@@ -3756,6 +3765,8 @@ export class DomPainter {
         fillColor = 'none';
       } else if (typeof block.fillColor === 'string') {
         fillColor = block.fillColor;
+      } else if (typeof block.fillColor === 'object') {
+        fillColor = '#000000';
       }
       const strokeColor =
         block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : undefined;
@@ -3795,6 +3806,67 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
+  }
+
+  private applyPictureFillToSVG(svgElement: SVGElement, fill: PictureFill, blockId: string): void {
+    if (!fill.src) return;
+    const targets = this.findShapeEffectTargets(svgElement);
+    if (targets.length === 0) return;
+
+    const patternId = this.sanitizeSvgId(`sd-picture-fill-${blockId}`);
+    const defs = this.ensureSvgDefs(svgElement);
+
+    const pattern = this.doc!.createElementNS(SVG_NS, 'pattern');
+    pattern.setAttribute('id', patternId);
+    pattern.setAttribute('patternUnits', 'objectBoundingBox');
+    pattern.setAttribute('patternContentUnits', 'objectBoundingBox');
+    pattern.setAttribute('width', '1');
+    pattern.setAttribute('height', '1');
+
+    const image = this.doc!.createElementNS(SVG_NS, 'image');
+    image.setAttribute('href', fill.src);
+    image.setAttribute('x', '0');
+    image.setAttribute('y', '0');
+    image.setAttribute('width', '1');
+    image.setAttribute('height', '1');
+    image.setAttribute('preserveAspectRatio', 'none');
+    pattern.appendChild(image);
+    defs.appendChild(pattern);
+
+    targets.forEach((target) => {
+      target.setAttribute('fill', `url(#${patternId})`);
+    });
+  }
+
+  private expandSvgViewBoxForCenteredStroke(svgElement: SVGElement): void {
+    const viewBox = svgElement.getAttribute('viewBox');
+    if (!viewBox) return;
+
+    const parts = viewBox
+      .trim()
+      .split(/[\s,]+/)
+      .map((part) => Number(part));
+    if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) return;
+
+    const maxStrokeWidth = this.findShapeEffectTargets(svgElement).reduce((max, target) => {
+      const stroke = target.getAttribute('stroke');
+      if (!stroke || stroke === 'none') return max;
+      const strokeWidth = Number(target.getAttribute('stroke-width') ?? 1);
+      return Number.isFinite(strokeWidth) && strokeWidth > max ? strokeWidth : max;
+    }, 0);
+    if (maxStrokeWidth <= 0) return;
+
+    const padding = maxStrokeWidth / 2;
+    const [x, y, width, height] = parts;
+    svgElement.setAttribute(
+      'viewBox',
+      [
+        this.formatSvgNumber(x - padding),
+        this.formatSvgNumber(y - padding),
+        this.formatSvgNumber(width + padding * 2),
+        this.formatSvgNumber(height + padding * 2),
+      ].join(' '),
+    );
   }
 
   private tryCreateConnectorPresetSvg(

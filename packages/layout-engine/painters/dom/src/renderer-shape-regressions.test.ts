@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestPainter as createDomPainter } from './_test-utils.js';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import type { DrawingGeometry, FlowBlock, Layout, Measure, SolidFillWithAlpha } from '@superdoc/contracts';
+import type { DrawingGeometry, FlowBlock, Layout, Measure, PictureFill, SolidFillWithAlpha } from '@superdoc/contracts';
 
 type DrawingFlowBlock = Extract<FlowBlock, { kind: 'drawing' }>;
 
@@ -354,6 +354,43 @@ describe('DomPainter shape regressions', () => {
     expect(path).toBeTruthy();
     expect(path?.getAttribute('fill')).toBe(alphaFill.color);
     expect(path?.getAttribute('fill-opacity')).toBe(String(alphaFill.alpha));
+  });
+
+  it('renders picture fills clipped by preset shape geometry', () => {
+    const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
+    const pictureFill: PictureFill = {
+      type: 'picture',
+      src: 'data:image/jpeg;base64,profileBase64',
+      rId: 'rId6',
+      extension: 'jpeg',
+    };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'ellipse-picture-fill',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'ellipse',
+      fillColor: pictureFill,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 4,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const fillTarget = svg?.querySelector('ellipse, path') as SVGElement | null;
+    const pattern = svg?.querySelector('pattern[id^="sd-picture-fill-"]') as SVGPatternElement | null;
+    const image = pattern?.querySelector('image') as SVGImageElement | null;
+
+    expect(pattern).toBeTruthy();
+    expect(pattern?.getAttribute('patternContentUnits')).toBe('objectBoundingBox');
+    expect(image?.getAttribute('href')).toBe(pictureFill.src);
+    expect(image?.getAttribute('preserveAspectRatio')).toBe('none');
+    expect(fillTarget?.getAttribute('fill')).toBe(`url(#${pattern?.id})`);
+    expect(fillTarget?.getAttribute('stroke')).toBe('#5b9bd5');
   });
 
   it('keeps explicit custom-geometry strokes visible for EMU-sized coordinate spaces', () => {

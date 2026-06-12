@@ -213,6 +213,42 @@ function extractColorFromElement(element) {
   return null;
 }
 
+const normalizeTargetPath = (targetPath = '') => {
+  if (!targetPath) return targetPath;
+  const trimmed = targetPath.replace(/^\/+/, '');
+  if (trimmed.startsWith('word/')) return trimmed;
+  if (trimmed.startsWith('media/')) return `word/${trimmed}`;
+  return `word/${trimmed}`;
+};
+
+const inferExtensionFromPath = (path = '') => {
+  const match = String(path).match(/\.([a-zA-Z0-9]+)(?:[#?].*)?$/);
+  return match?.[1]?.toLowerCase();
+};
+
+function resolveBlipFillPicture(blipFill, params) {
+  const blip = findChildByLocalName(blipFill?.elements, 'blip');
+  const rEmbed = blip?.attributes?.['r:embed'];
+  if (!rEmbed || !params?.docx) return null;
+
+  const currentFile = params.filename || 'document.xml';
+  let rels = params.docx[`word/_rels/${currentFile}.rels`];
+  if (!rels) rels = params.docx[`word/_rels/document.xml.rels`];
+
+  const relationships = rels?.elements?.find((el) => el.name === 'Relationships');
+  const rel = relationships?.elements?.find((el) => el.attributes?.['Id'] === rEmbed);
+  const target = rel?.attributes?.['Target'];
+  if (!target) return null;
+
+  const src = normalizeTargetPath(target);
+  return {
+    type: 'picture',
+    src,
+    rId: rEmbed,
+    extension: inferExtensionFromPath(src),
+  };
+}
+
 /**
  * Converts a theme color name to its corresponding hex color value.
  * Uses the default Office theme color palette.
@@ -424,9 +460,10 @@ export function extractStrokeColor(spPr, style) {
  * Checks direct fill definition in spPr first, then falls back to style reference.
  * @param {Object} spPr - The shape properties element
  * @param {Object} style - The shape style element (wps:style)
+ * @param {Object} params - Optional converter context for relationship lookup
  * @returns {string|null} Hex color value
  */
-export function extractFillColor(spPr, style) {
+export function extractFillColor(spPr, style, params) {
   const noFill = findChildByLocalName(spPr?.elements, 'noFill');
   if (noFill) {
     return null;
@@ -450,7 +487,7 @@ export function extractFillColor(spPr, style) {
 
   const blipFill = findChildByLocalName(spPr?.elements, 'blipFill');
   if (blipFill) {
-    return '#cccccc'; // placeholder color for now
+    return resolveBlipFillPicture(blipFill, params) ?? '#cccccc';
   }
 
   // No fill specified in spPr, check style reference

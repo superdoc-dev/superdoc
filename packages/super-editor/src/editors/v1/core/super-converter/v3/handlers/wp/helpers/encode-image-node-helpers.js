@@ -1010,7 +1010,7 @@ const parseShapeGroupVectorChild = (wsp, transform, params) => {
   const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
   const orientation = composeShapeGroupChildOrientation(rect, shapeXfrm);
   const style = findChildByLocalName(wsp.elements, 'style');
-  const fillColor = extractFillColor(spPr, style);
+  const fillColor = extractFillColor(spPr, style, params);
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
   const lineEnds = extractLineEnds(spPr);
@@ -1738,7 +1738,7 @@ export function getVectorShape({
 
   // Extract colors
   const style = wsp.elements?.find((el) => el.name === 'wps:style');
-  const fillColor = extractFillColor(spPr, style);
+  const fillColor = extractFillColor(spPr, style, params);
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
   const lineEnds = extractLineEnds(spPr);

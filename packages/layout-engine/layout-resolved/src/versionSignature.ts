@@ -57,6 +57,12 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const valueVersion = (value: unknown): string => {
+  if (value == null) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+};
+
 const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
   if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
     return run.trackedChanges;
@@ -478,7 +484,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       return [
         block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
-        vector.fillColor ?? '',
+        valueVersion(vector.fillColor),
         vector.strokeColor ?? '',
         vector.strokeWidth ?? '',
         vector.geometry.width,

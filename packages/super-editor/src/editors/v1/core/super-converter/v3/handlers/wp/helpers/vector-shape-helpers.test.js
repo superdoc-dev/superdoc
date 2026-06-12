@@ -413,8 +413,47 @@ describe('extractFillColor', () => {
       gradientType: 'linear',
     });
 
-    // Image fills still return placeholder color
     expect(extractFillColor({ elements: [{ name: 'a:blipFill' }] }, null)).toBe('#cccccc');
+  });
+
+  it('extracts picture fills from blipFill relationships', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:blipFill',
+          elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId6' } }],
+        },
+      ],
+    };
+    const params = {
+      filename: 'document.xml',
+      docx: {
+        'word/_rels/document.xml.rels': {
+          elements: [
+            {
+              name: 'Relationships',
+              elements: [
+                {
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'rId6',
+                    Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+                    Target: 'media/image1.jpeg',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    expect(extractFillColor(spPr, null, params)).toEqual({
+      type: 'picture',
+      src: 'word/media/image1.jpeg',
+      rId: 'rId6',
+      extension: 'jpeg',
+    });
   });
 
   it('falls back to style when spPr has no fill', () => {

@@ -1073,6 +1073,74 @@ describe('Media Utilities', () => {
       expect(result[0]).toBe(blocks[0]); // Same reference, no changes
     });
 
+    it('hydrates picture fills on vector shape drawing blocks', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'drawing',
+          id: 'drawing-picture-fill',
+          drawingKind: 'vectorShape',
+          geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+          shapeKind: 'ellipse',
+          fillColor: {
+            type: 'picture',
+            src: 'word/media/profile.jpeg',
+            rId: 'rId6',
+            extension: 'jpeg',
+          },
+        } as unknown as FlowBlock,
+      ];
+      const mediaFiles = { 'word/media/profile.jpeg': 'profileBase64' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      const drawingBlock = result[0] as unknown as {
+        fillColor: { type: 'picture'; src: string; rId: string; extension: string };
+      };
+
+      expect(drawingBlock).not.toBe(blocks[0]);
+      expect(drawingBlock.fillColor).toEqual({
+        type: 'picture',
+        src: 'data:image/jpeg;base64,profileBase64',
+        rId: 'rId6',
+        extension: 'jpeg',
+      });
+    });
+
+    it('hydrates picture fills on shapeGroup vector children', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'drawing',
+          id: 'drawing-group-picture-fill',
+          drawingKind: 'shapeGroup',
+          geometry: { width: 200, height: 200, rotation: 0, flipH: false, flipV: false },
+          shapes: [
+            {
+              shapeType: 'vectorShape',
+              attrs: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                kind: 'ellipse',
+                fillColor: {
+                  type: 'picture',
+                  src: 'word/media/profile.png',
+                  extension: 'png',
+                },
+              },
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+      const mediaFiles = { 'word/media/profile.png': 'profilePngBase64' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      const drawingBlock = result[0] as unknown as {
+        shapes: Array<{ attrs: { fillColor: { type: 'picture'; src: string } } }>;
+      };
+
+      expect(drawingBlock.shapes[0].attrs.fillColor.src).toBe('data:image/png;base64,profilePngBase64');
+    });
+
     it('handles shapeGroup with empty shapes array', () => {
       const blocks: FlowBlock[] = [
         {

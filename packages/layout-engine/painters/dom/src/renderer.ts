@@ -3231,7 +3231,7 @@ export class DomPainter {
     if (resolvedSvgMarkup) {
       const svgElement = this.parseSafeSvg(resolvedSvgMarkup);
       if (svgElement) {
-        if (!customGeomSvg && this.isConnectorPresetShape(block.shapeKind)) {
+        if (!customGeomSvg && (this.isConnectorPresetShape(block.shapeKind) || this.isLineLikeShape(block.shapeKind))) {
           this.applyNonScalingStrokeToConnector(svgElement);
         } else {
           this.expandSvgViewBoxForCenteredStroke(svgElement);
@@ -3327,6 +3327,10 @@ export class DomPainter {
 
   private isConnectorPresetShape(shapeKind?: string | null): boolean {
     return typeof shapeKind === 'string' && CONNECTOR_PRESET_SHAPES.has(shapeKind);
+  }
+
+  private isLineLikeShape(shapeKind?: string | null): boolean {
+    return shapeKind === 'line' || shapeKind === 'straightConnector1';
   }
 
   private applyNonScalingStrokeToConnector(svgElement: SVGElement): void {
@@ -3777,9 +3781,15 @@ export class DomPainter {
         const height = heightOverride ?? block.geometry.height;
         const stroke = strokeColor ?? '#000000';
         const strokeWidth = block.strokeWidth ?? 1;
+        const isHorizontal = height <= 1 && width > height;
+        const isVertical = width <= 1 && height > width;
+        const x1 = isVertical ? width / 2 : 0;
+        const y1 = isHorizontal ? height / 2 : 0;
+        const x2 = isVertical ? width / 2 : width;
+        const y2 = isHorizontal ? height / 2 : height;
 
-        return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <line x1="0" y1="0" x2="${width}" y2="${height}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${this.formatSvgNumber(width)}" height="${this.formatSvgNumber(height)}" viewBox="0 0 ${this.formatSvgNumber(width)} ${this.formatSvgNumber(height)}" preserveAspectRatio="none">
+  <line x1="${this.formatSvgNumber(x1)}" y1="${this.formatSvgNumber(y1)}" x2="${this.formatSvgNumber(x2)}" y2="${this.formatSvgNumber(y2)}" stroke="${stroke}" stroke-width="${this.formatSvgNumber(strokeWidth)}" vector-effect="non-scaling-stroke" />
 </svg>`;
       }
 

@@ -445,6 +445,75 @@ describe('VectorShapeView', () => {
       expect(path.getAttribute('marker-end')).toContain('tail');
       expect(marker.getAttribute('markerUnits')).toBe('strokeWidth');
     });
+
+    it('renders straight connector strokes as non-scaling inside an unscaled base viewBox', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'straightConnector1',
+          width: 450,
+          height: 1,
+          effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+          lineEnds: {
+            tail: { type: 'triangle' },
+          },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      const line = svg.querySelector('line');
+      expect(view.dom.style.height).toBe('16px');
+      expect(svg.getAttribute('viewBox')).toBe('0 0 450 1');
+      expect(svg.getAttribute('preserveAspectRatio')).toBe('none');
+      expect(svg.style.width).toBe('450px');
+      expect(svg.style.height).toBe('1px');
+      expect(line.getAttribute('y1')).toBe('0.5');
+      expect(line.getAttribute('y2')).toBe('0.5');
+      expect(line.getAttribute('stroke-width')).toBe('1');
+      expect(line.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+      expect(line.getAttribute('marker-end')).toContain('tail');
+    });
+
+    it('preserves tiny square straight connectors as diagonal lines', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'straightConnector1',
+          width: 1,
+          height: 1,
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const line = view.dom.querySelector('svg line');
+      expect(line.getAttribute('x1')).toBe('0');
+      expect(line.getAttribute('y1')).toBe('0');
+      expect(line.getAttribute('x2')).toBe('1');
+      expect(line.getAttribute('y2')).toBe('1');
+    });
   });
 
   describe('edge cases and error handling', () => {

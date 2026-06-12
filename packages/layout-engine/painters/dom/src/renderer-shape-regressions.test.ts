@@ -153,6 +153,61 @@ describe('DomPainter shape regressions', () => {
     expect(marker?.getAttribute('markerHeight')).toBe('8');
   });
 
+  it('renders straight connector strokes without scaling them thinner than connector presets', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 16, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const line = svg?.querySelector('line') as SVGLineElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 450 1');
+    expect(svg?.getAttribute('preserveAspectRatio')).toBe('none');
+    expect(line?.getAttribute('y1')).toBe('0.5');
+    expect(line?.getAttribute('y2')).toBe('0.5');
+    expect(line?.getAttribute('stroke-width')).toBe('1');
+    expect(line?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
+  it('preserves tiny square straight connectors as diagonal lines', () => {
+    const geometry: DrawingGeometry = { width: 1, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-tiny-diagonal',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    expect(line?.getAttribute('x1')).toBe('0');
+    expect(line?.getAttribute('y1')).toBe('0');
+    expect(line?.getAttribute('x2')).toBe('1');
+    expect(line?.getAttribute('y2')).toBe('1');
+  });
+
   it('renders DrawingML headEnd on the visual start of a straight connector', () => {
     const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
     const drawingBlock: DrawingFlowBlock = {

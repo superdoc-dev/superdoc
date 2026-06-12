@@ -394,6 +394,8 @@ export class VectorShapeView {
     svg.setAttribute('width', width.toString());
     svg.setAttribute('height', height.toString());
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.style.width = `${width}px`;
+    svg.style.height = `${height}px`;
     svg.style.display = 'block';
 
     // Create defs for gradients if needed
@@ -467,11 +469,13 @@ export class VectorShapeView {
 
       case 'line':
       case 'straightConnector1':
+        const isHorizontalLine = height <= 1 && width > height;
+        const isVerticalLine = width <= 1 && height > width;
         shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        shapeElement.setAttribute('x1', '0');
-        shapeElement.setAttribute('y1', '0');
-        shapeElement.setAttribute('x2', width.toString());
-        shapeElement.setAttribute('y2', height.toString());
+        shapeElement.setAttribute('x1', isVerticalLine ? (width / 2).toString() : '0');
+        shapeElement.setAttribute('y1', isHorizontalLine ? (height / 2).toString() : '0');
+        shapeElement.setAttribute('x2', isVerticalLine ? (width / 2).toString() : width.toString());
+        shapeElement.setAttribute('y2', isHorizontalLine ? (height / 2).toString() : height.toString());
         break;
 
       default:
@@ -512,6 +516,11 @@ export class VectorShapeView {
     }
     shapeElement.setAttribute('stroke', stroke);
     shapeElement.setAttribute('stroke-width', strokeW.toString());
+    if (kind === 'line' || kind === 'straightConnector1') {
+      svg.setAttribute('viewBox', `0 0 ${formatSvgNumber(width)} ${formatSvgNumber(height)}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      shapeElement.setAttribute('vector-effect', 'non-scaling-stroke');
+    }
 
     svg.appendChild(shapeElement);
     return svg;

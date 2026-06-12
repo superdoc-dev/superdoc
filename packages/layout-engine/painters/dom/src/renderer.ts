@@ -866,6 +866,16 @@ const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
 const PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET = 1_000_000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
+const CONNECTOR_PRESET_SHAPES = new Set([
+  'bentConnector2',
+  'bentConnector3',
+  'bentConnector4',
+  'bentConnector5',
+  'curvedConnector2',
+  'curvedConnector3',
+  'curvedConnector4',
+  'curvedConnector5',
+]);
 // Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
 
 /**
@@ -3219,6 +3229,9 @@ export class DomPainter {
     if (resolvedSvgMarkup) {
       const svgElement = this.parseSafeSvg(resolvedSvgMarkup);
       if (svgElement) {
+        if (!customGeomSvg && this.isConnectorPresetShape(block.shapeKind)) {
+          this.applyNonScalingStrokeToConnector(svgElement);
+        }
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
         svgElement.style.display = 'block';
@@ -3300,6 +3313,18 @@ export class DomPainter {
     } else {
       container.style.border = '1px solid rgba(15, 23, 42, 0.3)';
     }
+  }
+
+  private isConnectorPresetShape(shapeKind?: string | null): boolean {
+    return typeof shapeKind === 'string' && CONNECTOR_PRESET_SHAPES.has(shapeKind);
+  }
+
+  private applyNonScalingStrokeToConnector(svgElement: SVGElement): void {
+    svgElement.querySelectorAll('path, line, polyline').forEach((target) => {
+      const stroke = target.getAttribute('stroke');
+      if (!stroke || stroke === 'none') return;
+      target.setAttribute('vector-effect', 'non-scaling-stroke');
+    });
   }
 
   private hasShapeTextContent(textContent?: ShapeTextContent): textContent is ShapeTextContent {

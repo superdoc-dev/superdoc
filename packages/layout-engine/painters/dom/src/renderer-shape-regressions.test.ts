@@ -180,6 +180,29 @@ describe('DomPainter shape regressions', () => {
     expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 10 0 L 0 5 L 10 10 Z');
   });
 
+  it('keeps bent connector stroke thickness uniform under non-uniform SVG scaling', () => {
+    const geometry: DrawingGeometry = { width: 427, height: 28, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'bent-connector-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'bentConnector3',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 50 0 L 50 100 L 100 100');
+    expect(path?.getAttribute('stroke-width')).toBe('1');
+    expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
   it('generates roundRect preset geometry in the target coordinate space', () => {
     const width = 430;
     const height = 262;

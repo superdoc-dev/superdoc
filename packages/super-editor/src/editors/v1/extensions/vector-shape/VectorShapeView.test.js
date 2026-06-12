@@ -409,6 +409,36 @@ describe('VectorShapeView', () => {
       expect(svg.getAttribute('width')).toBe('200');
       expect(svg.getAttribute('height')).toBe('50');
     });
+
+    it('keeps connector preset strokes non-scaling under non-uniform scaling', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'bentConnector3',
+          width: 427,
+          height: 28,
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+        },
+      };
+
+      const mockSvgTemplate =
+        '<svg viewBox="0 0 100 100"><path d="M 0 0 L 50 0 L 50 100 L 100 100" fill="none" stroke="#5b9bd5" stroke-width="1" /></svg>';
+      presetGeometry.getPresetShapeSvg.mockReturnValue(mockSvgTemplate);
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const path = view.dom.querySelector('svg path');
+      expect(path.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+    });
   });
 
   describe('edge cases and error handling', () => {

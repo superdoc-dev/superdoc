@@ -10,6 +10,29 @@ import {
   generateTransforms,
 } from '../shared/svg-utils.js';
 
+const CONNECTOR_PRESET_SHAPES = new Set([
+  'bentConnector2',
+  'bentConnector3',
+  'bentConnector4',
+  'bentConnector5',
+  'curvedConnector2',
+  'curvedConnector3',
+  'curvedConnector4',
+  'curvedConnector5',
+]);
+
+function isConnectorPresetShape(kind) {
+  return typeof kind === 'string' && CONNECTOR_PRESET_SHAPES.has(kind);
+}
+
+function applyNonScalingStrokeToConnector(svgElement) {
+  svgElement.querySelectorAll('path, line, polyline').forEach((target) => {
+    const stroke = target.getAttribute('stroke');
+    if (!stroke || stroke === 'none') return;
+    target.setAttribute('vector-effect', 'non-scaling-stroke');
+  });
+}
+
 export class VectorShapeView {
   node;
 
@@ -404,6 +427,9 @@ export class VectorShapeView {
             tempDiv.innerHTML = svgTemplate;
             const tempSvg = tempDiv.querySelector('svg');
             if (tempSvg) {
+              if (isConnectorPresetShape(kind)) {
+                applyNonScalingStrokeToConnector(tempSvg);
+              }
               // Preserve the preset viewBox and scale via width/height
               tempSvg.setAttribute('width', width.toString());
               tempSvg.setAttribute('height', height.toString());

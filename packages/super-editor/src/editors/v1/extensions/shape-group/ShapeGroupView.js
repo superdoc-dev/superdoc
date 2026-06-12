@@ -3,6 +3,27 @@ import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { createGradient, createTextElement } from '../shared/svg-utils.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
+const CONNECTOR_PRESET_SHAPES = new Set([
+  'bentConnector2',
+  'bentConnector3',
+  'bentConnector4',
+  'bentConnector5',
+  'curvedConnector2',
+  'curvedConnector3',
+  'curvedConnector4',
+  'curvedConnector5',
+]);
+
+function isConnectorPresetShape(kind) {
+  return typeof kind === 'string' && CONNECTOR_PRESET_SHAPES.has(kind);
+}
+
+function applyNonScalingStrokeToConnectorTarget(target) {
+  const stroke = target.getAttribute('stroke');
+  if (!stroke || stroke === 'none') return;
+  target.setAttribute('vector-effect', 'non-scaling-stroke');
+}
+
 export class ShapeGroupView {
   node;
 
@@ -482,6 +503,13 @@ export class ShapeGroupView {
             ) {
               this.applyLineEndsToTarget(clonedChild, lineEnds, strokeColor, strokeWidth, defs, markerBase);
               lineEndsApplied = true;
+            }
+
+            if (
+              isConnectorPresetShape(shapeKind) &&
+              (clonedChild.tagName === 'path' || clonedChild.tagName === 'line' || clonedChild.tagName === 'polyline')
+            ) {
+              applyNonScalingStrokeToConnectorTarget(clonedChild);
             }
 
             g.appendChild(clonedChild);

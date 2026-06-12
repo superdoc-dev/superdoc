@@ -5209,43 +5209,49 @@ describe('layoutHeaderFooter', () => {
     expect(imgFragWithout!.y).not.toBe(imgFragFooter!.y);
   });
 
-  it('does NOT post-normalize page-relative anchors in header layout', () => {
+  it('post-normalizes page-relative anchors in header layout', () => {
     const imageBlock: FlowBlock = {
       kind: 'image',
       id: 'img-page',
       src: 'data:image/png;base64,xxx',
       anchor: {
         isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
         vRelativeFrom: 'page',
-        alignV: 'top',
-        offsetV: 10,
+        alignV: 'center',
+        offsetH: 0,
+        offsetV: 0,
       },
     };
     const imageMeasure: Measure = {
       kind: 'image',
-      width: 50,
-      height: 30,
+      width: 762.24,
+      height: 1010.88,
     };
 
     const constraints = {
-      width: 200,
-      height: 800,
+      width: 624,
+      height: 864,
+      pageWidth: 816,
       pageHeight: 1056,
-      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
     };
 
-    // With kind='header': no normalization — Y stays as inner-layout computed it
     const withHeader = layoutHeaderFooter([imageBlock], [imageMeasure], constraints, 'header');
     const imgFrag = withHeader.pages[0]?.fragments.find((f) => f.kind === 'image');
 
-    // Without kind: same behavior (no normalization)
+    // Without kind: no header/footer normalization, so the inner synthetic canvas
+    // still resolves the anchor against the body-content-sized page.
     const withoutKind = layoutHeaderFooter([imageBlock], [imageMeasure], constraints);
     const imgFragNoKind = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
 
-    // Both should have the same Y — inner-layout raw position
     expect(imgFrag).toBeDefined();
     expect(imgFragNoKind).toBeDefined();
-    expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+    expect(imgFrag!.x).toBeCloseTo((816 - 762.24) / 2);
+    expect(imgFrag!.y).toBeCloseTo((1056 - 1010.88) / 2);
+    expect(imgFragNoKind!.x).not.toBe(imgFrag!.x);
+    expect(imgFragNoKind!.y).not.toBe(imgFrag!.y);
   });
 
   it('keeps paragraph-relative tall non-page-covering header anchors in measurement height', () => {

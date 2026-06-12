@@ -10,8 +10,8 @@ function makeParaFragment(blockId: string, y: number): Fragment {
   return { kind: 'para', blockId, x: 0, y, fromLine: 0, toLine: 1 } as Fragment;
 }
 
-function makeAnchoredImageFragment(blockId: string, y: number, height: number): Fragment {
-  return { kind: 'image', blockId, x: 0, y, height, isAnchored: true } as unknown as Fragment;
+function makeAnchoredImageFragment(blockId: string, y: number, height: number, width = 0): Fragment {
+  return { kind: 'image', blockId, x: 0, y, width, height, isAnchored: true } as unknown as Fragment;
 }
 
 function makeDummyMeasure(): Measure {
@@ -23,6 +23,7 @@ const MARGIN_BOTTOM = 72;
 const FOOTER_DISTANCE = 36;
 
 const fullConstraints = {
+  pageWidth: 816,
   pageHeight: PAGE_HEIGHT,
   margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36, footer: FOOTER_DISTANCE },
 };
@@ -33,7 +34,35 @@ const FOOTER_BAND_ORIGIN = PAGE_HEIGHT - FOOTER_DISTANCE; // 1020
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
+describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', () => {
+  describe('page-relative anchors in header', () => {
+    it('normalizes centered page-relative anchors against the physical page', () => {
+      const imgWidth = 762.24;
+      const imgHeight = 1010.88;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-background',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'page',
+          alignV: 'center',
+          offsetH: 0,
+          offsetV: 0,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-background', 0, imgHeight, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBeCloseTo((816 - imgWidth) / 2);
+      expect(fragment.y).toBeCloseTo((PAGE_HEIGHT - imgHeight) / 2);
+    });
+  });
+
   describe('page-relative anchors in footer', () => {
     it('normalizes a top-aligned anchor', () => {
       const block: FlowBlock = {

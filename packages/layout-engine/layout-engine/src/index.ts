@@ -3643,17 +3643,12 @@ export function layoutHeaderFooter(
     remeasureParagraph,
   });
 
-  // Post-normalize page-relative anchored fragment Y positions for footers.
+  // Post-normalize page-relative anchored fragment positions for headers/footers.
   //
-  // The inner layoutDocument() uses the body content height as its page height,
-  // but page-relative anchors need the REAL physical page height to resolve
-  // bottom/center alignment correctly. This post-correction rewrites their Y
-  // to footer-band-local coordinates using the real page geometry.
-  //
-  // Headers don't need this: the inner layout's page-relative Y is already
-  // correct relative to the header container, and the painter handles the
-  // container-to-page offset via effectiveOffset subtraction.
-  if (kind === 'footer' && constraints.pageHeight != null) {
+  // The inner layoutDocument() uses the body content box as its page canvas, but
+  // page-relative anchors need the real physical page dimensions. This
+  // post-correction rewrites their coordinates using the real page geometry.
+  if (kind && constraints.pageHeight != null) {
     normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
   }
 

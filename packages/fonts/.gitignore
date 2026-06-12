@@ -1,0 +1,7 @@
+# Font binaries are synced from the canonical source (shared/font-system/assets) by
+# scripts/sync-assets.mjs at prepare/prepack time. They are not committed here (single source
+# of truth), but they ARE shipped in the npm tarball via package.json "files".
+assets/
+
+# Build output
+dist/

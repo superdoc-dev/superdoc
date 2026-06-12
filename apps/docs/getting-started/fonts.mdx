@@ -6,19 +6,66 @@ keywords: 'fonts, font loading, calibri, cambria, aptos, font fallback, custom f
 
 SuperDoc keeps the font name from the Word document. When SuperDoc ships an approved fallback for that font, it renders with the fallback but keeps the original name for export. When no fallback is available, load the real font in your app.
 
-## Load fonts in your app
+## Bundled fallback fonts
 
-Fonts are your host page's responsibility. `@font-face`, a hosted stylesheet, or a font CDN: anything the browser can resolve.
+A Word document asks for fonts like Calibri, Cambria, and Times New Roman. Most are proprietary, or not installed on every machine. SuperDoc renders them with reviewed open substitutes that match the metrics: Carlito for Calibri, Liberation Serif for Times New Roman, and more. The original name is kept for export.
+
+These substitutes are real `.woff2` files. The browser fetches them from a URL. Installing SuperDoc from npm puts them in `node_modules`, which does not serve them to the browser. So you tell your app where they live. Pick one path.
+
+### Recommended: the `@superdoc/fonts` package
+
+Install the optional pack and pass it. Your bundler (Vite, Webpack, Next, Nuxt) emits the files and rewrites the URLs. No copy step. No path config.
+
+```bash
+npm install @superdoc/fonts
+```
+
+```js
+import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc/fonts';
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: superdocFonts,
+});
+```
+
+### Alternative: host the files yourself
+
+Serve the `.woff2` from your own path or a CDN, then point SuperDoc at them. The files ship in the package at `node_modules/superdoc/dist/fonts/`.
+
+```js
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: { assetBaseUrl: '/fonts/' },
+});
+```
+
+Use `fonts.resolveAssetUrl` instead for signed or versioned URLs.
+
+### CDN script build
+
+Nothing to configure. The CDN build looks for the fonts next to the script. Host the `fonts/` folder beside `superdoc.min.js`.
+
+### Skipping the pack
+
+The pack is optional. Skip it if you load your own fonts for every family, or only need fonts the user's OS already has. When the bundled `.woff2` cannot be fetched, SuperDoc logs a one-time warning and falls back to the original font name. On a machine without that font, the text renders in a system fallback, so it can look unchanged.
+
+## Load your own fonts
+
+For a brand font, a licensed font, or any family SuperDoc does not ship a fallback for, load the real file yourself. Use `@font-face`, a hosted stylesheet, or a font CDN. Anything the browser can resolve.
 
 ```css
 @font-face {
-  font-family: 'Calibri';
-  src: url('/fonts/Carlito-Regular.woff2') format('woff2');
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
   font-display: swap;
 }
 ```
 
-For custom or licensed fonts, load the real file yourself. SuperDoc's built-in fallbacks cover only the fonts it ships and verifies.
+SuperDoc's built-in fallbacks cover only the fonts it ships and verifies. For everything else, the real file is yours to provide.
 
 ## Toolbar font list
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc/fonts';
 
 const editor = ref<HTMLDivElement | null>(null);
 const file = ref<File | null>(null);
@@ -17,6 +18,7 @@ const initEditor = () => {
   superdoc = new SuperDoc({
     selector: editor.value,
     document: file.value,
+    fonts: superdocFonts,
   });
 };
 

@@ -1,5 +1,6 @@
 import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc/fonts';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,7 @@ export class AppComponent implements OnDestroy {
       selector: this.editorRef.nativeElement,
       documentMode: 'editing',
       document: file,
+      fonts: superdocFonts,
     });
   }
 

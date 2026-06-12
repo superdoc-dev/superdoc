@@ -1,0 +1,39 @@
+{
+  "name": "@superdoc/fonts",
+  "version": "0.1.0",
+  "description": "Optional bundled metric-compatible font substitutes for SuperDoc, shipped as bundler-resolvable assets.",
+  "type": "module",
+  "license": "SEE LICENSE IN assets/LICENSES.md",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "assets"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "sync": "node scripts/sync-assets.mjs",
+    "generate": "node scripts/generate-asset-urls.mjs",
+    "build": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json",
+    "prepare": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

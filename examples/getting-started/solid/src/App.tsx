@@ -1,5 +1,6 @@
 import { createEffect, createSignal, createUniqueId, onCleanup, Show, untrack } from 'solid-js';
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc/fonts';
 import 'superdoc/style.css';
 import './App.css';
 
@@ -72,6 +73,7 @@ export default function App() {
       selector: `#${CSS.escape(containerId)}`,
       toolbar: `#${CSS.escape(toolbarId)}`,
       document: doc,
+      fonts: superdocFonts,
       documentMode: untrack(() => mode()),
       role: 'editor',
       user: currentUser,

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { SuperDocEditor, SuperDocRef, DocumentMode } from '@superdoc-dev/react';
+import { superdocFonts } from '@superdoc/fonts';
 import '@superdoc-dev/react/style.css';
 
 export default function Home() {
@@ -105,6 +106,7 @@ export default function Home() {
             <SuperDocEditor
               ref={editorRef}
               document={file}
+              fonts={superdocFonts}
               documentMode={mode}
               user={{
                 name: 'Demo User',

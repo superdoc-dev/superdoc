@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@superdoc-dev/react": "^1.0.0-rc.1",
+    "@superdoc/fonts": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BASELINE_BUNDLED,
+  FULLY_ACTIVE_BUNDLED,
+  createBundledActivation,
   createFontResolver,
   resolveFontFamily,
   resolvePhysicalFamilies,
@@ -364,6 +367,112 @@ describe('FontResolver (per-document context)', () => {
     resolver.map('Verdana', '   '); // whitespace-only physical -> ignored
     expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(resolver.version).toBe(1);
+  });
+});
+
+describe('FontResolver (bundled activation gating)', () => {
+  const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+
+  it('no pack configured: bundled substitutes are inert and pass through as_requested', () => {
+    const r = createFontResolver(BASELINE_BUNDLED);
+    expect(r.resolvePrimaryPhysicalFamily('Calibri')).toBe('Calibri');
+    expect(r.resolvePhysicalFamily('Calibri, sans-serif')).toBe('Calibri, sans-serif');
+    expect(r.resolveFontFamily('Calibri')).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Calibri',
+      reason: 'as_requested',
+    });
+    // Even the baseline families render with system fonts when no pack is served.
+    expect(r.resolvePrimaryPhysicalFamily('Arial')).toBe('Arial');
+  });
+
+  it('pack configured: substitutes apply, matching the default fully-active resolver', () => {
+    const r = createFontResolver(FULLY_ACTIVE_BUNDLED);
+    expect(r.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(r.resolveFontFamily('Cambria')).toEqual({
+      logicalFamily: 'Cambria',
+      physicalFamily: 'Caladea',
+      reason: 'bundled_substitute',
+    });
+  });
+
+  it('curation gates substitution per logical family', () => {
+    const excluded = createFontResolver(createBundledActivation({ packConfigured: true, exclude: ['Cooper Black'] }));
+    expect(excluded.resolvePrimaryPhysicalFamily('Cooper Black')).toBe('Cooper Black'); // excluded -> inert
+    expect(excluded.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito'); // others still substitute
+
+    const only = createFontResolver(createBundledActivation({ packConfigured: true, include: ['Calibri'] }));
+    expect(only.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(only.resolvePrimaryPhysicalFamily('Cambria')).toBe('Cambria'); // not included -> inert
+  });
+
+  it('an explicit fonts.map override is honored even with no pack (customer instruction, not a suggestion)', () => {
+    const r = createFontResolver(BASELINE_BUNDLED);
+    r.map('Calibri', 'MyCalibri');
+    expect(r.resolveFontFamily('Calibri')).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'MyCalibri',
+      reason: 'custom_mapping',
+    });
+  });
+
+  it('a registered real face is honored with no pack; an inactive bundled clone is treated as no provider', () => {
+    const r = createFontResolver(BASELINE_BUNDLED);
+    const face = { weight: '400', style: 'normal' } as const;
+    // Customer fonts.add registered a real Calibri face -> render it (registered_face).
+    expect(r.resolveFace('Calibri', face, (f) => norm(f) === 'calibri')).toMatchObject({
+      physicalFamily: 'Calibri',
+      reason: 'registered_face',
+    });
+    // No registered face and no pack: the clone is inert, so the family passes through as_requested
+    // (NOT fallback_face_absent - an inactive clone is no provider, not a present-but-faceless one).
+    expect(r.resolveFace('Calibri', face, () => false)).toMatchObject({
+      physicalFamily: 'Calibri',
+      reason: 'as_requested',
+    });
+  });
+
+  it('activation is folded into the signature: no-pack and curated are isolated; full-pack == default', () => {
+    const baseline = createFontResolver(BASELINE_BUNDLED);
+    const full = createFontResolver(FULLY_ACTIVE_BUNDLED);
+    const def = createFontResolver(); // defaults to fully active
+    const excl = createFontResolver(createBundledActivation({ packConfigured: true, exclude: ['Calibri'] }));
+
+    // A configured full-pack document shares the empty (cache-sharing) signature with the default.
+    expect(full.signature).toBe('');
+    expect(def.signature).toBe('');
+    // No-pack and curated documents get distinct, non-empty signatures, so their measures never
+    // collide with a full-pack document's.
+    expect(baseline.signature).not.toBe('');
+    expect(excl.signature).not.toBe('');
+    expect(new Set([baseline.signature, full.signature, excl.signature]).size).toBe(3);
+  });
+
+  it('setActivation re-gates resolution and busts the signature; re-applying the same is a no-op', () => {
+    const r = createFontResolver(); // fully active
+    expect(r.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(r.signature).toBe('');
+
+    r.setActivation(BASELINE_BUNDLED);
+    expect(r.resolvePrimaryPhysicalFamily('Calibri')).toBe('Calibri'); // now inert
+    expect(r.signature).not.toBe('');
+
+    const v = r.version;
+    r.setActivation(createBundledActivation({ packConfigured: false })); // same signature -> no bump
+    expect(r.version).toBe(v);
+  });
+
+  it('signature composes activation with overrides', () => {
+    const a = createFontResolver(BASELINE_BUNDLED);
+    a.map('Georgia', 'Gelasio');
+    const b = createFontResolver(BASELINE_BUNDLED);
+    b.map('Georgia', 'Tinos');
+    // Same activation, different overrides -> distinct signatures.
+    expect(a.signature).not.toBe(b.signature);
+    // Same override under a DIFFERENT activation -> distinct signature (activation folded in).
+    const c = createFontResolver(FULLY_ACTIVE_BUNDLED);
+    c.map('Georgia', 'Gelasio');
+    expect(a.signature).not.toBe(c.signature);
   });
 });
 

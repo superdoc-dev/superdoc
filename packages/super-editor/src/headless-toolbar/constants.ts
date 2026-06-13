@@ -63,10 +63,12 @@ export const DEFAULT_FONT_SIZE_OPTIONS = [
 
 /**
  * Default headless-toolbar font options, DERIVED from the shared font-offering registry
- * (`@superdoc/font-system`) instead of a hand-maintained list. Bundled clean defaults and explicit
- * qualified choices are advertised; customer-supplied and category fallback rows stay absent.
- * `label` is the Word-facing logical name (stored/exported); `value` is the logical CSS stack applied
- * to the run.
+ * (`@superdoc/font-system`). This static const is the conservative NO-PACK baseline - one Word font
+ * per CSS generic (Arial, Times New Roman, Courier New) - the floor for a headless toolbar with no
+ * runtime font config.
+ * A headless consumer that wires the bundled pack and wants the curated rich set builds its options
+ * per instance from `getDefaultFontFamilyOptions(deriveBundledActivation(fontsConfig))`. `label` is
+ * the Word-facing logical name (stored/exported); `value` is the logical CSS stack applied to the run.
  */
 export const DEFAULT_FONT_FAMILY_OPTIONS = getDefaultFontFamilyOptions();
 

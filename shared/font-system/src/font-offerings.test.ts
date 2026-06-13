@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { BASELINE_BUNDLED, FULLY_ACTIVE_BUNDLED, createBundledActivation } from './activation';
 import {
   FONT_OFFERINGS,
   fontOfferingRenderStack,
@@ -6,8 +7,12 @@ import {
   getBuiltInToolbarFontOfferings,
   getDefaultFontFamilyOptions,
   getDefaultFontOfferings,
+  warnUnknownBundledSelection,
 } from './font-offerings';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
+
+/** No-pack toolbar baseline: one common Word font per CSS generic, each with a generic CSS fallback. */
+const EXPECTED_BASELINE = ['Arial', 'Courier New', 'Times New Roman'];
 
 const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman'];
 const EXPECTED_BUILT_IN_TOOLBAR = [
@@ -85,13 +90,36 @@ describe('font offerings', () => {
     }
   });
 
-  it('built-in toolbar offerings include advertised bundled rows without reclassifying them as defaults', () => {
-    expect(getBuiltInToolbarFontOfferings().map((o) => o.logicalFamily)).toEqual(EXPECTED_BUILT_IN_TOOLBAR);
-    expect(getBuiltInToolbarFontOfferings().find((o) => o.logicalFamily === 'Cooper Black')).toMatchObject({
-      offering: 'qualified',
-      verdict: 'visual_only',
-      bundled: true,
-    });
+  it('built-in toolbar offerings default to the conservative no-pack baseline', () => {
+    // No activation (and the explicit BASELINE_BUNDLED) = no pack configured = the baseline (one per generic).
+    expect(getBuiltInToolbarFontOfferings().map((o) => o.logicalFamily)).toEqual(EXPECTED_BASELINE);
+    expect(getBuiltInToolbarFontOfferings(BASELINE_BUNDLED).map((o) => o.logicalFamily)).toEqual(EXPECTED_BASELINE);
+  });
+
+  it('built-in toolbar offerings show the full advertised set when the pack is configured', () => {
+    expect(getBuiltInToolbarFontOfferings(FULLY_ACTIVE_BUNDLED).map((o) => o.logicalFamily)).toEqual(
+      EXPECTED_BUILT_IN_TOOLBAR,
+    );
+    expect(
+      getBuiltInToolbarFontOfferings(FULLY_ACTIVE_BUNDLED).find((o) => o.logicalFamily === 'Cooper Black'),
+    ).toMatchObject({ offering: 'qualified', verdict: 'visual_only', bundled: true });
+  });
+
+  it('curation narrows the configured toolbar set by logical Word name', () => {
+    const excluded = getBuiltInToolbarFontOfferings(
+      createBundledActivation({ packConfigured: true, exclude: ['Cooper Black', 'Verdana'] }),
+    ).map((o) => o.logicalFamily);
+    expect(excluded).not.toContain('Cooper Black');
+    expect(excluded).not.toContain('Verdana');
+    expect(excluded).toContain('Calibri');
+    expect(excluded.length).toBe(EXPECTED_BUILT_IN_TOOLBAR.length - 2);
+
+    // include is an allow-list, applied within the offered set (names outside it stay non-default
+    // toolbar options - use modules.toolbar.fonts for those).
+    const included = getBuiltInToolbarFontOfferings(
+      createBundledActivation({ packConfigured: true, include: ['Calibri', 'Georgia', 'Arial'] }),
+    ).map((o) => o.logicalFamily);
+    expect(included).toEqual(['Arial', 'Calibri', 'Georgia']);
   });
 
   it('classifies the qualified and category rows distinctly (carried for the later fidelity layer)', () => {
@@ -211,8 +239,16 @@ describe('font offerings', () => {
     });
   });
 
-  it('getDefaultFontFamilyOptions returns logical label + logical stack', () => {
+  it('getDefaultFontFamilyOptions returns the baseline by default (logical label + logical stack)', () => {
     expect(getDefaultFontFamilyOptions()).toEqual([
+      { label: 'Arial', value: 'Arial, sans-serif' },
+      { label: 'Courier New', value: 'Courier New, monospace' },
+      { label: 'Times New Roman', value: 'Times New Roman, serif' },
+    ]);
+  });
+
+  it('getDefaultFontFamilyOptions returns the full set when the pack is configured', () => {
+    expect(getDefaultFontFamilyOptions(FULLY_ACTIVE_BUNDLED)).toEqual([
       { label: 'Arial', value: 'Arial, sans-serif' },
       { label: 'Arial Black', value: 'Arial Black, sans-serif' },
       { label: 'Arial Narrow', value: 'Arial Narrow, sans-serif' },
@@ -251,5 +287,40 @@ describe('font offerings', () => {
     for (const o of FONT_OFFERINGS) {
       expect(o.generic).toBe(evidenceGeneric.get(o.logicalFamily));
     }
+  });
+});
+
+describe('warnUnknownBundledSelection', () => {
+  it('stays silent for valid bundled families or no selection', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnUnknownBundledSelection(undefined);
+    warnUnknownBundledSelection({ exclude: ['Cooper Black', 'Verdana'] });
+    warnUnknownBundledSelection({ include: ['Calibri', 'Cambria'] });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('warns once per unknown name, suggesting the closest bundled family for a near typo', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnUnknownBundledSelection({ exclude: ['Calibrii'] });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/"Calibrii" is not a bundled font/);
+    expect(warn.mock.calls[0][0]).toMatch(/did you mean "Calibri"\?/);
+    warn.mockRestore();
+  });
+
+  it('warns for a real-but-unbundled Word font (no clone shipped), so curating it is a no-op', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnUnknownBundledSelection({ include: ['Aptos'] });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/"Aptos" is not a bundled font/);
+    warn.mockRestore();
+  });
+
+  it('warns when include and exclude are both set', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnUnknownBundledSelection({ include: ['Calibri'], exclude: ['Cambria'] });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/not both/));
+    warn.mockRestore();
   });
 });

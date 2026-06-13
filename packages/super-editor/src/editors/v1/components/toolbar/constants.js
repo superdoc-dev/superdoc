@@ -1,24 +1,39 @@
-import { fontOfferingRenderStack, fontOfferingStack, getBuiltInToolbarFontOfferings } from '@superdoc/font-system';
+import {
+  BASELINE_BUNDLED,
+  fontOfferingRenderStack,
+  fontOfferingStack,
+  getBuiltInToolbarFontOfferings,
+} from '@superdoc/font-system';
 
 /**
- * Built-in toolbar font dropdown options, DERIVED from the shared font-offering registry
- * (`@superdoc/font-system`) instead of a hand-maintained list. Bundled clean defaults and explicit
- * qualified/category fallback choices are advertised; unbundled candidates are intentionally absent
- * from the static defaults.
+ * Build the built-in toolbar font dropdown options for a bundled-font activation, DERIVED from the
+ * shared font-offering registry (`@superdoc/font-system`). Without a configured pack this is the
+ * conservative baseline; with one it is the curated rich set.
  *
  * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
  * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that
  * actually paints (e.g. Carlito), so the dropdown looks like the rendered result.
+ *
+ * @param {import('@superdoc/font-system').BundledActivation} [activation]
  */
-export const TOOLBAR_FONTS = getBuiltInToolbarFontOfferings().map((offering) => ({
-  label: offering.logicalFamily,
-  key: fontOfferingStack(offering),
-  fontWeight: 400,
-  props: {
-    style: { fontFamily: fontOfferingRenderStack(offering) },
-    'data-item': 'btn-fontFamily-option',
-  },
-}));
+export function toolbarFontOptionsFor(activation = BASELINE_BUNDLED) {
+  return getBuiltInToolbarFontOfferings(activation).map((offering) => ({
+    label: offering.logicalFamily,
+    key: fontOfferingStack(offering),
+    fontWeight: 400,
+    props: {
+      style: { fontFamily: fontOfferingRenderStack(offering) },
+      'data-item': 'btn-fontFamily-option',
+    },
+  }));
+}
+
+/**
+ * Static baseline dropdown options (no pack configured). The fallback when a toolbar has no live
+ * activation to build from; the live path uses {@link composeToolbarFontOptions} with the document's
+ * activation so a configured pack shows the rich set.
+ */
+export const TOOLBAR_FONTS = toolbarFontOptionsFor(BASELINE_BUNDLED);
 
 function normalizeToolbarFamily(value) {
   return String(value ?? '')
@@ -38,21 +53,29 @@ function compareToolbarFontOptions(a, b) {
  * with the bundled defaults. The toolbar only asks for the result; it does not know how a font previews.
  *
  * - A consumer-provided `configFonts` list is returned UNCHANGED (custom toolbars own their list).
- * - With no document options, returns `undefined` so the caller keeps its fallback to {@link TOOLBAR_FONTS}.
- * - Otherwise: bundled defaults and document fonts are deduped by normalized logical family, then sorted
+ * - The built-in base is gated on `activation`: the baseline without a configured pack, the curated
+ *   rich set with one.
+ * - When the base is the baseline AND there are no document options, returns `undefined` so the caller
+ *   keeps its fallback to the static {@link TOOLBAR_FONTS} (it is the same list). Any configured pack
+ *   or extra document font returns the built list.
+ * - Bundled base and document fonts are deduped by normalized logical family, then sorted
  *   alphabetically by the visible font name. `label`/`key` stay the pure logical family (active-state
  *   matching + the stored value), and the preview renders in `previewFamily`.
  *
  * @param {ReadonlyArray<import('@superdoc/font-system').DocumentFontOption>} documentOptions
  * @param {Array} [configFonts] - the consumer's `fonts` config, if any
+ * @param {import('@superdoc/font-system').BundledActivation} [activation] - the document's bundled-font activation
  * @returns {Array|undefined}
  */
-export function composeToolbarFontOptions(documentOptions, configFonts) {
+export function composeToolbarFontOptions(documentOptions, configFonts, activation = BASELINE_BUNDLED) {
   if (configFonts) return configFonts;
-  if (!documentOptions?.length) return undefined;
-  const seen = new Set(TOOLBAR_FONTS.map((option) => normalizeToolbarFamily(option.label)));
-  const merged = [...TOOLBAR_FONTS];
-  for (const option of documentOptions) {
+  // Baseline base AND no document fonts is identical to the static TOOLBAR_FONTS const: let the
+  // caller keep that const instead of rebuilding an equal array.
+  if (!activation.packConfigured && !documentOptions?.length) return undefined;
+  const base = toolbarFontOptionsFor(activation);
+  const seen = new Set(base.map((option) => normalizeToolbarFamily(option.label)));
+  const merged = [...base];
+  for (const option of documentOptions ?? []) {
     const dedupeKey = normalizeToolbarFamily(option.logicalFamily);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -66,7 +89,7 @@ export function composeToolbarFontOptions(documentOptions, configFonts) {
       },
     });
   }
-  return merged.length > TOOLBAR_FONTS.length ? merged.sort(compareToolbarFontOptions) : undefined;
+  return merged.sort(compareToolbarFontOptions);
 }
 
 export const TOOLBAR_FONT_SIZES = [

@@ -39,6 +39,7 @@ jobs:
               - 'packages/document-api/**'
               - 'packages/collaboration-yjs/**'
               - 'packages/docx-evidence-contracts/**'
+              - 'packages/fonts/**'
               - 'shared/**'
               - 'tests/**'
               - 'scripts/**'
@@ -130,6 +131,13 @@ jobs:
         # because the Build step above already ran `pnpm run build`.
         # Local equivalent: `pnpm check:public:superdoc` (with build).
         run: pnpm check:public:superdoc --skip-build
+
+      - name: Font curation list drift check
+        # Fails if the committed packages/fonts/src/bundled-families.ts no longer matches the
+        # font-system curation set, so a font-offerings change that is not regenerated cannot merge
+        # stale (guards the Verdana-bug class). Runs here because the job's path filter covers both
+        # the font offerings (shared/**) and the fonts package (packages/fonts/**).
+        run: pnpm --filter @superdoc/fonts run check:families
 
   unit-tests:
     needs: build

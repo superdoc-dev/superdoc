@@ -205,7 +205,9 @@ describe('DocumentFontController', () => {
 
     controller.map({ Georgia: 'Tinos', Verdana: 'Some Runtime Font' });
     controller.reset();
-    controller.applyInitialConfig({ map: { Georgia: 'Gelasio' } });
+    // assetBaseUrl marks the pack configured, so bundled substitutes stay active and Verdana reverts
+    // to its bundled default (Noto Sans) - proving reset cleared the stale runtime Verdana mapping.
+    controller.applyInitialConfig({ assetBaseUrl: '/fonts/', map: { Georgia: 'Gelasio' } });
     flushMicrotasks();
 
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');

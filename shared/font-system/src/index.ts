@@ -49,9 +49,26 @@ export {
 
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';
 
+// Per-document bundled-font activation (config-presence gate + curation). The resolver and offerings
+// consume it; the editor derives it from `fonts` config via `deriveBundledActivation`.
+export type {
+  BundledFontSelection,
+  BundledActivation,
+  BundledActivationInput,
+  FontAssetConfigLike,
+} from './activation';
+export { createBundledActivation, deriveBundledActivation, FULLY_ACTIVE_BUNDLED, BASELINE_BUNDLED } from './activation';
+
 // The bundled-asset base setter is also exported here (not only the ./bundled subpath) so
 // the CDN entry can resolve it through the bare `@superdoc/font-system` specifier.
-export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_BASE } from './bundled';
+export {
+  setBundledFontAssetBase,
+  getBundledFontAssetBase,
+  DEFAULT_BUNDLED_FONT_BASE,
+  markBundledPackPresent,
+  isBundledPackPresent,
+  __resetBundledPackPresent,
+} from './bundled';
 
 export type { FontResolutionRecord, UsedFace } from './report';
 export { buildFontReport, buildFaceReport } from './report';
@@ -76,6 +93,8 @@ export {
   getDefaultFontFamilyOptions,
   fontOfferingStack,
   fontOfferingRenderStack,
+  warnUnknownBundledSelection,
+  getBundledFamilyNames,
 } from './font-offerings';
 
 export type { DocumentFontOption, FontFamilyOption } from './document-font-options';

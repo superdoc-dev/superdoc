@@ -14,6 +14,12 @@ function makeSuperdocStub(
     documentMode?: 'editing' | 'suggesting' | 'viewing';
     selection?: { empty: boolean; text?: string };
     documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
+    /** The `fonts` config the toolbar derives bundled activation from. Omit for the no-pack baseline. */
+    fontsConfig?: {
+      resolveAssetUrl?: unknown;
+      assetBaseUrl?: string;
+      bundled?: { include?: string[]; exclude?: string[] };
+    };
   } = {},
 ) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -53,7 +59,7 @@ function makeSuperdocStub(
     superdocListenerCount(event: string): number;
   } = {
     activeEditor: editor,
-    config: { documentMode: initial.documentMode ?? 'editing' },
+    config: { documentMode: initial.documentMode ?? 'editing', fonts: initial.fontsConfig },
     fonts: {
       getDocumentFontOptions: vi.fn(() => documentFontOptions),
     },
@@ -136,8 +142,28 @@ describe('createSuperDocUI', () => {
     expect(slice.get()).toBe('editing');
   });
 
-  it('exposes final font-family options for custom UI', () => {
+  it('defaults to the baseline font set when no pack is configured', () => {
     const superdoc = makeSuperdocStub({
+      documentFontOptions: [
+        { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+        { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+    // No pack: the one-per-generic baseline plus the document's own fonts (Calibri is a document font).
+    expect(ui.fonts.getOptions().map((o) => o.label)).toEqual([
+      'Aptos',
+      'Arial',
+      'Calibri',
+      'Courier New',
+      'Times New Roman',
+    ]);
+  });
+
+  it('exposes final font-family options for custom UI when the pack is configured', () => {
+    const superdoc = makeSuperdocStub({
+      fontsConfig: { assetBaseUrl: '/fonts/' },
       documentFontOptions: [
         { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
         { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
@@ -201,7 +227,8 @@ describe('createSuperDocUI', () => {
   });
 
   it('refreshes ui.fonts when fonts-changed fires', async () => {
-    const superdoc = makeSuperdocStub();
+    // Configured pack so the snapshot is the full set (the refresh behavior is the point here).
+    const superdoc = makeSuperdocStub({ fontsConfig: { assetBaseUrl: '/fonts/' } });
     const ui = createSuperDocUI({ superdoc });
     teardown.push(() => ui.destroy());
 

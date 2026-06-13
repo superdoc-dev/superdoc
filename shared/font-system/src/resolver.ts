@@ -23,6 +23,7 @@
 
 import { getFallbackDecisionForFace, getRenderableFallback } from '@docfonts/fallbacks';
 
+import { type BundledActivation, FULLY_ACTIVE_BUNDLED } from './activation';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { SUBSTITUTION_EVIDENCE, type FaceSlot } from './substitution-evidence';
 
@@ -252,6 +253,36 @@ export class FontResolver {
   #version = 0;
   /** Memoized {@link signature}; null = stale, recomputed on next read. Invalidated on every mutation. */
   #cachedSignature: string | null = null;
+  /**
+   * This document's bundled-font activation: which bundled families it may substitute to and
+   * advertise (config-presence + optional curation). Set once at config time via {@link setActivation}
+   * (the editor's `fonts` config is stable across document swaps), then effectively constant. Folded
+   * into {@link signature} so a no-pack / curated document never reuses a full-pack document's measure
+   * cache. Defaults to fully active, so the module-level resolver and any `createFontResolver()` with
+   * no activation keep the prior global substitution behavior.
+   */
+  #activation: BundledActivation;
+
+  constructor(activation: BundledActivation = FULLY_ACTIVE_BUNDLED) {
+    this.#activation = activation;
+  }
+
+  /**
+   * Apply this document's bundled-font activation, derived from the editor's `fonts` config.
+   * Config-time only: the document font controller calls this before the first measure. Busts the
+   * cached {@link signature} (and bumps {@link version}) so the new activation is reflected in both
+   * resolution and the measure-cache key; a no-op when the activation signature is unchanged, so
+   * re-applying the same config on a document swap neither reflows nor drops the cache.
+   */
+  setActivation(activation: BundledActivation): void {
+    if (this.#activation.signature === activation.signature) {
+      this.#activation = activation;
+      return;
+    }
+    this.#activation = activation;
+    this.#version += 1;
+    this.#cachedSignature = null;
+  }
 
   /**
    * Map a logical family to a physical render family for this document, overriding the
@@ -358,19 +389,33 @@ export class FontResolver {
   get signature(): string {
     if (this.#cachedSignature !== null) return this.#cachedSignature;
     // JSON of sorted [logical, physical] pairs: deterministic and collision-safe even when a font name
-    // contains punctuation (a delimited "logical=physical|..." form would not be). Empty (no overrides
-    // AND no embedded bindings) is '' so all default documents share cache. Embedded physical names are
-    // document-unique, so folding them in gives two embedded-Calibri documents distinct signatures
-    // (cache isolation). Format is unchanged when there are no embedded fonts (the common case keeps its
-    // existing identity). Memoized until the next mutation.
-    if (this.#overrides.size === 0 && this.#embedded.size === 0) {
+    // contains punctuation (a delimited "logical=physical|..." form would not be). Embedded physical
+    // names are document-unique, so folding them in gives two embedded-Calibri documents distinct
+    // signatures (cache isolation). The activation signature ('' when FULLY active) is folded in too,
+    // so a no-pack / curated document never reuses a full-pack document's measures. Memoized until the
+    // next mutation.
+    const activation = this.#activation.signature;
+    const hasOverrides = this.#overrides.size > 0;
+    const hasEmbedded = this.#embedded.size > 0;
+    // Fully default AND fully active is '' so all default full-pack documents share cache and match
+    // the global resolver - the existing common-case identity is preserved exactly.
+    if (!hasOverrides && !hasEmbedded && activation === '') {
       this.#cachedSignature = '';
+      return this.#cachedSignature;
+    }
+    const overridePairs = sortPairs([...this.#overrides.entries()]);
+    if (activation === '') {
+      // Legacy format preserved exactly when activation does not narrow this document (override-only,
+      // or override + embedded), so existing signatures/cache identities are unchanged.
+      this.#cachedSignature = !hasEmbedded
+        ? JSON.stringify(overridePairs)
+        : JSON.stringify({ o: overridePairs, e: sortPairs([...this.#embedded.entries()]) });
     } else {
-      const overridePairs = sortPairs([...this.#overrides.entries()]);
-      this.#cachedSignature =
-        this.#embedded.size === 0
-          ? JSON.stringify(overridePairs)
-          : JSON.stringify({ o: overridePairs, e: sortPairs([...this.#embedded.entries()]) });
+      // Activation narrows this document (no pack, or curated): include it under a distinct `a` key.
+      const obj: { o?: Array<[string, string]>; e?: Array<[string, string]>; a: string } = { a: activation };
+      if (hasOverrides) obj.o = overridePairs;
+      if (hasEmbedded) obj.e = sortPairs([...this.#embedded.entries()]);
+      this.#cachedSignature = JSON.stringify(obj);
     }
     return this.#cachedSignature;
   }
@@ -379,11 +424,18 @@ export class FontResolver {
   #physicalFor(bareFamily: string): { physical: string; reason: FontResolutionReason } {
     const key = normalizeFamilyKey(bareFamily);
     const override = this.#overrides.get(key);
+    // An explicit `fonts.map` override is always honored - it is a customer instruction, not a
+    // bundled-pack suggestion, so it is NOT gated by activation.
     if (override) return { physical: override, reason: 'custom_mapping' };
-    const bundled = BUNDLED_SUBSTITUTES[key];
-    if (bundled) return { physical: bundled, reason: 'bundled_substitute' };
-    const category = CATEGORY_FALLBACKS[key];
-    if (category) return { physical: category, reason: 'category_fallback' };
+    // Bundled substitutes / category fallbacks only apply when this document's pack is active. With
+    // no pack configured (baseline), the logical family passes through to system fonts so nothing
+    // fetches a substitute that is not being served; curation narrows which families are active.
+    if (this.#activation.isActive(bareFamily)) {
+      const bundled = BUNDLED_SUBSTITUTES[key];
+      if (bundled) return { physical: bundled, reason: 'bundled_substitute' };
+      const category = CATEGORY_FALLBACKS[key];
+      if (category) return { physical: category, reason: 'category_fallback' };
+    }
     return { physical: bareFamily, reason: 'as_requested' };
   }
 
@@ -425,16 +477,22 @@ export class FontResolver {
     if (hasFace(primary, face.weight, face.style)) {
       return { physical: primary, reason: 'registered_face' };
     }
-    // 3/4. docfonts fallback: either a bundled substitute or a lower-fidelity category fallback.
-    //      Query the face-aware docfonts helper instead of checking the requested face directly:
-    //      rows may explicitly allow synthetic faces (e.g. Cooper Black Bold -> Caprasimo Regular),
-    //      in which case the load gate must await the source face while paint keeps the requested
-    //      bold/italic style for browser synthesis.
-    const docfonts = resolveDocfontsFace(primary, face, hasFace);
-    if (docfonts) return docfonts;
-    // 5. a configured provider (an override or a bundled clone) was known but none could supply this
-    //    face: pass the logical family through, reported non-metric, never faux-styled.
-    const bundled = BUNDLED_SUBSTITUTES[key];
+    // 3/4. docfonts fallback: either a bundled substitute or a lower-fidelity category fallback - but
+    //      ONLY when this document's bundled pack is active for this family (config-presence +
+    //      curation). With no pack configured, the family passes through to system fonts so nothing
+    //      fetches a substitute that is not served. Query the face-aware docfonts helper instead of
+    //      checking the requested face directly: rows may explicitly allow synthetic faces (e.g.
+    //      Cooper Black Bold -> Caprasimo Regular), in which case the load gate must await the source
+    //      face while paint keeps the requested bold/italic style for browser synthesis.
+    const active = this.#activation.isActive(primary);
+    if (active) {
+      const docfonts = resolveDocfontsFace(primary, face, hasFace);
+      if (docfonts) return docfonts;
+    }
+    // 5. a configured provider (an override, or - when active - a bundled clone) was known but none
+    //    could supply this face: pass the logical family through, reported non-metric, never
+    //    faux-styled. An inactive bundled clone is treated as no provider (step 6), not an absent face.
+    const bundled = active ? BUNDLED_SUBSTITUTES[key] : undefined;
     if (override || bundled) {
       return { physical: primary, reason: 'fallback_face_absent' };
     }
@@ -536,9 +594,13 @@ export class FontResolver {
   }
 }
 
-/** Create a per-document resolver seeded with bundled DocFonts fallbacks. */
-export function createFontResolver(): FontResolver {
-  return new FontResolver();
+/**
+ * Create a per-document resolver seeded with bundled DocFonts fallbacks. Pass the document's
+ * {@link BundledActivation} (from `deriveBundledActivation`) so substitution is gated on the pack
+ * being configured and on any curation; omit it for the prior fully-active behavior.
+ */
+export function createFontResolver(activation?: BundledActivation): FontResolver {
+  return new FontResolver(activation);
 }
 
 /**

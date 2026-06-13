@@ -5,11 +5,15 @@
 // from Quill / Chart.js.
 
 import { SuperDoc } from './core/SuperDoc.js';
-import { setBundledFontAssetBase } from '@superdoc/font-system';
+import { markBundledPackPresent, setBundledFontAssetBase } from '@superdoc/font-system';
 import * as namespace from './index.js';
 
-// Default the bundled-font asset base to `./fonts/` relative to THIS script - the CDN
-// package layout ships `superdoc.min.js` next to `fonts/*.woff2`. `document.currentScript`
+// The CDN package layout ships `fonts/*.woff2` next to `superdoc.min.js`, so the bundled pack is
+// served by default - mark it present so the toolbar and resolver light up the rich pack without
+// per-instance `fonts` config (npm consumers signal it via `fonts.resolveAssetUrl` / `assetBaseUrl`).
+markBundledPackPresent();
+
+// Default the bundled-font asset base to `./fonts/` relative to THIS script. `document.currentScript`
 // is valid while the script is executing (this top-level runs then), and null later in
 // callbacks, so we must capture it here, not inside font loading. Consumer config
 // (`fonts.assetBaseUrl` / `fonts.resolveAssetUrl`) takes precedence over this default.

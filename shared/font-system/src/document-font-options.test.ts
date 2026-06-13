@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BASELINE_BUNDLED,
+  FULLY_ACTIVE_BUNDLED,
   buildDocumentFontOptions,
   buildFontFamilyOptions,
   type FontFaceRequest,
@@ -116,13 +118,34 @@ describe('buildDocumentFontOptions (document-specific toolbar fonts)', () => {
 });
 
 describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
-  it('combines bundled toolbar choices and document fonts alphabetically with no status field', () => {
-    const options = buildFontFamilyOptions([
-      { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
-      { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
-      { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
-      { logicalFamily: 'Apple Chancery', previewFamily: 'Apple Chancery' },
+  const documentOptions = [
+    { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+    { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
+    { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
+    { logicalFamily: 'Apple Chancery', previewFamily: 'Apple Chancery' },
+  ];
+
+  it('with no pack configured: the baseline plus document fonts, alphabetical, no status field', () => {
+    const options = buildFontFamilyOptions(documentOptions);
+    expect(options.map((option) => option.label)).toEqual([
+      'Apple Chancery',
+      'Aptos',
+      'Arial',
+      'Bangla MN',
+      'Calibri',
+      'Courier New',
+      'Times New Roman',
     ]);
+    // BASELINE_BUNDLED is the explicit form of the same default.
+    expect(buildFontFamilyOptions(documentOptions, BASELINE_BUNDLED).map((o) => o.label)).toEqual(
+      options.map((o) => o.label),
+    );
+    expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
+    expect(options.every((option) => !('status' in option))).toBe(true);
+  });
+
+  it('with the pack configured: the full built-in set plus document fonts', () => {
+    const options = buildFontFamilyOptions(documentOptions, FULLY_ACTIVE_BUNDLED);
     expect(options.map((option) => option.label)).toEqual([
       'Apple Chancery',
       'Aptos',
@@ -151,7 +174,6 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
       'Verdana',
     ]);
     expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
-    expect(options.every((option) => !('status' in option))).toBe(true);
   });
 
   it('uses the logical family as the apply value and previewFamily only for row rendering', () => {

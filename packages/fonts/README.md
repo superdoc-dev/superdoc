@@ -40,6 +40,25 @@ That is the whole setup. No copying files into `public/`, no `assetBaseUrl`. The
 written as `new URL('../assets/<file>', import.meta.url)`, which Vite, Webpack 5, Next, Nuxt,
 esbuild, and Parcel all detect, emit, and rewrite to the final hashed path.
 
+### Choosing which fonts
+
+`superdocFonts` enables every reviewed family. To narrow the set, use `createSuperDocFonts` and name
+the families by their Word name (`Calibri`, not the substitute `Carlito`):
+
+```js
+import { createSuperDocFonts } from '@superdoc/fonts';
+
+// Everything except a couple:
+new SuperDoc({ selector: '#editor', document, fonts: createSuperDocFonts({ exclude: ['Cooper Black'] }) });
+
+// Or only an explicit set:
+new SuperDoc({ selector: '#editor', document, fonts: createSuperDocFonts({ include: ['Calibri', 'Cambria'] }) });
+```
+
+`include` is an allow-list; `exclude` keeps everything but the named families. Curation drives the
+toolbar list and which families SuperDoc substitutes. Your own licensed fonts stay separate
+(`fonts.families`).
+
 ### Hosting the assets another way
 
 If you serve the fonts from a CDN or a signed path instead, you do not need this package's

@@ -28,6 +28,28 @@ export function getBundledFontAssetBase(): string {
   return defaultAssetBase;
 }
 
+// Whether the bundled pack is served WITHOUT per-instance config. The CDN `<script>` build ships
+// `fonts/*.woff2` next to `superdoc.min.js`, so its entry marks the pack present; npm consumers
+// signal it per instance via `fonts.resolveAssetUrl` / `fonts.assetBaseUrl` instead. Drives the
+// config-presence gate (`deriveBundledActivation`) so the toolbar/resolver light up the rich pack
+// only when it will actually be served.
+let bundledPackPresent = false;
+
+/** Mark the bundled pack as served page-globally (the CDN build calls this beside its base setter). */
+export function markBundledPackPresent(): void {
+  bundledPackPresent = true;
+}
+
+/** Whether the bundled pack is served page-globally (set by the CDN build). */
+export function isBundledPackPresent(): boolean {
+  return bundledPackPresent;
+}
+
+/** Reset the page-global pack-present flag. Test-only; not part of the public surface. */
+export function __resetBundledPackPresent(): void {
+  bundledPackPresent = false;
+}
+
 export interface InstallBundledOptions {
   /** Highest-precedence per-face URL resolver (consumer `fonts.resolveAssetUrl`). */
   resolveAssetUrl?: FontAssetUrlResolver;

@@ -188,6 +188,10 @@ function init(file?: File, content?: ContentOverrideInput) {
     selector: '#editor',
     useLayoutEngine: layout,
     telemetry: { enabled: false },
+    // Configure the bundled pack so the harness exercises the FULL toolbar + substitution (the
+    // product's rich experience). Without a configured pack the toolbar is the conservative
+    // baseline; font specs assert the rich list, so the harness opts in here.
+    fonts: { assetBaseUrl: '/fonts/' },
     onReady: ({ superdoc }: SuperDocReadyPayload) => {
       harnessWindow.superdoc = superdoc;
       if (comments === 'panel' && commentsPanel) {

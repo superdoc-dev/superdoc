@@ -13,7 +13,7 @@ import type {
   CommentLocationsPayload,
   ListDefinitionsPayload,
 } from './EditorEvents.js';
-import type { FontAssetUrlResolver } from '@superdoc/font-system';
+import type { BundledFontSelection, FontAssetUrlResolver } from '@superdoc/font-system';
 
 /**
  * One physical font face to register from a URL source.
@@ -57,6 +57,14 @@ export interface FontsConfig {
    * Synchronous (font resolution stays deterministic). Takes precedence over `assetBaseUrl`.
    */
   resolveAssetUrl?: FontAssetUrlResolver;
+  /**
+   * Curate which bundled families this document advertises and substitutes to, by LOGICAL Word name
+   * (e.g. `"Calibri"`). Applies only when the pack is configured; it narrows the rich set, it does
+   * not enable it. Prefer setting this with `createSuperDocFonts({ include / exclude })` from
+   * `@superdoc/fonts` rather than by hand. Does not affect customer fonts ({@link families} /
+   * {@link map}), which are always honored.
+   */
+  bundled?: BundledFontSelection;
 }
 import type { ProseMirrorJSON } from './EditorTypes.js';
 

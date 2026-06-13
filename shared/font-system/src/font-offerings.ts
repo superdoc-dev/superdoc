@@ -15,6 +15,7 @@
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
  */
+import { type BundledActivation, type BundledFontSelection, BASELINE_BUNDLED } from './activation';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { type CssGeneric, SUBSTITUTION_EVIDENCE, type SubstituteVerdict } from './substitution-evidence';
 
@@ -53,6 +54,26 @@ export interface FontOffering {
 
 const BUNDLED_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 const SUPPORTED_ALIAS_FAMILIES: ReadonlySet<string> = new Set(['Arial MT', 'Courier', 'Times']);
+
+/**
+ * The conservative toolbar baseline shown when the bundled pack is NOT configured: one common
+ * Word-facing font per CSS generic - Arial (sans-serif), Times New Roman (serif), Courier New
+ * (monospace). The applied stack ends in that generic, so each degrades gracefully on a machine that
+ * lacks the exact font - no named font is ever guaranteed installed, so this is a readable floor, not
+ * an exact-typography promise. Each has a metric-safe bundled clone (Liberation Sans/Serif/Mono) that
+ * activates only once the pack is configured. Georgia and the other serif/sans options are
+ * pack-enabled rich choices (see {@link ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES}), not baseline
+ * necessities. Documents still resolve the full substitute table through the resolver when their pack
+ * is active.
+ */
+const BUILT_IN_TOOLBAR_BASELINE_FAMILIES: ReadonlySet<string> = new Set(['Arial', 'Courier New', 'Times New Roman']);
+
+/**
+ * The richer set advertised ON TOP of the clean defaults when the bundled pack IS configured.
+ * Bundled qualified / category-fallback families the product has chosen to surface. Inert without a
+ * configured pack (they would not render), and individually removable via `createSuperDocFonts`
+ * curation.
+ */
 const ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES: ReadonlySet<string> = new Set([
   'Arial Black',
   'Arial Narrow',
@@ -128,17 +149,31 @@ export function getDefaultFontOfferings(): FontOffering[] {
 }
 
 /**
- * Built-in font picker options SuperDoc can render from its bundled assets. Includes clean defaults plus
- * explicitly advertised qualified/category fallbacks. Consumers that need strict metric-safe choices
- * should use {@link getDefaultFontOfferings}.
+ * Built-in font picker options for a document, gated on its bundled-font {@link BundledActivation}:
+ *
+ *  - pack NOT configured (the default): the conservative {@link BUILT_IN_TOOLBAR_BASELINE_FAMILIES}
+ *    baseline - only fonts that render acceptably with no pack served. SuperDoc does not advertise
+ *    bundled fonts it would have to fetch from an unconfigured location.
+ *  - pack configured: the clean defaults plus the advertised qualified / category fallbacks, minus
+ *    any the consumer curated out (`createSuperDocFonts({ include / exclude })`).
+ *
+ * Documents still RESOLVE the full reviewed substitute table through the resolver when their pack is
+ * active; this governs only what the picker ADVERTISES. Consumers that need strict metric-safe
+ * choices should use {@link getDefaultFontOfferings}.
  */
-export function getBuiltInToolbarFontOfferings(): FontOffering[] {
+export function getBuiltInToolbarFontOfferings(activation: BundledActivation = BASELINE_BUNDLED): FontOffering[] {
+  if (!activation.packConfigured) {
+    return FONT_OFFERINGS.filter((o) => o.bundled && BUILT_IN_TOOLBAR_BASELINE_FAMILIES.has(o.logicalFamily)).sort(
+      compareLogicalFamily,
+    );
+  }
   return FONT_OFFERINGS.filter(
     (o) =>
-      o.offering === 'default' ||
-      (o.bundled &&
-        ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES.has(o.logicalFamily) &&
-        (o.offering === 'qualified' || o.offering === 'category_fallback')),
+      (o.offering === 'default' ||
+        (o.bundled &&
+          ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES.has(o.logicalFamily) &&
+          (o.offering === 'qualified' || o.offering === 'category_fallback'))) &&
+      activation.isActive(o.logicalFamily),
   ).sort(compareLogicalFamily);
 }
 
@@ -162,9 +197,104 @@ export function fontOfferingRenderStack(offering: FontOffering): string {
  * built-in (Vue) toolbar builds its own richer `FontConfig` from
  * {@link getBuiltInToolbarFontOfferings}.
  */
-export function getDefaultFontFamilyOptions(): readonly { label: string; value: string }[] {
-  return getBuiltInToolbarFontOfferings().map((offering) => ({
+export function getDefaultFontFamilyOptions(
+  activation: BundledActivation = BASELINE_BUNDLED,
+): readonly { label: string; value: string }[] {
+  return getBuiltInToolbarFontOfferings(activation).map((offering) => ({
     label: offering.logicalFamily,
     value: fontOfferingStack(offering),
   }));
+}
+
+/** Normalize a family name for keying: trim, strip surrounding quotes, lowercase. */
+function normalizeFamilyKey(family: string): string {
+  return family
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .toLowerCase();
+}
+
+/** Every logical Word family SuperDoc ships a bundled substitute for - the set curation can target. */
+const BUNDLED_LOGICAL_FAMILIES: readonly string[] = [
+  ...new Set(FONT_OFFERINGS.filter((o) => o.bundled).map((o) => o.logicalFamily)),
+].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+const BUNDLED_LOGICAL_KEYS: ReadonlySet<string> = new Set(BUNDLED_LOGICAL_FAMILIES.map(normalizeFamilyKey));
+
+/**
+ * The Word family names a document can curate (`include` / `exclude`) - i.e. every logical family the
+ * resolver substitutes to a bundled face, including category fallbacks like Verdana. The SINGLE source
+ * of truth for the curation surface: {@link warnUnknownBundledSelection} validates against it, and
+ * `@superdoc/fonts` generates its committed list from it (so the strict `createSuperDocFonts` helper and
+ * the lenient raw-config warning accept exactly the same names - no font advertised in the toolbar is
+ * un-curatable). Distinct from the asset manifest's `replaces` (a metric-clone list that omits
+ * category fallbacks).
+ */
+export function getBundledFamilyNames(): string[] {
+  return [...BUNDLED_LOGICAL_FAMILIES];
+}
+
+/** Bounded Levenshtein distance between two short strings, for a "did you mean" curation hint. */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > 2) return 3; // cannot be within the suggestion threshold
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i += 1) {
+    const curr = [i];
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+/** The closest bundled family within edit distance 2, or null - so a typo gets a concrete suggestion. */
+function closestBundledFamily(name: string): string | null {
+  const key = normalizeFamilyKey(name);
+  let best: string | null = null;
+  let bestDist = 3;
+  for (const family of BUNDLED_LOGICAL_FAMILIES) {
+    const dist = editDistance(key, normalizeFamilyKey(family));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = family;
+    }
+  }
+  return best;
+}
+
+/**
+ * Warn (once per name) at config time when a `fonts.bundled` curation entry is not a bundled family,
+ * so curating it silently does nothing - and when both `include` and `exclude` are set. The safety
+ * net for `fonts.bundled` set DIRECTLY: `createSuperDocFonts` already rejects unknown names and
+ * structural errors in the consumer's setup code, but a hand-written `fonts.bundled` bypasses it. Warn
+ * (not throw) here because this runs at editor init, where a font-name typo must not crash the editor.
+ */
+export function warnUnknownBundledSelection(selection: BundledFontSelection | undefined): void {
+  if (!selection) return;
+  const include = selection.include ?? [];
+  const exclude = selection.exclude ?? [];
+  if (include.length && exclude.length) {
+    console.warn(
+      '[superdoc] fonts.bundled: set `include` OR `exclude`, not both. ' +
+        'Using `include` (the allow-list) and ignoring `exclude`. Prefer createSuperDocFonts(), which rejects this.',
+    );
+  }
+  const seen = new Set<string>();
+  for (const name of [...include, ...exclude]) {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!trimmed) continue;
+    const key = normalizeFamilyKey(trimmed);
+    if (BUNDLED_LOGICAL_KEYS.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    const suggestion = closestBundledFamily(trimmed);
+    console.warn(
+      `[superdoc] fonts.bundled: "${trimmed}" is not a bundled font, so curating it has no effect` +
+        `${suggestion ? ` (did you mean "${suggestion}"?)` : ''}. ` +
+        'Curate by Word family name, e.g. Calibri, Cambria, Times New Roman. ' +
+        'Docs: https://docs.superdoc.dev/getting-started/fonts',
+    );
+  }
 }

@@ -17,6 +17,17 @@ const local = resolve(here, '../assets');
 const sourceDir = existsSync(canonical) ? canonical : local;
 const outFile = resolve(here, '../src/asset-urls.ts');
 
+/** Format with the repo Prettier when available so committed output is stable; tolerate its absence. */
+async function formatTs(content, filepath) {
+  try {
+    const prettier = await import('prettier');
+    const config = (await prettier.resolveConfig(filepath)) ?? {};
+    return await prettier.format(content, { ...config, filepath });
+  } catch {
+    return content;
+  }
+}
+
 const files = readdirSync(sourceDir)
   .filter((f) => f.endsWith('.woff2'))
   .sort();
@@ -44,16 +55,11 @@ ${entries}
 // generator produces byte-identical output and the format hook never rewrites it. Prettier is
 // optional - in a consumer git-install it may be absent, and the unformatted output is still
 // valid TypeScript - so a missing prettier is not an error.
-let output = content;
-try {
-  const prettier = await import('prettier');
-  const config = (await prettier.resolveConfig(outFile)) ?? {};
-  output = await prettier.format(content, { ...config, filepath: outFile });
-} catch {
-  // Prettier not resolvable here; write the unformatted (still valid) output.
-}
-
-writeFileSync(outFile, output);
+writeFileSync(outFile, await formatTs(content, outFile));
 console.log(
   `[@superdoc/fonts] wrote ${files.length} asset URLs -> src/asset-urls.ts (source: ${sourceDir.includes('shared') ? 'canonical' : 'local'})`,
 );
+
+// The curatable family-name list (src/bundled-families.ts) is generated SEPARATELY by
+// scripts/generate-bundled-families.ts: it must mirror the runtime resolver/offerings curation set
+// (which includes category fallbacks like Verdana), not the asset manifest's metric-clone `replaces`.

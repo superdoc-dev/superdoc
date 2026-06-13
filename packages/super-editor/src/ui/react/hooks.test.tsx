@@ -16,6 +16,11 @@ function makeSuperdocStub(
   overrides: {
     selectionInfo?: unknown;
     documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
+    fontsConfig?: {
+      resolveAssetUrl?: unknown;
+      assetBaseUrl?: string;
+      bundled?: { include?: string[]; exclude?: string[] };
+    };
   } = {},
 ) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -51,7 +56,7 @@ function makeSuperdocStub(
 
   return {
     activeEditor: editor,
-    config: { documentMode: 'editing' as const },
+    config: { documentMode: 'editing' as const, fonts: overrides.fontsConfig },
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!superdocListeners.has(event)) superdocListeners.set(event, new Set());
       superdocListeners.get(event)!.add(handler);
@@ -157,7 +162,7 @@ describe('domain hooks', () => {
     expect(toolbar).toEqual({ context: null, commands: {} });
   });
 
-  it('useSuperDocFontOptions returns defaults plus active document fonts', () => {
+  it('useSuperDocFontOptions returns the configured set plus active document fonts', () => {
     let options: ReturnType<typeof useSuperDocFontOptions> | undefined;
     let setSuperDoc: ReturnType<typeof useSetSuperDoc> | undefined;
 
@@ -178,6 +183,7 @@ describe('domain hooks', () => {
     act(() => {
       setSuperDoc!(
         makeSuperdocStub({
+          fontsConfig: { assetBaseUrl: '/fonts/' },
           documentFontOptions: [{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }],
         }),
       );

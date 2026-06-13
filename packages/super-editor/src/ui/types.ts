@@ -81,6 +81,13 @@ export interface SuperDocLike {
         authorColors?: import('@superdoc/contracts').AuthorColorsConfig;
       };
     };
+    /**
+     * The `fonts` config (the same object passed to `new SuperDoc({ fonts })`). The toolbar derives
+     * the document's bundled-font activation from it via `deriveBundledActivation`, so the picker
+     * advertises the conservative baseline by default and the curated rich set only once the pack is wired.
+     * Loosely typed (structural) so test stubs need not model the full `FontsConfig`.
+     */
+    fonts?: import('@superdoc/font-system').FontAssetConfigLike;
   };
   /**
    * Optional setter for documentMode. Consumed by `ui.document.setMode`

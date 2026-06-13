@@ -6,6 +6,7 @@
  * Fallback diagnostics are intentionally not part of this surface. The toolbar lists document fonts as
  * plain picker rows; internal fallback/reporting details stay in SuperDoc's runtime font report.
  */
+import { type BundledActivation, BASELINE_BUNDLED } from './activation';
 import { buildFaceReport, type FontResolutionRecord, type UsedFace } from './report';
 import { getBuiltInToolbarFontOfferings } from './font-offerings';
 import type { FontRegistry } from './registry';
@@ -84,13 +85,20 @@ function compareByLabel(a: FontFamilyOption, b: FontFamilyOption): number {
 }
 
 /**
- * Compose the final font-family picker list from bundled toolbar choices plus active document fonts.
- * The result is sorted alphabetically and deduped by logical family.
+ * Compose the final font-family picker list from the built-in toolbar choices plus the active
+ * document's fonts. The built-in choices are gated on the document's bundled-font {@link
+ * BundledActivation} (baseline when no pack is configured, the curated rich set when it is); pass it
+ * from the editor so the picker advertises only what this document will render. Document fonts are
+ * always listed - they come from the loaded document itself. Sorted alphabetically, deduped by
+ * logical family.
  */
-export function buildFontFamilyOptions(documentOptions: ReadonlyArray<DocumentFontOption>): FontFamilyOption[] {
+export function buildFontFamilyOptions(
+  documentOptions: ReadonlyArray<DocumentFontOption>,
+  activation: BundledActivation = BASELINE_BUNDLED,
+): FontFamilyOption[] {
   const seen = new Set<string>();
   const options: FontFamilyOption[] = [];
-  for (const offering of getBuiltInToolbarFontOfferings()) {
+  for (const offering of getBuiltInToolbarFontOfferings(activation)) {
     const key = normalizeKey(offering.logicalFamily);
     if (seen.has(key)) continue;
     seen.add(key);

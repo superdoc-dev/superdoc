@@ -1,4 +1,9 @@
-import type { FontFaceRequest, FontResolver } from '@superdoc/font-system';
+import {
+  deriveBundledActivation,
+  warnUnknownBundledSelection,
+  type FontFaceRequest,
+  type FontResolver,
+} from '@superdoc/font-system';
 import type { FontFamilyConfig, FontsConfig } from '../../types/EditorConfig.js';
 import type { FontReadinessGate } from './FontReadinessGate.js';
 
@@ -169,8 +174,14 @@ export class DocumentFontController {
    * registration cannot move the resolver signature that would otherwise bust them), so the first
    * measure cannot reuse a stale fallback width another editor instance left in the global cache.
    */
-  applyInitialConfig(config: Pick<FontsConfig, 'families' | 'map'> | null | undefined): void {
+  applyInitialConfig(config: FontsConfig | null | undefined): void {
     this.#cancelPendingRuntimeReflow();
+    // Surface curation typos / non-bundled names (and include+exclude both) once, at config time.
+    warnUnknownBundledSelection(config?.bundled);
+    // Derive activation even with NO config: an npm app that wired no pack defaults to the safe
+    // baseline (no substitution, no stray .woff2 fetches), while the CDN build - which marks the pack
+    // present - stays rich. Set before families/map so the first resolution already reflects it.
+    this.#resolver.setActivation(deriveBundledActivation(config));
     if (!config) return;
     const registered = this.#registerFamilies(config.families);
     this.#applyMappings(config.map);

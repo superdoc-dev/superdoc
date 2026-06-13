@@ -101,7 +101,7 @@ function FontSizePicker() {
 
 ## Font family picker
 
-Use `useSuperDocFontOptions()` for a custom font dropdown. It returns the built-in defaults plus fonts used by the active document, sorted alphabetically.
+Use `useSuperDocFontOptions()` for a custom font dropdown. It returns the fonts SuperDoc can render plus fonts used by the active document, sorted alphabetically. Without a configured font pack that is the conservative baseline; configure the pack (`@superdoc/fonts`, or `fonts.assetBaseUrl`) and it returns the full set, minus anything curated with `createSuperDocFonts`.
 
 `label` is what you show. `value` is what you pass to the `font-family` command. `previewFamily` is only for rendering the option row.
 

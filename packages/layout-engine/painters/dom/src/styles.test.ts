@@ -244,6 +244,42 @@ describe('ensureSdtContainerStyles', () => {
     expect(beforeRule).toContain('background: none;');
   });
 
+  it('keeps inline SDT box geometry stable in viewing mode', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingInlineRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-inline,\s*\.presentation-editor--viewing \.superdoc-structured-content-inline:hover\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const viewingInlineLockedHoverRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-inline\[data-lock-mode\]:hover\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+
+    expect(viewingInlineRule).toContain('background: none;');
+    expect(viewingInlineRule).toContain('border-color: transparent;');
+    expect(viewingInlineRule).not.toContain('padding: 0;');
+    expect(viewingInlineRule).not.toContain('border: none;');
+    expect(viewingInlineLockedHoverRule).not.toContain('border: none;');
+  });
+
+  it('suppresses empty inline SDT border color in viewing mode without removing its border box', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingEmptyInlineRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-inline\[data-empty='true'\]:not\(\[data-appearance='hidden'\]\)\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+
+    expect(viewingEmptyInlineRule).toContain('border-color: transparent;');
+    expect(viewingEmptyInlineRule).not.toContain('border: none;');
+    expect(viewingEmptyInlineRule).not.toContain('padding: 0;');
+  });
+
   it('suppresses block SDT resting background paint in viewing and print modes', () => {
     ensureSdtContainerStyles(document);
 

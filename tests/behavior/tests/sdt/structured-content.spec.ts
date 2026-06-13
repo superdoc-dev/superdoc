@@ -321,7 +321,7 @@ test.describe('viewing mode hides SDT affordances', () => {
     await superdoc.snapshot('block SDT viewing mode');
   });
 
-  test('inline SDT border and label are hidden in viewing mode', async ({ superdoc }) => {
+  test('inline SDT visual border and label are hidden in viewing mode', async ({ superdoc }) => {
     await superdoc.type('Hello ');
     await superdoc.waitForStable();
     await insertInlineSdt(superdoc.page, 'Hidden Inline', 'value');
@@ -334,11 +334,11 @@ test.describe('viewing mode hides SDT affordances', () => {
       const el = document.querySelector(sel);
       if (!el) return null;
       const cs = getComputedStyle(el);
-      return { border: cs.borderStyle };
+      return { borderColor: cs.borderColor };
     }, INLINE_SDT);
 
     expect(styles).not.toBeNull();
-    expect(styles!.border).toBe('none');
+    expect(styles!.borderColor === 'rgba(0, 0, 0, 0)' || styles!.borderColor === 'transparent').toBe(true);
     await superdoc.assertElementHidden(INLINE_LABEL);
 
     await superdoc.snapshot('inline SDT viewing mode');

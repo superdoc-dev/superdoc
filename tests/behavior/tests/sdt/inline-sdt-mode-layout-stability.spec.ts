@@ -52,4 +52,39 @@ test.describe('inline SDT mode layout stability', () => {
     expect(Math.abs(suggestingLeft - editingLeft)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(viewingLeft - editingLeft)).toBeLessThanOrEqual(0.5);
   });
+
+  test('empty inline SDT does not show a visible border in viewing mode', async ({ superdoc }) => {
+    await superdoc.type('Before ');
+    await superdoc.waitForStable();
+    await superdoc.page.evaluate(() => {
+      const editor = (window as any).editor;
+      const node = editor.schema.nodes.structuredContent.create({
+        id: '3121',
+        tag: 'inline_text_sdt',
+        alias: 'Empty Inline',
+      });
+      editor.view.dispatch(editor.state.tr.replaceSelectionWith(node));
+    });
+    await superdoc.waitForStable();
+
+    await superdoc.setDocumentMode('viewing');
+    await superdoc.waitForStable();
+
+    const styles = await superdoc.page.evaluate(() => {
+      const wrapper = document.querySelector(
+        '.superdoc-structured-content-inline[data-sdt-id="3121"][data-empty="true"]',
+      );
+      if (!wrapper) throw new Error('Empty inline SDT wrapper not found');
+      const computed = getComputedStyle(wrapper);
+      return {
+        borderColor: computed.borderColor,
+        borderStyle: computed.borderStyle,
+        padding: computed.padding,
+      };
+    });
+
+    expect(styles.borderColor === 'rgba(0, 0, 0, 0)' || styles.borderColor === 'transparent').toBe(true);
+    expect(styles.borderStyle).not.toBe('none');
+    expect(styles.padding).not.toBe('0px');
+  });
 });

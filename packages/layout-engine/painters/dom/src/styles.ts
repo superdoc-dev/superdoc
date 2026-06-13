@@ -1012,6 +1012,10 @@ const SDT_CONTAINER_STYLES = `
   border-color: transparent;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-inline[data-empty='true']:not([data-appearance='hidden']) {
+  border-color: transparent;
+}
+
 .presentation-editor--viewing .superdoc-structured-content__label,
 .presentation-editor--viewing .superdoc-structured-content-inline__label {
   display: none !important;

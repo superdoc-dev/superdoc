@@ -103,7 +103,6 @@ describe('composeToolbarFontOptions (document fonts unioned with the built-in se
       'Bangla MN',
       'Calibri',
       'Courier New',
-      'Georgia',
       'Times New Roman',
     ]);
     expect(options.filter((o) => o.label === 'Calibri')).toHaveLength(1);

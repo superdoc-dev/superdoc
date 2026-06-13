@@ -35,7 +35,7 @@ interface HarnessConfig {
    * (`include-calibri` / `exclude-cooper`), malformed raw config (`bad-raw`), and a 404 base
    * (`bad-url`).
    */
-  fonts?: 'no-pack' | 'pack' | 'include-calibri' | 'exclude-cooper' | 'bad-raw' | 'bad-url';
+  fonts?: 'no-pack' | 'pack' | 'package' | 'include-calibri' | 'exclude-cooper' | 'bad-raw' | 'bad-url';
 }
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';

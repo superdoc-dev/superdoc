@@ -1,6 +1,7 @@
 import 'superdoc/style.css';
 import { SuperDoc } from 'superdoc';
 import { createSuperDocUI } from 'superdoc/ui';
+import { superdocFonts } from '@superdoc-dev/fonts';
 
 type SuperDocUIInstance = ReturnType<typeof createSuperDocUI>;
 
@@ -202,6 +203,10 @@ function resolveHarnessFontsConfig(mode: string | null): SuperDocConfig['fonts']
     case 'bad-url':
       // Pack configured but the assets are not served there: faces 404 on use, with a clear warning.
       return { assetBaseUrl: '/__missing-fonts__/' };
+    case 'package':
+      // The real `@superdoc-dev/fonts` DX: no assetBaseUrl, the package resolves each face to a
+      // bundler-emitted asset URL. Proves the import-and-go path users copy from the docs.
+      return superdocFonts as SuperDocConfig['fonts'];
     case 'pack':
     default:
       return { assetBaseUrl: '/fonts/' };

@@ -39,7 +39,14 @@ export default defineConfig({
   },
   plugins: [vue(), serveBundledFonts],
   resolve: {
-    alias: getAliases(true),
+    // Alias the optional published pack to its source so the harness can import it without declaring
+    // a dep (pnpm's isolated linker would otherwise not link it here). This still exercises the real
+    // DX: Vite resolves the package's `new URL('../assets/x.woff2', import.meta.url)` and emits the
+    // asset, which is what the `fonts: 'package'` mode verifies end to end.
+    alias: [
+      { find: '@superdoc-dev/fonts', replacement: path.resolve(here, '../../../packages/fonts/src/index.ts') },
+      ...getAliases(true),
+    ],
     conditions: ['source'],
   },
   server: {

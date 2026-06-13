@@ -6,8 +6,8 @@ recurring CI publishing is a follow-up.
 ## First publish (manual, required once)
 
 We are not wiring release automation into this PR. The first publish is done by hand so we can
-publish `0.1.0` under the new `@superdoc` org with a deliberate version, rather than letting
-automation pick it. Use the `caio-pizzol` account / a token with publish rights to the `@superdoc`
+publish `0.1.0` under the `@superdoc-dev` org with a deliberate version, rather than letting
+automation pick it. Use the `caio-pizzol` account / a token with publish rights to the `@superdoc-dev`
 org.
 
 ```bash

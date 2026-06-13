@@ -29,6 +29,13 @@ interface HarnessConfig {
   documentMode?: 'editing' | 'viewing' | 'suggesting';
   previewScroll?: boolean;
   blockPreviewScrollEvents?: boolean;
+  /**
+   * Bundled-font mode forwarded to the harness as `?fonts=`. Unset keeps the rich pack (the default
+   * the other specs rely on). Drives the font-availability specs: `no-pack` baseline, curation
+   * (`include-calibri` / `exclude-cooper`), malformed raw config (`bad-raw`), and a 404 base
+   * (`bad-url`).
+   */
+  fonts?: 'no-pack' | 'pack' | 'include-calibri' | 'exclude-cooper' | 'bad-raw' | 'bad-url';
 }
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';
@@ -67,6 +74,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.documentMode) params.set('documentMode', config.documentMode);
   if (config.previewScroll) params.set('previewScroll', '1');
   if (config.blockPreviewScrollEvents) params.set('blockPreviewScrollEvents', '1');
+  if (config.fonts) params.set('fonts', config.fonts);
   const qs = params.toString();
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }

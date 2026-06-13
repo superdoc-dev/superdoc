@@ -329,8 +329,6 @@ Snapshot values match the format you pass to `execute()`. What you read is what 
 
 For a font dropdown that also includes fonts used by the active document, use `useSuperDocFontOptions()` from `superdoc/ui/react` or `ui.fonts` from `superdoc/ui`.
 
-`DEFAULT_FONT_FAMILY_OPTIONS` is the conservative no-pack baseline - one Word font per CSS generic (Arial, Times New Roman, Courier New). For the full pack plus any curation and the active document's fonts, use `useSuperDocFontOptions()` from `superdoc/ui/react` or `ui.fonts` from `superdoc/ui`; they reflect the configured pack at runtime, which a static constant cannot.
-
 For font family, font size, and other commands that apply to selected text, prefer a button menu or popover that prevents `mousedown` from moving focus out of the editor. Native selects can visually clear the editor selection while their menu is open.
 
 <CodeGroup>

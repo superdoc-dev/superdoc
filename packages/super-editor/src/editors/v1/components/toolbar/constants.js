@@ -49,18 +49,11 @@ function compareToolbarFontOptions(a, b) {
 
 /**
  * The single seam that composes the font dropdown options: it turns the active document's
- * {@link import('@superdoc/font-system').DocumentFontOption}s into toolbar font options and unions them
- * with the bundled defaults. The toolbar only asks for the result; it does not know how a font previews.
- *
- * - A consumer-provided `configFonts` list is returned UNCHANGED (custom toolbars own their list).
- * - The built-in base is gated on `activation`: the baseline without a configured pack, the curated
- *   rich set with one.
- * - When the base is the baseline AND there are no document options, returns `undefined` so the caller
- *   keeps its fallback to the static {@link TOOLBAR_FONTS} (it is the same list). Any configured pack
- *   or extra document font returns the built list.
- * - Bundled base and document fonts are deduped by normalized logical family, then sorted
- *   alphabetically by the visible font name. `label`/`key` stay the pure logical family (active-state
- *   matching + the stored value), and the preview renders in `previewFamily`.
+ * {@link import('@superdoc/font-system').DocumentFontOption}s into toolbar font options, unions them
+ * with the activation-gated built-in base (baseline without a configured pack, the curated rich set
+ * with one), dedupes by normalized logical family, and sorts by visible name. A consumer-provided
+ * `configFonts` list is returned unchanged. Returns `undefined` only when the base is the baseline and
+ * there are no document fonts, so the caller can keep the equal static {@link TOOLBAR_FONTS} const.
  *
  * @param {ReadonlyArray<import('@superdoc/font-system').DocumentFontOption>} documentOptions
  * @param {Array} [configFonts] - the consumer's `fonts` config, if any

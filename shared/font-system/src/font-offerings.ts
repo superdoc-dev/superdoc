@@ -58,13 +58,8 @@ const SUPPORTED_ALIAS_FAMILIES: ReadonlySet<string> = new Set(['Arial MT', 'Cour
 /**
  * The conservative toolbar baseline shown when the bundled pack is NOT configured: one common
  * Word-facing font per CSS generic - Arial (sans-serif), Times New Roman (serif), Courier New
- * (monospace). The applied stack ends in that generic, so each degrades gracefully on a machine that
- * lacks the exact font - no named font is ever guaranteed installed, so this is a readable floor, not
- * an exact-typography promise. Each has a metric-safe bundled clone (Liberation Sans/Serif/Mono) that
- * activates only once the pack is configured. Georgia and the other serif/sans options are
- * pack-enabled rich choices (see {@link ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES}), not baseline
- * necessities. Documents still resolve the full substitute table through the resolver when their pack
- * is active.
+ * (monospace). Each has a metric-safe bundled clone that activates only once the pack is configured;
+ * the richer set (Georgia and the rest) is pack-enabled, see {@link ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES}.
  */
 const BUILT_IN_TOOLBAR_BASELINE_FAMILIES: ReadonlySet<string> = new Set(['Arial', 'Courier New', 'Times New Roman']);
 
@@ -221,13 +216,11 @@ const BUNDLED_LOGICAL_FAMILIES: readonly string[] = [
 const BUNDLED_LOGICAL_KEYS: ReadonlySet<string> = new Set(BUNDLED_LOGICAL_FAMILIES.map(normalizeFamilyKey));
 
 /**
- * The Word family names a document can curate (`include` / `exclude`) - i.e. every logical family the
- * resolver substitutes to a bundled face, including category fallbacks like Verdana. The SINGLE source
- * of truth for the curation surface: {@link warnUnknownBundledSelection} validates against it, and
- * `@superdoc-dev/fonts` generates its committed list from it (so the strict `createSuperDocFonts` helper and
- * the lenient raw-config warning accept exactly the same names - no font advertised in the toolbar is
- * un-curatable). Distinct from the asset manifest's `replaces` (a metric-clone list that omits
- * category fallbacks).
+ * The Word family names a document can curate (`include` / `exclude`): every logical family the
+ * resolver substitutes to a bundled face, including category fallbacks like Verdana. The single
+ * source of truth for the curation surface - {@link warnUnknownBundledSelection} validates against it
+ * and `@superdoc-dev/fonts` generates its committed list from it. Distinct from the asset manifest's
+ * `replaces`, which omits category fallbacks (the reason curation keys on offerings, not `replaces`).
  */
 export function getBundledFamilyNames(): string[] {
   return [...BUNDLED_LOGICAL_FAMILIES];

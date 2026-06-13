@@ -106,10 +106,9 @@ export interface SuperDocFontsConfig {
  *       fonts: createSuperDocFonts({ exclude: ['Cooper Black', 'Brush Script MT'] }),
  *     });
  *
- * Think in Word logical names. `include` is an allow-list (only those families resolve and appear in
- * the toolbar); `exclude` keeps everything but those. Pass neither for the full pack - that is exactly
- * {@link superdocFonts}. Curation governs the BUNDLED pack only; your own licensed fonts stay separate
- * (`fonts.families` / `fonts.map`).
+ * Names are Word logical families. Pass neither `include` nor `exclude` for the full pack - that is
+ * exactly {@link superdocFonts}. Curation governs the BUNDLED pack only; your own licensed fonts stay
+ * separate (`fonts.families` / `fonts.map`).
  *
  * @beta
  */

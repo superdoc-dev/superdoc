@@ -323,4 +323,14 @@ describe('warnUnknownBundledSelection', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/not both/));
     warn.mockRestore();
   });
+
+  it('coerces a non-array include (raw JS) - warns about the shape, never spreads it into characters', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // A bare string must warn once about the wrong shape, not a per-character "unknown font" warning.
+    warnUnknownBundledSelection({ include: 'Calibri' as unknown as string[] });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/fonts\.bundled\.include must be an array/);
+    expect(warn.mock.calls[0][0]).not.toMatch(/is not a bundled font/);
+    warn.mockRestore();
+  });
 });

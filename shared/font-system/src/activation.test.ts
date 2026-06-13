@@ -63,6 +63,22 @@ describe('createBundledActivation', () => {
       createBundledActivation({ packConfigured: true, include: ['Cambria', 'Calibri', 'Calibri'] }).signature,
     ).toBe(createBundledActivation({ packConfigured: true, include: ['Calibri', 'Cambria'] }).signature);
   });
+
+  it('ignores malformed (non-array) curation instead of crashing - falls back to the full pack', () => {
+    // Raw JS config can hand-write a bare string; deriving activation must never throw at init.
+    const a = createBundledActivation({ packConfigured: true, include: 'Calibri' as unknown as string[] });
+    expect(a).toBe(FULLY_ACTIVE_BUNDLED);
+    expect(a.isActive('Calibri')).toBe(true);
+  });
+
+  it('drops non-string entries from a curation array', () => {
+    const a = createBundledActivation({
+      packConfigured: true,
+      include: ['Calibri', 123, null] as unknown as string[],
+    });
+    expect(a.isActive('Calibri')).toBe(true);
+    expect(a.isActive('Cambria')).toBe(false);
+  });
 });
 
 describe('deriveBundledActivation', () => {
@@ -92,5 +108,14 @@ describe('deriveBundledActivation', () => {
     markBundledPackPresent();
     expect(deriveBundledActivation(undefined).packConfigured).toBe(true);
     expect(deriveBundledActivation({}).isActive('Calibri')).toBe(true);
+  });
+
+  it('does not crash on malformed raw bundled config (a string instead of an array)', () => {
+    const a = deriveBundledActivation({
+      assetBaseUrl: '/fonts/',
+      bundled: { include: 'Calibri' as unknown as string[] },
+    });
+    expect(a.packConfigured).toBe(true);
+    expect(a.isActive('Calibri')).toBe(true); // malformed curation ignored -> full pack
   });
 });

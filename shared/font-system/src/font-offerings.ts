@@ -259,6 +259,24 @@ function closestBundledFamily(name: string): string | null {
 }
 
 /**
+ * Coerce a raw `fonts.bundled.include`/`exclude` value to a string array. Raw config is hand-written
+ * JS that may be malformed (a bare `include: 'Calibri'`, a number, ...); a non-array is reported once
+ * and dropped, so it can neither crash init nor spread a string into per-character "unknown font"
+ * warnings. createSuperDocFonts is the strict path that rejects malformed curation outright.
+ */
+function coerceCurationList(value: unknown, field: 'include' | 'exclude'): string[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    console.warn(
+      `[superdoc] fonts.bundled.${field} must be an array of font names; ignoring it. ` +
+        'Prefer createSuperDocFonts(), which rejects malformed curation.',
+    );
+    return [];
+  }
+  return value.filter((name): name is string => typeof name === 'string');
+}
+
+/**
  * Warn (once per name) at config time when a `fonts.bundled` curation entry is not a bundled family,
  * so curating it silently does nothing - and when both `include` and `exclude` are set. The safety
  * net for `fonts.bundled` set DIRECTLY: `createSuperDocFonts` already rejects unknown names and
@@ -267,8 +285,8 @@ function closestBundledFamily(name: string): string | null {
  */
 export function warnUnknownBundledSelection(selection: BundledFontSelection | undefined): void {
   if (!selection) return;
-  const include = selection.include ?? [];
-  const exclude = selection.exclude ?? [];
+  const include = coerceCurationList(selection.include, 'include');
+  const exclude = coerceCurationList(selection.exclude, 'exclude');
   if (include.length && exclude.length) {
     console.warn(
       '[superdoc] fonts.bundled: set `include` OR `exclude`, not both. ' +

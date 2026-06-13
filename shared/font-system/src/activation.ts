@@ -60,8 +60,18 @@ function normalizeKey(family: string): string {
 
 /** Normalized, de-duplicated, sorted list - or undefined when there is nothing usable. */
 function normalizeList(families: readonly string[] | undefined): string[] | undefined {
-  if (!families) return undefined;
-  const out = [...new Set(families.map(normalizeKey).filter(Boolean))].sort();
+  // Raw `fonts.bundled` is hand-written JS that may be malformed (a bare string, a number, a
+  // non-array). Treat anything that is not an array of strings as "no curation" so a wrong shape
+  // can never crash editor init; createSuperDocFonts is the strict path that rejects it instead.
+  if (!Array.isArray(families)) return undefined;
+  const out = [
+    ...new Set(
+      families
+        .filter((f) => typeof f === 'string')
+        .map(normalizeKey)
+        .filter(Boolean),
+    ),
+  ].sort();
   return out.length > 0 ? out : undefined;
 }
 

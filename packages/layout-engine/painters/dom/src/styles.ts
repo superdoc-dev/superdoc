@@ -970,8 +970,7 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Viewing mode: remove structured content affordances */
-.presentation-editor--viewing .superdoc-structured-content-block,
-.presentation-editor--viewing .superdoc-structured-content-inline {
+.presentation-editor--viewing .superdoc-structured-content-block {
   background: none;
   border: none;
   padding: 0;
@@ -1002,14 +1001,15 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-inline,
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {
   background: none;
-  border: none;
+  border-color: transparent;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-inline[data-lock-mode]:hover {
   background: none;
-  border: none;
+  border-color: transparent;
 }
 
 .presentation-editor--viewing .superdoc-structured-content__label,

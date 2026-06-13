@@ -66,15 +66,23 @@
   display: inline-flex;
 }
 
-.super-editor .ProseMirror.view-mode .sd-structured-content,
 .super-editor .ProseMirror.view-mode .sd-structured-content-block {
   padding: 0;
   border: none;
 }
 
-.super-editor .ProseMirror.view-mode .sd-structured-content:hover,
+.super-editor .ProseMirror.view-mode .sd-structured-content {
+  background: none;
+  border-color: transparent;
+}
+
 .super-editor .ProseMirror.view-mode .sd-structured-content-block:hover {
   background: none;
+}
+
+.super-editor .ProseMirror.view-mode .sd-structured-content:hover {
+  background: none;
+  border-color: transparent;
 }
 
 .super-editor .ProseMirror.view-mode .sd-structured-content-draggable {
@@ -85,10 +93,14 @@
   outline: none;
 }
 
-.presentation-editor--viewing .sd-structured-content,
 .presentation-editor--viewing .sd-structured-content-block {
   padding: 0;
   border: none;
+}
+
+.presentation-editor--viewing .sd-structured-content {
+  background: none;
+  border-color: transparent;
 }
 
 .presentation-editor--viewing .sd-structured-content-draggable {

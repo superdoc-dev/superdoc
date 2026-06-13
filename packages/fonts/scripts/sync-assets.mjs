@@ -18,7 +18,7 @@ const dst = resolve(here, '../assets');
 if (!existsSync(src)) {
   // Not in the monorepo (e.g. a published install that somehow ran prepare). The assets are
   // expected to already be present from the tarball, so this is a no-op, not an error.
-  console.warn(`[@superdoc/fonts] canonical assets not found at ${src}; skipping sync (assets assumed present)`);
+  console.warn(`[@superdoc-dev/fonts] canonical assets not found at ${src}; skipping sync (assets assumed present)`);
   process.exit(0);
 }
 
@@ -31,4 +31,4 @@ for (const name of readdirSync(src)) {
   }
 }
 const count = readdirSync(dst).filter((f) => f.endsWith('.woff2')).length;
-console.log(`[@superdoc/fonts] synced ${count} font faces from shared/font-system/assets -> assets/`);
+console.log(`[@superdoc-dev/fonts] synced ${count} font faces from shared/font-system/assets -> assets/`);

@@ -5,7 +5,7 @@
 //
 // Skips when the font-system source is absent (a rare standalone install), leaving the committed file;
 // in the monorepo a real import error fails loudly. Committed so npm consumers get the list without
-// re-generating. Re-run via `pnpm --filter @superdoc/fonts generate` when the curation set changes.
+// re-generating. Re-run via `pnpm --filter @superdoc-dev/fonts generate` when the curation set changes.
 import { existsSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,16 +16,16 @@ const fontSystemSource = resolve(here, '../../../shared/font-system/src/font-off
 
 if (!existsSync(fontSystemSource)) {
   console.log(
-    '[@superdoc/fonts] font-system source not present (standalone install); kept committed src/bundled-families.ts',
+    '[@superdoc-dev/fonts] font-system source not present (standalone install); kept committed src/bundled-families.ts',
   );
   process.exit(0);
 }
 
-// eslint-disable-next-line import-x/no-relative-packages -- build-only script (not shipped); @superdoc/fonts stays a dependency-free runtime package and font-system exposes no /src export, so reading its source relatively here is intentional
+// eslint-disable-next-line import-x/no-relative-packages -- build-only script (not shipped); @superdoc-dev/fonts stays a dependency-free runtime package and font-system exposes no /src export, so reading its source relatively here is intentional
 const { getBundledFamilyNames } = await import('../../../shared/font-system/src/font-offerings');
 const names = getBundledFamilyNames();
 if (names.length === 0) {
-  console.error('[@superdoc/fonts] font-system returned no curatable families');
+  console.error('[@superdoc-dev/fonts] font-system returned no curatable families');
   process.exit(1);
 }
 
@@ -52,4 +52,4 @@ try {
 }
 
 writeFileSync(outFile, output);
-console.log(`[@superdoc/fonts] wrote ${names.length} curatable family names -> src/bundled-families.ts`);
+console.log(`[@superdoc-dev/fonts] wrote ${names.length} curatable family names -> src/bundled-families.ts`);

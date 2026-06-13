@@ -10,7 +10,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { SuperDoc } from 'superdoc';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import 'superdoc/style.css';
 
 const container = ref<HTMLDivElement>();

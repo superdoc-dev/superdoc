@@ -1,6 +1,6 @@
 import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
 import { SuperDoc } from 'superdoc';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 
 @Component({
   selector: 'app-root',

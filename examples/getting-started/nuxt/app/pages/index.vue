@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SuperDoc } from 'superdoc';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 
 const editor = ref<HTMLDivElement | null>(null);
 const file = ref<File | null>(null);

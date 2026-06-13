@@ -224,7 +224,7 @@ const BUNDLED_LOGICAL_KEYS: ReadonlySet<string> = new Set(BUNDLED_LOGICAL_FAMILI
  * The Word family names a document can curate (`include` / `exclude`) - i.e. every logical family the
  * resolver substitutes to a bundled face, including category fallbacks like Verdana. The SINGLE source
  * of truth for the curation surface: {@link warnUnknownBundledSelection} validates against it, and
- * `@superdoc/fonts` generates its committed list from it (so the strict `createSuperDocFonts` helper and
+ * `@superdoc-dev/fonts` generates its committed list from it (so the strict `createSuperDocFonts` helper and
  * the lenient raw-config warning accept exactly the same names - no font advertised in the toolbar is
  * un-curatable). Distinct from the asset manifest's `replaces` (a metric-clone list that omits
  * category fallbacks).

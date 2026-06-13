@@ -1,6 +1,6 @@
 import { createEffect, createSignal, createUniqueId, onCleanup, Show, untrack } from 'solid-js';
 import { SuperDoc } from 'superdoc';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import 'superdoc/style.css';
 import './App.css';
 

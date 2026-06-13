@@ -1,9 +1,9 @@
 import { SuperDoc } from 'superdoc';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import 'superdoc/style.css';
 
 // `fonts: superdocFonts` serves SuperDoc's bundled fallback fonts (Carlito for Calibri, etc.)
-// from the @superdoc/fonts package. Your bundler emits the .woff2; no copy step, no assetBaseUrl.
+// from the @superdoc-dev/fonts package. Your bundler emits the .woff2; no copy step, no assetBaseUrl.
 let superdoc = new SuperDoc({
   selector: '#editor',
   fonts: superdocFonts,

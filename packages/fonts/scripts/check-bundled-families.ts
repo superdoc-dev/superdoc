@@ -5,7 +5,7 @@
 //
 // Skips when the font-system source is absent (a standalone install cannot recompute the set); in the
 // monorepo it runs and a real import error fails loudly. Run via
-// `pnpm --filter @superdoc/fonts check:families`.
+// `pnpm --filter @superdoc-dev/fonts check:families`.
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,11 +15,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fontSystemSource = resolve(here, '../../../shared/font-system/src/font-offerings.ts');
 
 if (!existsSync(fontSystemSource)) {
-  console.log('[@superdoc/fonts] font-system source not present (standalone install); skipping curation-drift check');
+  console.log('[@superdoc-dev/fonts] font-system source not present (standalone install); skipping curation-drift check');
   process.exit(0);
 }
 
-// eslint-disable-next-line import-x/no-relative-packages -- build-only script (not shipped); @superdoc/fonts stays a dependency-free runtime package and font-system exposes no /src export, so reading its source relatively here is intentional
+// eslint-disable-next-line import-x/no-relative-packages -- build-only script (not shipped); @superdoc-dev/fonts stays a dependency-free runtime package and font-system exposes no /src export, so reading its source relatively here is intentional
 const { getBundledFamilyNames } = await import('../../../shared/font-system/src/font-offerings');
 const expected = [...getBundledFamilyNames()].sort();
 const committed = [...BUNDLED_FAMILY_NAMES].sort();
@@ -28,12 +28,12 @@ if (JSON.stringify(expected) !== JSON.stringify(committed)) {
   const missing = expected.filter((name) => !committed.includes(name));
   const extra = committed.filter((name) => !expected.includes(name));
   console.error(
-    '[@superdoc/fonts] src/bundled-families.ts is STALE: it no longer matches the font-system curation set.',
+    '[@superdoc-dev/fonts] src/bundled-families.ts is STALE: it no longer matches the font-system curation set.',
   );
   if (missing.length) console.error(`  missing (in offerings, not committed): ${missing.join(', ')}`);
   if (extra.length) console.error(`  extra (committed, not in offerings):    ${extra.join(', ')}`);
-  console.error('  Fix: run `pnpm --filter @superdoc/fonts generate` and commit src/bundled-families.ts');
+  console.error('  Fix: run `pnpm --filter @superdoc-dev/fonts generate` and commit src/bundled-families.ts');
   process.exit(1);
 }
 
-console.log(`[@superdoc/fonts] curation list in sync with font-system (${committed.length} families)`);
+console.log(`[@superdoc-dev/fonts] curation list in sync with font-system (${committed.length} families)`);

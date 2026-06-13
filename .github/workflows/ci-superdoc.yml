@@ -137,7 +137,7 @@ jobs:
         # font-system curation set, so a font-offerings change that is not regenerated cannot merge
         # stale (guards the Verdana-bug class). Runs here because the job's path filter covers both
         # the font offerings (shared/**) and the fonts package (packages/fonts/**).
-        run: pnpm --filter @superdoc/fonts run check:families
+        run: pnpm --filter @superdoc-dev/fonts run check:families
 
   unit-tests:
     needs: build

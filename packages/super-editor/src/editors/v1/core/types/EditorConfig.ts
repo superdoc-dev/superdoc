@@ -61,7 +61,7 @@ export interface FontsConfig {
    * Curate which bundled families this document advertises and substitutes to, by LOGICAL Word name
    * (e.g. `"Calibri"`). Applies only when the pack is configured; it narrows the rich set, it does
    * not enable it. Prefer setting this with `createSuperDocFonts({ include / exclude })` from
-   * `@superdoc/fonts` rather than by hand. Does not affect customer fonts ({@link families} /
+   * `@superdoc-dev/fonts` rather than by hand. Does not affect customer fonts ({@link families} /
    * {@link map}), which are always honored.
    */
   bundled?: BundledFontSelection;

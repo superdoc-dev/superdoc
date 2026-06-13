@@ -1,5 +1,5 @@
 {
-  "name": "@superdoc/fonts",
+  "name": "@superdoc-dev/fonts",
   "version": "0.1.0",
   "description": "Optional bundled metric-compatible font substitutes for SuperDoc, shipped as bundler-resolvable assets.",
   "type": "module",

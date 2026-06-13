@@ -7,7 +7,7 @@
  * document simply decides which of those faces it actually uses.
  *
  * Two states, driven by whether the consumer wired the pack:
- *  - `packConfigured: false` (no `@superdoc/fonts`, no `fonts.assetBaseUrl` / `fonts.resolveAssetUrl`,
+ *  - `packConfigured: false` (no `@superdoc-dev/fonts`, no `fonts.assetBaseUrl` / `fonts.resolveAssetUrl`,
  *    not the CDN build): NO bundled family is active. The document advertises the conservative
  *    baseline and renders logical names with system fonts; nothing fetches a substitute `.woff2` that
  *    is not being served, so there is no stray 404 and no spurious warning.

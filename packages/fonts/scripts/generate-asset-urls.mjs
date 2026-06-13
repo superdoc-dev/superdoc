@@ -33,7 +33,7 @@ const files = readdirSync(sourceDir)
   .sort();
 
 if (files.length === 0) {
-  console.error(`[@superdoc/fonts] no .woff2 found in ${sourceDir}`);
+  console.error(`[@superdoc-dev/fonts] no .woff2 found in ${sourceDir}`);
   process.exit(1);
 }
 
@@ -57,7 +57,7 @@ ${entries}
 // valid TypeScript - so a missing prettier is not an error.
 writeFileSync(outFile, await formatTs(content, outFile));
 console.log(
-  `[@superdoc/fonts] wrote ${files.length} asset URLs -> src/asset-urls.ts (source: ${sourceDir.includes('shared') ? 'canonical' : 'local'})`,
+  `[@superdoc-dev/fonts] wrote ${files.length} asset URLs -> src/asset-urls.ts (source: ${sourceDir.includes('shared') ? 'canonical' : 'local'})`,
 );
 
 // The curatable family-name list (src/bundled-families.ts) is generated SEPARATELY by

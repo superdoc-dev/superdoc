@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { SuperDocEditor, SuperDocRef, DocumentMode } from '@superdoc-dev/react';
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import '@superdoc-dev/react/style.css';
 
 export default function Home() {

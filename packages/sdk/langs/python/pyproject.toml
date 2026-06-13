@@ -4,18 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superdoc-sdk"
+<<<<<<< HEAD
 version = "1.16.1"
+=======
+version = "1.16.0"
+>>>>>>> origin/main
 description = "SuperDoc SDK (CLI-backed)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "AGPL-3.0"
 authors = [{ name = "SuperDoc" }]
 dependencies = [
+<<<<<<< HEAD
   "superdoc-sdk-cli-darwin-arm64==1.16.1; platform_system == 'Darwin' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
   "superdoc-sdk-cli-darwin-x64==1.16.1; platform_system == 'Darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
   "superdoc-sdk-cli-linux-x64==1.16.1; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
   "superdoc-sdk-cli-linux-arm64==1.16.1; platform_system == 'Linux' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
   "superdoc-sdk-cli-windows-x64==1.16.1; platform_system == 'Windows' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+=======
+  "superdoc-sdk-cli-darwin-arm64==1.16.0; platform_system == 'Darwin' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-darwin-x64==1.16.0; platform_system == 'Darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-x64==1.16.0; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-arm64==1.16.0; platform_system == 'Linux' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-windows-x64==1.16.0; platform_system == 'Windows' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+>>>>>>> origin/main
 ]
 
 [tool.setuptools]

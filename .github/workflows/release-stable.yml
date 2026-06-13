@@ -182,6 +182,13 @@ jobs:
           packages-dir: ${{ steps.stage_recovered_python.outputs.main_dir }}
           skip-existing: true
 
+      # build-python-sdk.mjs requires packages/sdk/tools/catalog.json, a
+      # generated (gitignored) artifact. `pnpm run build` does not produce it,
+      # so generate the SDK tool catalog/clients before the Python build.
+      - name: Generate SDK artifacts (tool catalog)
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
+        run: pnpm run generate:all
+
       - name: Build and verify Python SDK
         if: steps.stable_release.outputs.sdk_release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs

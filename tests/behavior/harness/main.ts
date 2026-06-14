@@ -211,6 +211,21 @@ function resolveHarnessFontsConfig(mode: string | null): SuperDocConfig['fonts']
       // A configured pack whose assets are actually SERVED (see the /bundled-fonts middleware), so
       // face-load specs can assert a real 200. Distinct from the default base on purpose.
       return { assetBaseUrl: '/bundled-fonts/' };
+    case 'custom':
+    case 'custom-toolbar':
+      // A consumer-licensed font registered via fonts.families - NO bundled pack. The face source is a
+      // real served woff2 (a bundled face) under a DISTINCT family name, so it decodes and renders.
+      // With no pack the toolbar stays baseline, which lets a spec prove fonts.families alone does NOT
+      // add a toolbar option (selectability comes from modules.toolbar.fonts, set when mode is
+      // 'custom-toolbar', or from the document using the font).
+      return {
+        families: [
+          {
+            family: 'Brand Sans',
+            faces: [{ source: '/bundled-fonts/Carlito-Regular.woff2', weight: 400, style: 'normal' }],
+          },
+        ],
+      } as SuperDocConfig['fonts'];
     default:
       // The rich pack advertised but NOT served: substitutes appear in the toolbar but are never
       // fetched, so rendered text keeps logical names. This is the default every non-font spec runs
@@ -278,6 +293,24 @@ function init(file?: File, content?: ContentOverrideInput) {
     config.modules = {
       ...(config.modules ?? {}),
       toolbar: { responsiveToContainer: true },
+    };
+  }
+
+  // Custom toolbar font list (modules.toolbar.fonts): a custom family is SELECTABLE only when the
+  // consumer lists it here (fonts.families registration alone does not add a toolbar option). This
+  // replaces the built-in list entirely.
+  if (fontsMode === 'custom-toolbar') {
+    config.modules = {
+      ...(config.modules ?? {}),
+      toolbar: {
+        ...((config.modules as { toolbar?: Record<string, unknown> } | undefined)?.toolbar ?? {}),
+        fonts: [
+          { label: 'Arial', key: 'Arial, sans-serif' },
+          { label: 'Times New Roman', key: 'Times New Roman, serif' },
+          { label: 'Courier New', key: 'Courier New, monospace' },
+          { label: 'Brand Sans', key: 'Brand Sans', props: { style: { fontFamily: 'Brand Sans' } } },
+        ],
+      },
     };
   }
 

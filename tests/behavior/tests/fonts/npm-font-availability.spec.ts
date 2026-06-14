@@ -1,10 +1,10 @@
 import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 
 // Font availability + curation on the npm path, driven through the existing Vite harness via the
-// `fonts` config mode (see resolveHarnessFontsConfig in harness/main.ts). These rows assert what the
-// toolbar ADVERTISES and that malformed raw config degrades safely - none of them need the bundled
-// `.woff2` to be served, so they run without the font middleware. Apply/load/export and the CDN path
-// live in sibling specs.
+// `fonts` config mode (see resolveHarnessFontsConfig in harness/main.ts): no-pack baseline,
+// include/exclude curation, applying a bundled font (loads the substitute, keeps the logical name),
+// malformed raw config, a broken asset base, and programmatic apply. The package-import DX,
+// document-font preservation, and custom fonts live in sibling specs.
 
 const FONT_TOGGLE = '[data-item="btn-fontFamily-toggle"]';
 const FONT_OPTION = '[data-item="btn-fontFamily-option"]';

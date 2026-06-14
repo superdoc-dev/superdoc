@@ -121,6 +121,8 @@ describe('installBundledSubstitutes URL resolution', () => {
     expect(reg.sourcesFor('Carlito')).toContain('url(/first/Carlito-Regular.woff2)');
     expect(reg.sourcesFor('Carlito')).not.toContain('url(/second/Carlito-Regular.woff2)');
     expect(warn).toHaveBeenCalledTimes(1);
+    // Assert the message, not just the count: a dev must see WHY the second config was dropped.
+    expect(warn.mock.calls[0][0]).toMatch(/a later fonts config .* is ignored/);
     warn.mockRestore();
   });
 });

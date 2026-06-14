@@ -197,10 +197,9 @@ test.describe('npm + pack with a broken asset base', () => {
     await openFontDropdown(superdoc);
     await selectFontOption(superdoc, 'Calibri');
 
-    // SuperDoc honors the configured base: it requests Calibri's substitute from exactly where the
-    // app pointed it, not anywhere else. (A real server would 404 here; this harness returns Vite's
-    // SPA fallback, which the browser then can't decode - SuperDoc itself does not warn on a load
-    // failure, it falls back to the logical name, which the run keeps.)
+    // SuperDoc honors the configured base: the substitute is requested from exactly where the app
+    // pointed it. No 404 or SuperDoc warning to assert here - SuperDoc falls back to the logical name
+    // on a load failure (the browser reports it), and this Vite harness serves an SPA fallback.
     await expect
       .poll(() => woff2.some((u) => /\/__missing-fonts__\/Carlito.*\.woff2/.test(u)), { timeout: 10_000 })
       .toBe(true);

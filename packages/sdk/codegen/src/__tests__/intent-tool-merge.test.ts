@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 // JS module without types — pull via dynamic import.
-const { mergeMergedProperty, collectContractProperties } = await import('../generate-intent-tools.mjs');
+const { mergeMergedProperty, collectContractProperties, sanitizeSchema } = await import('../generate-intent-tools.mjs');
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
 const CATALOG_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json');
@@ -123,6 +123,127 @@ describe('collectContractProperties', () => {
     expect(collectContractProperties(null).size).toBe(0);
     expect(collectContractProperties(undefined).size).toBe(0);
     expect(collectContractProperties({}).size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeSchema — catalog schemas must remain self-describing for clients
+// that do not resolve `$ref`/`oneOf` branches. MCP clients such as Claude Code
+// preserve object arguments only when the emitted schema carries
+// `type: "object"`; otherwise object-only params can be stringified before
+// they reach DocumentApi validation.
+// ---------------------------------------------------------------------------
+
+describe('sanitizeSchema', () => {
+  const defs = {
+    BlockNodeAddress: {
+      type: 'object',
+      properties: {
+        kind: { const: 'block' },
+        nodeType: { type: 'string' },
+        nodeId: { type: 'string' },
+      },
+      required: ['kind', 'nodeType', 'nodeId'],
+    },
+    TextAddress: {
+      type: 'object',
+      properties: {
+        kind: { const: 'text' },
+        blockId: { type: 'string' },
+      },
+      required: ['kind', 'blockId'],
+    },
+    TextTarget: {
+      type: 'object',
+      properties: {
+        kind: { const: 'text' },
+        segments: { type: 'array' },
+      },
+      required: ['kind', 'segments'],
+    },
+    SelectionTarget: {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            kind: { const: 'selection' },
+          },
+          required: ['kind'],
+        },
+      ],
+    },
+    DeleteBehavior: {
+      enum: ['selection', 'exact'],
+    },
+  };
+
+  test('adds object type to refs that resolve to object schemas', () => {
+    const result = sanitizeSchema({ $ref: '#/$defs/BlockNodeAddress' }, defs);
+    expect(result).toEqual({
+      $ref: '#/$defs/BlockNodeAddress',
+      type: 'object',
+    });
+  });
+
+  test('adds object type to nested object-only oneOf branches', () => {
+    const result = sanitizeSchema(
+      {
+        oneOf: [
+          {
+            oneOf: [{ $ref: '#/$defs/TextAddress' }, { $ref: '#/$defs/SelectionTarget' }],
+          },
+        ],
+      },
+      defs,
+    );
+
+    expect(result.type).toBe('object');
+    expect(result.oneOf?.[0]).toMatchObject({ $ref: '#/$defs/TextAddress', type: 'object' });
+    expect(result.oneOf?.[1]).toMatchObject({ $ref: '#/$defs/SelectionTarget', type: 'object' });
+  });
+
+  test('adds object type after dropping opaque empty oneOf branches', () => {
+    const result = sanitizeSchema(
+      {
+        oneOf: [{ $ref: '#/$defs/TextAddress' }, {}],
+      },
+      defs,
+    );
+
+    expect(result).toMatchObject({
+      $ref: '#/$defs/TextAddress',
+      type: 'object',
+    });
+  });
+
+  test('does not mark non-object refs as object', () => {
+    const result = sanitizeSchema({ $ref: '#/$defs/DeleteBehavior' }, defs);
+    expect(result).toEqual({ $ref: '#/$defs/DeleteBehavior' });
+  });
+
+  test('keeps mixed object and scalar unions untyped at the parent level', () => {
+    const result = sanitizeSchema(
+      {
+        oneOf: [{ $ref: '#/$defs/BlockNodeAddress' }, { type: 'string' }],
+      },
+      defs,
+    );
+
+    expect(result.type).toBeUndefined();
+    expect(result.oneOf?.[0]).toMatchObject({ $ref: '#/$defs/BlockNodeAddress', type: 'object' });
+    expect(result.oneOf?.[1]).toEqual({ type: 'string' });
+  });
+
+  test('adds object type to merged object-only property schemas', () => {
+    const merged = mergeMergedProperty(
+      { oneOf: [{ $ref: '#/$defs/TextAddress' }, { $ref: '#/$defs/TextAddress' }] },
+      { oneOf: [{ $ref: '#/$defs/TextTarget' }, { $ref: '#/$defs/SelectionTarget' }] },
+    );
+
+    const result = sanitizeSchema(merged, defs);
+
+    expect(result.type).toBe('object');
+    expect(result.oneOf?.every((branch: any) => branch?.type === 'object')).toBe(true);
   });
 });
 

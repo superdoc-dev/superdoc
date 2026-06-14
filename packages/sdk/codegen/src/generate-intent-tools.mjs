@@ -94,13 +94,50 @@ function stripNullable(s) {
 }
 
 /**
- * Recursively fix bare `{ const: value }` nodes to include `type`.
- * Anthropic requires `const` to be accompanied by a `type` field.
+ * Recursively make emitted tool schemas self-describing for MCP/provider
+ * clients. Some clients do not resolve `$ref`, so object-only refs/unions
+ * need an inline `type: "object"` fallback. Anthropic also requires bare
+ * `{ const: value }` nodes to include a `type` field.
  */
-function sanitizeSchema(schema) {
+const REF_PREFIX = '#/$defs/';
+
+function refName(schema) {
+  if (!schema || typeof schema !== 'object' || typeof schema.$ref !== 'string') return null;
+  return schema.$ref.startsWith(REF_PREFIX) ? schema.$ref.slice(REF_PREFIX.length) : null;
+}
+
+function isObjectLikeSchema(schema, $defs, seen = new Set()) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false;
+
+  if (schema.type === 'object') return true;
+
+  const name = refName(schema);
+  if (name) {
+    if (!$defs || seen.has(name)) return false;
+    const target = $defs[name];
+    if (!target) return false;
+    return isObjectLikeSchema(target, $defs, new Set([...seen, name]));
+  }
+
+  for (const key of ['oneOf', 'anyOf', 'allOf']) {
+    const variants = schema[key];
+    if (Array.isArray(variants) && variants.length > 0) {
+      return variants.every((variant) => isObjectLikeSchema(variant, $defs, seen));
+    }
+  }
+
+  return false;
+}
+
+function maybeAddObjectType(schema, $defs) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema) || schema.type) return schema;
+  return isObjectLikeSchema(schema, $defs) ? { ...schema, type: 'object' } : schema;
+}
+
+export function sanitizeSchema(schema, $defs) {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
 
-  const result = { ...schema };
+  const result = { ...maybeAddObjectType(schema, $defs) };
 
   // "type": "json" is a SuperDoc contract sentinel for "any JSON value".
   if (result.type === 'json') {
@@ -119,7 +156,7 @@ function sanitizeSchema(schema) {
   // Recurse into nested structures
   if (result.properties) {
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([k, v]) => [k, sanitizeSchema(v)]),
+      Object.entries(result.properties).map(([k, v]) => [k, sanitizeSchema(v, $defs)]),
     );
   }
   if (Array.isArray(result.oneOf)) {
@@ -129,7 +166,7 @@ function sanitizeSchema(schema) {
       delete result.oneOf;
       result.enum = values;
     } else {
-      result.oneOf = result.oneOf.map(sanitizeSchema);
+      result.oneOf = result.oneOf.map((branch) => sanitizeSchema(branch, $defs));
 
       // Remove empty-object branches ({}) from oneOf — they represent null/clear
       // but are opaque to LLMs. The parent description handles the "use null to clear" guidance.
@@ -166,19 +203,19 @@ function sanitizeSchema(schema) {
     }
   }
   if (Array.isArray(result.anyOf)) {
-    result.anyOf = result.anyOf.map(sanitizeSchema);
+    result.anyOf = result.anyOf.map((branch) => sanitizeSchema(branch, $defs));
   }
   if (Array.isArray(result.allOf)) {
-    result.allOf = result.allOf.map(sanitizeSchema);
+    result.allOf = result.allOf.map((branch) => sanitizeSchema(branch, $defs));
   }
   if (result.items) {
-    result.items = sanitizeSchema(result.items);
+    result.items = sanitizeSchema(result.items, $defs);
   }
   if (result.additionalProperties && typeof result.additionalProperties === 'object') {
-    result.additionalProperties = sanitizeSchema(result.additionalProperties);
+    result.additionalProperties = sanitizeSchema(result.additionalProperties, $defs);
   }
 
-  return result;
+  return maybeAddObjectType(result, $defs);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +256,7 @@ export function collectContractProperties(inputSchema) {
   return result;
 }
 
-function buildInputSchemaFromParams(operation) {
+function buildInputSchemaFromParams(operation, $defs) {
   const properties = {};
   const required = [];
 
@@ -247,7 +284,7 @@ function buildInputSchemaFromParams(operation) {
     else if (param.type === 'json' && param.schema && param.schema.type !== 'json') schema = param.schema;
     else schema = { type: 'object' };
 
-    schema = sanitizeSchema(schema);
+    schema = sanitizeSchema(schema, $defs);
     if (param.description) schema.description = param.description;
     properties[param.name] = schema;
     if (param.required) required.push(param.name);
@@ -279,8 +316,8 @@ function buildInputSchemaFromParams(operation) {
 //   {}                            — no extractable constraints
 // ---------------------------------------------------------------------------
 
-function extractRequiredConstraints(operation) {
-  const cliSchema = buildInputSchemaFromParams(operation);
+function extractRequiredConstraints(operation, $defs) {
+  const cliSchema = buildInputSchemaFromParams(operation, $defs);
   const cliParamNames = new Set(Object.keys(cliSchema.properties ?? {}));
   const contractSchema = operation.inputSchema;
 
@@ -334,6 +371,7 @@ function extractRequiredConstraints(operation) {
 
 function buildIntentTools(contract) {
   const intentGroupMeta = contract.intentGroupMeta ?? {};
+  const $defs = contract.$defs;
 
   // Group operations by intentGroup
   const groups = new Map();
@@ -365,7 +403,7 @@ function buildIntentTools(contract) {
     if (isSingleOp) {
       // Single-op tool — no action enum, input schema = operation schema
       const { operationId, operation } = ops[0];
-      const inputSchema = buildInputSchemaFromParams(operation);
+      const inputSchema = buildInputSchemaFromParams(operation, $defs);
 
       tools.push({
         toolName: meta.toolName,
@@ -374,7 +412,7 @@ function buildIntentTools(contract) {
         mutates,
         annotations,
         inputExamples,
-        operations: [{ operationId, intentAction: operation.intentAction, ...extractRequiredConstraints(operation) }],
+        operations: [{ operationId, intentAction: operation.intentAction, ...extractRequiredConstraints(operation, $defs) }],
       });
     } else {
       // Multi-op tool — add action discriminator
@@ -394,7 +432,7 @@ function buildIntentTools(contract) {
       const propPresence = new Map();
 
       for (const { operation } of ops) {
-        const opSchema = buildInputSchemaFromParams(operation);
+        const opSchema = buildInputSchemaFromParams(operation, $defs);
         const opRequired = new Set(opSchema.required ?? []);
 
         // Also check the contract inputSchema's required array — CLI params may
@@ -415,7 +453,7 @@ function buildIntentTools(contract) {
             // merged schema so EVERY documented action shape validates.
             // Without this, e.g. `position` ends up as the row enum and
             // insert_column's `position:'last'` is rejected before dispatch.
-            allProperties[propName] = mergeMergedProperty(allProperties[propName], propSchema);
+            allProperties[propName] = sanitizeSchema(mergeMergedProperty(allProperties[propName], propSchema), $defs);
           }
 
           const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0, requiredBy: [] };
@@ -462,7 +500,7 @@ function buildIntentTools(contract) {
           // which can cause the model to avoid them unnecessarily.
           const presentIn = [];
           for (const { operation } of ops) {
-            const opSchema = buildInputSchemaFromParams(operation);
+            const opSchema = buildInputSchemaFromParams(operation, $defs);
             if (opSchema.properties && propName in opSchema.properties) {
               presentIn.push(operation.intentAction);
             }
@@ -509,7 +547,7 @@ function buildIntentTools(contract) {
         operations: ops.map(({ operationId, operation }) => ({
           operationId,
           intentAction: operation.intentAction,
-          ...extractRequiredConstraints(operation),
+          ...extractRequiredConstraints(operation, $defs),
         })),
       });
     }

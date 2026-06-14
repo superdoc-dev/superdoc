@@ -91,7 +91,33 @@ For a brand font, a licensed font, or any family SuperDoc does not ship a fallba
 }
 ```
 
-SuperDoc's built-in fallbacks cover only the fonts it ships and verifies. For everything else, the real file is yours to provide. To register it through SuperDoc instead of CSS, pass it in `fonts.families` (which composes with `@superdoc-dev/fonts`).
+SuperDoc's built-in fallbacks cover only the fonts it ships and verifies. For everything else, the real file is yours to provide.
+
+To register a font through SuperDoc instead of CSS, pass it in `fonts.families` (which composes with `@superdoc-dev/fonts`). Give one file per face so bold and italic resolve correctly:
+
+```js
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: {
+    families: [
+      {
+        family: 'Brand Sans',
+        faces: [
+          { source: '/fonts/BrandSans-Regular.woff2' },
+          { source: '/fonts/BrandSans-Italic.woff2', style: 'italic' },
+          { source: '/fonts/BrandSans-Bold.woff2', weight: 700 },
+          { source: '/fonts/BrandSans-BoldItalic.woff2', weight: 700, style: 'italic' },
+        ],
+      },
+    ],
+  },
+});
+```
+
+SuperDoc passes each `source` URL to the browser; it does not read the font file, so register one file per weight and style you use. `weight` defaults to 400 and `style` to `normal`. Use WOFF2 for the widest browser support.
+
+Registering a family makes it render wherever a document uses it. It does not add the font to the toolbar; to offer it there, list it in `modules.toolbar.fonts` (see [Toolbar font list](#toolbar-font-list)).
 
 ## Toolbar font list
 

@@ -113,10 +113,13 @@ test.describe('npm + pack: applying a bundled font', () => {
   test('applying Calibri loads its bundled face (200) and stores the logical name, not Carlito', async ({
     superdoc,
   }) => {
-    // Capture bundled-font responses from the moment we apply (faces load lazily, only on use).
+    // Capture bundled-font responses from the moment we apply (faces load lazily, only on use). The
+    // 'pack' mode uses the SERVED `/bundled-fonts/` base; the default `/fonts/` is intentionally
+    // unserved so it doesn't perturb non-font specs (see harness/vite.config.ts).
     const fontResponses: Array<{ url: string; status: number }> = [];
     superdoc.page.on('response', (res) => {
-      if (/\/fonts\/.*\.woff2(\?|$)/.test(res.url())) fontResponses.push({ url: res.url(), status: res.status() });
+      if (/\/bundled-fonts\/.*\.woff2(\?|$)/.test(res.url()))
+        fontResponses.push({ url: res.url(), status: res.status() });
     });
 
     await superdoc.type('Calibri sample');

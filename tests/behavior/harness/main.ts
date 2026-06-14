@@ -208,7 +208,13 @@ function resolveHarnessFontsConfig(mode: string | null): SuperDocConfig['fonts']
       // bundler-emitted asset URL. Proves the import-and-go path users copy from the docs.
       return superdocFonts as SuperDocConfig['fonts'];
     case 'pack':
+      // A configured pack whose assets are actually SERVED (see the /bundled-fonts middleware), so
+      // face-load specs can assert a real 200. Distinct from the default base on purpose.
+      return { assetBaseUrl: '/bundled-fonts/' };
     default:
+      // The rich pack advertised but NOT served: substitutes appear in the toolbar but are never
+      // fetched, so rendered text keeps logical names. This is the default every non-font spec runs
+      // under, so it must stay served-nowhere (see harness/vite.config.ts).
       return { assetBaseUrl: '/fonts/' };
   }
 }

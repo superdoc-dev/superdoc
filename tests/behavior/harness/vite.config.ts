@@ -8,17 +8,19 @@ import { getAliases } from '../../../packages/superdoc/vite.config.js';
 const superdocRequire = createRequire(new URL('../../../packages/superdoc/package.json', import.meta.url));
 const vue = superdocRequire('@vitejs/plugin-vue').default;
 
-// Serve the built bundled `.woff2` at `/fonts/` (the harness default assetBaseUrl) so the
-// font-availability specs can assert real face loads (200) and the no-pack/curation absence of them.
-// Production-faithful: it serves packages/superdoc/dist/fonts, the same set a CDN/npm consumer gets.
-// Requires `superdoc` to be built (CI builds it before the behavior job; locally run
-// `pnpm --filter superdoc build`). The `bad-url` mode points elsewhere on purpose, so it 404s here.
+// Serve the built bundled `.woff2` at `/bundled-fonts/` so the face-load specs can assert real loads
+// (200). Deliberately NOT `/fonts/`: the harness's default assetBaseUrl is `/fonts/`, and existing
+// specs rely on it staying UNSERVED - substitutes are advertised but never fetched, so rendered text
+// keeps the logical Word name (e.g. the list-marker specs read the computed family). Serving `/fonts/`
+// globally makes those substitutes load and breaks them. Only the `pack` font mode points here.
+// Production-faithful: serves packages/superdoc/dist/fonts (CI builds superdoc before the behavior
+// job; locally run `pnpm --filter superdoc build`).
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bundledFontsDir = path.resolve(here, '../../../packages/superdoc/dist/fonts');
 const serveBundledFonts: Plugin = {
   name: 'serve-bundled-fonts',
   configureServer(server) {
-    server.middlewares.use('/fonts', (req, res, next) => {
+    server.middlewares.use('/bundled-fonts', (req, res, next) => {
       const name = decodeURIComponent((req.url ?? '').split('?')[0]).replace(/^\/+/, '');
       const file = path.join(bundledFontsDir, name);
       if (name && file.startsWith(bundledFontsDir) && fs.existsSync(file) && fs.statSync(file).isFile()) {

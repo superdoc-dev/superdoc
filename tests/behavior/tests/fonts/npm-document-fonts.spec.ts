@@ -25,9 +25,10 @@ test.describe('npm, no pack: a document that uses bundled fonts', () => {
   test.use({ config: { toolbar: 'full', fonts: 'no-pack' } });
 
   test('preserves the document font name without fetching a bundled substitute', async ({ superdoc }) => {
+    // No pack means no bundled substitution at all, so assert NO `.woff2` is fetched from any base.
     const fontRequests: string[] = [];
     superdoc.page.on('request', (req) => {
-      if (/\/fonts\/.*\.woff2(\?|$)/.test(req.url())) fontRequests.push(req.url());
+      if (/\.woff2(\?|$)/.test(req.url())) fontRequests.push(req.url());
     });
 
     await superdoc.loadDocument(CALIBRI_DOC);

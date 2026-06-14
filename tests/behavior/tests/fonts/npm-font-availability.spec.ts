@@ -170,3 +170,81 @@ test.describe('npm + malformed raw fonts.bundled', () => {
     expect(await fontOptionLabels(superdoc)).toEqual(RICH_LABELS);
   });
 });
+
+test.describe('npm + pack with a broken asset base', () => {
+  test.use({ config: { toolbar: 'full', fonts: 'bad-url' } });
+
+  test('advertises rich on config presence and requests faces from the configured base, staying graceful', async ({
+    superdoc,
+  }) => {
+    const woff2: string[] = [];
+    superdoc.page.on('response', (res) => {
+      if (/\.woff2(\?|$)/.test(res.url())) woff2.push(res.url());
+    });
+
+    // Advertising is gated on config PRESENCE, not on the assets actually being served - so a
+    // configured-but-broken base still shows the full rich set.
+    await openFontDropdown(superdoc);
+    expect(await fontOptionLabels(superdoc)).toEqual(RICH_LABELS);
+    await superdoc.page.keyboard.press('Escape');
+    await superdoc.waitForStable();
+
+    await superdoc.type('Broken base sample');
+    await superdoc.waitForStable();
+    const pos = await superdoc.findTextPos('Broken base sample');
+    await superdoc.setTextSelection(pos, pos + 'Broken base sample'.length);
+    await superdoc.waitForStable();
+    await openFontDropdown(superdoc);
+    await selectFontOption(superdoc, 'Calibri');
+
+    // SuperDoc honors the configured base: it requests Calibri's substitute from exactly where the
+    // app pointed it, not anywhere else. (A real server would 404 here; this harness returns Vite's
+    // SPA fallback, which the browser then can't decode - SuperDoc itself does not warn on a load
+    // failure, it falls back to the logical name, which the run keeps.)
+    await expect
+      .poll(() => woff2.some((u) => /\/__missing-fonts__\/Carlito.*\.woff2/.test(u)), { timeout: 10_000 })
+      .toBe(true);
+    expect(woff2.every((u) => /\/__missing-fonts__\//.test(u))).toBe(true);
+    await superdoc.assertTextMarkAttrs('Broken base sample', 'textStyle', { fontFamily: 'Calibri' });
+  });
+});
+
+test.describe('npm, no pack: programmatic apply', () => {
+  test.use({ config: { fonts: 'no-pack' } });
+
+  test('applying a bundled font via the editor command keeps the name and fetches no substitute', async ({
+    superdoc,
+  }) => {
+    // Exercises the resolver gate with the UI out of the picture: a font absent from the no-pack
+    // toolbar can still be applied programmatically (or arrive in a document), and must keep its
+    // logical name without pulling a substitute.
+    const fontRequests: string[] = [];
+    superdoc.page.on('request', (req) => {
+      if (/\.woff2(\?|$)/.test(req.url())) fontRequests.push(req.url());
+    });
+    const warnings: string[] = [];
+    superdoc.page.on('console', (msg) => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
+
+    await superdoc.type('Programmatic sample');
+    await superdoc.waitForStable();
+    const pos = await superdoc.findTextPos('Programmatic sample');
+    await superdoc.setTextSelection(pos, pos + 'Programmatic sample'.length);
+    await superdoc.waitForStable();
+
+    await superdoc.page.evaluate(() => {
+      (
+        window as unknown as { editor: { commands: { setFontFamily: (f: string) => void } } }
+      ).editor.commands.setFontFamily('Calibri');
+    });
+    await superdoc.waitForStable();
+
+    // Stored value is the logical name; no pack means no substitute fetch and no font-config warning.
+    await superdoc.assertTextMarkAttrs('Programmatic sample', 'textStyle', { fontFamily: 'Calibri' });
+    expect(fontRequests).toEqual([]);
+    expect(
+      warnings.filter((w) => /bundled|substitute|@superdoc-dev\/fonts|assetBaseUrl|not a bundled font/i.test(w)),
+    ).toEqual([]);
+  });
+});

@@ -39,10 +39,10 @@ function createView(kind, attrs = {}) {
 
 describe('ShapeGroupView connector rendering', () => {
   it.each([
-    ['bentConnector2', 'M 0 0 L 118 0 L 118 78'],
-    ['bentConnector3', 'M 0 0 L 59 0 L 59 78 L 118 78'],
-    ['bentConnector4', 'M 0 0 L 59 0 L 59 39 L 118 39 L 118 78'],
-    ['bentConnector5', 'M 0 0 L 29.5 0 L 29.5 39 L 88.5 39 L 88.5 78 L 118 78'],
+    ['bentConnector2', 'M 0 0 L 120 0 L 120 80'],
+    ['bentConnector3', 'M 0 0 L 60 0 L 60 80 L 120 80'],
+    ['bentConnector4', 'M 0 0 L 60 0 L 60 40 L 120 40 L 120 80'],
+    ['bentConnector5', 'M 0 0 L 30 0 L 30 40 L 90 40 L 90 80 L 120 80'],
   ])('renders %s with non-degenerate path data', (kind, expectedPath) => {
     const view = createView(kind);
     const path = view.dom.querySelector('path');
@@ -58,10 +58,20 @@ describe('ShapeGroupView connector rendering', () => {
       const path = view.dom.querySelector('path');
 
       expect(path?.getAttribute('d')).toBeTruthy();
-      expect(path?.getAttribute('d')).not.toContain('59 39 59 39');
+      expect(path?.getAttribute('d')).not.toContain('60 40 60 40');
       expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
     },
   );
+
+  it('uses the shared viewBox padding strategy for connector strokes', () => {
+    const view = createView('bentConnector4', { strokeWidth: 4 });
+    const connectorSvg = view.dom.querySelector('g svg');
+    const path = connectorSvg?.querySelector('path');
+
+    expect(connectorSvg?.getAttribute('viewBox')).toBe('-2 -2 124 84');
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 60 0 L 60 40 L 120 40 L 120 80');
+    expect(path?.hasAttribute('transform')).toBe(false);
+  });
 });
 
 describe('ShapeGroupView picture fills', () => {

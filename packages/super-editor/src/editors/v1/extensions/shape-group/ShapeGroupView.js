@@ -2,14 +2,12 @@
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import {
   applyNonScalingStrokeToConnectorTarget,
+  createConnectorPresetSvg,
   createGradient,
   createLineEndMarker,
   createPictureFillPattern,
   createTextElement,
-  getConnectorPresetPath,
-  getConnectorStrokePadding,
   isConnectorPresetShape,
-  formatSvgNumber,
 } from '../shared/svg-utils.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
@@ -404,29 +402,19 @@ export class ShapeGroupView {
     }
 
     if (isConnectorPresetShape(shapeKind)) {
-      const strokePadding = getConnectorStrokePadding(strokeColor, strokeWidth);
-      const pathWidth = Math.max(0, width - strokePadding * 2);
-      const pathHeight = Math.max(0, height - strokePadding * 2);
-      const pathD = getConnectorPresetPath(shapeKind, pathWidth, pathHeight);
-      if (pathD) {
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', pathD);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', strokeColor === null ? 'none' : strokeColor || '#000000');
-        path.setAttribute('stroke-width', (strokeColor === null ? 0 : strokeWidth).toString());
-        if (strokePadding > 0) {
-          path.setAttribute(
-            'transform',
-            `translate(${formatSvgNumber(strokePadding)}, ${formatSvgNumber(strokePadding)})`,
-          );
-        }
-        applyNonScalingStrokeToConnectorTarget(path);
-
-        if (lineEnds && strokeColor !== null) {
+      const connectorSvgMarkup = createConnectorPresetSvg({ kind: shapeKind, strokeColor, strokeWidth, width, height });
+      if (connectorSvgMarkup) {
+        const template = document.createElement('template');
+        template.innerHTML = connectorSvgMarkup.trim();
+        const connectorSvg = template.content.firstElementChild;
+        const path = connectorSvg?.querySelector('path');
+        if (path && lineEnds && strokeColor !== null) {
           const markerBase = `line-end-${shapeIndex}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
           this.applyLineEndsToTarget(path, lineEnds, strokeColor, strokeWidth, defs, markerBase);
         }
-        g.appendChild(path);
+        if (connectorSvg) {
+          g.appendChild(connectorSvg);
+        }
       }
 
       if (attrs.textContent && attrs.textContent.parts) {

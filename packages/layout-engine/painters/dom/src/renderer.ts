@@ -2403,7 +2403,7 @@ export class DomPainter {
         // Footer page-relative: fragment.y is normalized to band-local coords
         pageY = footerAnchorPageOriginY + fragment.y;
       } else if (isPageRelative) {
-        // Header page-relative: fragment.y is raw inner-layout absolute Y
+        // Header page-relative: fragment.y is already normalized to physical page Y
         pageY = fragment.y;
       } else {
         pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
@@ -2438,7 +2438,7 @@ export class DomPainter {
         // Footer page-relative: fragment.y is normalized to band-local coords
         fragEl.style.top = `${fragment.y + footerAnchorContainerOffsetY}px`;
       } else if (isPageRelative) {
-        // Header page-relative: convert raw inner-layout Y to container-local
+        // Header page-relative: convert physical page Y to container-local
         fragEl.style.top = `${fragment.y - effectiveOffset}px`;
       } else if (footerYOffset > 0) {
         // Non-anchored footer content: push to bottom of container

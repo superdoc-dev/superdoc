@@ -61,6 +61,47 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
       expect(fragment.x).toBeCloseTo((816 - imgWidth) / 2);
       expect(fragment.y).toBeCloseTo((PAGE_HEIGHT - imgHeight) / 2);
     });
+
+    it('normalizes right-aligned page-relative anchors against the physical page', () => {
+      const imgWidth = 120;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-logo',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'right',
+          offsetH: 12,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-logo', 0, 40, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(816 - imgWidth - 12);
+    });
+
+    it('normalizes left page-relative anchors with explicit offsets', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-left-offset',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'left',
+          offsetH: 24,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-left-offset', 0, 40, 120);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(24);
+    });
   });
 
   describe('page-relative anchors in footer', () => {

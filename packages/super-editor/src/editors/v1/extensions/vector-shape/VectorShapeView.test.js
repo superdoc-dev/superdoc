@@ -343,6 +343,39 @@ describe('VectorShapeView', () => {
       expect(ellipse.getAttribute('ry')).toBe('50');
     });
 
+    it('renders picture fills as SVG patterns for basic shapes', () => {
+      const pictureNode = {
+        attrs: {
+          kind: 'rect',
+          width: 120,
+          height: 80,
+          fillColor: {
+            type: 'picture',
+            src: 'data:image/png;base64,abc123',
+          },
+          strokeColor: '#000000',
+          strokeWidth: 1,
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: pictureNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const rect = view.dom.querySelector('rect');
+      const pattern = view.dom.querySelector('pattern');
+      const image = view.dom.querySelector('pattern image');
+      expect(rect.getAttribute('fill')).toMatch(/^url\(#picture-fill-/);
+      expect(pattern.getAttribute('patternUnits')).toBe('objectBoundingBox');
+      expect(image.getAttribute('href')).toBe('data:image/png;base64,abc123');
+    });
+
     it('uses preset geometry for complex shapes with preserveAspectRatio="none"', () => {
       const complexNode = {
         attrs: {

@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ShapeGroupView } from './ShapeGroupView.js';
 
-function createView(kind) {
+function createView(kind, attrs = {}) {
   return new ShapeGroupView({
     node: {
       attrs: {
@@ -22,6 +22,7 @@ function createView(kind) {
               fillColor: null,
               strokeColor: '#123456',
               strokeWidth: 2,
+              ...attrs,
             },
           },
         ],
@@ -61,4 +62,22 @@ describe('ShapeGroupView connector rendering', () => {
       expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
     },
   );
+});
+
+describe('ShapeGroupView picture fills', () => {
+  it('renders vector child picture fills as SVG patterns', () => {
+    const view = createView('rect', {
+      fillColor: {
+        type: 'picture',
+        src: 'data:image/png;base64,group-picture',
+      },
+    });
+
+    const filledShape = view.dom.querySelector('[fill^="url(#picture-fill-"]');
+    const pattern = view.dom.querySelector('pattern');
+    const image = view.dom.querySelector('pattern image');
+    expect(filledShape?.getAttribute('fill')).toMatch(/^url\(#picture-fill-/);
+    expect(pattern?.getAttribute('patternUnits')).toBe('objectBoundingBox');
+    expect(image?.getAttribute('href')).toBe('data:image/png;base64,group-picture');
+  });
 });

@@ -11,6 +11,7 @@ import {
   applyNonScalingStrokeToConnector,
   createConnectorPresetSvg,
   createLineEndMarker,
+  createPictureFillPattern,
   formatSvgNumber,
   isConnectorPresetShape,
 } from '../shared/svg-utils.js';
@@ -344,6 +345,8 @@ export class VectorShapeView {
         } else if (fillColor.type === 'solidWithAlpha') {
           fill = fillColor.color;
           fillOpacity = fillColor.alpha;
+        } else if (fillColor.type === 'picture') {
+          fill = createPictureFillPattern(defs, fillColor) ?? 'none';
         }
       } else {
         fill = fillColor;
@@ -415,6 +418,20 @@ export class VectorShapeView {
             if (tempSvg) {
               if (isConnectorPresetShape(kind)) {
                 applyNonScalingStrokeToConnector(tempSvg);
+              }
+              if (fillColor?.type === 'picture') {
+                const tempDefs =
+                  tempSvg.querySelector('defs') ||
+                  tempSvg.insertBefore(
+                    document.createElementNS('http://www.w3.org/2000/svg', 'defs'),
+                    tempSvg.firstChild,
+                  );
+                const pictureFill = createPictureFillPattern(tempDefs, fillColor);
+                if (pictureFill) {
+                  tempSvg.querySelectorAll('[fill]:not([fill="none"])').forEach((el) => {
+                    el.setAttribute('fill', pictureFill);
+                  });
+                }
               }
               // Preserve the preset viewBox and scale via width/height
               tempSvg.setAttribute('width', width.toString());
@@ -503,6 +520,8 @@ export class VectorShapeView {
           fill = '#cccccc'; // Placeholder for gradients
         } else if (fillColor.type === 'solidWithAlpha') {
           fill = fillColor.color; // Use the actual color, alpha will be applied separately
+        } else if (fillColor.type === 'picture') {
+          fill = '#000000'; // Replaced by a pattern after parsing
         }
       }
 

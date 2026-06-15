@@ -4,6 +4,7 @@ import {
   applyNonScalingStrokeToConnectorTarget,
   createGradient,
   createLineEndMarker,
+  createPictureFillPattern,
   createTextElement,
   getConnectorPresetPath,
   getConnectorStrokePadding,
@@ -264,6 +265,8 @@ export class ShapeGroupView {
       const gradient = this.createGradient(fillColor, gradientId);
       defs.appendChild(gradient);
       fillValue = `url(#${gradientId})`;
+    } else if (fillColor && typeof fillColor === 'object' && fillColor.type === 'picture') {
+      fillValue = createPictureFillPattern(defs, fillColor) ?? 'none';
     } else if (fillColor === null) {
       fillValue = 'none'; // Transparent
     } else if (typeof fillColor === 'string') {

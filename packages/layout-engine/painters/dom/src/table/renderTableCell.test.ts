@@ -652,7 +652,6 @@ describe('renderTableCell', () => {
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
       x: 40,
-      tableIndent: 20,
       cellMeasure,
       cell,
     });

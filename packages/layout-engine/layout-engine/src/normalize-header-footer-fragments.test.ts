@@ -102,6 +102,30 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
 
       expect(fragment.x).toBe(24);
     });
+
+    it('normalizes column-relative X using the physical page margin when Y is page-relative', () => {
+      const imgWidth = 830;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-column-background',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          offsetH: -76,
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetV: 8,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-column-background', 0, 40, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(-4);
+      expect(fragment.y).toBe(8);
+    });
   });
 
   describe('page-relative anchors in footer', () => {

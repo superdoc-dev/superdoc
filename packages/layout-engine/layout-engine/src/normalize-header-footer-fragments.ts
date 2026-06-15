@@ -7,6 +7,7 @@ import type {
   ImageMeasure,
   DrawingMeasure,
 } from '@superdoc/contracts';
+import { resolveAnchoredGraphicX } from '@superdoc/contracts';
 /**
  * Subset of HeaderFooterConstraints needed for fragment normalization.
  * Defined locally to avoid circular imports with index.ts.
@@ -23,19 +24,6 @@ export type RegionConstraints = {
     footer?: number;
   };
 };
-
-function computePhysicalAnchorX(block: ImageBlock | DrawingBlock, fragmentWidth: number, pageWidth: number): number {
-  const alignH = block.anchor?.alignH ?? 'left';
-  const offsetH = block.anchor?.offsetH ?? 0;
-
-  if (alignH === 'right') {
-    return pageWidth - fragmentWidth - offsetH;
-  }
-  if (alignH === 'center') {
-    return (pageWidth - fragmentWidth) / 2 + offsetH;
-  }
-  return offsetH;
-}
 
 /**
  * Compute the physical-page Y coordinate for a page-relative anchored drawing,
@@ -133,9 +121,19 @@ export function normalizeFragmentsForRegion(
       const block = blockById.get(fragment.blockId);
       if (!block || !isPageRelativeBlock(block)) continue;
 
-      if (block.anchor?.hRelativeFrom === 'page' && pageWidth != null) {
+      if (pageWidth != null) {
         const fragmentWidth = (fragment as { width?: number }).width ?? 0;
-        fragment.x = computePhysicalAnchorX(block, fragmentWidth, pageWidth);
+        const marginLeft = Math.max(0, constraints.margins.left ?? 0);
+        const marginRight = Math.max(0, constraints.margins.right ?? 0);
+        const contentWidth = Math.max(1, pageWidth - (marginLeft + marginRight));
+        fragment.x = resolveAnchoredGraphicX(
+          block.anchor ?? {},
+          0,
+          { width: contentWidth, gap: 0, count: 1 },
+          fragmentWidth,
+          { left: marginLeft, right: marginRight },
+          pageWidth,
+        );
       }
 
       if (block.anchor?.vRelativeFrom === 'page') {

@@ -1276,28 +1276,54 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
         // ImageRuns so Uint8Array (Y.js binary) and string (zip) media
         // alike resolve to a data URI.
         if (drawingBlock.drawingKind === 'vectorShape' || drawingBlock.drawingKind === 'textboxShape') {
-          const parts = (drawingBlock as VectorShapeDrawing).textContent?.parts;
-          if (!parts || parts.length === 0) return blk;
-          let partsChanged = false;
-          const hydratedParts = parts.map((part: TextPart) => {
-            if (part?.kind !== 'image' || !part.src || part.src.startsWith('data:')) {
-              return part;
+          const shapeBlock = drawingBlock as VectorShapeDrawing;
+          let blockChanged = false;
+          let nextBlock: VectorShapeDrawing = shapeBlock;
+
+          const contentBlocks = shapeBlock.contentBlocks;
+          if (Array.isArray(contentBlocks) && contentBlocks.length > 0) {
+            let contentBlocksChanged = false;
+            const hydratedContentBlocks = contentBlocks.map((paragraphBlock) => {
+              if (paragraphBlock.kind !== 'paragraph' || !paragraphBlock.runs?.length) {
+                return paragraphBlock;
+              }
+              const hydratedRuns = hydrateRuns(paragraphBlock.runs);
+              if (hydratedRuns !== paragraphBlock.runs) {
+                contentBlocksChanged = true;
+                return { ...paragraphBlock, runs: hydratedRuns };
+              }
+              return paragraphBlock;
+            });
+            if (contentBlocksChanged) {
+              blockChanged = true;
+              nextBlock = { ...nextBlock, contentBlocks: hydratedContentBlocks };
             }
-            const resolvedSrc = resolveImageSrc(part.src, part.rId, undefined, part.extension);
-            if (resolvedSrc) {
-              partsChanged = true;
-              return { ...part, src: resolvedSrc };
-            }
-            return part;
-          });
-          if (partsChanged) {
-            const vectorShapeBlock = drawingBlock as VectorShapeDrawing;
-            return {
-              ...vectorShapeBlock,
-              textContent: { ...vectorShapeBlock.textContent, parts: hydratedParts },
-            };
           }
-          return blk;
+
+          const parts = shapeBlock.textContent?.parts;
+          if (parts && parts.length > 0) {
+            let partsChanged = false;
+            const hydratedParts = parts.map((part: TextPart) => {
+              if (part?.kind !== 'image' || !part.src || part.src.startsWith('data:')) {
+                return part;
+              }
+              const resolvedSrc = resolveImageSrc(part.src, part.rId, undefined, part.extension);
+              if (resolvedSrc) {
+                partsChanged = true;
+                return { ...part, src: resolvedSrc };
+              }
+              return part;
+            });
+            if (partsChanged) {
+              blockChanged = true;
+              nextBlock = {
+                ...nextBlock,
+                textContent: { ...nextBlock.textContent, parts: hydratedParts },
+              };
+            }
+          }
+
+          return blockChanged ? nextBlock : blk;
         }
 
         if (drawingBlock.drawingKind !== 'shapeGroup') {

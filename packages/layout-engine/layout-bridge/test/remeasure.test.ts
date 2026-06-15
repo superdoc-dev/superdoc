@@ -1638,4 +1638,28 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].width).toBeGreaterThan(0);
     });
   });
+
+  describe('atomic runs', () => {
+    it('measures image-only paragraphs with correct width and line height', () => {
+      const block = createBlock([
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,abc',
+          width: 179,
+          height: 179,
+          pmStart: 1,
+          pmEnd: 2,
+        },
+      ]);
+      block.attrs = { alignment: 'center' };
+
+      const measure = remeasureParagraph(block, 179.8);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(179);
+      expect(measure.lines[0].lineHeight).toBe(179);
+      expect(measure.lines[0].maxImageHeight).toBe(179);
+      expect(measure.totalHeight).toBe(179);
+    });
+  });
 });

@@ -73,6 +73,15 @@ export const ShapeContainer = Node.create({
         rendered: false,
       },
 
+      // Host-paragraph properties preserved when an inline drawing is the sole
+      // block content of a <w:p> and gets hoisted to the top level. Without this
+      // the paragraph's alignment (e.g. centered) is lost and the layout adapter
+      // cannot center the drawing. See legacy-handle-paragraph-node.js.
+      wrapperParagraph: {
+        default: null,
+        rendered: false,
+      },
+
       anchorData: {
         rendered: false,
       },

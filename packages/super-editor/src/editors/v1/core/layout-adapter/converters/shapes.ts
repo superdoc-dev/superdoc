@@ -838,6 +838,35 @@ export function shapeGroupNodeToDrawingBlock(
 }
 
 /**
+ * Inline textbox/shape paragraphs whose only content is the drawing are lifted to the
+ * document top level by the importer, which stashes the original host paragraph props on
+ * `wrapperParagraph`. Those drawings keep their authored width, so a centered/right-aligned
+ * host paragraph must still offset the whole box on the page. Derive the alignment metadata
+ * the layout engine consumes (`inlineParagraphAlignment`) from that wrapper (SD: IT-1140).
+ *
+ * Only applies to inline-wrapped drawings; anchored drawings are positioned by their anchor.
+ */
+const resolveInlineAlignmentFromWrapper = (rawAttrs: Record<string, unknown>): Record<string, unknown> => {
+  const wrapType = (rawAttrs.wrap as { type?: unknown } | undefined)?.type;
+  if (wrapType !== 'Inline' || !isPlainObject(rawAttrs.wrapperParagraph)) {
+    return {};
+  }
+  const wrapper = rawAttrs.wrapperParagraph as Record<string, unknown>;
+  const paragraphProperties = isPlainObject(wrapper.paragraphProperties)
+    ? (wrapper.paragraphProperties as Record<string, unknown>)
+    : undefined;
+  // w:jc="distribute" visually centers a sole inline drawing; the PM `textAlign` attribute
+  // collapses it to 'justify', so fall back to the raw justification to detect it.
+  const justification = paragraphProperties?.justification;
+  const textAlign = typeof wrapper.textAlign === 'string' ? wrapper.textAlign : undefined;
+  const effectiveAlignment = justification === 'distribute' ? 'center' : textAlign;
+  if (effectiveAlignment !== 'center' && effectiveAlignment !== 'right') {
+    return {};
+  }
+  return { inlineParagraphAlignment: effectiveAlignment };
+};
+
+/**
  * Convert a ProseMirror shapeContainer node to a DrawingBlock
  *
  * @param node - Shape container node to convert
@@ -869,6 +898,7 @@ export function shapeContainerNodeToDrawingBlock(
   return buildDrawingBlock(
     {
       ...rawAttrs,
+      ...resolveInlineAlignmentFromWrapper(rawAttrs),
       ...(textContent ? { textContent } : {}),
       ...(rawAttrs.textAlign == null && textContent?.horizontalAlign ? { textAlign: textContent.horizontalAlign } : {}),
       ...(rawAttrs.textInsets == null ? { textInsets: resolveTextboxInsetsFromAttrs(textboxAttrs) } : {}),

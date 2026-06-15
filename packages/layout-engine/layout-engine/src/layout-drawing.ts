@@ -89,7 +89,10 @@ export function layoutDrawingBlock({
   const maxWidthForBlock =
     attrs?.isFullWidth === true && maxWidth > 0 ? Math.max(1, maxWidth - indentLeft - indentRight) : maxWidth;
   const rawWrap = attrs?.wrap as { type?: unknown } | undefined;
-  const isInlineShapeGroup = block.drawingKind === 'shapeGroup' && rawWrap?.type === 'Inline';
+  // Inline shape groups and textboxes render at their authored width, so a centered or
+  // right-aligned host paragraph must offset the whole box within the column (SD: IT-1140).
+  const isInlineAlignableDrawing =
+    (block.drawingKind === 'shapeGroup' || block.drawingKind === 'textboxShape') && rawWrap?.type === 'Inline';
   const inlineParagraphAlignment =
     attrs?.inlineParagraphAlignment === 'center' || attrs?.inlineParagraphAlignment === 'right'
       ? attrs.inlineParagraphAlignment
@@ -117,7 +120,7 @@ export function layoutDrawingBlock({
 
   const pmRange = extractBlockPmRange(block);
   let x = columnX(state) + marginLeft + indentLeft;
-  if (isInlineShapeGroup && inlineParagraphAlignment) {
+  if (isInlineAlignableDrawing && inlineParagraphAlignment) {
     const pIndentLeft = typeof attrs?.paragraphIndentLeft === 'number' ? attrs.paragraphIndentLeft : 0;
     const pIndentRight = typeof attrs?.paragraphIndentRight === 'number' ? attrs.paragraphIndentRight : 0;
     const alignBox = Math.max(0, maxWidthForBlock - pIndentLeft - pIndentRight);

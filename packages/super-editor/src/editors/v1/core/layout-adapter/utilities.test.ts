@@ -904,6 +904,39 @@ describe('Media Utilities', () => {
     });
   });
 
+  describe('hydrateImageBlocks - textboxShape contentBlocks hydration', () => {
+    it('hydrates ImageRuns inside textboxShape contentBlocks', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'drawing',
+          id: 'textbox-1',
+          drawingKind: 'textboxShape',
+          geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+          contentBlocks: [
+            {
+              kind: 'paragraph',
+              id: 'textbox-para-1',
+              runs: [{ kind: 'image', src: 'word/media/image1.png', width: 100, height: 100 }],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+      const mediaFiles = { 'word/media/image1.png': 'base64ImageData' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      const drawingBlock = result[0] as {
+        contentBlocks: Array<{ runs: Array<{ kind?: string; src?: string }> }>;
+      };
+
+      expect(drawingBlock.contentBlocks[0].runs[0]).toEqual({
+        kind: 'image',
+        src: 'data:image/png;base64,base64ImageData',
+        width: 100,
+        height: 100,
+      });
+    });
+  });
+
   describe('hydrateImageBlocks - ShapeGroup image hydration', () => {
     it('hydrates image children inside shapeGroup drawing blocks', () => {
       const blocks: FlowBlock[] = [

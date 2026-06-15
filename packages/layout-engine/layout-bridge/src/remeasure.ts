@@ -349,6 +349,19 @@ const getRunWidth = (run: Run): number => {
   return typeof width === 'number' ? width : 0;
 };
 
+const isAtomicLayoutRun = (run: Run): boolean => 'src' in run || run.kind === 'math' || run.kind === 'fieldAnnotation';
+
+const getAtomicRunLayoutWidth = (run: Run): number => {
+  const margins = run as { distLeft?: number; distRight?: number };
+  return getRunWidth(run) + (margins.distLeft ?? 0) + (margins.distRight ?? 0);
+};
+
+const getAtomicRunLayoutHeight = (run: Run): number => {
+  const baseHeight = typeof (run as { height?: number }).height === 'number' ? (run as { height: number }).height : 0;
+  const margins = run as { distTop?: number; distBottom?: number };
+  return baseHeight + (margins.distTop ?? 0) + (margins.distBottom ?? 0);
+};
+
 /**
  * Checks if a break run is a line break (as opposed to page/column break).
  *
@@ -1315,6 +1328,7 @@ export function remeasureParagraph(
     let resumeRun = -1;
     let resumeChar = 0;
     let lineMaxTextFontSize = 0;
+    let lineMaxAtomicHeight = 0;
 
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
@@ -1393,6 +1407,18 @@ export function remeasureParagraph(
         width += placeholderWidth;
         endRun = r;
         endChar = text.length > 0 ? text.length : start + 1;
+        continue;
+      }
+      if (text.length === 0 && isAtomicLayoutRun(run)) {
+        const atomicWidth = getAtomicRunLayoutWidth(run);
+        if (width > 0 && width + atomicWidth > effectiveMaxWidth - WIDTH_FUDGE_PX) {
+          didBreakInThisLine = true;
+          break;
+        }
+        width += atomicWidth;
+        lineMaxAtomicHeight = Math.max(lineMaxAtomicHeight, getAtomicRunLayoutHeight(run));
+        endRun = r;
+        endChar = 1;
         continue;
       }
       for (let c = start; c < text.length; c += 1) {
@@ -1496,8 +1522,9 @@ export function remeasureParagraph(
       width,
       ascent: 0,
       descent: 0,
-      lineHeight: lineHeightForRuns(runs, startRun, endRun, lastMeasuredFontSize),
+      lineHeight: Math.max(lineHeightForRuns(runs, startRun, endRun, lastMeasuredFontSize), lineMaxAtomicHeight),
       maxWidth: effectiveMaxWidth,
+      ...(lineMaxAtomicHeight > 0 ? { maxImageHeight: lineMaxAtomicHeight } : {}),
     };
     lines.push(line);
     if (lineMaxTextFontSize > 0) {

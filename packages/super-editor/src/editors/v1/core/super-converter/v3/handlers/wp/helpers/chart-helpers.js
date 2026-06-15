@@ -172,6 +172,7 @@ export function parseChartXml(chartXml) {
   const valueAxis = parseAxis(plotArea, 'c:valAx');
   const legendPosition = parseLegendPosition(chart);
   const styleId = parseStyleId(chartSpace);
+  const chartAreaBorder = parseChartAreaBorder(chartSpace);
 
   return {
     chartType,
@@ -183,6 +184,7 @@ export function parseChartXml(chartXml) {
     ...(valueAxis && { valueAxis }),
     ...(legendPosition && { legendPosition }),
     ...(styleId != null && { styleId }),
+    ...(chartAreaBorder != null && { chartAreaBorder }),
   };
 }
 
@@ -452,6 +454,21 @@ function parseLegendPosition(chart) {
   if (!legend) return undefined;
   const legendPos = findChild(legend, 'c:legendPos');
   return getAttr(legendPos, 'val') || undefined;
+}
+
+/**
+ * Parse chart-space outline visibility from c:spPr.
+ * @param {Object} chartSpace - c:chartSpace element
+ * @returns {boolean|undefined}
+ */
+function parseChartAreaBorder(chartSpace) {
+  const spPr = findChild(chartSpace, 'c:spPr');
+  if (!spPr) return undefined;
+
+  const line = findChild(spPr, 'a:ln');
+  if (!line) return undefined;
+
+  return !findChild(line, 'a:noFill');
 }
 
 /**

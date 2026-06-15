@@ -40,6 +40,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const CHART_PADDING = { top: 30, right: 20, bottom: 50, left: 60 };
 const HORIZONTAL_CHART_PADDING = { top: 2, right: 20, bottom: 2, left: 60 };
+const RIGHT_LEGEND_WIDTH = 110;
 const VALUE_TICK_COUNT = 5;
 const DATA_LABEL_PADDING = 4;
 
@@ -61,6 +62,8 @@ export function createChartElement(
   container.style.width = '100%';
   container.style.height = '100%';
   container.style.position = 'relative';
+  if (chartData?.chartAreaBorder !== false) container.style.border = '1px solid #BFBFBF';
+  container.style.boxSizing = 'border-box';
 
   if (!chartData || !chartData.series?.length) {
     return createChartPlaceholder(doc, container, 'No chart data');
@@ -138,6 +141,7 @@ export function formatTickValue(value: number): string {
 }
 
 type BarChartLayout = {
+  padding: typeof CHART_PADDING;
   plotWidth: number;
   plotHeight: number;
   groupWidth: number;
@@ -150,6 +154,7 @@ type BarChartLayout = {
 };
 
 type HorizontalBarChartLayout = {
+  padding: typeof HORIZONTAL_CHART_PADDING;
   plotLeft: number;
   plotTop: number;
   plotWidth: number;
@@ -200,9 +205,21 @@ function applyGuardrails(chart: ChartModel): { series: ChartSeriesData[]; trunca
   return { series, truncated };
 }
 
-function computeBarLayout(width: number, height: number, series: ChartSeriesData[]): BarChartLayout {
-  const plotWidth = Math.max(1, width - CHART_PADDING.left - CHART_PADDING.right);
-  const plotHeight = Math.max(1, height - CHART_PADDING.top - CHART_PADDING.bottom);
+function getBarChartPadding(chart: ChartModel): typeof CHART_PADDING {
+  return {
+    ...CHART_PADDING,
+    right: chart.legendPosition === 'r' ? RIGHT_LEGEND_WIDTH : CHART_PADDING.right,
+  };
+}
+
+function computeBarLayout(
+  width: number,
+  height: number,
+  series: ChartSeriesData[],
+  padding: typeof CHART_PADDING,
+): BarChartLayout {
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
 
   const allValues = series.flatMap((s) => s.values);
   const maxValue = Math.max(0, ...allValues);
@@ -217,20 +234,21 @@ function computeBarLayout(width: number, height: number, series: ChartSeriesData
   const barGap = Math.max(1, groupWidth * 0.1);
   const totalBarWidth = groupWidth - barGap * 2;
   const barWidth = Math.max(1, totalBarWidth / seriesCount);
-  const baselineY = CHART_PADDING.top + plotHeight * (maxValue / valueRange);
+  const baselineY = padding.top + plotHeight * (maxValue / valueRange);
 
-  return { plotWidth, plotHeight, groupWidth, barWidth, barGap, baselineY, valueRange, minValue, maxValue };
+  return { padding, plotWidth, plotHeight, groupWidth, barWidth, barGap, baselineY, valueRange, minValue, maxValue };
 }
 
 function computeHorizontalBarLayout(
   width: number,
   height: number,
   series: ChartSeriesData[],
-  gapWidth?: number,
+  chart: ChartModel,
   hasValueAxisLabels = false,
 ): HorizontalBarChartLayout {
   const padding = {
     ...HORIZONTAL_CHART_PADDING,
+    right: chart.legendPosition === 'r' ? RIGHT_LEGEND_WIDTH : HORIZONTAL_CHART_PADDING.right,
     bottom: hasValueAxisLabels ? 24 : HORIZONTAL_CHART_PADDING.bottom,
   };
   const plotLeft = padding.left;
@@ -248,7 +266,7 @@ function computeHorizontalBarLayout(
   const seriesCount = series.length;
 
   const groupHeight = plotHeight / categoryCount;
-  const gapRatio = Math.max(0, Math.min(5, (gapWidth ?? 150) / 100));
+  const gapRatio = Math.max(0, Math.min(5, (chart.gapWidth ?? 150) / 100));
   const barHeight = Math.max(1, groupHeight / (seriesCount + gapRatio));
   const barGap = Math.max(0, (groupHeight - barHeight * seriesCount) / 2);
   const baselineX = plotLeft + plotWidth * ((0 - minValue) / valueRange);
@@ -265,6 +283,7 @@ function computeHorizontalBarLayout(
     valueRange,
     minValue,
     maxValue,
+    padding,
   };
 }
 
@@ -279,7 +298,7 @@ function toHorizontalDisplaySeries(chart: ChartModel, series: ChartSeriesData[])
 }
 
 function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[], layout: BarChartLayout): void {
-  const { groupWidth, barGap, barWidth, baselineY, valueRange, plotHeight } = layout;
+  const { padding, groupWidth, barGap, barWidth, baselineY, valueRange, plotHeight } = layout;
 
   for (let si = 0; si < series.length; si++) {
     const s = series[si]!;
@@ -288,7 +307,7 @@ function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[]
     for (let ci = 0; ci < s.values.length; ci++) {
       const value = s.values[ci]!;
       const barHeight = Math.abs(value / valueRange) * plotHeight;
-      const x = CHART_PADDING.left + ci * groupWidth + barGap + si * barWidth;
+      const x = padding.left + ci * groupWidth + barGap + si * barWidth;
       const y = value >= 0 ? baselineY - barHeight : baselineY;
 
       const rect = doc.createElementNS(SVG_NS, 'rect');
@@ -456,23 +475,23 @@ function renderHorizontalBars(
 }
 
 function renderAxes(doc: Document, svg: SVGSVGElement, layout: BarChartLayout): void {
-  const { plotWidth, plotHeight, baselineY } = layout;
+  const { padding, plotWidth, plotHeight, baselineY } = layout;
 
   // Vertical axis
   const vAxis = doc.createElementNS(SVG_NS, 'line');
-  vAxis.setAttribute('x1', String(CHART_PADDING.left));
-  vAxis.setAttribute('y1', String(CHART_PADDING.top));
-  vAxis.setAttribute('x2', String(CHART_PADDING.left));
-  vAxis.setAttribute('y2', String(CHART_PADDING.top + plotHeight));
+  vAxis.setAttribute('x1', String(padding.left));
+  vAxis.setAttribute('y1', String(padding.top));
+  vAxis.setAttribute('x2', String(padding.left));
+  vAxis.setAttribute('y2', String(padding.top + plotHeight));
   vAxis.setAttribute('stroke', AXIS_COLOR);
   vAxis.setAttribute('stroke-width', '1');
   svg.appendChild(vAxis);
 
   // Horizontal baseline
   const hAxis = doc.createElementNS(SVG_NS, 'line');
-  hAxis.setAttribute('x1', String(CHART_PADDING.left));
+  hAxis.setAttribute('x1', String(padding.left));
   hAxis.setAttribute('y1', String(baselineY));
-  hAxis.setAttribute('x2', String(CHART_PADDING.left + plotWidth));
+  hAxis.setAttribute('x2', String(padding.left + plotWidth));
   hAxis.setAttribute('y2', String(baselineY));
   hAxis.setAttribute('stroke', AXIS_COLOR);
   hAxis.setAttribute('stroke-width', '1');
@@ -486,15 +505,15 @@ function renderCategoryLabels(
   layout: BarChartLayout,
   width: number,
 ): void {
-  const { groupWidth, plotHeight } = layout;
+  const { padding, groupWidth, plotHeight } = layout;
   const categoryCount = Math.max(1, categories.length);
   const fontSize = Math.max(8, Math.min(12, width / categoryCount / 5));
 
   for (let ci = 0; ci < categories.length; ci++) {
-    const labelX = CHART_PADDING.left + ci * groupWidth + groupWidth / 2;
+    const labelX = padding.left + ci * groupWidth + groupWidth / 2;
     const label = doc.createElementNS(SVG_NS, 'text');
     label.setAttribute('x', String(labelX));
-    label.setAttribute('y', String(CHART_PADDING.top + plotHeight + 16));
+    label.setAttribute('y', String(padding.top + plotHeight + 16));
     label.setAttribute('text-anchor', 'middle');
     label.setAttribute('font-size', String(fontSize));
     label.setAttribute('fill', LABEL_COLOR);
@@ -504,17 +523,23 @@ function renderCategoryLabels(
   }
 }
 
-function renderValueTicks(doc: Document, svg: SVGSVGElement, layout: BarChartLayout, height: number): void {
-  const { plotWidth, plotHeight, valueRange, minValue } = layout;
+function renderValueTicks(
+  doc: Document,
+  svg: SVGSVGElement,
+  layout: BarChartLayout,
+  height: number,
+  showGridlines: boolean,
+): void {
+  const { padding, plotWidth, plotHeight, valueRange, minValue } = layout;
   const tickStep = valueRange / VALUE_TICK_COUNT;
   const fontSize = Math.max(8, Math.min(11, height / 30));
 
   for (let i = 0; i <= VALUE_TICK_COUNT; i++) {
     const tickValue = minValue + tickStep * i;
-    const tickY = CHART_PADDING.top + plotHeight - (plotHeight * (tickValue - minValue)) / valueRange;
+    const tickY = padding.top + plotHeight - (plotHeight * (tickValue - minValue)) / valueRange;
 
     const label = doc.createElementNS(SVG_NS, 'text');
-    label.setAttribute('x', String(CHART_PADDING.left - 6));
+    label.setAttribute('x', String(padding.left - 6));
     label.setAttribute('y', String(tickY + 3));
     label.setAttribute('text-anchor', 'end');
     label.setAttribute('font-size', String(fontSize));
@@ -523,13 +548,13 @@ function renderValueTicks(doc: Document, svg: SVGSVGElement, layout: BarChartLay
     label.textContent = formatTickValue(tickValue);
     svg.appendChild(label);
 
-    if (i > 0 && i < VALUE_TICK_COUNT) {
+    if (showGridlines && i > 0 && i < VALUE_TICK_COUNT) {
       const gridLine = doc.createElementNS(SVG_NS, 'line');
-      gridLine.setAttribute('x1', String(CHART_PADDING.left));
+      gridLine.setAttribute('x1', String(padding.left));
       gridLine.setAttribute('y1', String(tickY));
-      gridLine.setAttribute('x2', String(CHART_PADDING.left + plotWidth));
+      gridLine.setAttribute('x2', String(padding.left + plotWidth));
       gridLine.setAttribute('y2', String(tickY));
-      gridLine.setAttribute('stroke', GRID_COLOR);
+      gridLine.setAttribute('stroke', AXIS_COLOR);
       gridLine.setAttribute('stroke-width', '0.5');
       svg.appendChild(gridLine);
     }
@@ -591,16 +616,24 @@ function renderHorizontalValueTicks(
       gridLine.setAttribute('y1', String(plotTop));
       gridLine.setAttribute('x2', String(tickX));
       gridLine.setAttribute('y2', String(plotTop + plotHeight));
-      gridLine.setAttribute('stroke', GRID_COLOR);
+      gridLine.setAttribute('stroke', AXIS_COLOR);
       gridLine.setAttribute('stroke-width', '0.5');
       svg.appendChild(gridLine);
     }
   }
 }
 
-function renderLegend(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[], height: number): void {
-  const legendY = height - 12;
-  let legendX = CHART_PADDING.left;
+function renderLegend(
+  doc: Document,
+  svg: SVGSVGElement,
+  series: ChartSeriesData[],
+  width: number,
+  height: number,
+  position: string | undefined,
+): void {
+  const isRightLegend = position === 'r';
+  let legendX = isRightLegend ? width - RIGHT_LEGEND_WIDTH + 12 : CHART_PADDING.left;
+  let legendY = isRightLegend ? Math.max(CHART_PADDING.top + 12, height / 2 - (series.length * 18) / 2) : height - 12;
 
   for (let si = 0; si < series.length; si++) {
     const s = series[si]!;
@@ -623,7 +656,11 @@ function renderLegend(doc: Document, svg: SVGSVGElement, series: ChartSeriesData
     label.textContent = s.name;
     svg.appendChild(label);
 
-    legendX += 14 + s.name.length * 6 + 16;
+    if (isRightLegend) {
+      legendY += 18;
+    } else {
+      legendX += 14 + s.name.length * 6 + 16;
+    }
   }
 }
 
@@ -964,7 +1001,7 @@ function renderScatterChart(
   }
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, undefined);
   }
   if (truncated) {
     renderTruncationIndicator(doc, svg, width);
@@ -1027,7 +1064,7 @@ function renderBubbleChart(
   }
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, undefined);
   }
   if (truncated) {
     renderTruncationIndicator(doc, svg, width);
@@ -1163,7 +1200,7 @@ function renderRadarChart(
   }
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, undefined);
   }
   if (truncated) {
     renderTruncationIndicator(doc, svg, width);
@@ -1408,7 +1445,7 @@ function renderLineChart(
   }
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, undefined);
   }
   if (truncated) {
     renderTruncationIndicator(doc, svg, width);
@@ -1470,7 +1507,7 @@ function renderAreaChart(
   }
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, undefined);
   }
   if (truncated) {
     renderTruncationIndicator(doc, svg, width);
@@ -1626,7 +1663,7 @@ function estimateSvgElements(
 
   const axes = 2;
   const valueTicks = VALUE_TICK_COUNT + 1;
-  const gridLines = VALUE_TICK_COUNT - 1;
+  const gridLines = chart.valueAxis?.majorGridlines === true ? VALUE_TICK_COUNT - 1 : 0;
   return bars + axes + categoryLabels + valueTicks + gridLines + dataLabels + legend;
 }
 
@@ -1658,18 +1695,18 @@ function renderBarChart(
     const valueAxisDeleted = chart.valueAxis?.deleted === true;
     const horizontalSeries = toHorizontalDisplaySeries(chart, series);
     const horizontalCategories = horizontalSeries[0]?.categories ?? [];
-    const layout = computeHorizontalBarLayout(width, height, horizontalSeries, chart.gapWidth, !valueAxisDeleted);
+    const layout = computeHorizontalBarLayout(width, height, horizontalSeries, chart, !valueAxisDeleted);
 
+    if (!valueAxisDeleted) {
+      renderHorizontalValueTicks(doc, svg, layout, height, chart.valueAxis?.majorGridlines === true);
+    }
     renderHorizontalBars(doc, svg, horizontalSeries, layout);
     if (chart.categoryAxis?.deleted !== true) {
       renderHorizontalCategoryLabels(doc, svg, horizontalCategories, layout, width);
     }
-    if (!valueAxisDeleted) {
-      renderHorizontalValueTicks(doc, svg, layout, height, chart.valueAxis?.majorGridlines === true);
-    }
 
     if (hasLegend) {
-      renderLegend(doc, svg, series, height);
+      renderLegend(doc, svg, series, width, height, chart.legendPosition);
     }
 
     if (truncated) {
@@ -1680,15 +1717,15 @@ function renderBarChart(
     return container;
   }
 
-  const layout = computeBarLayout(width, height, series);
+  const layout = computeBarLayout(width, height, series, getBarChartPadding(chart));
 
+  renderValueTicks(doc, svg, layout, height, chart.valueAxis?.majorGridlines === true);
   renderBars(doc, svg, series, layout);
   renderAxes(doc, svg, layout);
   renderCategoryLabels(doc, svg, categories, layout, width);
-  renderValueTicks(doc, svg, layout, height);
 
   if (hasLegend) {
-    renderLegend(doc, svg, series, height);
+    renderLegend(doc, svg, series, width, height, chart.legendPosition);
   }
 
   if (truncated) {

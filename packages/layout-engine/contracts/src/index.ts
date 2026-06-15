@@ -1412,6 +1412,8 @@ export type ChartModel = {
   legendPosition?: string;
   /** OOXML chart style ID. */
   styleId?: number;
+  /** Whether the chart area outline should be painted. */
+  chartAreaBorder?: boolean;
 };
 
 /** Chart drawing block. */

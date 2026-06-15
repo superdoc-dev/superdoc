@@ -113,6 +113,20 @@ describe('createChartElement', () => {
     expect(el.querySelector('svg')).not.toBeNull();
   });
 
+  it('draws a chart area border around rendered charts', () => {
+    const el = createChartElement(doc, makeBarChart(), defaultGeometry);
+    expect(el.style.borderWidth).toBe('1px');
+    expect(el.style.borderStyle).toBe('solid');
+    expect(el.style.borderColor).toBe('rgb(191, 191, 191)');
+    expect(el.style.boxSizing).toBe('border-box');
+  });
+
+  it('omits the chart area border when the chart XML disables the outline', () => {
+    const el = createChartElement(doc, makeBarChart({ chartAreaBorder: false }), defaultGeometry);
+    expect(el.style.border).toBe('');
+    expect(el.style.boxSizing).toBe('border-box');
+  });
+
   it('shows placeholder for missing chart data', () => {
     const el = createChartElement(doc, undefined, defaultGeometry);
     expect(el.textContent).toContain('No chart data');
@@ -131,11 +145,75 @@ describe('createChartElement', () => {
   it('renders bars for each series value', () => {
     const el = createChartElement(doc, makeBarChart(), defaultGeometry);
     const rects = el.querySelectorAll('svg rect');
-    // 3 data points = 3 bar rects (no legend swatch for single series with legendPosition)
-    // Wait — with the fix, legend shows for single series too. Let's check:
-    // Series 1 has 3 values → 3 bars
-    // Legend: 1 series with legendPosition → 1 swatch rect
     expect(rects.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('paints vertical bar gridlines behind bars', () => {
+    const el = createChartElement(doc, makeBarChart({ valueAxis: { majorGridlines: true } }), defaultGeometry);
+    const svg = el.querySelector('svg')!;
+    const children = Array.from(svg.children);
+    const firstGridlineIndex = children.findIndex(
+      (child) => child.tagName === 'line' && child.getAttribute('stroke-width') === '0.5',
+    );
+    const firstBarIndex = children.findIndex(
+      (child) => child.tagName === 'rect' && child.getAttribute('fill') === '#4472C4',
+    );
+    const axisLine = Array.from(svg.querySelectorAll('line')).find(
+      (line) => line.getAttribute('stroke-width') === '1',
+    )!;
+    const gridline = children[firstGridlineIndex]!;
+
+    expect(firstGridlineIndex).toBeGreaterThanOrEqual(0);
+    expect(firstGridlineIndex).toBeLessThan(firstBarIndex);
+    expect(gridline.getAttribute('stroke')).toBe(axisLine.getAttribute('stroke'));
+  });
+
+  it('omits vertical bar gridlines when the value axis does not request them', () => {
+    const el = createChartElement(doc, makeBarChart({ valueAxis: undefined }), defaultGeometry);
+    const gridlines = Array.from(el.querySelectorAll('svg line')).filter(
+      (line) => line.getAttribute('stroke-width') === '0.5',
+    );
+
+    expect(gridlines).toHaveLength(0);
+  });
+
+  it('renders right-positioned legends as a column beside vertical bar charts', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        legendPosition: 'r',
+        series: [
+          { name: 'Series 1', categories: ['Q1'], values: [100] },
+          { name: 'Series 2', categories: ['Q1'], values: [80] },
+          { name: 'Series 3', categories: ['Q1'], values: [60] },
+        ],
+      }),
+      defaultGeometry,
+    );
+    const svg = el.querySelector('svg')!;
+    const legendLabels = ['Series 1', 'Series 2', 'Series 3'].map(
+      (name) => Array.from(svg.querySelectorAll('text')).find((text) => text.textContent === name)!,
+    );
+    const xPositions = legendLabels.map((label) => Number(label.getAttribute('x')));
+    const yPositions = legendLabels.map((label) => Number(label.getAttribute('y')));
+    const barRightEdge = Math.max(
+      ...Array.from(svg.querySelectorAll('rect'))
+        .filter((rect) => rect.getAttribute('height') !== '10')
+        .map((rect) => Number(rect.getAttribute('x')) + Number(rect.getAttribute('width'))),
+    );
+
+    expect(new Set(xPositions).size).toBe(1);
+    expect(xPositions[0]).toBeGreaterThan(barRightEdge);
+    expect(yPositions[1] - yPositions[0]).toBeGreaterThan(0);
+    expect(yPositions[2] - yPositions[1]).toBeGreaterThan(0);
+  });
+
+  it('keeps right-positioned non-bar legends on the bottom until their plots reserve right space', () => {
+    const el = createChartElement(doc, makeBubbleChart({ legendPosition: 'r' }), defaultGeometry);
+    const legendLabel = Array.from(el.querySelectorAll('svg text')).find((text) => text.textContent === 'Series 1')!;
+
+    expect(Number(legendLabel.getAttribute('x'))).toBe(74);
+    expect(Number(legendLabel.getAttribute('y'))).toBe(defaultGeometry.height - 12);
   });
 
   it('renders horizontal bar charts with category labels and in-bar percentage data labels', () => {

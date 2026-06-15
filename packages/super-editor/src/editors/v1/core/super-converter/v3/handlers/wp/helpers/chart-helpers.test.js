@@ -287,6 +287,17 @@ describe('chart-helpers', () => {
       expect(result.styleId).toBe(2);
     });
 
+    it('parses a disabled chart area border from chart-space shape properties', () => {
+      const xml = makeBarChartXml();
+      xml.elements.push({
+        name: 'c:spPr',
+        elements: [{ name: 'a:ln', elements: [{ name: 'a:noFill' }] }],
+      });
+
+      const result = parseChartXml(xml);
+      expect(result.chartAreaBorder).toBe(false);
+    });
+
     it('prefers c14 style in mc:AlternateContent when present', () => {
       const result = parseChartXml(makeBarChartXmlWithAlternateContentStyle({ choiceStyle: 102, fallbackStyle: 2 }));
       expect(result.styleId).toBe(102);

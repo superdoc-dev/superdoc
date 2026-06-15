@@ -138,6 +138,47 @@ describe('createChartElement', () => {
     expect(rects.length).toBeGreaterThanOrEqual(3);
   });
 
+  it('renders horizontal bar charts with category labels and in-bar percentage data labels', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        barDirection: 'bar',
+        gapWidth: 78,
+        legendPosition: undefined,
+        valueAxis: { deleted: true },
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['Skill #5', 'Skill #4', 'Skill #3'],
+            values: [0.5, 1, 0.25],
+            dataLabels: { showValue: true, numberFormat: '0%', position: 'ctr' },
+          },
+        ],
+      }),
+      { width: 394, height: 132, rotation: 0, flipH: false, flipV: false },
+    );
+    const svg = el.querySelector('svg')!;
+    const rects = Array.from(svg.querySelectorAll('rect'));
+    const textNodes = Array.from(svg.querySelectorAll('text'));
+    const texts = textNodes.map((text) => text.textContent);
+    const categoryLabels = textNodes.filter((text) => text.textContent?.startsWith('Skill #'));
+    const orderedCategoryLabels = [...categoryLabels]
+      .sort((a, b) => Number(a.getAttribute('y')) - Number(b.getAttribute('y')))
+      .map((text) => text.textContent);
+    const firstBarHeight = Number(rects[0].getAttribute('height'));
+    const firstBarBottom = Number(rects[0].getAttribute('y')) + firstBarHeight;
+    const nextBarY = Number(rects[1].getAttribute('y'));
+
+    expect(rects).toHaveLength(3);
+    expect(Number(rects[0].getAttribute('width'))).toBeGreaterThan(Number(rects[0].getAttribute('height')));
+    expect(firstBarHeight).toBeGreaterThan(20);
+    expect(nextBarY - firstBarBottom).toBeGreaterThan(8);
+    expect(orderedCategoryLabels).toEqual(['Skill #3', 'Skill #4', 'Skill #5']);
+    expect(texts).toEqual(expect.arrayContaining(['Skill #5', 'Skill #4', 'Skill #3', '50%', '100%', '25%']));
+    expect(texts).not.toContain('0.2');
+    expect(svg.querySelectorAll('line')).toHaveLength(0);
+  });
+
   it('renders a pie chart as SVG paths', () => {
     const el = createChartElement(doc, makePieChart(), defaultGeometry);
     const svg = el.querySelector('svg');

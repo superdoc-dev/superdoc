@@ -30,6 +30,7 @@ const AXIS_COLOR = '#595959';
 const GRID_COLOR = '#E0E0E0';
 const LABEL_COLOR = '#333';
 const TICK_LABEL_COLOR = '#666';
+const DATA_LABEL_COLOR = '#FFFFFF';
 const FONT_FAMILY = 'Calibri, Arial, sans-serif';
 const PLACEHOLDER_BG = '#f8f9fa';
 const PLACEHOLDER_BORDER = '#dee2e6';
@@ -38,6 +39,7 @@ const PLACEHOLDER_TEXT_COLOR = '#6c757d';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const CHART_PADDING = { top: 30, right: 20, bottom: 50, left: 60 };
+const HORIZONTAL_CHART_PADDING = { top: 2, right: 20, bottom: 2, left: 60 };
 const VALUE_TICK_COUNT = 5;
 
 // ============================================================================
@@ -146,6 +148,20 @@ type BarChartLayout = {
   maxValue: number;
 };
 
+type HorizontalBarChartLayout = {
+  plotLeft: number;
+  plotTop: number;
+  plotWidth: number;
+  plotHeight: number;
+  groupHeight: number;
+  barHeight: number;
+  barGap: number;
+  baselineX: number;
+  valueRange: number;
+  minValue: number;
+  maxValue: number;
+};
+
 /**
  * Apply performance guardrails to chart data, truncating series and data points
  * that exceed rendering limits. Returns the truncated data and whether truncation occurred.
@@ -198,6 +214,62 @@ function computeBarLayout(width: number, height: number, series: ChartSeriesData
   return { plotWidth, plotHeight, groupWidth, barWidth, barGap, baselineY, valueRange, minValue, maxValue };
 }
 
+function computeHorizontalBarLayout(
+  width: number,
+  height: number,
+  series: ChartSeriesData[],
+  gapWidth?: number,
+  hasValueAxisLabels = false,
+): HorizontalBarChartLayout {
+  const padding = {
+    ...HORIZONTAL_CHART_PADDING,
+    bottom: hasValueAxisLabels ? 24 : HORIZONTAL_CHART_PADDING.bottom,
+  };
+  const plotLeft = padding.left;
+  const plotTop = padding.top;
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
+
+  const allValues = series.flatMap((s) => s.values);
+  const maxValue = Math.max(0, ...allValues);
+  const minValue = Math.min(0, ...allValues);
+  const valueRange = Math.max(1, maxValue - minValue);
+
+  const categories = series[0]?.categories ?? [];
+  const categoryCount = Math.max(1, categories.length);
+  const seriesCount = series.length;
+
+  const groupHeight = plotHeight / categoryCount;
+  const gapRatio = Math.max(0, Math.min(5, (gapWidth ?? 150) / 100));
+  const barHeight = Math.max(1, groupHeight / (seriesCount + gapRatio));
+  const barGap = Math.max(0, (groupHeight - barHeight * seriesCount) / 2);
+  const baselineX = plotLeft + plotWidth * ((0 - minValue) / valueRange);
+
+  return {
+    plotLeft,
+    plotTop,
+    plotWidth,
+    plotHeight,
+    groupHeight,
+    barHeight,
+    barGap,
+    baselineX,
+    valueRange,
+    minValue,
+    maxValue,
+  };
+}
+
+function toHorizontalDisplaySeries(chart: ChartModel, series: ChartSeriesData[]): ChartSeriesData[] {
+  if (chart.categoryAxis?.orientation === 'maxMin') return series;
+
+  return series.map((s) => ({
+    ...s,
+    categories: [...s.categories].reverse(),
+    values: [...s.values].reverse(),
+  }));
+}
+
 function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[], layout: BarChartLayout): void {
   const { groupWidth, barGap, barWidth, baselineY, valueRange, plotHeight } = layout;
 
@@ -218,6 +290,56 @@ function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[]
       rect.setAttribute('height', String(Math.max(0.5, barHeight)));
       rect.setAttribute('fill', color);
       svg.appendChild(rect);
+    }
+  }
+}
+
+function formatDataLabel(value: number, numberFormat?: string): string {
+  if (numberFormat?.includes('%')) {
+    const decimalMatch = numberFormat.match(/0\.(0+)%/);
+    const decimals = decimalMatch?.[1]?.length ?? 0;
+    return `${(value * 100).toFixed(decimals)}%`;
+  }
+  return formatTickValue(value);
+}
+
+function renderHorizontalBars(
+  doc: Document,
+  svg: SVGSVGElement,
+  series: ChartSeriesData[],
+  layout: HorizontalBarChartLayout,
+): void {
+  const { plotTop, groupHeight, barGap, barHeight, baselineX, valueRange, plotWidth } = layout;
+
+  for (let si = 0; si < series.length; si++) {
+    const s = series[si]!;
+    const color = SERIES_COLORS[si % SERIES_COLORS.length]!;
+
+    for (let ci = 0; ci < s.values.length; ci++) {
+      const value = s.values[ci]!;
+      const barWidth = Math.abs(value / valueRange) * plotWidth;
+      const x = value >= 0 ? baselineX : baselineX - barWidth;
+      const y = plotTop + ci * groupHeight + barGap + si * barHeight;
+
+      const rect = doc.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', String(x));
+      rect.setAttribute('y', String(y));
+      rect.setAttribute('width', String(Math.max(0.5, barWidth)));
+      rect.setAttribute('height', String(barHeight));
+      rect.setAttribute('fill', color);
+      svg.appendChild(rect);
+
+      if (s.dataLabels?.showValue) {
+        const label = doc.createElementNS(SVG_NS, 'text');
+        label.setAttribute('x', String(x + barWidth / 2));
+        label.setAttribute('y', String(y + barHeight / 2 + 3));
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', String(Math.max(7, Math.min(10, barHeight * 0.75))));
+        label.setAttribute('fill', DATA_LABEL_COLOR);
+        label.setAttribute('font-family', FONT_FAMILY);
+        label.textContent = formatDataLabel(value, s.dataLabels.numberFormat);
+        svg.appendChild(label);
+      }
     }
   }
 }
@@ -296,6 +418,68 @@ function renderValueTicks(doc: Document, svg: SVGSVGElement, layout: BarChartLay
       gridLine.setAttribute('y1', String(tickY));
       gridLine.setAttribute('x2', String(CHART_PADDING.left + plotWidth));
       gridLine.setAttribute('y2', String(tickY));
+      gridLine.setAttribute('stroke', GRID_COLOR);
+      gridLine.setAttribute('stroke-width', '0.5');
+      svg.appendChild(gridLine);
+    }
+  }
+}
+
+function renderHorizontalCategoryLabels(
+  doc: Document,
+  svg: SVGSVGElement,
+  categories: string[],
+  layout: HorizontalBarChartLayout,
+  width: number,
+): void {
+  const { plotLeft, plotTop, groupHeight } = layout;
+  const categoryCount = Math.max(1, categories.length);
+  const fontSize = Math.max(8, Math.min(12, width / categoryCount / 5));
+
+  for (let ci = 0; ci < categories.length; ci++) {
+    const label = doc.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', String(plotLeft - 6));
+    label.setAttribute('y', String(plotTop + ci * groupHeight + groupHeight / 2 + 4));
+    label.setAttribute('text-anchor', 'end');
+    label.setAttribute('font-size', String(fontSize));
+    label.setAttribute('fill', LABEL_COLOR);
+    label.setAttribute('font-family', FONT_FAMILY);
+    label.textContent = categories[ci] ?? '';
+    svg.appendChild(label);
+  }
+}
+
+function renderHorizontalValueTicks(
+  doc: Document,
+  svg: SVGSVGElement,
+  layout: HorizontalBarChartLayout,
+  height: number,
+  showGridlines: boolean,
+): void {
+  const { plotLeft, plotTop, plotHeight, plotWidth, valueRange, minValue } = layout;
+  const tickStep = valueRange / VALUE_TICK_COUNT;
+  const fontSize = Math.max(8, Math.min(11, height / 30));
+
+  for (let i = 0; i <= VALUE_TICK_COUNT; i++) {
+    const tickValue = minValue + tickStep * i;
+    const tickX = plotLeft + (plotWidth * (tickValue - minValue)) / valueRange;
+
+    const label = doc.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', String(tickX));
+    label.setAttribute('y', String(plotTop + plotHeight + 16));
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-size', String(fontSize));
+    label.setAttribute('fill', TICK_LABEL_COLOR);
+    label.setAttribute('font-family', FONT_FAMILY);
+    label.textContent = formatTickValue(tickValue);
+    svg.appendChild(label);
+
+    if (showGridlines && i > 0 && i < VALUE_TICK_COUNT) {
+      const gridLine = doc.createElementNS(SVG_NS, 'line');
+      gridLine.setAttribute('x1', String(tickX));
+      gridLine.setAttribute('y1', String(plotTop));
+      gridLine.setAttribute('x2', String(tickX));
+      gridLine.setAttribute('y2', String(plotTop + plotHeight));
       gridLine.setAttribute('stroke', GRID_COLOR);
       gridLine.setAttribute('stroke-width', '0.5');
       svg.appendChild(gridLine);
@@ -1310,13 +1494,29 @@ function renderDoughnutChart(
  * Estimate the number of SVG elements a bar chart will produce.
  * Used to check the element budget before rendering.
  */
-function estimateSvgElements(series: ChartSeriesData[], categories: string[], hasLegend: boolean): number {
+function estimateSvgElements(
+  series: ChartSeriesData[],
+  categories: string[],
+  hasLegend: boolean,
+  chart: ChartModel,
+): number {
   const bars = series.reduce((sum, s) => sum + s.values.length, 0);
-  const axes = 2;
-  const categoryLabels = categories.length;
-  const valueTicks = (VALUE_TICK_COUNT + 1) * 2; // labels + grid lines
+  const isHorizontalBar = chart.chartType === 'barChart' && chart.barDirection === 'bar';
+  const categoryLabels = chart.categoryAxis?.deleted === true ? 0 : categories.length;
+  const dataLabels = series.reduce((sum, s) => (s.dataLabels?.showValue ? sum + s.values.length : sum), 0);
   const legend = hasLegend ? series.length * 2 : 0; // swatch + label per series
-  return bars + axes + categoryLabels + valueTicks + legend;
+
+  if (isHorizontalBar) {
+    const valueAxisDeleted = chart.valueAxis?.deleted === true;
+    const valueLabels = valueAxisDeleted ? 0 : VALUE_TICK_COUNT + 1;
+    const gridLines = !valueAxisDeleted && chart.valueAxis?.majorGridlines === true ? VALUE_TICK_COUNT - 1 : 0;
+    return bars + categoryLabels + dataLabels + valueLabels + gridLines + legend;
+  }
+
+  const axes = 2;
+  const valueTicks = VALUE_TICK_COUNT + 1;
+  const gridLines = VALUE_TICK_COUNT - 1;
+  return bars + axes + categoryLabels + valueTicks + gridLines + dataLabels + legend;
 }
 
 function renderBarChart(
@@ -1332,7 +1532,7 @@ function renderBarChart(
   const hasLegend = chart.legendPosition !== undefined;
 
   // Enforce SVG element budget (§11): fall back to simplified rendering
-  const estimated = estimateSvgElements(series, categories, hasLegend);
+  const estimated = estimateSvgElements(series, categories, hasLegend, chart);
   if (estimated > SVG_ELEMENT_BUDGET) {
     return createChartPlaceholder(doc, container, `Chart too complex for inline rendering (${estimated} elements)`);
   }
@@ -1342,6 +1542,32 @@ function renderBarChart(
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
   svg.style.display = 'block';
+
+  if (chart.barDirection === 'bar') {
+    const valueAxisDeleted = chart.valueAxis?.deleted === true;
+    const horizontalSeries = toHorizontalDisplaySeries(chart, series);
+    const horizontalCategories = horizontalSeries[0]?.categories ?? [];
+    const layout = computeHorizontalBarLayout(width, height, horizontalSeries, chart.gapWidth, !valueAxisDeleted);
+
+    renderHorizontalBars(doc, svg, horizontalSeries, layout);
+    if (chart.categoryAxis?.deleted !== true) {
+      renderHorizontalCategoryLabels(doc, svg, horizontalCategories, layout, width);
+    }
+    if (!valueAxisDeleted) {
+      renderHorizontalValueTicks(doc, svg, layout, height, chart.valueAxis?.majorGridlines === true);
+    }
+
+    if (hasLegend) {
+      renderLegend(doc, svg, series, height);
+    }
+
+    if (truncated) {
+      renderTruncationIndicator(doc, svg, width);
+    }
+
+    container.appendChild(svg);
+    return container;
+  }
 
   const layout = computeBarLayout(width, height, series);
 

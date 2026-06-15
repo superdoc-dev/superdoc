@@ -1373,12 +1373,23 @@ export type ChartSeriesData = {
   xValues?: number[];
   /** Optional bubble radius/size values for bubble charts. */
   bubbleSizes?: number[];
+  /** Optional data-label settings from c:dLbls. */
+  dataLabels?: ChartDataLabelsConfig;
+};
+
+/** Data-label configuration extracted from c:dLbls. */
+export type ChartDataLabelsConfig = {
+  showValue?: boolean;
+  numberFormat?: string;
+  position?: string;
 };
 
 /** Axis configuration extracted from c:catAx / c:valAx. */
 export type ChartAxisConfig = {
   title?: string;
   orientation?: 'minMax' | 'maxMin';
+  deleted?: boolean;
+  majorGridlines?: boolean;
 };
 
 /** Normalized chart data model parsed from OOXML chart XML. */
@@ -1389,6 +1400,8 @@ export type ChartModel = {
   subType?: string;
   /** Bar direction — 'col' for vertical columns, 'bar' for horizontal bars. */
   barDirection?: 'col' | 'bar';
+  /** Gap width between bar groups as a percentage of bar width. */
+  gapWidth?: number;
   /** Data series in the chart. */
   series: ChartSeriesData[];
   /** Category axis config. */

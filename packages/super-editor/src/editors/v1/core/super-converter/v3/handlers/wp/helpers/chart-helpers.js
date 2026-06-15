@@ -69,6 +69,12 @@ const findChildren = (node, name) => node?.elements?.filter((el) => el.name === 
  */
 const getAttr = (node, attr) => node?.attributes?.[attr];
 
+const getBooleanVal = (node, defaultValue = true) => {
+  const val = getAttr(node, 'val');
+  if (val == null) return defaultValue;
+  return val === '1' || val === 'true' || val === 'on';
+};
+
 // ============================================================================
 // Chart part resolution
 // ============================================================================
@@ -160,6 +166,7 @@ export function parseChartXml(chartXml) {
 
   const subType = extractGrouping(chartTypeEl);
   const barDirection = extractBarDirection(chartTypeEl);
+  const gapWidth = extractNumericChildVal(chartTypeEl, 'c:gapWidth');
   const series = parseSeries(chartTypeEl, chartType);
   const categoryAxis = parseAxis(plotArea, 'c:catAx');
   const valueAxis = parseAxis(plotArea, 'c:valAx');
@@ -170,6 +177,7 @@ export function parseChartXml(chartXml) {
     chartType,
     ...(subType && { subType }),
     ...(barDirection && { barDirection }),
+    ...(gapWidth != null && { gapWidth }),
     series,
     ...(categoryAxis && { categoryAxis }),
     ...(valueAxis && { valueAxis }),
@@ -228,13 +236,23 @@ function extractBarDirection(chartTypeEl) {
   return val === 'col' || val === 'bar' ? val : undefined;
 }
 
+function extractNumericChildVal(parentEl, childName) {
+  const child = findChild(parentEl, childName);
+  const rawValue = getAttr(child, 'val');
+  if (rawValue == null) return undefined;
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : undefined;
+}
+
 /**
  * Parse all series (c:ser) from a chart type element.
  * @param {Object} chartTypeEl
  * @returns {import('@superdoc/contracts').ChartSeriesData[]}
  */
 function parseSeries(chartTypeEl, chartType) {
-  return findChildren(chartTypeEl, 'c:ser').map((seriesEl) => parseOneSeries(seriesEl, chartType));
+  const chartDataLabels = parseDataLabels(chartTypeEl);
+  return findChildren(chartTypeEl, 'c:ser').map((seriesEl) => parseOneSeries(seriesEl, chartType, chartDataLabels));
 }
 
 /**
@@ -243,13 +261,14 @@ function parseSeries(chartTypeEl, chartType) {
  * @param {string} chartType
  * @returns {import('@superdoc/contracts').ChartSeriesData}
  */
-function parseOneSeries(serEl, chartType) {
+function parseOneSeries(serEl, chartType, chartDataLabels) {
   const name = extractSeriesName(serEl);
   const categories = extractCachedStrings(findChild(serEl, 'c:cat'));
   const values = extractCachedNumbers(findChild(serEl, 'c:val'));
   const xValues = extractCachedNumbers(findChild(serEl, 'c:xVal'));
   const yValues = extractCachedNumbers(findChild(serEl, 'c:yVal'));
   const bubbleSizes = extractCachedNumbers(findChild(serEl, 'c:bubbleSize'));
+  const dataLabels = mergeDataLabels(chartDataLabels, parseDataLabels(serEl));
 
   if (chartType === 'scatterChart' || chartType === 'bubbleChart') {
     const parsedCategoryValues = categories.map((value) => Number(value));
@@ -268,12 +287,47 @@ function parseOneSeries(serEl, chartType) {
       values: seriesYValues,
       ...(seriesXValues.length ? { xValues: seriesXValues } : {}),
       ...(chartType === 'bubbleChart' && bubbleSizes.length ? { bubbleSizes } : {}),
+      ...(dataLabels ? { dataLabels } : {}),
     };
 
     return seriesData;
   }
 
-  return { name, categories, values };
+  return { name, categories, values, ...(dataLabels ? { dataLabels } : {}) };
+}
+
+function mergeDataLabels(chartDataLabels, seriesDataLabels) {
+  if (seriesDataLabels === undefined) return chartDataLabels ?? undefined;
+  if (seriesDataLabels === null) return undefined;
+  return { ...(chartDataLabels ?? {}), ...seriesDataLabels };
+}
+
+/**
+ * Parse data label settings from c:dLbls.
+ * @param {Object} parentEl
+ * @returns {import('@superdoc/contracts').ChartDataLabelsConfig|null|undefined}
+ */
+function parseDataLabels(parentEl) {
+  const dLbls = findChild(parentEl, 'c:dLbls');
+  if (!dLbls) return undefined;
+
+  const deleteEl = findChild(dLbls, 'c:delete');
+  if (deleteEl && getBooleanVal(deleteEl)) return null;
+
+  const showVal = findChild(dLbls, 'c:showVal');
+  const numFmt = findChild(dLbls, 'c:numFmt');
+  const dLblPos = findChild(dLbls, 'c:dLblPos');
+
+  const config = {};
+  if (showVal) config.showValue = getBooleanVal(showVal);
+
+  const numberFormat = getAttr(numFmt, 'formatCode');
+  if (numberFormat) config.numberFormat = numberFormat;
+
+  const position = getAttr(dLblPos, 'val');
+  if (position) config.position = position;
+
+  return Object.keys(config).length > 0 ? config : undefined;
 }
 
 /**
@@ -361,10 +415,14 @@ function parseAxis(plotArea, axisName) {
   const title = extractAxisTitle(titleEl);
   const scaling = findChild(axis, 'c:scaling');
   const orientation = getAttr(findChild(scaling, 'c:orientation'), 'val');
+  const deleteEl = findChild(axis, 'c:delete');
+  const hasMajorGridlines = Boolean(findChild(axis, 'c:majorGridlines'));
 
   const config = {};
   if (title) config.title = title;
   if (orientation === 'minMax' || orientation === 'maxMin') config.orientation = orientation;
+  if (deleteEl && getBooleanVal(deleteEl) === true) config.deleted = true;
+  if (hasMajorGridlines) config.majorGridlines = true;
 
   return Object.keys(config).length > 0 ? config : undefined;
 }

@@ -290,6 +290,18 @@ function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[]
       rect.setAttribute('height', String(Math.max(0.5, barHeight)));
       rect.setAttribute('fill', color);
       svg.appendChild(rect);
+
+      if (s.dataLabels?.showValue) {
+        const label = doc.createElementNS(SVG_NS, 'text');
+        label.setAttribute('x', String(x + barWidth / 2));
+        label.setAttribute('y', String(y + barHeight / 2 + 3));
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', String(Math.max(7, Math.min(10, barWidth * 0.75))));
+        label.setAttribute('fill', DATA_LABEL_COLOR);
+        label.setAttribute('font-family', FONT_FAMILY);
+        label.textContent = formatDataLabel(value, s.dataLabels.numberFormat);
+        svg.appendChild(label);
+      }
     }
   }
 }

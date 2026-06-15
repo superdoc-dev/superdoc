@@ -179,6 +179,28 @@ describe('createChartElement', () => {
     expect(svg.querySelectorAll('line')).toHaveLength(0);
   });
 
+  it('renders data labels for vertical bar charts', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        legendPosition: undefined,
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['A', 'B', 'C'],
+            values: [3, 7, 11],
+            dataLabels: { showValue: true },
+          },
+        ],
+      }),
+      defaultGeometry,
+    );
+
+    const texts = Array.from(el.querySelectorAll('svg text')).map((text) => text.textContent);
+
+    expect(texts).toEqual(expect.arrayContaining(['3', '7', '11']));
+  });
+
   it('renders a pie chart as SVG paths', () => {
     const el = createChartElement(doc, makePieChart(), defaultGeometry);
     const svg = el.querySelector('svg');

@@ -12,13 +12,17 @@ vi.mock('@converter/helpers.js', () => ({
   inchesToPixels: vi.fn((inches) => inches * 96),
 }));
 
-vi.mock('../shared/svg-utils.js', () => ({
-  createGradient: vi.fn(),
-  createTextElement: vi.fn(),
-  applyGradientToSVG: vi.fn(),
-  applyAlphaToSVG: vi.fn(),
-  generateTransforms: vi.fn(() => []),
-}));
+vi.mock('../shared/svg-utils.js', async () => {
+  const actual = await vi.importActual('../shared/svg-utils.js');
+  return {
+    ...actual,
+    createGradient: vi.fn(),
+    createTextElement: vi.fn(),
+    applyGradientToSVG: vi.fn(),
+    applyAlphaToSVG: vi.fn(),
+    generateTransforms: vi.fn(() => []),
+  };
+});
 
 describe('VectorShapeView', () => {
   let mockEditor;

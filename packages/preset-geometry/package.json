@@ -10,6 +10,10 @@
     ".": {
       "types": "./index.d.ts",
       "default": "./index.js"
+    },
+    "./connectors": {
+      "types": "./connectors.d.ts",
+      "default": "./connectors.js"
     }
   }
 }

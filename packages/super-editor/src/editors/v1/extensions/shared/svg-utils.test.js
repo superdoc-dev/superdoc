@@ -2,9 +2,49 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createTextElement, createGradient, generateTransforms } from './svg-utils.js';
+import {
+  createTextElement,
+  createGradient,
+  generateTransforms,
+  getConnectorPresetPath,
+  createConnectorPresetSvg,
+} from './svg-utils.js';
 
 describe('svg-utils', () => {
+  describe('connector preset helpers', () => {
+    it.each([
+      ['bentConnector2', 'M 0 0 L 120 0 L 120 80'],
+      ['bentConnector3', 'M 0 0 L 60 0 L 60 80 L 120 80'],
+      ['bentConnector4', 'M 0 0 L 60 0 L 60 40 L 120 40 L 120 80'],
+      ['bentConnector5', 'M 0 0 L 30 0 L 30 40 L 90 40 L 90 80 L 120 80'],
+    ])('generates non-degenerate %s path data', (kind, expectedPath) => {
+      expect(getConnectorPresetPath(kind, 120, 80)).toBe(expectedPath);
+    });
+
+    it.each(['curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5'])(
+      'generates %s path data without duplicate consecutive curve endpoints',
+      (kind) => {
+        const path = getConnectorPresetPath(kind, 120, 80);
+        expect(path).toBeTruthy();
+        expect(path).not.toContain('60 40 60 40');
+      },
+    );
+
+    it('creates connector SVGs with stroke padding and non-scaling stroke', () => {
+      const svg = createConnectorPresetSvg({
+        kind: 'bentConnector4',
+        strokeColor: '#123456',
+        strokeWidth: 4,
+        width: 120,
+        height: 80,
+      });
+
+      expect(svg).toContain('viewBox="-2 -2 124 84"');
+      expect(svg).toContain('vector-effect="non-scaling-stroke"');
+      expect(svg).toContain('stroke="#123456"');
+    });
+  });
+
   describe('createTextElement', () => {
     const createBasicTextContent = (text = 'Hello World') => ({
       parts: [{ text, formatting: {} }],

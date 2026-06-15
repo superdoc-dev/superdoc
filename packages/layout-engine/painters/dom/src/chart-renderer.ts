@@ -181,7 +181,7 @@ function applyGuardrails(chart: ChartModel): { series: ChartSeriesData[]; trunca
     }
     truncated = true;
     return {
-      name: s.name,
+      ...s,
       categories: s.categories.slice(0, MAX_POINTS_PER_SERIES),
       values: s.values.slice(0, MAX_POINTS_PER_SERIES),
       ...(s.xValues && { xValues: s.xValues.slice(0, MAX_POINTS_PER_SERIES) }),

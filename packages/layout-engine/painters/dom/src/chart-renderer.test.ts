@@ -319,6 +319,28 @@ describe('performance guardrails', () => {
     expect(el.textContent).toContain('Data truncated');
   });
 
+  it('preserves data labels when truncating oversized series', () => {
+    const categories = Array.from({ length: 501 }, (_, i) => `C${i}`);
+    const values = Array.from({ length: 501 }, (_, i) => (i + 1) / 100);
+    const chart = makeBarChart({
+      legendPosition: undefined,
+      series: [
+        {
+          name: 'Big',
+          categories,
+          values,
+          dataLabels: { showValue: true, numberFormat: '0%' },
+        },
+      ],
+    });
+    const el = createChartElement(doc, chart, defaultGeometry);
+    const texts = Array.from(el.querySelectorAll('svg text')).map((text) => text.textContent);
+
+    expect(el.textContent).toContain('Data truncated');
+    expect(texts).toEqual(expect.arrayContaining(['1%', '500%']));
+    expect(texts).not.toContain('501%');
+  });
+
   it('falls back to placeholder when estimated SVG elements exceed budget (5000)', () => {
     // 20 series × 500 points = 10,000 bars alone → exceeds 5,000 budget
     const series = Array.from({ length: 20 }, (_, i) => ({

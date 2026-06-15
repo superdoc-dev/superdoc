@@ -5,12 +5,32 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createTextElement,
   createGradient,
+  createPictureFillPattern,
   generateTransforms,
   getConnectorPresetPath,
   createConnectorPresetSvg,
 } from './svg-utils.js';
 
 describe('svg-utils', () => {
+  describe('createPictureFillPattern', () => {
+    it('sizes picture-fill image content in object bounding box coordinates', () => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.appendChild(defs);
+
+      const fill = createPictureFillPattern(defs, { src: 'data:image/png;base64,AAA' }, 'test-fill');
+      const patternId = fill.match(/^url\(#(.+)\)$/)?.[1];
+      const pattern = defs.querySelector(`#${patternId}`);
+      const image = pattern?.querySelector('image');
+
+      expect(pattern).not.toBeNull();
+      expect(pattern.getAttribute('patternUnits')).toBe('objectBoundingBox');
+      expect(pattern.getAttribute('patternContentUnits')).toBe('objectBoundingBox');
+      expect(image.getAttribute('width')).toBe('1');
+      expect(image.getAttribute('height')).toBe('1');
+    });
+  });
+
   describe('connector preset helpers', () => {
     it.each([
       ['bentConnector2', 'M 0 0 L 120 0 L 120 80'],

@@ -36,6 +36,7 @@ export function createPictureFillPattern(defs, pictureFill, prefix = 'picture-fi
   const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
   pattern.setAttribute('id', patternId);
   pattern.setAttribute('patternUnits', 'objectBoundingBox');
+  pattern.setAttribute('patternContentUnits', 'objectBoundingBox');
   pattern.setAttribute('width', '1');
   pattern.setAttribute('height', '1');
 

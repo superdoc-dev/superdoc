@@ -516,10 +516,12 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     if (block.drawingKind === 'chart') {
       return [
         'drawing:chart',
-        block.chartData?.chartType ?? '',
-        block.chartData?.series?.length ?? 0,
+        valueVersion(block.chartData),
         block.geometry.width,
         block.geometry.height,
+        block.geometry.rotation ?? 0,
+        block.geometry.flipH ? 1 : 0,
+        block.geometry.flipV ? 1 : 0,
         block.chartRelId ?? '',
       ].join('|');
     }

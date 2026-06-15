@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
 import type {
   FlowBlock,
+  ChartDrawing,
   ImageBlock,
   ImageRun,
   ParagraphBlock,
@@ -256,6 +257,38 @@ describe('deriveBlockVersion - vector shape effects', () => {
     };
 
     expect(deriveBlockVersion(withPictureB)).not.toBe(deriveBlockVersion(withPictureA));
+  });
+});
+
+describe('deriveBlockVersion - chart drawings', () => {
+  const makeChartDrawing = (values: number[]): ChartDrawing => ({
+    kind: 'drawing',
+    id: 'chart-1',
+    drawingKind: 'chart',
+    geometry: { width: 320, height: 180, rotation: 0, flipH: false, flipV: false },
+    chartRelId: 'rIdChart1',
+    chartData: {
+      chartType: 'barChart',
+      barDirection: 'col',
+      gapWidth: 150,
+      series: [
+        {
+          name: 'Series 1',
+          categories: ['Q1', 'Q2', 'Q3'],
+          values,
+          dataLabels: { showValue: true, numberFormat: '0%' },
+        },
+      ],
+      valueAxis: { deleted: false, majorGridlines: true },
+      legendPosition: 'b',
+    },
+  });
+
+  it('changes when rendered chart data changes without changing series count', () => {
+    const first = deriveBlockVersion(makeChartDrawing([0.25, 0.5, 0.75]));
+    const second = deriveBlockVersion(makeChartDrawing([0.25, 0.5, 1]));
+
+    expect(second).not.toBe(first);
   });
 });
 

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Compute structural hunks describing whole-block add/removes between two docs.
  *

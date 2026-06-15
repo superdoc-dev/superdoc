@@ -1,5 +1,16 @@
+// @ts-check
 import { Fragment } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * @typedef {{
+ *   kind: 'remove' | 'insert',
+ *   changeId: string,
+ *   basePos?: number,
+ *   anchorBasePos?: number,
+ *   proposalNode?: import('prosemirror-model').Node,
+ * }} StructuralHunk
+ */
 
 /**
  * Apply structural hunks to a transaction as row-level tracked-change PM attrs.
@@ -18,10 +29,11 @@ import { v4 as uuidv4 } from 'uuid';
  * @param {{
  *   tr: import('prosemirror-state').Transaction,
  *   state: import('prosemirror-state').EditorState,
- *   hunks: object[],
+ *   hunks: StructuralHunk[],
  * }} args
  * @returns {{ applied: number, warnings: string[] }}
  */
+ 
 export const applyHunks = ({ tr, state, hunks }) => {
   const warnings = [];
   let applied = 0;
@@ -32,6 +44,10 @@ export const applyHunks = ({ tr, state, hunks }) => {
     const operationId = hunk.changeId;
 
     if (hunk.kind === 'remove') {
+      if (typeof hunk.basePos !== 'number') {
+        warnings.push(`Missing basePos for remove hunk ${hunk.changeId}`);
+        continue;
+      }
       const livePos = tr.mapping.map(hunk.basePos);
       const tableNode = tr.doc.nodeAt(livePos);
       if (!tableNode || tableNode.type.name !== 'table') {
@@ -57,6 +73,10 @@ export const applyHunks = ({ tr, state, hunks }) => {
       const proposal = hunk.proposalNode;
       if (!proposal) {
         warnings.push(`Missing proposalNode for insert hunk ${hunk.changeId}`);
+        continue;
+      }
+      if (typeof hunk.anchorBasePos !== 'number') {
+        warnings.push(`Missing anchorBasePos for insert hunk ${hunk.changeId}`);
         continue;
       }
       const trackedRows = [];

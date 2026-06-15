@@ -59,7 +59,10 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
 
 const valueVersion = (value: unknown): string => {
   if (value == null) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'object') {
+    const serialized = stableSerializeEvidenceValue(value);
+    return `h:${serialized.length}:${hashString(2166136261, serialized).toString(36)}`;
+  }
   return String(value);
 };
 
@@ -278,7 +281,7 @@ const hashNumber = (seed: number, value: number | undefined | null): number => {
 // sourceAnchorSignature
 // ---------------------------------------------------------------------------
 
-const stableSerializeEvidenceValue = (value: unknown): string => {
+function stableSerializeEvidenceValue(value: unknown): string {
   if (value === undefined) return '';
   if (value === null) return 'null';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -296,7 +299,7 @@ const stableSerializeEvidenceValue = (value: unknown): string => {
       .join(',')}}`;
   }
   return JSON.stringify(String(value));
-};
+}
 
 /**
  * Stable source/evidence metadata signature for paint cache invalidation.

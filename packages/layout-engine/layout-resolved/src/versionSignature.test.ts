@@ -258,6 +258,21 @@ describe('deriveBlockVersion - vector shape effects', () => {
 
     expect(deriveBlockVersion(withPictureB)).not.toBe(deriveBlockVersion(withPictureA));
   });
+
+  it('does not embed picture fill data URIs in the version string', () => {
+    const version = deriveBlockVersion({
+      ...makeVectorShape(),
+      fillColor: {
+        type: 'picture',
+        src: `data:image/png;base64,${'A'.repeat(1024)}`,
+        rId: 'rId1',
+        extension: 'png',
+      },
+    });
+
+    expect(version).not.toContain('data:image/png;base64');
+    expect(version.length).toBeLessThan(300);
+  });
 });
 
 describe('deriveBlockVersion - chart drawings', () => {
@@ -289,6 +304,14 @@ describe('deriveBlockVersion - chart drawings', () => {
     const second = deriveBlockVersion(makeChartDrawing([0.25, 0.5, 1]));
 
     expect(second).not.toBe(first);
+  });
+
+  it('hashes chart data instead of embedding every series point', () => {
+    const values = Array.from({ length: 1000 }, (_, index) => index);
+    const version = deriveBlockVersion(makeChartDrawing(values));
+
+    expect(version).not.toContain('999');
+    expect(version.length).toBeLessThan(200);
   });
 });
 

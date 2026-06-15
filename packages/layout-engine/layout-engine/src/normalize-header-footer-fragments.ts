@@ -121,7 +121,7 @@ export function normalizeFragmentsForRegion(
       const block = blockById.get(fragment.blockId);
       if (!block || !isPageRelativeBlock(block)) continue;
 
-      if (pageWidth != null) {
+      if (pageWidth != null && block.anchor?.vRelativeFrom === 'page') {
         const fragmentWidth = (fragment as { width?: number }).width ?? 0;
         const marginLeft = Math.max(0, constraints.margins.left ?? 0);
         const marginRight = Math.max(0, constraints.margins.right ?? 0);

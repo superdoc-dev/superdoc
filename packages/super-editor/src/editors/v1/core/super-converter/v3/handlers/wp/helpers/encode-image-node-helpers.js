@@ -24,6 +24,7 @@ import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 import { findChildByLocalName, someChildHasLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
 import { importDrawingMLTextbox } from './import-drawingml-textbox.js';
+import { normalizeTargetPath } from '../../helpers/media-target-path.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -35,19 +36,6 @@ const GROUP_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingG
  * filename so the same image always receives the same ID across open cycles.
  */
 const SD_IMAGE_ID_NAMESPACE = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
-
-/**
- * Normalize a relationship target to a relative media path.
- * Strips leading slashes and collapses duplicated "word/" prefixes so lookups
- * match the media keys we store (e.g., "word/media/image.png").
- */
-const normalizeTargetPath = (targetPath = '') => {
-  if (!targetPath) return targetPath;
-  const trimmed = targetPath.replace(/^\/+/, ''); // remove leading slash(es)
-  if (trimmed.startsWith('word/')) return trimmed;
-  if (trimmed.startsWith('media/')) return `word/${trimmed}`;
-  return `word/${trimmed}`;
-};
 
 /**
  * Default dimensions for vector shapes when size is not specified.

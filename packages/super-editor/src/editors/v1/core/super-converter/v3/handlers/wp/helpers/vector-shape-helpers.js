@@ -1,5 +1,6 @@
 import { emuToPixels, rotToDegrees } from '@converter/helpers.js';
 import { findChildByLocalName, filterChildrenByLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
+import { normalizeTargetPath } from '../../helpers/media-target-path.js';
 
 /**
  * Converts a preset color name (a:prstClr) to its hex value.
@@ -212,14 +213,6 @@ function extractColorFromElement(element) {
 
   return null;
 }
-
-const normalizeTargetPath = (targetPath = '') => {
-  if (!targetPath) return targetPath;
-  const trimmed = targetPath.replace(/^\/+/, '');
-  if (trimmed.startsWith('word/')) return trimmed;
-  if (trimmed.startsWith('media/')) return `word/${trimmed}`;
-  return `word/${trimmed}`;
-};
 
 const inferExtensionFromPath = (path = '') => {
   const match = String(path).match(/\.([a-zA-Z0-9]+)(?:[#?].*)?$/);

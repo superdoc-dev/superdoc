@@ -179,6 +179,34 @@ describe('createChartElement', () => {
     expect(svg.querySelectorAll('line')).toHaveLength(0);
   });
 
+  it('positions horizontal outEnd data labels outside the bar end', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        barDirection: 'bar',
+        categoryAxis: { orientation: 'maxMin' },
+        legendPosition: undefined,
+        valueAxis: { deleted: true },
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['A', 'B'],
+            values: [0.5, 1],
+            dataLabels: { showValue: true, numberFormat: '0%', position: 'outEnd' },
+          },
+        ],
+      }),
+      { width: 300, height: 120, rotation: 0, flipH: false, flipV: false },
+    );
+    const svg = el.querySelector('svg')!;
+    const firstBar = svg.querySelector('rect')!;
+    const firstLabel = Array.from(svg.querySelectorAll('text')).find((text) => text.textContent === '50%')!;
+    const barEndX = Number(firstBar.getAttribute('x')) + Number(firstBar.getAttribute('width'));
+
+    expect(Number(firstLabel.getAttribute('x'))).toBeGreaterThan(barEndX);
+    expect(firstLabel.getAttribute('text-anchor')).toBe('start');
+  });
+
   it('renders data labels for vertical bar charts', () => {
     const el = createChartElement(
       doc,

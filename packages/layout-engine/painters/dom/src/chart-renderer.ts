@@ -41,6 +41,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const CHART_PADDING = { top: 30, right: 20, bottom: 50, left: 60 };
 const HORIZONTAL_CHART_PADDING = { top: 2, right: 20, bottom: 2, left: 60 };
 const VALUE_TICK_COUNT = 5;
+const DATA_LABEL_PADDING = 4;
 
 // ============================================================================
 // Public API
@@ -160,6 +161,13 @@ type HorizontalBarChartLayout = {
   valueRange: number;
   minValue: number;
   maxValue: number;
+};
+
+type DataLabelPlacement = {
+  x: number;
+  y: number;
+  textAnchor: 'start' | 'middle' | 'end';
+  fill: string;
 };
 
 /**
@@ -292,12 +300,13 @@ function renderBars(doc: Document, svg: SVGSVGElement, series: ChartSeriesData[]
       svg.appendChild(rect);
 
       if (s.dataLabels?.showValue) {
+        const placement = resolveVerticalBarDataLabelPlacement(s.dataLabels.position, value, x, y, barWidth, barHeight);
         const label = doc.createElementNS(SVG_NS, 'text');
-        label.setAttribute('x', String(x + barWidth / 2));
-        label.setAttribute('y', String(y + barHeight / 2 + 3));
-        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('x', String(placement.x));
+        label.setAttribute('y', String(placement.y));
+        label.setAttribute('text-anchor', placement.textAnchor);
         label.setAttribute('font-size', String(Math.max(7, Math.min(10, barWidth * 0.75))));
-        label.setAttribute('fill', DATA_LABEL_COLOR);
+        label.setAttribute('fill', placement.fill);
         label.setAttribute('font-family', FONT_FAMILY);
         label.textContent = formatDataLabel(value, s.dataLabels.numberFormat);
         svg.appendChild(label);
@@ -313,6 +322,88 @@ function formatDataLabel(value: number, numberFormat?: string): string {
     return `${(value * 100).toFixed(decimals)}%`;
   }
   return formatTickValue(value);
+}
+
+function resolveHorizontalBarDataLabelPlacement(
+  position: string | undefined,
+  value: number,
+  x: number,
+  y: number,
+  barWidth: number,
+  barHeight: number,
+): DataLabelPlacement {
+  const centerY = y + barHeight / 2 + 3;
+  if (position === 'outEnd') {
+    return {
+      x: value >= 0 ? x + barWidth + DATA_LABEL_PADDING : x - DATA_LABEL_PADDING,
+      y: centerY,
+      textAnchor: value >= 0 ? 'start' : 'end',
+      fill: LABEL_COLOR,
+    };
+  }
+  if (position === 'inEnd') {
+    return {
+      x: value >= 0 ? x + barWidth - DATA_LABEL_PADDING : x + DATA_LABEL_PADDING,
+      y: centerY,
+      textAnchor: value >= 0 ? 'end' : 'start',
+      fill: DATA_LABEL_COLOR,
+    };
+  }
+  if (position === 'inBase') {
+    return {
+      x: value >= 0 ? x + DATA_LABEL_PADDING : x + barWidth - DATA_LABEL_PADDING,
+      y: centerY,
+      textAnchor: value >= 0 ? 'start' : 'end',
+      fill: DATA_LABEL_COLOR,
+    };
+  }
+  return {
+    x: x + barWidth / 2,
+    y: centerY,
+    textAnchor: 'middle',
+    fill: DATA_LABEL_COLOR,
+  };
+}
+
+function resolveVerticalBarDataLabelPlacement(
+  position: string | undefined,
+  value: number,
+  x: number,
+  y: number,
+  barWidth: number,
+  barHeight: number,
+): DataLabelPlacement {
+  const centerX = x + barWidth / 2;
+  if (position === 'outEnd') {
+    return {
+      x: centerX,
+      y: value >= 0 ? y - DATA_LABEL_PADDING : y + barHeight + 10,
+      textAnchor: 'middle',
+      fill: LABEL_COLOR,
+    };
+  }
+  if (position === 'inEnd') {
+    return {
+      x: centerX,
+      y: value >= 0 ? y + 10 : y + barHeight - DATA_LABEL_PADDING,
+      textAnchor: 'middle',
+      fill: DATA_LABEL_COLOR,
+    };
+  }
+  if (position === 'inBase') {
+    return {
+      x: centerX,
+      y: value >= 0 ? y + barHeight - DATA_LABEL_PADDING : y + 10,
+      textAnchor: 'middle',
+      fill: DATA_LABEL_COLOR,
+    };
+  }
+  return {
+    x: centerX,
+    y: y + barHeight / 2 + 3,
+    textAnchor: 'middle',
+    fill: DATA_LABEL_COLOR,
+  };
 }
 
 function renderHorizontalBars(
@@ -342,12 +433,20 @@ function renderHorizontalBars(
       svg.appendChild(rect);
 
       if (s.dataLabels?.showValue) {
+        const placement = resolveHorizontalBarDataLabelPlacement(
+          s.dataLabels.position,
+          value,
+          x,
+          y,
+          barWidth,
+          barHeight,
+        );
         const label = doc.createElementNS(SVG_NS, 'text');
-        label.setAttribute('x', String(x + barWidth / 2));
-        label.setAttribute('y', String(y + barHeight / 2 + 3));
-        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('x', String(placement.x));
+        label.setAttribute('y', String(placement.y));
+        label.setAttribute('text-anchor', placement.textAnchor);
         label.setAttribute('font-size', String(Math.max(7, Math.min(10, barHeight * 0.75))));
-        label.setAttribute('fill', DATA_LABEL_COLOR);
+        label.setAttribute('fill', placement.fill);
         label.setAttribute('font-family', FONT_FAMILY);
         label.textContent = formatDataLabel(value, s.dataLabels.numberFormat);
         svg.appendChild(label);

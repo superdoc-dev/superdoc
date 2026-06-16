@@ -1,6 +1,7 @@
 import {
   getCommentDefinition,
   isCommentResolvedInThread,
+  isSyntheticTrackedChangeComment,
   updateCommentsExtendedXml,
   updateCommentsIdsAndExtensible,
   updateCommentsXml,
@@ -810,5 +811,39 @@ describe('updateCommentsXml', () => {
 
     expect(updatedComment.attributes['w:email']).toBeUndefined();
     expect(updatedComment.attributes['custom:email']).toBe('author@example.com');
+  });
+});
+
+describe('isSyntheticTrackedChangeComment', () => {
+  it('keeps a plain comment that is not linked to a tracked change', () => {
+    expect(isSyntheticTrackedChangeComment(makeComment())).toBe(false);
+  });
+
+  it('drops a body-less synthetic tracked-change projection row', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'tc-1', trackedChange: true })).toBe(true);
+  });
+
+  it('keeps a genuine user comment that is anchored to a tracked change', () => {
+    // The regression: these carry trackedChange:true but have an authored body, so they
+    // must still be exported — otherwise accept-and-comment redline reviews lose them.
+    const linkedComment = makeComment({ commentId: 'c-on-tc', trackedChange: true });
+    expect(isSyntheticTrackedChangeComment(linkedComment)).toBe(false);
+  });
+
+  it.each(['commentText', 'text', 'commentJSON', 'elements'])(
+    'treats a tracked-change comment carrying a "%s" body as a real comment',
+    (bodyKey) => {
+      expect(isSyntheticTrackedChangeComment({ commentId: 'c', trackedChange: true, [bodyKey]: 'x' })).toBe(false);
+    },
+  );
+
+  it('keeps a tracked-change reply (has parentCommentId) even without its own body', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'r', trackedChange: true, parentCommentId: 'p' })).toBe(false);
+  });
+
+  it('keeps the comment whenever trackedChange is falsy or the input is nullish', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'c', trackedChange: false })).toBe(false);
+    expect(isSyntheticTrackedChangeComment({ commentId: 'c' })).toBe(false);
+    expect(isSyntheticTrackedChangeComment(null)).toBe(false);
   });
 });

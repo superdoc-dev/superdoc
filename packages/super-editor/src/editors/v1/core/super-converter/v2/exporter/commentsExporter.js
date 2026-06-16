@@ -18,6 +18,26 @@ export const prepareCommentParaIds = (comment) => {
   return newComment;
 };
 
+/**
+ * Detect a SYNTHETIC tracked-change projection row.
+ *
+ * SuperDoc seeds the comments array with one auto-generated entry per tracked change so the
+ * sidebar can render it; these carry `trackedChange: true` but no authored body and must not
+ * be written to comments.xml. A genuine user comment anchored to (or overlapping) a tracked
+ * change ALSO carries `trackedChange: true`, so it must NOT be treated as synthetic. Only rows
+ * that are flagged tracked-change AND have no comment body AND are not a thread reply are
+ * synthetic. Mirrors `isSyntheticTrackedChangeProjection` in the document-api comment store.
+ *
+ * @param {Object} comment The export comment record
+ * @returns {boolean} True only for body-less tracked-change projection rows
+ */
+export const isSyntheticTrackedChangeComment = (comment) => {
+  if (!comment || comment.trackedChange !== true) return false;
+  const has = (key) => Object.prototype.hasOwnProperty.call(comment, key);
+  const hasBody = has('commentText') || has('text') || has('commentJSON') || has('elements');
+  return !hasBody && !has('parentCommentId');
+};
+
 const getCommentIds = (comment) => {
   if (!comment) return [];
   return [comment.commentId, comment.importedId, comment.internalId].filter((id) => id != null).map((id) => String(id));

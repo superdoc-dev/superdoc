@@ -3,6 +3,7 @@ import { carbonCopy } from '../../../utilities/carbonCopy.js';
 import { COMMENT_REF, COMMENTS_XML_DEFINITIONS } from '../../exporter-docx-defs.js';
 import { generateDocxRandomId } from '../../../helpers/generateDocxRandomId.js';
 import { COMMENT_FILE_BASENAMES } from '../../constants.js';
+import { commentHasMeaningfulContent } from '../../../../utils/comment-content.js';
 
 /**
  * Insert w15:paraId into the comments
@@ -19,23 +20,31 @@ export const prepareCommentParaIds = (comment) => {
 };
 
 /**
- * Detect a SYNTHETIC tracked-change projection row.
+ * Detect a SYNTHETIC tracked-change projection row that must NOT be written to any comment part
+ * (comments.xml, commentsExtended.xml, commentsIds.xml, commentsExtensible.xml).
  *
  * SuperDoc seeds the comments array with one auto-generated entry per tracked change so the
- * sidebar can render it; these carry `trackedChange: true` but no authored body and must not
- * be written to comments.xml. A genuine user comment anchored to (or overlapping) a tracked
- * change ALSO carries `trackedChange: true`, so it must NOT be treated as synthetic. Only rows
- * that are flagged tracked-change AND have no comment body AND are not a thread reply are
- * synthetic. Mirrors `isSyntheticTrackedChangeProjection` in the document-api comment store.
+ * sidebar can render it. A genuine user comment anchored to (or overlapping) a tracked change
+ * ALSO carries `trackedChange: true`, so the flag alone cannot discriminate.
+ *
+ * Primary discriminator: the explicit `isSyntheticTrackedChangeProjection` marker set where the
+ * row is created (comments-store `getPendingComment`). It is authoritative and immune to a
+ * synthetic row inheriting the sidebar draft text from the shared `currentCommentText` ref.
+ *
+ * Legacy fallback (rows authored before the marker existed): a tracked-change row with no
+ * authored body and no thread linkage. This MUST be value-based, not key-presence: at the export
+ * layer every record has `commentText`/`commentJSON`/`parentCommentId` keys stamped by
+ * `getValues()` and the export translators, so a key-presence test would treat every row as real.
+ * See `commentHasMeaningfulContent`.
  *
  * @param {Object} comment The export comment record
- * @returns {boolean} True only for body-less tracked-change projection rows
+ * @returns {boolean} True for synthetic projection rows that must be excluded from export
  */
 export const isSyntheticTrackedChangeComment = (comment) => {
-  if (!comment || comment.trackedChange !== true) return false;
-  const has = (key) => Object.prototype.hasOwnProperty.call(comment, key);
-  const hasBody = has('commentText') || has('text') || has('commentJSON') || has('elements');
-  return !hasBody && !has('parentCommentId');
+  if (!comment) return false;
+  if (comment.isSyntheticTrackedChangeProjection === true) return true;
+  if (comment.trackedChange !== true) return false;
+  return !commentHasMeaningfulContent(comment) && !comment.parentCommentId && !comment.threadingParentCommentId;
 };
 
 const getCommentIds = (comment) => {
@@ -182,8 +191,17 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
 
   // Re-build the comment definitions
   commentDefs.forEach((commentDef) => {
-    const paragraphs = commentDef.elements || [];
-    if (!paragraphs.length) return;
+    let paragraphs = commentDef.elements || [];
+    if (!paragraphs.length) {
+      // A body-less comment that survived filtering (e.g. an empty reply) must still be a
+      // well-formed, anchored comment. Give it one empty paragraph so the normalization below
+      // always runs: it binds xmlns:custom, drops the non-schema w:done / w15:paraId from the
+      // <w:comment> element, and stamps w14:paraId on the paragraph (which the commentsExtended /
+      // commentsIds entries key on). This prevents emitting a bare <w:comment> whose custom:
+      // attributes have no in-scope namespace binding.
+      paragraphs = [{ type: 'element', name: 'w:p', attributes: {}, elements: [] }];
+      commentDef.elements = paragraphs;
+    }
 
     const firstParagraph = paragraphs.find((node) => node?.name === 'w:p') ?? paragraphs[0];
     const lastParagraph =
@@ -297,15 +315,19 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
       'w15:done': isResolved ? '1' : '0',
     };
 
-    // Use paraIdParent only for comments that should use commentsExtended threading.
-    // Note: If the parent is a tracked change (not a real Word comment), we don't set this attribute
-    // because Word doesn't recognize tracked changes as comment parents.
+    // Thread a reply to its parent. `comments` has already had synthetic tracked-change
+    // projection rows removed upstream (isSyntheticTrackedChangeComment), so any parent found
+    // here is a real authored comment, including a genuine comment that happens to sit on
+    // tracked-changed text (which still carries trackedChange: true). We must NOT gate on
+    // parentComment.trackedChange: that dropped valid replies to comments anchored on a tracked
+    // change. If the parent was a synthetic projection it is already gone from `comments`, so
+    // findCommentById returns undefined and the reply correctly exports as a top-level comment
+    // (Word never threads a comment under a tracked change).
     const parentId = comment.threadingParentCommentId || comment.parentCommentId;
     const threadingStyle = resolveThreadingStyle(comment, profile);
     if (parentId && (threadingStyle === 'commentsExtended' || shouldIncludeForThreads)) {
       const parentComment = findCommentById(comments, parentId);
-      const allowTrackedParent = profile?.defaultStyle === 'commentsExtended';
-      if (parentComment && (allowTrackedParent || !parentComment.trackedChange)) {
+      if (parentComment) {
         attributes['w15:paraIdParent'] = parentComment.commentParaId;
       }
     }

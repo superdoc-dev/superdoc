@@ -8,7 +8,7 @@ import type {
   TrackChangeType,
 } from '@superdoc/document-api';
 export { buildCommentJsonFromText } from '../../utils/comment-content.js';
-import { buildCommentJsonFromText } from '../../utils/comment-content.js';
+import { buildCommentJsonFromText, collectCommentTextFragments } from '../../utils/comment-content.js';
 
 const FALLBACK_STORE_KEY = '__documentApiComments';
 const DELETED_COMMENT_SNAPSHOT_KEY = '__documentApiDeletedCommentSnapshots';
@@ -242,28 +242,6 @@ export function reconcileCommentEntityStoreWithAnchors(
   return { restored, removed };
 }
 
-function collectTextFragments(value: unknown, sink: string[]): void {
-  if (!value) return;
-
-  if (typeof value === 'string') {
-    if (value.length > 0) sink.push(value);
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) collectTextFragments(item, sink);
-    return;
-  }
-
-  if (typeof value !== 'object') return;
-  const record = value as Record<string, unknown>;
-  if (typeof record.text === 'string' && record.text.length > 0) sink.push(record.text);
-
-  if (record.content) collectTextFragments(record.content, sink);
-  if (record.elements) collectTextFragments(record.elements, sink);
-  if (record.nodes) collectTextFragments(record.nodes, sink);
-}
-
 function hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -278,11 +256,18 @@ function hasCommentBodyPayload(raw: Record<string, unknown>): boolean {
 }
 
 function isSyntheticTrackedChangeProjection(raw: Record<string, unknown>): boolean {
+  // Honor the explicit marker first. The comments store flags auto-generated tracked-change
+  // projection rows with `isSyntheticTrackedChangeProjection`, and these reach collaboration
+  // through `useComment.getValues()`, which stamps `commentText`/`parentCommentId` keys. Without
+  // this check the key-presence fallback below would treat a marked row as a real comment entity
+  // and sync it into the store.
+  if (raw.isSyntheticTrackedChangeProjection === true) return true;
+
   if (raw.trackedChange !== true) return false;
 
-  // Tracked-change projection rows share the comments Y.Array, but they are
-  // not user-authored comment entities. Linked user comments on tracked
-  // content also carry `trackedChange: true`, so only skip rows that lack any
+  // Legacy fallback for rows authored before the marker existed. Tracked-change projection rows
+  // share the comments Y.Array, but they are not user-authored comment entities. Linked user
+  // comments on tracked content also carry `trackedChange: true`, so only skip rows that lack any
   // actual comment body payload or thread metadata.
   return !hasCommentBodyPayload(raw) && !hasOwnProperty(raw, 'parentCommentId');
 }
@@ -291,8 +276,8 @@ export function extractCommentText(entry: CommentEntityRecord): string | undefin
   if (typeof entry.commentText === 'string') return entry.commentText;
 
   const fragments: string[] = [];
-  if (entry.commentJSON) collectTextFragments(entry.commentJSON, fragments);
-  if (entry.elements) collectTextFragments(entry.elements, fragments);
+  if (entry.commentJSON) collectCommentTextFragments(entry.commentJSON, fragments);
+  if (entry.elements) collectCommentTextFragments(entry.elements, fragments);
 
   if (!fragments.length) return undefined;
   return fragments.join('').trim();

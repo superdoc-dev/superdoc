@@ -1128,6 +1128,44 @@ describe('comments-store', () => {
     );
   });
 
+  it('adding a synthetic tracked-change projection does not pollute or clear a pending draft', () => {
+    const superdoc = { emit: vi.fn(), config: { isInternal: true } };
+
+    // The user is composing a comment: a pending comment with draft text is open.
+    store.commentsList = [];
+    store.pendingComment = { commentId: 'pending', selection: { source: 'floating' } };
+    store.currentCommentText = 'My unsent draft';
+
+    // A tracked change syncs and projects a fresh sidebar row while the draft is open.
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'tc-fresh',
+        trackedChangeText: 'inserted text',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    // The projection is added as a body-less, marked synthetic row...
+    const projection = store.commentsList.find((c) => c.commentId === 'tc-fresh');
+    expect(projection).toBeTruthy();
+    expect(projection.isSyntheticTrackedChangeProjection).toBe(true);
+    expect(projection.commentText).toBe('');
+
+    // ...and the user's in-progress draft is untouched (no draft text copied, no
+    // removePendingComment side effect clearing the pending state).
+    expect(store.pendingComment).toEqual({ commentId: 'pending', selection: { source: 'floating' } });
+    expect(store.currentCommentText).toBe('My unsent draft');
+  });
+
   it('reopens resolved tracked change comments when add event dedupes an existing thread', () => {
     const superdoc = {
       emit: vi.fn(),

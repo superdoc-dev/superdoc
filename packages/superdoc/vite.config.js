@@ -32,6 +32,10 @@ const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package
 const repoRequire = createRequire(path.resolve(__dirname, '../../package.json'));
 const superEditorRequire = createRequire(path.resolve(__dirname, '../super-editor/package.json'));
 const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
+const nodePolyfillShimAliases = ['buffer', 'global', 'process'].map((name) => ({
+  find: `vite-plugin-node-polyfills/shims/${name}`,
+  replacement: fileURLToPath(import.meta.resolve(`vite-plugin-node-polyfills/shims/${name}`)),
+}));
 
 const resolvePackageEsmEntry = (pkg, resolver = repoRequire) => {
   const resolved = resolver.resolve(pkg);
@@ -71,6 +75,7 @@ const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'sto
 export const getAliases = (_isDev) => {
   const aliases = [
     ...proseMirrorSingletonAliases,
+    ...nodePolyfillShimAliases,
 
     // Workspace packages (source paths for dev)
     { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },

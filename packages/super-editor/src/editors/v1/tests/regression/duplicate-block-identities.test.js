@@ -531,7 +531,9 @@ describe('wrapper dry-run and revision guards stay non-mutating on duplicate-lad
       warnSpy.mockRestore();
     }
 
-    const repairedCandidates = buildBlockIndex(editor).candidates.filter((candidate) => candidate.nodeId === 'DUPSTROK');
+    const repairedCandidates = buildBlockIndex(editor).candidates.filter(
+      (candidate) => candidate.nodeId === 'DUPSTROK',
+    );
     expect(repairedCandidates).toHaveLength(1);
   });
 });

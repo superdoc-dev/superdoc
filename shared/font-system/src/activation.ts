@@ -8,7 +8,7 @@
  *
  * Two states, driven by whether the consumer wired the pack:
  *  - `packConfigured: false` (no `@superdoc-dev/fonts`, no `fonts.assetBaseUrl` / `fonts.resolveAssetUrl`,
- *    not the CDN build): NO bundled family is active. The document advertises the conservative
+ *    no page-global pack): NO bundled family is active. The document advertises the conservative
  *    baseline and renders logical names with system fonts; nothing fetches a substitute `.woff2` that
  *    is not being served, so there is no stray 404 and no spurious warning.
  *  - `packConfigured: true`: every bundled family is active, minus `exclude` (or, with `include`,
@@ -106,8 +106,13 @@ export const BASELINE_BUNDLED: BundledActivation = Object.freeze({
  */
 export function createBundledActivation(input: BundledActivationInput): BundledActivation {
   if (!input.packConfigured) return BASELINE_BUNDLED;
+  // `include` is the stronger intent: when the consumer PROVIDED it at all - even malformed or empty
+  // after normalize - `exclude` must not apply, or a typo'd / wrong-shaped include silently inverts
+  // into an exclude. A provided-but-unusable include falls back to the full pack (ignored), per the
+  // contract that "no bundled fonts" is expressed by not configuring the pack, not by `include: []`.
+  const includeProvided = input.include != null;
   const include = normalizeList(input.include);
-  const exclude = include ? undefined : normalizeList(input.exclude);
+  const exclude = includeProvided ? undefined : normalizeList(input.exclude);
   if (!include && !exclude) return FULLY_ACTIVE_BUNDLED;
   if (include) {
     const set = new Set(include);
@@ -135,8 +140,12 @@ export interface FontAssetConfigLike {
 /**
  * Derive a document's {@link BundledActivation} from its `fonts` config. The pack counts as
  * configured when the consumer set `resolveAssetUrl` (e.g. `superdocFonts`) or `assetBaseUrl`, or
- * when the CDN build marked it present ({@link isBundledPackPresent}). Selection comes from
+ * when a host marked it present page-globally ({@link isBundledPackPresent}). Selection comes from
  * `fonts.bundled` (set via `createSuperDocFonts`).
+ *
+ * This is the lower-level primitive; runtime documents that may carry hand-written `fonts.bundled`
+ * derive activation through `deriveBundledActivationForConfig` (in font-offerings), which sanitizes
+ * unknown curation names against the known family set first.
  */
 export function deriveBundledActivation(config: FontAssetConfigLike | null | undefined): BundledActivation {
   const packConfigured = !!(config?.resolveAssetUrl || config?.assetBaseUrl) || isBundledPackPresent();

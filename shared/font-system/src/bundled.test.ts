@@ -73,6 +73,36 @@ describe('installBundledSubstitutes URL resolution', () => {
     expect(reg.sourcesFor('Carlito')).toContain('url(https://cdn.example.com/superdoc-fonts/v1/Carlito-Regular.woff2)');
   });
 
+  it('ignores a non-function resolveAssetUrl (raw misconfig), warns, and falls back to assetBaseUrl', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reg = new CaptureRegistry();
+    // A hand-written `fonts.resolveAssetUrl` may be a string; calling it would throw at init. It must
+    // be ignored (warned once) and fall back to the base-URL resolver instead of crashing.
+    expect(() =>
+      installBundledSubstitutes(reg.asRegistry(), {
+        resolveAssetUrl: '/cdn/' as unknown as () => string,
+        assetBaseUrl: 'https://cdn.example.com/fonts/',
+      }),
+    ).not.toThrow();
+    expect(reg.sourcesFor('Carlito')).toContain('url(https://cdn.example.com/fonts/Carlito-Regular.woff2)');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/resolveAssetUrl must be a function/));
+    warn.mockRestore();
+  });
+
+  it('warns about a non-function resolveAssetUrl once per document, not on every install call', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reg = new CaptureRegistry();
+    const handle = reg.asRegistry();
+    const opts = {
+      resolveAssetUrl: '/cdn/' as unknown as () => string,
+      assetBaseUrl: 'https://cdn.example.com/fonts/',
+    };
+    installBundledSubstitutes(handle, opts);
+    installBundledSubstitutes(handle, opts); // idempotent for the same registry: must not re-warn
+    expect(warn.mock.calls.filter((c) => /resolveAssetUrl must be a function/.test(String(c[0])))).toHaveLength(1);
+    warn.mockRestore();
+  });
+
   it('resolveAssetUrl wins over assetBaseUrl and receives per-face context', () => {
     const reg = new CaptureRegistry();
     const seen: { file: string; family: string; weight: string; style: string; source: string }[] = [];

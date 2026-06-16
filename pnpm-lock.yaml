@@ -2436,7 +2436,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue:
         specifier: 3.5.32
         version: 3.5.32(typescript@5.9.3)
@@ -2461,7 +2461,7 @@ importers:
         version: 8.57.2(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       concurrently:
         specifier: 'catalog:'
         version: 9.2.1
@@ -2485,7 +2485,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/document-api: {}
 
@@ -3370,25 +3370,6 @@ importers:
 
   shared/url-validation: {}
 
-  tests/behavior:
-    dependencies:
-      '@superdoc/document-api':
-        specifier: workspace:*
-        version: link:../../packages/document-api
-      superdoc:
-        specifier: workspace:*
-        version: link:../../packages/superdoc
-    devDependencies:
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.58.2
-      jszip:
-        specifier: 'catalog:'
-        version: 3.10.1
-      vite:
-        specifier: npm:rolldown-vite@7.3.1
-        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   tests/doc-api-stories:
     dependencies:
       '@superdoc-dev/sdk':
@@ -3408,31 +3389,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  tests/visual:
-    dependencies:
-      superdoc:
-        specifier: workspace:*
-        version: link:../../packages/superdoc
-    devDependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.988.0
-        version: 3.1019.0
-      '@clack/prompts':
-        specifier: ^1.0.0
-        version: 1.1.0
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.58.2
-      dotenv:
-        specifier: 'catalog:'
-        version: 16.6.1
-      tsx:
-        specifier: 'catalog:'
-        version: 4.21.0
-      vite:
-        specifier: npm:rolldown-vite@7.3.1
-        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
 packages:
 
@@ -20054,6 +20010,7 @@ packages:
   recharts@2.15.0:
     resolution: {integrity: sha512-cIvMxDfpAmqAmVgc4yb7pgm/O1tmmkl/CjrvXuW+62/+7jj/iF9Ykm+hb/UJt42TREHMyd3gb+pkgoa2MxgDIw==}
     engines: {node: '>=14'}
+    deprecated: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
     peerDependencies:
       react: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -23769,6 +23726,7 @@ snapshots:
       '@aws-crypto/util': 5.2.0
       '@aws-sdk/types': 3.973.6
       tslib: 2.8.1
+    optional: true
 
   '@aws-crypto/sha1-browser@5.2.0':
     dependencies:
@@ -23778,6 +23736,7 @@ snapshots:
       '@aws-sdk/util-locate-window': 3.965.5
       '@smithy/util-utf8': 2.3.0
       tslib: 2.8.1
+    optional: true
 
   '@aws-crypto/sha256-browser@5.2.0':
     dependencies:
@@ -23964,6 +23923,7 @@ snapshots:
       tslib: 2.8.1
     transitivePeerDependencies:
       - aws-crt
+    optional: true
 
   '@aws-sdk/client-sagemaker-runtime@3.1019.0':
     dependencies:
@@ -24034,6 +23994,7 @@ snapshots:
     dependencies:
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/credential-provider-env@3.972.23':
     dependencies:
@@ -24155,6 +24116,7 @@ snapshots:
       '@smithy/types': 4.13.1
       '@smithy/util-config-provider': 4.2.2
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-eventstream@3.972.8':
     dependencies:
@@ -24169,6 +24131,7 @@ snapshots:
       '@smithy/protocol-http': 5.3.12
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-flexible-checksums@3.974.5':
     dependencies:
@@ -24186,6 +24149,7 @@ snapshots:
       '@smithy/util-stream': 4.5.20
       '@smithy/util-utf8': 4.2.2
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-host-header@3.972.8':
     dependencies:
@@ -24199,6 +24163,7 @@ snapshots:
       '@aws-sdk/types': 3.973.6
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-logger@3.972.8':
     dependencies:
@@ -24230,12 +24195,14 @@ snapshots:
       '@smithy/util-stream': 4.5.20
       '@smithy/util-utf8': 4.2.2
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-ssec@3.972.8':
     dependencies:
       '@aws-sdk/types': 3.973.6
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/middleware-user-agent@3.972.26':
     dependencies:
@@ -24322,6 +24289,7 @@ snapshots:
       '@smithy/signature-v4': 5.3.12
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/token-providers@3.1019.0':
     dependencies:
@@ -24343,6 +24311,7 @@ snapshots:
   '@aws-sdk/util-arn-parser@3.972.3':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@aws-sdk/util-endpoints@3.996.5':
     dependencies:
@@ -31984,10 +31953,12 @@ snapshots:
     dependencies:
       '@smithy/util-base64': 4.3.2
       tslib: 2.8.1
+    optional: true
 
   '@smithy/chunked-blob-reader@5.2.2':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@smithy/config-resolver@4.4.13':
     dependencies:
@@ -32063,6 +32034,7 @@ snapshots:
       '@smithy/chunked-blob-reader-native': 4.2.3
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@smithy/hash-node@4.2.12':
     dependencies:
@@ -32076,6 +32048,7 @@ snapshots:
       '@smithy/types': 4.13.1
       '@smithy/util-utf8': 4.2.2
       tslib: 2.8.1
+    optional: true
 
   '@smithy/invalid-dependency@4.2.12':
     dependencies:
@@ -32095,6 +32068,7 @@ snapshots:
       '@smithy/types': 4.13.1
       '@smithy/util-utf8': 4.2.2
       tslib: 2.8.1
+    optional: true
 
   '@smithy/middleware-content-length@4.2.12':
     dependencies:
@@ -32309,6 +32283,7 @@ snapshots:
       '@smithy/abort-controller': 4.2.12
       '@smithy/types': 4.13.1
       tslib: 2.8.1
+    optional: true
 
   '@smithy/uuid@1.1.2':
     dependencies:
@@ -33679,25 +33654,6 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.2
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue: 3.5.32(typescript@5.9.3)
-
-  '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
-    dependencies:
-      '@ampproject/remapping': 2.3.0
-      '@bcoe/v8-coverage': 1.0.2
-      ast-v8-to-istanbul: 0.3.12
-      debug: 4.4.3(supports-color@5.5.0)
-      istanbul-lib-coverage: 3.2.2
-      istanbul-lib-report: 3.0.1
-      istanbul-lib-source-maps: 5.0.6
-      istanbul-reports: 3.2.0
-      magic-string: 0.30.21
-      magicast: 0.3.5
-      std-env: 3.10.0
-      test-exclude: 7.0.2
-      tinyrainbow: 2.0.0
-      vitest: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-    transitivePeerDependencies:
-      - supports-color
 
   '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:

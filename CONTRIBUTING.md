@@ -28,7 +28,7 @@ Our docs live in `apps/docs/` ([docs.superdoc.dev](https://docs.superdoc.dev)) a
 Create example projects showing SuperDoc with different frameworks (Next.js, Nuxt, Remix, etc.) in the `examples/` directory.
 
 **Add test coverage**
-Write unit tests or visual regression tests for existing features. Better test coverage helps everyone.
+Write unit tests or behavior tests for existing features. Better test coverage helps everyone.
 
 **Fix bugs and implement features**
 Check our [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
@@ -79,7 +79,7 @@ packages/
   collaboration-yjs/     Collaboration server
 shared/                  Internal utilities
 examples/                Framework integration examples
-tests/visual/            Visual regression tests (Playwright)
+tests/                   Public test suites and fixtures
 ```
 
 ### Where to Make Changes
@@ -93,7 +93,6 @@ tests/visual/            Visual regression tests (Playwright)
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | React integration | `packages/react/` |
 | Main entry point (Vue) | `packages/superdoc/` |
-| Visual regression tests | `tests/visual/` |
 
 ### Key Design Principle
 
@@ -109,7 +108,7 @@ These are areas where community contributions are especially welcome. Check [iss
 |------|-----------|---------------|------------|
 | Documentation | Easy | [docs.superdoc.dev](https://docs.superdoc.dev) | Fix gaps, add code examples, improve explanations |
 | Examples | Easy | `examples/` | Create framework integration examples |
-| Test coverage | Easy-Medium | `tests/visual/` | Add tests for existing features |
+| Test coverage | Easy-Medium | `tests/` and package-local `*.test.*` files | Add tests for existing features |
 | Rendering parity | Medium | `layout-engine/painters/dom/` | Open a .docx in Word and SuperDoc, fix visual differences |
 | Browser compatibility | Medium | `super-editor/`, `layout-engine/` | Fix Firefox/Safari-specific bugs |
 | Copy/paste | Medium | `super-editor/src/editors/v1/extensions/` | Fix formatting loss when pasting from Word, Google Docs, browsers |

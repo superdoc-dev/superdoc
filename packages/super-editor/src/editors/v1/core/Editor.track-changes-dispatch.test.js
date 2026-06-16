@@ -24,7 +24,7 @@ const TEST_PARAGRAPH_BLOCK_ID = 'test-paragraph-1';
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const WORD_REPLACEMENT_FIXTURE = resolve(
   CURRENT_DIR,
-  '../../../../../../tests/behavior/tests/comments/fixtures/sd-1960-word-replacement-no-comments.docx',
+  '../tests/data/behavior-fixtures/sd-1960-word-replacement-no-comments.docx',
 );
 const BASIC_TEXT_INSERTION_OPEN_FIXTURE = resolve(CURRENT_DIR, '../tests/data/basic-text-insertion-open.docx');
 

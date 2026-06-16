@@ -15,7 +15,13 @@
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
  */
-import { type BundledActivation, type BundledFontSelection, BASELINE_BUNDLED } from './activation';
+import {
+  type BundledActivation,
+  type BundledFontSelection,
+  type FontAssetConfigLike,
+  BASELINE_BUNDLED,
+  deriveBundledActivation,
+} from './activation';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { type CssGeneric, SUBSTITUTION_EVIDENCE, type SubstituteVerdict } from './substitution-evidence';
 
@@ -285,16 +291,22 @@ function coerceCurationList(value: unknown, field: 'include' | 'exclude'): strin
  */
 export function warnUnknownBundledSelection(selection: BundledFontSelection | undefined): void {
   if (!selection) return;
+  // `include` WINS whenever it is provided - even empty or malformed - matching createBundledActivation,
+  // so `exclude` is then discarded at runtime. Key the warning off the same "provided" test, not off a
+  // non-empty include, so a discarded exclude's names are not flagged as typos for a list the editor ignores.
+  const includeProvided = selection.include != null;
   const include = coerceCurationList(selection.include, 'include');
   const exclude = coerceCurationList(selection.exclude, 'exclude');
-  if (include.length && exclude.length) {
+  if (includeProvided && exclude.length > 0) {
     console.warn(
       '[superdoc] fonts.bundled: set `include` OR `exclude`, not both. ' +
         'Using `include` (the allow-list) and ignoring `exclude`. Prefer createSuperDocFonts(), which rejects this.',
     );
   }
+  // Only check names on the EFFECTIVE side; the discarded side's names are moot.
+  const effective = includeProvided ? include : exclude;
   const seen = new Set<string>();
-  for (const name of [...include, ...exclude]) {
+  for (const name of effective) {
     const trimmed = typeof name === 'string' ? name.trim() : '';
     if (!trimmed) continue;
     const key = normalizeFamilyKey(trimmed);
@@ -308,4 +320,40 @@ export function warnUnknownBundledSelection(selection: BundledFontSelection | un
         'Docs: https://docs.superdoc.dev/getting-started/fonts',
     );
   }
+}
+
+/**
+ * Drop curation names that are not bundled families (keyed against the same set
+ * {@link warnUnknownBundledSelection} validates), preserving the `include` / `exclude` KEYS so the
+ * "include wins" precedence survives. A raw `fonts.bundled.include` that is all typos thus sanitizes
+ * to an empty-but-present include, which {@link createBundledActivation} ignores back to the full pack
+ * rather than emptying the toolbar. Silent: warnings are emitted once by
+ * {@link warnUnknownBundledSelection}; this only cleans.
+ */
+export function sanitizeBundledSelection(
+  selection: BundledFontSelection | undefined,
+): BundledFontSelection | undefined {
+  if (!selection) return selection;
+  const known = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((n): n is string => typeof n === 'string')
+      .filter((n) => BUNDLED_LOGICAL_KEYS.has(normalizeFamilyKey(n)));
+  };
+  const result: BundledFontSelection = {};
+  if (selection.include != null) result.include = known(selection.include);
+  if (selection.exclude != null) result.exclude = known(selection.exclude);
+  return result;
+}
+
+/**
+ * Derive a document's {@link BundledActivation} from its `fonts` config, first sanitizing raw
+ * `fonts.bundled` against the known family set ({@link sanitizeBundledSelection}). Runtime documents
+ * that may carry hand-written `fonts.bundled` should use this instead of the lower-level
+ * {@link deriveBundledActivation}: it guarantees an all-unknown `include` cannot empty the
+ * toolbar/resolver. (createSuperDocFonts validates the same names in the consumer's setup code.)
+ */
+export function deriveBundledActivationForConfig(config: FontAssetConfigLike | null | undefined): BundledActivation {
+  if (!config) return deriveBundledActivation(config);
+  return deriveBundledActivation({ ...config, bundled: sanitizeBundledSelection(config.bundled) });
 }

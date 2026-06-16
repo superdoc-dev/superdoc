@@ -30,7 +30,6 @@ export const CONFIG = {
   canonicalSymlinkTarget: 'AGENTS.md',
   knownCommands: [
     'pnpm test',
-    'pnpm test:behavior',
     'pnpm dev',
     'pnpm build',
     'pnpm docs:download',

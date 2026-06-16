@@ -71,6 +71,22 @@ describe('createBundledActivation', () => {
     expect(a.isActive('Calibri')).toBe(true);
   });
 
+  it('a provided-but-unusable include wins over exclude (a malformed/empty include never inverts to exclude)', () => {
+    // include was PROVIDED (even malformed), so exclude must not take effect - it falls back to the
+    // full pack instead of silently becoming "everything except Arial".
+    const malformed = createBundledActivation({
+      packConfigured: true,
+      include: 'Calibri' as unknown as string[],
+      exclude: ['Arial'],
+    });
+    expect(malformed).toBe(FULLY_ACTIVE_BUNDLED);
+    expect(malformed.isActive('Arial')).toBe(true);
+    // An empty include + exclude behaves the same way (include provided, nothing usable -> full pack).
+    expect(createBundledActivation({ packConfigured: true, include: [], exclude: ['Arial'] })).toBe(
+      FULLY_ACTIVE_BUNDLED,
+    );
+  });
+
   it('drops non-string entries from a curation array', () => {
     const a = createBundledActivation({
       packConfigured: true,

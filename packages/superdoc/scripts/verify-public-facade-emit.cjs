@@ -327,7 +327,7 @@ function listExportedNames(entry, file) {
       module: ts.ModuleKind.ESNext,
       target: ts.ScriptTarget.ESNext,
       noEmit: true,
-      skipLibCheck: false,
+      skipLibCheck: true,
     },
   });
   const diagnostics = [

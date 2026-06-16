@@ -105,6 +105,27 @@ describe('document-api contract catalog', () => {
     }
   });
 
+  it('declares success and failure schemas for all mutation operations', () => {
+    const schemas = buildInternalContractSchemas();
+
+    for (const operationId of OPERATION_IDS) {
+      if (!COMMAND_CATALOG[operationId].mutates) continue;
+      expect(schemas.operations[operationId].success, `${operationId} missing success schema`).toBeTruthy();
+      expect(schemas.operations[operationId].failure, `${operationId} missing failure schema`).toBeTruthy();
+    }
+  });
+
+  it('does not attach intent annotations to skipped tool operations', () => {
+    for (const [operationId, definition] of Object.entries(OPERATION_DEFINITIONS)) {
+      if (!definition.skipAsATool) continue;
+      expect(definition.intentGroup, `${operationId} skipAsATool operations must not declare intentGroup`).toBeUndefined();
+      expect(
+        definition.intentAction,
+        `${operationId} skipAsATool operations must not declare intentAction`,
+      ).toBeUndefined();
+    }
+  });
+
   it('keeps input schemas closed for object-shaped payloads', () => {
     const schemas = buildInternalContractSchemas();
 
@@ -203,6 +224,41 @@ describe('document-api contract catalog', () => {
     expect((textTarget.properties?.story as { $ref?: string }).$ref).toBe('#/$defs/StoryLocator');
     expect(textTarget.required).toEqual(['kind', 'segments']);
     expect(textTarget.additionalProperties).toBe(false);
+  });
+
+  it('describes fields.insert cached-result and complex serialization controls', () => {
+    const schemas = buildInternalContractSchemas();
+    const fieldsInsertInput = schemas.operations['fields.insert'].input as {
+      properties?: {
+        mode?: { const?: string };
+        at?: { $ref?: string };
+        instruction?: { type?: string };
+        cachedResultText?: { type?: string };
+        updatePolicy?: { enum?: string[] };
+        serialization?: { enum?: string[] };
+        complexFormatting?: {
+          properties?: {
+            markerRunProps?: { type?: string };
+            instructionRunProps?: { type?: string };
+            resultRunProps?: { type?: string };
+          };
+        };
+      };
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+
+    expect(fieldsInsertInput.properties?.mode?.const).toBe('raw');
+    expect(fieldsInsertInput.properties?.at?.$ref).toBe('#/$defs/TextTarget');
+    expect(fieldsInsertInput.properties?.instruction?.type).toBe('string');
+    expect(fieldsInsertInput.properties?.cachedResultText?.type).toBe('string');
+    expect(fieldsInsertInput.properties?.updatePolicy?.enum).toEqual(['rebuild', 'preserveCached']);
+    expect(fieldsInsertInput.properties?.serialization?.enum).toEqual(['simple', 'complex']);
+    expect(fieldsInsertInput.properties?.complexFormatting?.properties?.markerRunProps?.type).toBe('object');
+    expect(fieldsInsertInput.properties?.complexFormatting?.properties?.instructionRunProps?.type).toBe('object');
+    expect(fieldsInsertInput.properties?.complexFormatting?.properties?.resultRunProps?.type).toBe('object');
+    expect(fieldsInsertInput.required).toEqual(['mode', 'at', 'instruction']);
+    expect(fieldsInsertInput.additionalProperties).toBe(false);
   });
 
   it('accepts both object and array SDFragment in structural insert content schema', () => {

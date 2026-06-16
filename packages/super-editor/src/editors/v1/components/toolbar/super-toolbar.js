@@ -5,7 +5,7 @@ import { createHeadlessToolbar } from '../../../../headless-toolbar/create-headl
 import { getActiveFormatting } from '@core/helpers/getActiveFormatting.js';
 import { findParentNode } from '@helpers/index.js';
 import { vClickOutside } from '@superdoc/common';
-import { deriveBundledActivation } from '@superdoc/font-system';
+import { deriveBundledActivationForConfig } from '@superdoc/font-system';
 import Toolbar from './Toolbar.vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { toolbarTexts } from './toolbarTexts.js';
@@ -550,7 +550,7 @@ export class SuperToolbar extends EventEmitter {
     return composeToolbarFontOptions(
       this.superdoc?.fonts?.getDocumentFontOptions?.() ?? [],
       configFonts,
-      deriveBundledActivation(this.superdoc?.config?.fonts),
+      deriveBundledActivationForConfig(this.superdoc?.config?.fonts),
     );
   }
 

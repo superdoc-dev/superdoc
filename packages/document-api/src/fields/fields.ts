@@ -72,6 +72,30 @@ export function executeFieldsInsert(
   if (!input.instruction || typeof input.instruction !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'fields.insert requires a non-empty instruction string.');
   }
+  if (input.updatePolicy !== undefined && input.updatePolicy !== 'rebuild' && input.updatePolicy !== 'preserveCached') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert updatePolicy must be 'rebuild' or 'preserveCached' when provided.",
+    );
+  }
+  if (input.updatePolicy === 'preserveCached' && typeof input.cachedResultText !== 'string') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert with updatePolicy: 'preserveCached' requires a string cachedResultText.",
+    );
+  }
+  if (input.serialization !== undefined && input.serialization !== 'simple' && input.serialization !== 'complex') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert serialization must be 'simple' or 'complex' when provided.",
+    );
+  }
+  if (input.complexFormatting !== undefined && input.serialization !== 'complex') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert complexFormatting requires serialization: 'complex'.",
+    );
+  }
   return adapter.insert(input, normalizeMutationOptions(options));
 }
 

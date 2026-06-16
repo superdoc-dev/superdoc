@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { BASELINE_BUNDLED, FULLY_ACTIVE_BUNDLED, createBundledActivation } from './activation';
 import {
   FONT_OFFERINGS,
+  deriveBundledActivationForConfig,
   fontOfferingRenderStack,
   fontOfferingStack,
   getBuiltInToolbarFontOfferings,
   getDefaultFontFamilyOptions,
   getDefaultFontOfferings,
+  sanitizeBundledSelection,
   warnUnknownBundledSelection,
 } from './font-offerings';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
@@ -324,6 +326,24 @@ describe('warnUnknownBundledSelection', () => {
     warn.mockRestore();
   });
 
+  it('does not warn about unknown names on the discarded exclude side when both are set', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // include wins, so the exclude (a typo) is discarded - its names must not trigger a typo warning.
+    warnUnknownBundledSelection({ include: ['Calibri'], exclude: ['Xyzzy'] });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/not both/));
+    expect(warn.mock.calls.some((c) => /is not a bundled font/.test(String(c[0])))).toBe(false);
+    warn.mockRestore();
+  });
+
+  it('an empty (or malformed) but provided include still wins: the discarded exclude is not flagged', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // include is PROVIDED, so it wins and exclude is discarded at runtime even though include is empty;
+    // the discarded exclude's typo must not be flagged as if curating it had an effect.
+    warnUnknownBundledSelection({ include: [], exclude: ['Xyzzy'] });
+    expect(warn.mock.calls.some((c) => /is not a bundled font/.test(String(c[0])))).toBe(false);
+    warn.mockRestore();
+  });
+
   it('coerces a non-array include (raw JS) - warns about the shape, never spreads it into characters', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // A bare string must warn once about the wrong shape, not a per-character "unknown font" warning.
@@ -332,5 +352,28 @@ describe('warnUnknownBundledSelection', () => {
     expect(warn.mock.calls[0][0]).toMatch(/fonts\.bundled\.include must be an array/);
     expect(warn.mock.calls[0][0]).not.toMatch(/is not a bundled font/);
     warn.mockRestore();
+  });
+});
+
+describe('sanitizeBundledSelection / deriveBundledActivationForConfig (raw curation hardening)', () => {
+  it('drops unknown names but preserves the include / exclude keys', () => {
+    expect(sanitizeBundledSelection({ include: ['Calibri', 'Xyzzy'] })).toEqual({ include: ['Calibri'] });
+    expect(sanitizeBundledSelection({ exclude: ['Cooper Black', 'Nope'] })).toEqual({ exclude: ['Cooper Black'] });
+    // An all-unknown include keeps the (now empty) key, so include-wins precedence still applies downstream.
+    expect(sanitizeBundledSelection({ include: ['Xyzzy'] })).toEqual({ include: [] });
+    expect(sanitizeBundledSelection(undefined)).toBeUndefined();
+  });
+
+  it('an all-unknown raw include is ignored (full pack), never an empty toolbar', () => {
+    const a = deriveBundledActivationForConfig({ assetBaseUrl: '/fonts/', bundled: { include: ['Calibrii'] } });
+    expect(a).toBe(FULLY_ACTIVE_BUNDLED);
+    expect(a.isActive('Calibri')).toBe(true);
+  });
+
+  it('keeps valid curation working through the sanitizing path', () => {
+    const a = deriveBundledActivationForConfig({ assetBaseUrl: '/fonts/', bundled: { include: ['Calibri'] } });
+    expect(a.packConfigured).toBe(true);
+    expect(a.isActive('Calibri')).toBe(true);
+    expect(a.isActive('Cambria')).toBe(false);
   });
 });

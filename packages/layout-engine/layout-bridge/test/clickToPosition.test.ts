@@ -326,7 +326,15 @@ describe('clickToPosition', () => {
       rows: [
         {
           cells: [
-            { blocks: [emptyCellMeasure], paragraph: emptyCellMeasure, width: 320, height: 28, gridColumnStart: 0, colSpan: 1, rowSpan: 1 },
+            {
+              blocks: [emptyCellMeasure],
+              paragraph: emptyCellMeasure,
+              width: 320,
+              height: 28,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
           ],
           height: 28,
         },

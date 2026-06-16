@@ -2659,6 +2659,27 @@ export const OPERATION_DEFINITIONS = {
     intentAction: 'apply',
   },
 
+  'plan.execute': {
+    memberPath: 'plan.execute',
+    description:
+      'Execute a compiled batch of plan-safe operation entries with per-entry transactions, '
+      + 'capture resolution between entries, and keep-prefix-and-continue failure semantics.',
+    expectedResult:
+      'Returns a PlanExecuteResult with per-entry receipts, projected captures, and the first hard failure if any.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: [],
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'mutations/plan-execute.mdx',
+    referenceGroup: 'mutations',
+    skipAsATool: true,
+  },
+
   'capabilities.get': {
     memberPath: 'capabilities',
     description: 'Query runtime capabilities supported by the current document engine.',

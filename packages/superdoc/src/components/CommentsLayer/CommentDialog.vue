@@ -279,7 +279,8 @@ const isDialogActive = computed(() => {
 /* ── Step 1: Resolved badge ── */
 const resolvedBadgeLabel = computed(() => {
   if (!props.comment.resolvedTime) return null;
-  return props.comment.trackedChange ? 'Accepted' : 'Resolved';
+  if (!props.comment.trackedChange) return 'Resolved';
+  return props.comment.trackedChangeDecision === 'reject' ? 'Rejected' : 'Accepted';
 });
 
 /* ── Pending new comment (brand-new, not a reply) ── */
@@ -597,26 +598,31 @@ const handleAddComment = () => {
 const handleReject = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
 
+  // Custom handlers always resolve so the bubble disappears from
+  // getFloatingComments (SD-2049). The internal decision path only resolves
+  // when the decision actually applied — otherwise the tracked marks are
+  // still in the document and the thread must stay open (SD-3386).
+  let decisionApplied = true;
   if (props.comment.trackedChange && typeof customHandler === 'function') {
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else if (props.comment.trackedChange) {
-    commentsStore.decideTrackedChangeFromSidebar({
+    const result = commentsStore.decideTrackedChangeFromSidebar({
       superdoc: proxy.$superdoc,
       comment: props.comment,
       decision: 'reject',
     });
+    decisionApplied = Boolean(result?.ok) && result?.success !== false;
   } else {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
-  // Always resolve tracked changes so resolvedTime is set and the bubble
-  // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
-  if (props.comment.trackedChange) {
+  if (props.comment.trackedChange && decisionApplied) {
     props.comment.resolveComment({
       id: superdocStore.user.id,
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
+      decision: 'reject',
     });
   }
 
@@ -632,26 +638,33 @@ const handleReject = () => {
 const handleResolve = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
 
+  // Custom handlers always resolve so the bubble disappears from
+  // getFloatingComments (SD-2049). The internal decision path only resolves
+  // when the decision actually applied — otherwise the tracked marks are
+  // still in the document and the thread must stay open (SD-3386).
+  let decisionApplied = true;
   if (props.comment.trackedChange && typeof customHandler === 'function') {
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else {
     if (props.comment.trackedChange) {
-      commentsStore.decideTrackedChangeFromSidebar({
+      const result = commentsStore.decideTrackedChangeFromSidebar({
         superdoc: proxy.$superdoc,
         comment: props.comment,
         decision: 'accept',
       });
+      decisionApplied = Boolean(result?.ok) && result?.success !== false;
     }
   }
 
-  // Always resolve so resolvedTime is set and the bubble disappears
-  // from getFloatingComments — even when a custom handler is used (SD-2049).
-  props.comment.resolveComment({
-    id: superdocStore.user.id,
-    email: superdocStore.user.email,
-    name: superdocStore.user.name,
-    superdoc: proxy.$superdoc,
-  });
+  if (decisionApplied) {
+    props.comment.resolveComment({
+      id: superdocStore.user.id,
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+      ...(props.comment.trackedChange ? { decision: 'accept' } : {}),
+    });
+  }
 
   // Always cleanup the dialog state
   nextTick(() => {

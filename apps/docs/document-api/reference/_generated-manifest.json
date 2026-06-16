@@ -336,6 +336,7 @@
     "apps/docs/document-api/reference/metadata/update.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
+    "apps/docs/document-api/reference/mutations/plan-execute.mdx",
     "apps/docs/document-api/reference/mutations/preview.mdx",
     "apps/docs/document-api/reference/permission-ranges/create.mdx",
     "apps/docs/document-api/reference/permission-ranges/get.mdx",
@@ -660,7 +661,7 @@
     {
       "aliasMemberPaths": [],
       "key": "mutations",
-      "operationIds": ["mutations.preview", "mutations.apply"],
+      "operationIds": ["mutations.preview", "mutations.apply", "plan.execute"],
       "pagePath": "apps/docs/document-api/reference/mutations/index.mdx",
       "title": "Mutations"
     },
@@ -1087,5 +1088,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "5f31d1ac0480544e8ad1f950d39e28617d39a163f56f4e1bb7bbdcaf1a77abef"
+  "sourceHash": "ba8ef7f4596d1dcb752b0e40dc8f9ebee97c8a805933666b1a66efd51bd97cd6"
 }

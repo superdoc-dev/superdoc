@@ -172,6 +172,27 @@ const normalizeReplaceStepSingleCharDelete = ({ step, doc }) => {
 };
 
 /**
+ * Whether a slice carries any inline leaf content (text, hard breaks, inline
+ * widgets). A slice without inline leaves is a purely structural shell — e.g.
+ * the paragraph re-join slice `deleteRange` produces for a deletion that spans
+ * a paragraph boundary (`<paragraph><run/></paragraph>` with open ends).
+ *
+ * @param {import('prosemirror-model').Slice} slice
+ * @returns {boolean}
+ */
+const sliceHasInlineLeafContent = (slice) => {
+  let found = false;
+  slice.content.descendants((node) => {
+    if (found) return false;
+    if (node.isInline && (node.isText || node.isLeaf)) {
+      found = true;
+      return false;
+    }
+  });
+  return found;
+};
+
+/**
  * Replace step.
  * @param {object} options Replace step options.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
@@ -555,6 +576,14 @@ const tryCompileStep = ({
     if (!hasInlineContent) return { handled: false };
   }
 
+  // A non-empty slice without inline leaf content is a structural re-join
+  // shell, not user-visible replacement content. `deleteRange` emits one for
+  // a deletion that spans a paragraph boundary; compiling it as a replacement
+  // would insert the empty block shell at the range end and split the
+  // trailing paragraph (SD-3386). Track it as a plain deletion instead.
+  const isStructuralShellDelete =
+    step.from !== step.to && step.slice.content.size > 0 && !sliceHasInlineLeafContent(step.slice);
+
   // Build the intent. Pure inserts and pure deletes use the matching intent
   // type; mixed (text-replace) carries the original slice.
   let intent;
@@ -570,7 +599,7 @@ const tryCompileStep = ({
         source,
         preserveExistingReviewState,
       });
-    } else if (step.from !== step.to && step.slice.content.size === 0) {
+    } else if (step.from !== step.to && (step.slice.content.size === 0 || isStructuralShellDelete)) {
       intent = makeTextDeleteIntent({
         from: step.from,
         to: step.to,
@@ -641,7 +670,17 @@ const tryCompileStep = ({
     map.appendMap(invertStep.getMap());
     const mirrorIndex = map.maps.length - 1;
     for (let i = beforeSteps; i < newTr.steps.length; i += 1) {
-      map.appendMap(newTr.steps[i].getMap(), mirrorIndex);
+      // Mirror pairing assumes the compiled steps re-apply the original
+      // step's position effect (the condensed insert in the replace path).
+      // A structural-shell delete compiles to mark steps only — pairing
+      // their empty maps as mirrors of the invert map corrupts position
+      // recovery (Position NaN) for positions inside the never-inserted
+      // shell, so append those without mirrors (SD-3386).
+      if (isStructuralShellDelete) {
+        map.appendMap(newTr.steps[i].getMap());
+      } else {
+        map.appendMap(newTr.steps[i].getMap(), mirrorIndex);
+      }
     }
   } else {
     for (let i = beforeSteps; i < newTr.steps.length; i += 1) {
@@ -676,7 +715,11 @@ const tryCompileStep = ({
     // fall back to a shaped step the comments plugin already understands.
     meta.step = { slice: { content: { content: result.insertedNodes } } };
   }
-  if (result.selection?.kind === 'near' && stepWasNormalized && !result.insertedMark) {
+  // Structural-shell deletes also need the explicit override: the original
+  // step's post-step selection can sit inside the shell slice that was never
+  // inserted, so mapping it back is meaningless — honor the compiler's caret
+  // hint (left edge of the tracked deletion) instead.
+  if (result.selection?.kind === 'near' && (stepWasNormalized || isStructuralShellDelete) && !result.insertedMark) {
     meta.selectionPos = result.selection.pos;
   }
   newTr.setMeta(TrackChangesBasePluginKey, meta);

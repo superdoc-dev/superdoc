@@ -1,5 +1,5 @@
 import {
-  deriveBundledActivation,
+  deriveBundledActivationForConfig,
   warnUnknownBundledSelection,
   type FontFaceRequest,
   type FontResolver,
@@ -179,9 +179,10 @@ export class DocumentFontController {
     // Surface curation typos / non-bundled names (and include+exclude both) once, at config time.
     warnUnknownBundledSelection(config?.bundled);
     // Derive activation even with NO config: an npm app that wired no pack defaults to the safe
-    // baseline (no substitution, no stray .woff2 fetches), while the CDN build - which marks the pack
-    // present - stays rich. Set before families/map so the first resolution already reflects it.
-    this.#resolver.setActivation(deriveBundledActivation(config));
+    // baseline (no substitution, no stray .woff2 fetches); a configured pack stays rich. Raw
+    // fonts.bundled curation is sanitized here, so an all-unknown include cannot empty the toolbar.
+    // Set before families/map so the first resolution already reflects it.
+    this.#resolver.setActivation(deriveBundledActivationForConfig(config));
     if (!config) return;
     const registered = this.#registerFamilies(config.families);
     this.#applyMappings(config.map);

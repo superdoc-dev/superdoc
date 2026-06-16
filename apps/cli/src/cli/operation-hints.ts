@@ -146,6 +146,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'query.match': 'matched selectors',
   'mutations.preview': 'previewed mutations',
   'mutations.apply': 'applied mutations',
+  'plan.execute': 'executed plan batch',
   'capabilities.get': 'retrieved capabilities',
 
   // Tables
@@ -533,6 +534,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'query.match': 'plain',
   'mutations.preview': 'plain',
   'mutations.apply': 'plain',
+  'plan.execute': 'plain',
   'capabilities.get': 'plain',
 
   // Tables
@@ -902,6 +904,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'query.match': 'result',
   'mutations.preview': 'result',
   'mutations.apply': 'result',
+  'plan.execute': 'result',
   'capabilities.get': 'capabilities',
 
   // Tables
@@ -1304,6 +1307,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'query.match': 'query',
   'mutations.preview': 'general',
   'mutations.apply': 'general',
+  'plan.execute': 'general',
   'capabilities.get': 'general',
 
   // Tables

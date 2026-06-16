@@ -31,7 +31,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
 | Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
 | Query | 1 | 0 | 1 | [Open](/document-api/reference/query/index) |
-| Mutations | 2 | 0 | 2 | [Open](/document-api/reference/mutations/index) |
+| Mutations | 3 | 0 | 3 | [Open](/document-api/reference/mutations/index) |
 | Paragraph Formatting | 19 | 0 | 19 | [Open](/document-api/reference/format/paragraph/index) |
 | Paragraph Styles | 2 | 0 | 2 | [Open](/document-api/reference/styles/paragraph/index) |
 | Tables | 47 | 0 | 47 | [Open](/document-api/reference/tables/index) |
@@ -265,6 +265,7 @@ The tables below are grouped by namespace.
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/mutations/preview"><code>mutations.preview</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/mutations/apply"><code>mutations.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | Execute a mutation plan atomically against the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/mutations/plan-execute"><code>plan.execute</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.plan.execute(...)</code></span> | Execute a compiled batch of plan-safe operation entries with per-entry transactions, capture resolution between entries, and keep-prefix-and-continue failure semantics. |
 
 #### Paragraph Formatting
 

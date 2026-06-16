@@ -317,6 +317,7 @@ export const useCommentsStore = defineStore('comments', () => {
         resolvedById: comment.resolvedById ?? null,
         resolvedByEmail: comment.resolvedByEmail ?? null,
         resolvedByName: comment.resolvedByName ?? null,
+        trackedChangeDecision: comment.trackedChangeDecision ?? null,
       });
     }
     // Sets the resolved state to null so it can be restored in the comments sidebar
@@ -324,6 +325,7 @@ export const useCommentsStore = defineStore('comments', () => {
     comment.resolvedById = null;
     comment.resolvedByEmail = null;
     comment.resolvedByName = null;
+    comment.trackedChangeDecision = null;
   };
 
   const restoreResolvedMetadata = (comment) => {
@@ -335,6 +337,7 @@ export const useCommentsStore = defineStore('comments', () => {
     comment.resolvedById = snapshot.resolvedById ?? null;
     comment.resolvedByEmail = snapshot.resolvedByEmail ?? null;
     comment.resolvedByName = snapshot.resolvedByName ?? null;
+    comment.trackedChangeDecision = snapshot.trackedChangeDecision ?? null;
     return true;
   };
 
@@ -918,6 +921,7 @@ export const useCommentsStore = defineStore('comments', () => {
         id: params.resolvedById ?? superdoc?.user?.id ?? null,
         email: params.resolvedByEmail ?? superdoc?.user?.email ?? null,
         name: params.resolvedByName ?? superdoc?.user?.name ?? null,
+        decision: params.decision ?? null,
         superdoc,
       };
 
@@ -1752,6 +1756,7 @@ export const useCommentsStore = defineStore('comments', () => {
         comment.resolvedById = resolutionSnapshot.resolvedById ?? null;
         comment.resolvedByEmail = resolutionSnapshot.resolvedByEmail ?? null;
         comment.resolvedByName = resolutionSnapshot.resolvedByName ?? null;
+        comment.trackedChangeDecision = resolutionSnapshot.trackedChangeDecision ?? null;
         restoredComments.push(comment);
         return true;
       }

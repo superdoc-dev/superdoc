@@ -111,9 +111,7 @@ type ResolvedCellContext = {
   tablePos: number;
 };
 
-function resolveCellContextAtResolvedPos(
-  $pos: ReturnType<ProseMirrorNode['resolve']>,
-): ResolvedCellContext | null {
+function resolveCellContextAtResolvedPos($pos: ReturnType<ProseMirrorNode['resolve']>): ResolvedCellContext | null {
   const $cell = cellAround($pos);
   if (!$cell) return null;
 

@@ -113,6 +113,42 @@ describe('field wrappers SEQ fields', () => {
     expect(sequenceFields(editor).map((node) => node.attrs.resolvedNumber)).toEqual(['1', '2']);
   });
 
+  it('fields.insert rejects cached-result options the v1 runtime cannot preserve', () => {
+    const editor = createEditor();
+
+    expect(() =>
+      fieldsInsertWrapper(editor, {
+        ...fieldInsertInput('REF exhibitA \\h'),
+        cachedResultText: 'Exhibit A',
+        updatePolicy: 'preserveCached',
+        serialization: 'complex',
+      }),
+    ).toThrow(/preserveCached/);
+  });
+
+  it('fields.insert rejects complex formatting options the v1 runtime cannot preserve', () => {
+    const editor = createEditor();
+
+    expect(() =>
+      fieldsInsertWrapper(editor, {
+        ...fieldInsertInput('REF exhibitA \\h'),
+        serialization: 'complex',
+        complexFormatting: { resultRunProps: { rStyle: 'Hyperlink' } },
+      }),
+    ).toThrow(/complexFormatting/);
+  });
+
+  it('fields.insert rejects explicit simple serialization in the v1 runtime', () => {
+    const editor = createEditor();
+
+    expect(() =>
+      fieldsInsertWrapper(editor, {
+        ...fieldInsertInput('REF exhibitA \\h'),
+        serialization: 'simple',
+      }),
+    ).toThrow(/serialization: "simple"/);
+  });
+
   it('fields.rebuild recomputes stale SEQ resolvedNumber values for the full document', () => {
     const doc = schema.nodes.doc.create(null, [
       schema.nodes.paragraph.create({ sdBlockId: 'block-1' }, [

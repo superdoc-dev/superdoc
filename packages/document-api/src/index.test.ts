@@ -2966,7 +2966,55 @@ describe('createDocumentApi', () => {
     it('accepts nodeId for table-locator operations', () => {
       const api = makeApi();
       expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', autoFitMode: 'fixedWidth', preferredWidthType: 'auto' }),
+      ).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', preferredWidthType: 'pct', preferredWidth: 5000 }),
+      ).not.toThrow();
       expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
+    });
+
+    it('rejects non-zero preferredWidth when preferredWidthType is auto', () => {
+      const api = makeApi();
+      expect(() =>
+        api.tables.setLayout({
+          nodeId: 't1',
+          autoFitMode: 'fixedWidth',
+          preferredWidthType: 'auto',
+          preferredWidth: 1200,
+        } as any),
+      ).toThrow(/preferredWidth must be omitted or 0/);
+    });
+
+    it('rejects table preferred width type without a width value', () => {
+      const api = makeApi();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', autoFitMode: 'fixedWidth', preferredWidthType: 'pct' } as any),
+      ).toThrow(/preferredWidth is required/);
+    });
+
+    it('accepts cell preferred width type and partial cell padding', () => {
+      const api = makeApi();
+      const cell = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'tc1' };
+      expect(() =>
+        api.tables.setCellProperties({ target: cell, preferredWidthPt: 48, preferredWidthType: 'pct' }),
+      ).not.toThrow();
+      expect(() => api.tables.setCellProperties({ target: cell, preferredWidthType: 'auto' })).not.toThrow();
+      expect(() => api.tables.setCellPadding({ target: cell, leftPt: 5.4, rightPt: 5.4 })).not.toThrow();
+    });
+
+    it('rejects invalid cell width and padding combinations', () => {
+      const api = makeApi();
+      const cell = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'tc1' };
+      expect(() => api.tables.setCellProperties({ target: cell, preferredWidthType: 'pct' } as any)).toThrow(
+        /preferredWidthPt is required/,
+      );
+      expect(() =>
+        api.tables.setCellProperties({ target: cell, preferredWidthType: 'auto', preferredWidthPt: 12 } as any),
+      ).toThrow(/preferredWidthPt must be omitted or 0/);
+      expect(() => api.tables.setCellPadding({ target: cell } as any)).toThrow(/provide at least one padding side/);
+      expect(() => api.tables.setCellPadding({ target: cell, leftPt: -1 } as any)).toThrow(/non-negative/);
     });
 
     it('rejects both target + nodeId for table-locator operations', () => {

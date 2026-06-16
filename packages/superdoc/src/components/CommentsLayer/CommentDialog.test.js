@@ -767,6 +767,7 @@ describe('CommentDialog.vue', () => {
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
       superdoc: expect.any(Object),
+      decision: 'accept',
     });
     expect(superdocStub.focus).toHaveBeenCalledTimes(1);
 
@@ -776,6 +777,50 @@ describe('CommentDialog.vue', () => {
       expect.objectContaining({ comment: baseComment, decision: 'reject' }),
     );
     expect(superdocStub.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resolve the tracked-change thread when the decision fails (SD-3386)', async () => {
+    const { wrapper, baseComment } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        trackedChangeText: 'Removed',
+      },
+    });
+    commentsStoreStub.decideTrackedChangeFromSidebar.mockReturnValueOnce({ ok: true, success: false });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('reject');
+    await nextTick();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('labels a rejected tracked change as Rejected, not Accepted (SD-3386)', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        trackedChangeText: 'Removed',
+        resolvedTime: Date.now(),
+        trackedChangeDecision: 'reject',
+      },
+    });
+
+    expect(wrapper.find('.resolved-badge').text()).toContain('Rejected');
+  });
+
+  it('labels an accepted tracked change as Accepted', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+        resolvedTime: Date.now(),
+        trackedChangeDecision: 'accept',
+      },
+    });
+
+    expect(wrapper.find('.resolved-badge').text()).toContain('Accepted');
   });
 
   it('renders hyperlink additions without a format label', async () => {

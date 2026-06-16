@@ -95,7 +95,6 @@ Naming convention: `check:*` = non-mutating, safe in CI. `generate:*` = mutates 
 | What to verify | Command | Speed |
 |---|---|---|
 | Logic works? | `pnpm test` | seconds |
-| Editing works? | `pnpm test:behavior` | minutes |
-| Pixel diff? | `pnpm --dir tests/visual test` | ~5 min |
+| Public surface? | `pnpm check:public` | ~5 min |
 
-Per-package detail: `tests/behavior/AGENTS.md`, `tests/visual/AGENTS.md`. Eval suite: `evals/AGENTS.md`.
+Eval suite: `evals/AGENTS.md`.

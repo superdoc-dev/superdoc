@@ -210,6 +210,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
     'mutations.apply': (input) => api.mutations.apply(input),
+    'plan.execute': (input) => api.plan.execute(input),
 
     // --- capabilities ---
     'capabilities.get': () => api.capabilities(),

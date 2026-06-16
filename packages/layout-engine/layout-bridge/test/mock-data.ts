@@ -279,9 +279,36 @@ export const tableLayout: Layout = {
 // PM layout: p1 "Table text" [2,12), empty para inside pos 14, p3 "More text" [16,26).
 // A selection from 2..26 passes through all three lines; the empty line is a
 // zero-width slice (pmStart === pmEnd === 14) that the rect builder used to skip.
-const tableEmptyParaLineP1 = { fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 80, ascent: 10, descent: 4, lineHeight: TABLE_CELL_LINE_HEIGHT } as const;
-const tableEmptyParaLineEmpty = { fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 0, ascent: 10, descent: 4, lineHeight: TABLE_CELL_LINE_HEIGHT } as const;
-const tableEmptyParaLineP3 = { fromRun: 0, fromChar: 0, toRun: 0, toChar: 9, width: 70, ascent: 10, descent: 4, lineHeight: TABLE_CELL_LINE_HEIGHT } as const;
+const tableEmptyParaLineP1 = {
+  fromRun: 0,
+  fromChar: 0,
+  toRun: 0,
+  toChar: 10,
+  width: 80,
+  ascent: 10,
+  descent: 4,
+  lineHeight: TABLE_CELL_LINE_HEIGHT,
+} as const;
+const tableEmptyParaLineEmpty = {
+  fromRun: 0,
+  fromChar: 0,
+  toRun: 0,
+  toChar: 0,
+  width: 0,
+  ascent: 10,
+  descent: 4,
+  lineHeight: TABLE_CELL_LINE_HEIGHT,
+} as const;
+const tableEmptyParaLineP3 = {
+  fromRun: 0,
+  fromChar: 0,
+  toRun: 0,
+  toChar: 9,
+  width: 70,
+  ascent: 10,
+  descent: 4,
+  lineHeight: TABLE_CELL_LINE_HEIGHT,
+} as const;
 
 export const tableEmptyParaBlock: FlowBlock = {
   kind: 'table',
@@ -294,9 +321,21 @@ export const tableEmptyParaBlock: FlowBlock = {
           id: 'cell-0',
           attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
           blocks: [
-            { kind: 'paragraph', id: 'p1', runs: [{ text: 'Table text', fontFamily: 'Arial', fontSize: 14, pmStart: 2, pmEnd: 12 }] },
-            { kind: 'paragraph', id: 'p-empty', runs: [{ text: '', fontFamily: 'Arial', fontSize: 14, pmStart: 14, pmEnd: 14 }] },
-            { kind: 'paragraph', id: 'p3', runs: [{ text: 'More text', fontFamily: 'Arial', fontSize: 14, pmStart: 16, pmEnd: 26 }] },
+            {
+              kind: 'paragraph',
+              id: 'p1',
+              runs: [{ text: 'Table text', fontFamily: 'Arial', fontSize: 14, pmStart: 2, pmEnd: 12 }],
+            },
+            {
+              kind: 'paragraph',
+              id: 'p-empty',
+              runs: [{ text: '', fontFamily: 'Arial', fontSize: 14, pmStart: 14, pmEnd: 14 }],
+            },
+            {
+              kind: 'paragraph',
+              id: 'p3',
+              runs: [{ text: 'More text', fontFamily: 'Arial', fontSize: 14, pmStart: 16, pmEnd: 26 }],
+            },
           ],
         },
       ],
@@ -334,7 +373,16 @@ export const tableEmptyParaLayout: Layout = {
     {
       number: 1,
       fragments: [
-        { kind: 'table' as const, blockId: 'table-empty-para', fromRow: 0, toRow: 1, x: 30, y: 60, width: 120, height: TABLE_CELL_LINE_HEIGHT * 3 + 4 },
+        {
+          kind: 'table' as const,
+          blockId: 'table-empty-para',
+          fromRow: 0,
+          toRow: 1,
+          x: 30,
+          y: 60,
+          width: 120,
+          height: TABLE_CELL_LINE_HEIGHT * 3 + 4,
+        },
       ],
     },
   ],
@@ -345,15 +393,39 @@ export const tableEmptyParaLayout: Layout = {
 // A selection 1..25 passes through all three; the empty line is a zero-width slice
 // that the body rect builder used to skip, leaving a gap in the highlight band.
 export const bodyEmptyParaBlocks: FlowBlock[] = [
-  { kind: 'paragraph', id: 'body-p1', runs: [{ text: 'First line', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 11 }] },
-  { kind: 'paragraph', id: 'body-empty', runs: [{ text: '', fontFamily: 'Arial', fontSize: 16, pmStart: 13, pmEnd: 13 }] },
-  { kind: 'paragraph', id: 'body-p3', runs: [{ text: 'Third line', fontFamily: 'Arial', fontSize: 16, pmStart: 15, pmEnd: 25 }] },
+  {
+    kind: 'paragraph',
+    id: 'body-p1',
+    runs: [{ text: 'First line', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 11 }],
+  },
+  {
+    kind: 'paragraph',
+    id: 'body-empty',
+    runs: [{ text: '', fontFamily: 'Arial', fontSize: 16, pmStart: 13, pmEnd: 13 }],
+  },
+  {
+    kind: 'paragraph',
+    id: 'body-p3',
+    runs: [{ text: 'Third line', fontFamily: 'Arial', fontSize: 16, pmStart: 15, pmEnd: 25 }],
+  },
 ];
 
 export const bodyEmptyParaMeasures: Measure[] = [
-  { kind: 'paragraph', lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 80, ascent: 12, descent: 4, lineHeight: 20 }], totalHeight: 20 },
-  { kind: 'paragraph', lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 0, ascent: 12, descent: 4, lineHeight: 20 }], totalHeight: 20 },
-  { kind: 'paragraph', lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 80, ascent: 12, descent: 4, lineHeight: 20 }], totalHeight: 20 },
+  {
+    kind: 'paragraph',
+    lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 80, ascent: 12, descent: 4, lineHeight: 20 }],
+    totalHeight: 20,
+  },
+  {
+    kind: 'paragraph',
+    lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 0, ascent: 12, descent: 4, lineHeight: 20 }],
+    totalHeight: 20,
+  },
+  {
+    kind: 'paragraph',
+    lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 80, ascent: 12, descent: 4, lineHeight: 20 }],
+    totalHeight: 20,
+  },
 ];
 
 export const bodyEmptyParaLayout: Layout = {
@@ -363,7 +435,17 @@ export const bodyEmptyParaLayout: Layout = {
       number: 1,
       fragments: [
         { kind: 'para', blockId: 'body-p1', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300, pmStart: 1, pmEnd: 11 },
-        { kind: 'para', blockId: 'body-empty', fromLine: 0, toLine: 1, x: 30, y: 60, width: 300, pmStart: 13, pmEnd: 13 },
+        {
+          kind: 'para',
+          blockId: 'body-empty',
+          fromLine: 0,
+          toLine: 1,
+          x: 30,
+          y: 60,
+          width: 300,
+          pmStart: 13,
+          pmEnd: 13,
+        },
         { kind: 'para', blockId: 'body-p3', fromLine: 0, toLine: 1, x: 30, y: 80, width: 300, pmStart: 15, pmEnd: 25 },
       ],
     },

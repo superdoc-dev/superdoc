@@ -801,6 +801,127 @@ function textMutationResultSchemaFor(operationId: OperationId): JsonSchema {
   };
 }
 
+const markRunColorRefSchema: JsonSchema = {
+  oneOf: [
+    objectSchema(
+      {
+        model: { const: 'rgb' },
+        value: { type: 'string', minLength: 1 },
+      },
+      ['model', 'value'],
+    ),
+    objectSchema(
+      {
+        model: { const: 'theme' },
+        theme: { type: 'string', minLength: 1 },
+        tint: { type: 'integer' },
+        shade: { type: 'integer' },
+      },
+      ['model', 'theme'],
+    ),
+    objectSchema(
+      {
+        model: { const: 'auto' },
+      },
+      ['model'],
+    ),
+  ],
+};
+
+const markRunFontsSchema: JsonSchema = {
+  ...objectSchema({
+    ascii: { type: 'string', minLength: 1 },
+    hAnsi: { type: 'string', minLength: 1 },
+    eastAsia: { type: 'string', minLength: 1 },
+    cs: { type: 'string', minLength: 1 },
+    asciiTheme: { type: 'string', minLength: 1 },
+    hAnsiTheme: { type: 'string', minLength: 1 },
+    eastAsiaTheme: { type: 'string', minLength: 1 },
+    csTheme: { type: 'string', minLength: 1 },
+    hint: { type: 'string', minLength: 1 },
+  }),
+  minProperties: 1,
+};
+
+const markRunLanguagesSchema: JsonSchema = {
+  ...objectSchema({
+    val: { type: 'string', minLength: 1 },
+    eastAsia: { type: 'string', minLength: 1 },
+    bidi: { type: 'string', minLength: 1 },
+  }),
+  minProperties: 1,
+};
+
+const markRunUnderlineSchema: JsonSchema = {
+  ...objectSchema({
+    style: { type: 'string', minLength: 1 },
+    color: markRunColorRefSchema,
+  }),
+  minProperties: 1,
+};
+
+const markRunShadingSchema: JsonSchema = {
+  ...objectSchema({
+    fill: markRunColorRefSchema,
+    color: markRunColorRefSchema,
+    pattern: { type: 'string', minLength: 1 },
+  }),
+  minProperties: 1,
+};
+
+const markRunBorderSchema: JsonSchema = {
+  ...objectSchema({
+    style: { type: 'string', minLength: 1 },
+    width: { type: 'number' },
+    space: { type: 'number' },
+    color: markRunColorRefSchema,
+    frame: { type: 'boolean' },
+    shadow: { type: 'boolean' },
+  }),
+  minProperties: 1,
+};
+
+const markRunPropsSchema: JsonSchema = {
+  ...objectSchema({
+    rStyle: { type: 'string', minLength: 1 },
+    fontSizeCs: { type: 'number' },
+    specVanish: { type: 'boolean' },
+    fontSize: { type: 'number' },
+    fonts: markRunFontsSchema,
+    fontFamily: { type: 'string', minLength: 1 },
+    lang: markRunLanguagesSchema,
+    color: markRunColorRefSchema,
+    highlight: { type: 'string', minLength: 1 },
+    shading: markRunShadingSchema,
+    cs: { type: 'boolean' },
+    rtl: { type: 'boolean' },
+    bold: { type: 'boolean' },
+    boldCs: { type: 'boolean' },
+    italic: { type: 'boolean' },
+    italicCs: { type: 'boolean' },
+    underline: markRunUnderlineSchema,
+    strikethrough: { type: 'boolean' },
+    doubleStrikethrough: { type: 'boolean' },
+    caps: { type: 'boolean' },
+    smallCaps: { type: 'boolean' },
+    outline: { type: 'boolean' },
+    shadow: { type: 'boolean' },
+    emboss: { type: 'boolean' },
+    imprint: { type: 'boolean' },
+    verticalAlign: { enum: ['baseline', 'superscript', 'subscript'] },
+    characterSpacing: { type: 'number' },
+    characterScale: { type: 'number' },
+    kern: { type: 'number' },
+    baselineShift: { type: 'number' },
+    fitTextWidth: { type: 'number' },
+    vanish: { type: 'boolean' },
+    webHidden: { type: 'boolean' },
+    border: markRunBorderSchema,
+    textEffect: { type: 'string', minLength: 1 },
+  }),
+  minProperties: 1,
+};
+
 const trackChangeRefSchema = trackedChangeAddressSchema;
 
 const createParagraphSuccessSchema = objectSchema(
@@ -2816,6 +2937,8 @@ const fieldAddressSchema: JsonSchema = objectSchema(
     blockId: { type: 'string' },
     occurrenceIndex: { type: 'integer' },
     nestingDepth: { type: 'integer' },
+    storyId: { type: 'string' },
+    fieldId: { type: 'string' },
   },
   ['kind', 'blockId', 'occurrenceIndex'],
 );
@@ -5689,6 +5812,86 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         // an explicit failure schema descriptor for mutation operations.
         failure: preApplyFailureResultSchemaFor('mutations.apply'),
       },
+      'plan.execute': {
+        input: objectSchema(
+          {
+            entries: arraySchema(
+              objectSchema(
+                {
+                  operationId: { type: 'string' },
+                  input: {},
+                  options: {},
+                  captureAs: { type: 'string' },
+                  expect: objectSchema({
+                    success: { type: 'boolean' },
+                    failureCode: { type: 'string' },
+                    failureMessageIncludes: { type: 'string' },
+                    allowFailureMessageIncludes: { type: 'string' },
+                  }),
+                },
+                ['operationId'],
+              ),
+            ),
+            captureReturns: {
+              oneOf: [{ const: '*' }, arraySchema({ type: 'string' })],
+            },
+          },
+          ['entries'],
+        ),
+        output: objectSchema(
+          {
+            receipts: arraySchema(
+              objectSchema(
+                {
+                  entryIndex: { type: 'integer' },
+                  operationId: { type: 'string' },
+                  status: { enum: ['passed', 'allowed-failure', 'expected-failure'] },
+                  captureAs: { type: ['string', 'null'] },
+                  error: { type: 'string' },
+                },
+                ['entryIndex', 'operationId', 'status', 'captureAs'],
+              ),
+            ),
+            captures: { type: 'object' },
+            failure: objectSchema(
+              {
+                entryIndex: { type: 'integer' },
+                operationId: { type: 'string' },
+                message: { type: 'string' },
+              },
+              ['entryIndex', 'operationId', 'message'],
+            ),
+          },
+          ['receipts', 'captures'],
+        ),
+        success: objectSchema(
+          {
+            receipts: arraySchema(
+              objectSchema(
+                {
+                  entryIndex: { type: 'integer' },
+                  operationId: { type: 'string' },
+                  status: { enum: ['passed', 'allowed-failure', 'expected-failure'] },
+                  captureAs: { type: ['string', 'null'] },
+                  error: { type: 'string' },
+                },
+                ['entryIndex', 'operationId', 'status', 'captureAs'],
+              ),
+            ),
+            captures: { type: 'object' },
+            failure: objectSchema(
+              {
+                entryIndex: { type: 'integer' },
+                operationId: { type: 'string' },
+                message: { type: 'string' },
+              },
+              ['entryIndex', 'operationId', 'message'],
+            ),
+          },
+          ['receipts', 'captures'],
+        ),
+        failure: preApplyFailureResultSchemaFor('plan.execute'),
+      },
     };
   })(),
   'capabilities.get': {
@@ -5797,6 +6000,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         target: tableAddressSchema,
         nodeId: { type: 'string' },
         preferredWidth: { type: 'number' },
+        preferredWidthType: { enum: ['dxa', 'auto', 'pct'] },
         alignment: { enum: ['left', 'center', 'right'] },
         leftIndentPt: { type: 'number' },
         autoFitMode: { enum: ['fixedWidth', 'fitContents', 'fitWindow'] },
@@ -6035,6 +6239,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         target: tableCellAddressSchema,
         nodeId: { type: 'string' },
         preferredWidthPt: { type: 'number' },
+        preferredWidthType: { enum: ['dxa', 'auto', 'pct'] },
         verticalAlign: { enum: ['top', 'center', 'bottom'] },
         wrapText: { type: 'boolean' },
         fitText: { type: 'boolean' },
@@ -6268,18 +6473,21 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'tables.setCellPadding': {
     input: {
-      ...objectSchema(
-        {
-          target: tableCellAddressSchema,
-          nodeId: { type: 'string' },
-          topPt: { type: 'number', minimum: 0 },
-          rightPt: { type: 'number', minimum: 0 },
-          bottomPt: { type: 'number', minimum: 0 },
-          leftPt: { type: 'number', minimum: 0 },
-        },
-        ['topPt', 'rightPt', 'bottomPt', 'leftPt'],
-      ),
+      ...objectSchema({
+        target: tableCellAddressSchema,
+        nodeId: { type: 'string' },
+        topPt: { type: 'number', minimum: 0 },
+        rightPt: { type: 'number', minimum: 0 },
+        bottomPt: { type: 'number', minimum: 0 },
+        leftPt: { type: 'number', minimum: 0 },
+      }),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+      anyOf: [
+        { required: ['topPt'] },
+        { required: ['rightPt'] },
+        { required: ['bottomPt'] },
+        { required: ['leftPt'] },
+      ],
     },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
@@ -7656,11 +7864,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'fields.insert': {
-    input: objectSchema({ mode: { const: 'raw' }, at: textTargetSchema, instruction: { type: 'string' } }, [
-      'mode',
-      'at',
-      'instruction',
-    ]),
+    input: objectSchema(
+      {
+        mode: { const: 'raw' },
+        at: textTargetSchema,
+        instruction: { type: 'string' },
+        cachedResultText: { type: 'string' },
+        updatePolicy: { enum: ['rebuild', 'preserveCached'] },
+        serialization: { enum: ['simple', 'complex'] },
+        complexFormatting: objectSchema({
+          markerRunProps: markRunPropsSchema,
+          instructionRunProps: markRunPropsSchema,
+          resultRunProps: markRunPropsSchema,
+        }),
+      },
+      ['mode', 'at', 'instruction'],
+    ),
     ...fieldMutation,
   },
   'fields.rebuild': {

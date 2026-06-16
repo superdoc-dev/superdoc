@@ -22,7 +22,7 @@ import type {
 } from '@superdoc/document-api';
 import { composeAuthorColorResolver } from '@superdoc/contracts';
 import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
-import { buildFontFamilyOptions, deriveBundledActivation } from '@superdoc/font-system';
+import { buildFontFamilyOptions, deriveBundledActivationForConfig } from '@superdoc/font-system';
 import type { FontFamilyOption } from '@superdoc/font-system';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
@@ -602,7 +602,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // The document's bundled-font activation, derived from the same `fonts` config the editor used
   // (a pure function of config + the CDN pack flag, so it matches the editor's resolver). Gates the
   // built-in picker rows: baseline without a pack, the curated rich set with one.
-  const bundledActivation = () => deriveBundledActivation(superdoc.config?.fonts);
+  const bundledActivation = () => deriveBundledActivationForConfig(superdoc.config?.fonts);
   let fontOptionsCache: FontFamilyOption[] = buildFontFamilyOptions([], bundledActivation());
   const fontOptionsSignatureFor = (options: readonly FontFamilyOption[]) =>
     JSON.stringify(options.map((option) => [option.label, option.value, option.previewFamily]));

@@ -207,6 +207,7 @@ export interface TablesConvertToTextInput extends TableLocator {
 export type TableAutoFitMode = 'fixedWidth' | 'fitContents' | 'fitWindow';
 export type TableAlignment = 'left' | 'center' | 'right';
 export type TableDirection = 'ltr' | 'rtl';
+export type TablePreferredWidthType = 'auto' | 'dxa' | 'pct';
 
 export interface TablesSetLayoutInput extends TableLocator {
   /**
@@ -214,6 +215,14 @@ export interface TablesSetLayoutInput extends TableLocator {
    * Only applies to `fixedWidth` mode. Ignored when `autoFitMode` is `fitWindow`.
    */
   preferredWidth?: number;
+  /**
+   * Preferred width encoding for `fixedWidth` tables.
+   *
+   * - `auto` writes `<w:tblW w:w="0" w:type="auto"/>`.
+   * - `dxa` writes a twips-based width.
+   * - `pct` writes a percentage-based width.
+   */
+  preferredWidthType?: TablePreferredWidthType;
   alignment?: TableAlignment;
   leftIndentPt?: number;
   autoFitMode?: TableAutoFitMode;
@@ -245,8 +254,14 @@ export type TablesSetRowHeightInput =
 export type TablesDistributeRowsInput = TableLocator;
 
 export type TablesSetRowOptionsInput =
-  | (TableScopedRowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean })
-  | (DirectRowTargetLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean });
+  | (TableScopedRowLocator & {
+      allowBreakAcrossPages?: boolean;
+      repeatHeader?: boolean;
+    })
+  | (DirectRowTargetLocator & {
+      allowBreakAcrossPages?: boolean;
+      repeatHeader?: boolean;
+    });
 
 // ---------------------------------------------------------------------------
 // Column operations
@@ -303,6 +318,7 @@ export interface TablesSplitCellInput extends CellLocator {
 
 export interface TablesSetCellPropertiesInput extends CellLocator {
   preferredWidthPt?: number;
+  preferredWidthType?: TablePreferredWidthType;
   verticalAlign?: 'top' | 'center' | 'bottom';
   wrapText?: boolean;
   fitText?: boolean;
@@ -581,10 +597,14 @@ export interface TablesSetTablePaddingInput extends TableLocator {
 }
 
 export interface TablesSetCellPaddingInput extends CellLocator {
-  topPt: number;
-  rightPt: number;
-  bottomPt: number;
-  leftPt: number;
+  /**
+   * Omitted sides are preserved as-is. Provide one or more sides to author
+   * partial cell margins like OOXML `tcMar` left/right-only overrides.
+   */
+  topPt?: number;
+  rightPt?: number;
+  bottomPt?: number;
+  leftPt?: number;
 }
 
 export interface TablesSetCellSpacingInput extends TableLocator {

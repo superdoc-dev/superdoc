@@ -40,7 +40,7 @@ export function markBundledPackPresent(): void {
   bundledPackPresent = true;
 }
 
-/** Whether the bundled pack is served page-globally (set by the CDN build). */
+/** Whether the bundled pack is served page-globally (see {@link markBundledPackPresent}). */
 export function isBundledPackPresent(): boolean {
   return bundledPackPresent;
 }
@@ -103,8 +103,15 @@ function bundledAssetSignature(resolve: FontAssetUrlResolver): string {
  * substitute targets.
  */
 export function installBundledSubstitutes(registry: FontRegistry, options: InstallBundledOptions = {}): void {
+  const baseResolve: FontAssetUrlResolver = (context) =>
+    joinUrl(options.assetBaseUrl ?? defaultAssetBase, context.file);
+  // `resolveAssetUrl` comes from raw `fonts` config and may be malformed (a string, etc.) despite its
+  // type. Use it only when it is actually a function; otherwise fall back to the base-URL resolver, so
+  // a wrong shape degrades gracefully instead of throwing "resolve is not a function" during init. The
+  // fallback is warned once per document below, AFTER the idempotency check (not on every install call).
+  const candidate: unknown = options.resolveAssetUrl;
   const resolve: FontAssetUrlResolver =
-    options.resolveAssetUrl ?? ((context) => joinUrl(options.assetBaseUrl ?? defaultAssetBase, context.file));
+    typeof candidate === 'function' ? (candidate as FontAssetUrlResolver) : baseResolve;
   const signature = bundledAssetSignature(resolve);
   const installed = installedRegistries.get(registry);
   if (installed !== undefined) {
@@ -118,6 +125,14 @@ export function installBundledSubstitutes(registry: FontRegistry, options: Insta
     return;
   }
   installedRegistries.set(registry, signature);
+  // A non-function resolveAssetUrl was ignored above; warn now - after the per-registry idempotency
+  // check, so it fires once per document, not on every install call. (createSuperDocFonts rejects it.)
+  if (candidate != null && typeof candidate !== 'function') {
+    console.warn(
+      '[superdoc] fonts.resolveAssetUrl must be a function (context) => string; ignoring it and ' +
+        'falling back to fonts.assetBaseUrl. Prefer @superdoc-dev/fonts, which wires it correctly.',
+    );
+  }
   for (const family of BUNDLED_MANIFEST) {
     for (const face of family.faces) {
       const context: FontAssetUrlContext = {

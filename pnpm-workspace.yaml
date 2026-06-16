@@ -1,8 +1,6 @@
 packages:
   - e2e-tests
   - e2e-tests/templates/vue
-  - tests/visual
-  - tests/behavior
   - tests/doc-api-stories
   - tests/document-api-smoke
   - apps/*

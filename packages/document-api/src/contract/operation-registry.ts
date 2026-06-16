@@ -233,6 +233,7 @@ import type {
   MutationsPreviewOutput,
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
+import type { PlanExecuteInput, PlanExecuteResult } from '../plan/plan.js';
 import type {
   CreateTableOfContentsInput,
   CreateTableOfContentsResult,
@@ -902,6 +903,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
   'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
+  'plan.execute': { input: PlanExecuteInput; options: never; output: PlanExecuteResult };
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };

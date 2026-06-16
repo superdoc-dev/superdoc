@@ -50,7 +50,8 @@ export {
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';
 
 // Per-document bundled-font activation (config-presence gate + curation). The resolver and offerings
-// consume it; the editor derives it from `fonts` config via `deriveBundledActivation`.
+// consume it; the editor's runtime paths derive it via `deriveBundledActivationForConfig` (which
+// sanitizes raw `fonts.bundled`), built on the lower-level `deriveBundledActivation`.
 export type {
   BundledFontSelection,
   BundledActivation,
@@ -95,6 +96,8 @@ export {
   fontOfferingRenderStack,
   warnUnknownBundledSelection,
   getBundledFamilyNames,
+  sanitizeBundledSelection,
+  deriveBundledActivationForConfig,
 } from './font-offerings';
 
 export type { DocumentFontOption, FontFamilyOption } from './document-font-options';

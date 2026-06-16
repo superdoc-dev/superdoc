@@ -1,6 +1,6 @@
 # Testing Guide
 
-How to verify your changes before pushing.
+How to verify public SuperDoc changes before pushing.
 
 ## Quick Reference
 
@@ -8,12 +8,12 @@ How to verify your changes before pushing.
 |---|---|---|---|
 | Logic works? | `pnpm test` | ~30s | Hard |
 | Document API smoke? | `pnpm test:document-api-smoke` | ~1 min | Hard |
-| Editing works? | `pnpm test:behavior` | ~3 min | Hard |
-| Visual pixel diff? | `pnpm --dir tests/visual test` | ~5 min | Soft |
+| Public surface? | `pnpm check:public` | ~5 min | Hard |
 
 ## Unit Tests
 
-Test pure logic — data transformations, algorithms, style resolution, layout math.
+Test pure logic: data transformations, algorithms, style resolution, layout
+math, import/export behavior, and editor command internals.
 
 ```bash
 pnpm test                 # all packages
@@ -21,117 +21,57 @@ pnpm test:editor          # super-editor only
 pnpm --filter <pkg> test  # specific package
 ```
 
-Tests are co-located with source code as `feature.test.ts` next to `feature.ts`. Framework: Vitest.
+Tests are co-located with source code as `feature.test.ts` next to
+`feature.ts`. Framework: Vitest.
 
 ## Document API Smoke
 
-SuperDoc keeps only low-detail Document API guardrails in this repo:
+SuperDoc keeps low-detail Document API guardrails in this repo:
 
 ```bash
 pnpm test:document-api-smoke
 ```
 
-That smoke suite checks representative namespace/method presence and a
-small SDK open/read/mutate/save/reopen workflow.
+That smoke suite checks representative namespace/method presence and a small
+SDK open/read/mutate/save/reopen workflow.
 
-Additional conformance coverage may exist outside this repo in a separate
-checkout.
+## Rendering Checks
 
-If you maintain a separate conformance checkout, run it from there:
-
-```bash
-cd /path/to/conformance-repo
-SUPERDOC_REPO=/path/to/superdoc3 pnpm run test:document-api-conformance:report
-SUPERDOC_REPO=/path/to/superdoc3 pnpm run test:document-api-conformance
-```
-
-## Behavior Tests
-
-Test editing interactions through a real browser — typing, formatting, tables, comments, tracked changes, clipboard, toolbar.
+The public tree does not expose a pixel-diff command. For rendering changes,
+run the relevant unit suites, then manually compare the affected `.docx` in
+Microsoft Word and SuperDoc.
 
 ```bash
-pnpm test:behavior                        # all browsers, headless
-pnpm test:behavior -- --project=chromium  # single browser
-pnpm test:behavior:headed                 # watch the browser
-pnpm test:behavior:ui                     # Playwright UI mode
+pnpm test
 ```
 
-These assert on **document state**, not pixels. Located in `tests/behavior/`. See `tests/behavior/README.md` for writing tests.
-
-**First-time setup:**
-
-```bash
-pnpm --filter @superdoc-testing/behavior setup   # install browser binaries
-```
-
-## Visual Comparison (Pixel Diff)
-
-Playwright visual regression tests that screenshot rendered documents and compare them pixel-by-pixel against R2-stored baselines. Located in `tests/visual/`.
-
-```bash
-cd tests/visual
-pnpm docs:download    # sync the shared test corpus from R2 (first time / new docs)
-pnpm test             # run the visual suite
-pnpm report           # view the HTML report
-```
-
-Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux). See `tests/visual/README.md` for setup (R2 env vars, wrangler auth) and `tests/visual/AGENTS.md` for fixture details.
-
-Bulk layout regression comparison across the full corpus is maintainer-internal tooling and no longer lives in this repo.
+Maintainers may run additional release checks for rendering-sensitive changes.
 
 ## Uploading Test Documents
 
-Upload a `.docx` file to the shared test corpus (used by visual and behavior tests):
+For new `.docx` fixtures, keep the file minimal and place it with the public
+test suite that consumes it. For larger reproduction documents, attach the file
+to the issue or PR and explain which assertion it should cover.
 
-```bash
-pnpm --dir tests/visual docs:upload ./path/to/my-file.docx
-# Prompts for: issue ID or short description
-# -> uploads as rendering/paragraph-between-borders.docx
-```
-
-After uploading, pull it locally with `pnpm --dir tests/visual docs:download` so it's available for all test suites.
+Avoid adding broad fixture dumps; prefer focused documents that make a specific
+behavior or rendering expectation clear.
 
 ## When to Run What
 
 | I changed... | Run |
 |---|---|
 | A utility function or algorithm | `pnpm test` |
-| An editing command or extension | `pnpm test` + `pnpm test:behavior` |
-| Layout engine or style resolution | `pnpm test` + `pnpm --dir tests/visual test` |
-| DomPainter rendering | `pnpm test` + `pnpm --dir tests/visual test` |
-| PM adapter (data conversion) | `pnpm test` + `pnpm --dir tests/visual test` |
-| Table rendering or spacing | All three |
-| Super-converter (import/export) | `pnpm test` + `pnpm --dir tests/visual test` |
+| An editing command or extension | `pnpm test` |
+| Layout engine or style resolution | `pnpm test` + manual Word comparison |
+| DomPainter rendering | `pnpm test` + manual Word comparison |
+| PM adapter data conversion | `pnpm test` |
+| Table rendering or spacing | `pnpm test` + manual Word comparison |
+| Super-converter import/export | `pnpm test` |
 
 ## CI Behavior
 
 | Suite | Runs on PRs | Blocks merge |
 |---|---|---|
 | Unit tests | Yes | Yes |
-| Behavior tests | Yes (sharded across 3 runners) | Yes |
-| Visual tests | Yes (on rendering-related paths) | No (soft gate — diffs post a PR comment) |
-
-## Troubleshooting
-
-**Corpus download (`pnpm docs:download` in `tests/visual`) says auth expired or missing:**
-
-```bash
-npx wrangler login
-```
-
-R2 account ids and bucket names must be set via env vars (see `tests/visual/.env.example`).
-
-**Behavior tests fail with port conflict:**
-
-```bash
-node scripts/free-port.mjs 9990
-pnpm test:behavior
-```
-
-**Want to debug a behavior test visually:**
-
-```bash
-pnpm test:behavior:headed                          # see the browser
-pnpm test:behavior:ui                              # Playwright inspector
-pnpm test:behavior:trace                           # record traces
-```
+| Document API smoke | Yes | Yes |
+| Public surface checks | Yes | Yes |

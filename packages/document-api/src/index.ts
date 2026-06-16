@@ -345,6 +345,19 @@ import {
 import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
+import { createPlanApi, type PlanApi } from './plan/plan.js';
+export {
+  type PlanApi,
+  type PlanExecuteInput,
+  type PlanExecuteEntry,
+  type PlanExecuteEntryExpect,
+  type PlanExecuteResult,
+  type PlanEntryReceipt,
+  type PlanEntryReceiptStatus,
+  type PlanExecuteFailure,
+  type PlanCaptureRefMarker,
+  type PlanProjectTextOffsetMarker,
+} from './plan/plan.js';
 import type { HistoryAdapter, HistoryApi } from './history/history.js';
 import type { HistoryState, HistoryActionResult } from './history/history.types.js';
 import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
@@ -360,6 +373,9 @@ import type {
 } from './diff/diff.types.js';
 import {
   executeTableLocatorOp,
+  executeTablesSetLayoutOp,
+  executeTablesSetCellPaddingOp,
+  executeTablesSetCellPropertiesOp,
   executeRowLocatorOp,
   executeCellOrTableScopedCellLocatorOp,
   executeDocumentLevelTableOp,
@@ -1804,6 +1820,10 @@ export interface DocumentApi {
    */
   mutations: MutationsApi;
   /**
+   * Throughput-oriented batch executor with stepwise operation semantics.
+   */
+  plan: PlanApi;
+  /**
    * Snapshot-based document comparison and replay.
    */
   diff: DiffApi;
@@ -2572,12 +2592,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setLayout(input, options?) {
-        return executeTableLocatorOp(
-          'tables.setLayout',
-          adapters.tables.setLayout.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeTablesSetLayoutOp(adapters.tables.setLayout.bind(adapters.tables), input, options);
       },
       insertRow(input, options?) {
         return executeRowLocatorOp(
@@ -2688,12 +2703,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setCellProperties(input, options?) {
-        return executeTableLocatorOp(
-          'tables.setCellProperties',
-          adapters.tables.setCellProperties.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeTablesSetCellPropertiesOp(adapters.tables.setCellProperties.bind(adapters.tables), input, options);
       },
       setCellText(input, options?) {
         return executeCellOrTableScopedCellLocatorOp(
@@ -2782,12 +2792,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setCellPadding(input, options?) {
-        return executeTableLocatorOp(
-          'tables.setCellPadding',
-          adapters.tables.setCellPadding.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeTablesSetCellPaddingOp(adapters.tables.setCellPadding.bind(adapters.tables), input, options);
       },
       setCellSpacing(input, options?) {
         return executeTableLocatorOp(
@@ -3367,6 +3372,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return adapters.mutations.apply(input);
       },
     },
+    plan: createPlanApi((operationId, input, options) =>
+      api.invoke({ operationId, input, options } as DynamicInvokeRequest),
+    ),
     diff: {
       capture(): DiffSnapshot {
         return executeDiffCapture(adapters.diff);

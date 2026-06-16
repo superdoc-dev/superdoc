@@ -47,6 +47,7 @@ import {
   mergeWrapDistancesFromPadding,
   ptToPx,
 } from '../utilities.js';
+import { computeParagraphAttrs } from '../attributes/index.js';
 import { getLastParagraphFont } from './paragraph.js';
 
 // ============================================================================
@@ -842,7 +843,8 @@ export function shapeGroupNodeToDrawingBlock(
  * document top level by the importer, which stashes the original host paragraph props on
  * `wrapperParagraph`. Those drawings keep their authored width, so a centered/right-aligned
  * host paragraph must still offset the whole box on the page. Derive the alignment metadata
- * the layout engine consumes (`inlineParagraphAlignment`) from that wrapper (SD: IT-1140).
+ * the layout engine consumes (`inlineParagraphAlignment` plus wrapper indents) from that
+ * wrapper (SD: IT-1140).
  *
  * Only applies to inline-wrapped drawings; anchored drawings are positioned by their anchor.
  */
@@ -863,7 +865,12 @@ const resolveInlineAlignmentFromWrapper = (rawAttrs: Record<string, unknown>): R
   if (effectiveAlignment !== 'center' && effectiveAlignment !== 'right') {
     return {};
   }
-  return { inlineParagraphAlignment: effectiveAlignment };
+  const metadata: Record<string, unknown> = { inlineParagraphAlignment: effectiveAlignment };
+  const { paragraphAttrs } = computeParagraphAttrs({ type: 'paragraph', attrs: wrapper } as PMNode);
+  const indent = paragraphAttrs.indent;
+  if (typeof indent?.left === 'number') metadata.paragraphIndentLeft = indent.left;
+  if (typeof indent?.right === 'number') metadata.paragraphIndentRight = indent.right;
+  return metadata;
 };
 
 /**

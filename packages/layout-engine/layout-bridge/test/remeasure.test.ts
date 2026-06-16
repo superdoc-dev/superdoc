@@ -1640,6 +1640,31 @@ describe('remeasureParagraph', () => {
   });
 
   describe('atomic runs', () => {
+    it('does not retain image line height after rewinding past an inline image break point', () => {
+      const block = createBlock([
+        textRun('A '),
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,abc',
+          width: 179,
+          height: 179,
+          pmStart: 3,
+          pmEnd: 4,
+        },
+        textRun('B'.repeat(30)),
+      ]);
+
+      // Fits "A " + image, then overflows on following text and rewinds to the space.
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].toChar).toBe(2);
+      expect(measure.lines[0].maxImageHeight).toBeUndefined();
+      expect(measure.lines[0].lineHeight).toBeCloseTo(16 * 1.2);
+      expect(measure.lines[1].maxImageHeight).toBe(179);
+    });
+
     it('measures image-only paragraphs with correct width and line height', () => {
       const block = createBlock([
         {

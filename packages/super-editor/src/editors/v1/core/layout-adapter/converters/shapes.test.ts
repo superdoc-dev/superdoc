@@ -800,6 +800,32 @@ describe('shapes converter', () => {
       expect(result.attrs?.inlineParagraphAlignment).toBe('center');
     });
 
+    it('derives wrapper paragraph indents with inlineParagraphAlignment for centered inline textboxes', () => {
+      const node: PMNode = {
+        type: 'shapeContainer',
+        attrs: {
+          width: 199,
+          height: 191,
+          wrap: { type: 'Inline' },
+          wrapperParagraph: {
+            textAlign: 'center',
+            paragraphProperties: {
+              justification: 'center',
+              indent: { left: 720, right: 360 },
+            },
+          },
+        },
+      };
+
+      const result = shapeContainerNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap) as DrawingBlock & {
+        attrs?: Record<string, unknown>;
+      };
+
+      expect(result.attrs?.inlineParagraphAlignment).toBe('center');
+      expect(result.attrs?.paragraphIndentLeft).toBe(48);
+      expect(result.attrs?.paragraphIndentRight).toBe(24);
+    });
+
     it('derives inlineParagraphAlignment "center" from a distribute wrapper paragraph', () => {
       const node: PMNode = {
         type: 'shapeContainer',

@@ -362,6 +362,25 @@ const getAtomicRunLayoutHeight = (run: Run): number => {
   return baseHeight + (margins.distTop ?? 0) + (margins.distBottom ?? 0);
 };
 
+/** Max atomic (image/math/field) height for runs actually included on [fromRun, toRun]. */
+const getLineMaxAtomicHeight = (
+  runs: Run[],
+  fromRun: number,
+  fromChar: number,
+  toRun: number,
+  toChar: number,
+): number => {
+  let max = 0;
+  for (let r = fromRun; r <= toRun; r += 1) {
+    const run = runs[r];
+    if (!isAtomicLayoutRun(run)) continue;
+    if (r === toRun && toChar === 0) continue;
+    if (r === fromRun && r === toRun && toChar <= fromChar) continue;
+    max = Math.max(max, getAtomicRunLayoutHeight(run));
+  }
+  return max;
+};
+
 /**
  * Checks if a break run is a line break (as opposed to page/column break).
  *
@@ -1328,7 +1347,6 @@ export function remeasureParagraph(
     let resumeRun = -1;
     let resumeChar = 0;
     let lineMaxTextFontSize = 0;
-    let lineMaxAtomicHeight = 0;
 
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
@@ -1416,7 +1434,6 @@ export function remeasureParagraph(
           break;
         }
         width += atomicWidth;
-        lineMaxAtomicHeight = Math.max(lineMaxAtomicHeight, getAtomicRunLayoutHeight(run));
         endRun = r;
         endChar = 1;
         continue;
@@ -1513,6 +1530,8 @@ export function remeasureParagraph(
       endRun = startRun;
       endChar = startChar + 1;
     }
+
+    const lineMaxAtomicHeight = getLineMaxAtomicHeight(runs, startRun, startChar, endRun, endChar);
 
     const line: Line = {
       fromRun: startRun,

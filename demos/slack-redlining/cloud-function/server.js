@@ -1,6 +1,8 @@
 import fs from "fs";
 import { readFile, unlink } from "fs/promises";
 import express from "express";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import https from "https";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
@@ -18,11 +20,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+// Deployed behind GCP's load balancer (see README), so the real caller IP arrives
+// in X-Forwarded-For. Trust the first proxy hop so the rate limiter below keys on
+// the client instead of the proxy address (which would be a single shared bucket).
+app.set("trust proxy", 1);
+app.use(helmet());
+
+// Throttle the expensive document-processing route (POST "/" below) ahead of its
+// body parser, so over-limit requests are rejected before the body is parsed. The
+// health check stays on its own unthrottled path.
+const documentRateLimit = rateLimit({ windowMs: 60_000, limit: 20 });
+
 const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || "0.0.0.0";
-
-// Middleware
-app.use(express.json());
 
 // Health check endpoint
 app.get("/", (req, res) => {
@@ -30,7 +40,7 @@ app.get("/", (req, res) => {
 });
 
 // Main document processing endpoint
-app.post("/", async (req, res) => {
+app.post("/", documentRateLimit, express.json(), async (req, res) => {
   let filePath = null;
   
   try {

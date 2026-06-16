@@ -194,6 +194,8 @@ export type DeletableBlockNodeAddress = {
   kind: 'block';
   nodeType: DeletableBlockNodeType;
   nodeId: string;
+  /** Story containing this block. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type InlineNodeAddress = {

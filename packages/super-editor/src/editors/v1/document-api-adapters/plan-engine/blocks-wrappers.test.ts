@@ -92,17 +92,24 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 // ---------------------------------------------------------------------------
 
 type BlockDeleteEditorOptions = {
-  /** Pass a mock fn, or `null` to simulate a missing command. Defaults to `vi.fn(() => true)`. */
-  deleteBlockNodeById?: ReturnType<typeof vi.fn> | null;
   /** Pass a mock fn, or `null` to simulate a missing helper. Defaults to an auto-matching mock. */
   getBlockNodeById?: ReturnType<typeof vi.fn> | null;
+  /** Pass a mock fn, or `null` to simulate tracked-command unavailability. */
+  insertTrackedChange?: ReturnType<typeof vi.fn> | null;
+  /** Pass `null` to simulate a missing tracked-mode user. */
+  user?: { name: string; email: string } | null;
   children?: ProseMirrorNode[];
 };
 
 function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   editor: Editor;
   dispatch: ReturnType<typeof vi.fn>;
-  deleteBlockNodeById: ReturnType<typeof vi.fn> | undefined;
+  tr: {
+    setMeta: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    mapping: { map: (pos: number) => number };
+    docChanged: boolean;
+  };
 } {
   const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
     attrs: { paraId: 'p1', sdBlockId: 'p1' },
@@ -114,14 +121,19 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
 
   const dispatch = vi.fn();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: vi.fn(),
+    delete: vi.fn(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
+  tr.setMeta.mockReturnValue(tr);
+  tr.delete.mockImplementation(() => {
+    tr.docChanged = true;
+    return tr;
+  });
 
-  // null = explicitly missing; undefined = use default mock
-  const deleteBlockNodeById =
-    options.deleteBlockNodeById === null ? undefined : (options.deleteBlockNodeById ?? vi.fn(() => true));
+  const insertTrackedChange =
+    options.insertTrackedChange === null ? undefined : (options.insertTrackedChange ?? vi.fn(() => true));
   const getBlockNodeById =
     options.getBlockNodeById === null
       ? undefined
@@ -132,8 +144,8 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
         }));
 
   const commands: Record<string, unknown> = {};
-  if (deleteBlockNodeById !== undefined) {
-    commands.deleteBlockNodeById = deleteBlockNodeById;
+  if (insertTrackedChange !== undefined) {
+    commands.insertTrackedChange = insertTrackedChange;
   }
 
   const helpers: Record<string, unknown> = {};
@@ -142,13 +154,16 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   }
 
   const editor = {
+    options: {
+      user: options.user === undefined ? { name: 'Test User', email: 'test@example.com' } : options.user,
+    },
     state: { doc, tr },
     dispatch,
     commands,
     helpers,
   } as unknown as Editor;
 
-  return { editor, dispatch, deleteBlockNodeById };
+  return { editor, dispatch, tr };
 }
 
 function makeInput(nodeType: string, nodeId: string): BlocksDeleteInput {
@@ -330,27 +345,32 @@ describe('blocksDeleteWrapper', () => {
       }
     });
 
-    it('throws CAPABILITY_UNAVAILABLE when tracked mode is requested', () => {
-      const { editor } = makeBlockDeleteEditor();
+    it('uses tracked transaction metadata when tracked mode is requested', () => {
+      const { editor, dispatch, tr } = makeBlockDeleteEditor();
 
-      try {
-        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' });
-        expect.unreachable('should have thrown');
-      } catch (error) {
-        expect((error as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-        expect((error as DocumentApiAdapterError).message).toContain('tracked mode');
-      }
+      const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' });
+
+      expect(result.success).toBe(true);
+      expect(tr.delete).toHaveBeenCalledWith(0, 7);
+      expect(tr.setMeta).toHaveBeenCalledWith('inputType', 'programmatic');
+      expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+      expect(dispatch).toHaveBeenCalledWith(tr);
     });
 
-    it('throws CAPABILITY_UNAVAILABLE when deleteBlockNodeById command is missing', () => {
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById: null });
+    it('throws CAPABILITY_UNAVAILABLE when tracked mode lacks insertTrackedChange support', () => {
+      const { editor } = makeBlockDeleteEditor({ insertTrackedChange: null });
 
-      try {
-        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'));
-        expect.unreachable('should have thrown');
-      } catch (error) {
-        expect((error as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-      }
+      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' })).toThrow(
+        DocumentApiAdapterError,
+      );
+    });
+
+    it('throws CAPABILITY_UNAVAILABLE when tracked mode lacks a configured user', () => {
+      const { editor } = makeBlockDeleteEditor({ user: null });
+
+      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' })).toThrow(
+        DocumentApiAdapterError,
+      );
     });
 
     it('throws CAPABILITY_UNAVAILABLE when blockNode helper is missing', () => {
@@ -370,16 +390,16 @@ describe('blocksDeleteWrapper', () => {
   // -------------------------------------------------------------------------
 
   describe('dry run', () => {
-    it('returns success without executing the command', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
+    it('returns success without dispatching a transaction', () => {
+      const { editor, dispatch, tr } = makeBlockDeleteEditor();
       const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), {
         changeMode: 'direct',
         dryRun: true,
       });
       expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
       expect(result.deletedBlock).toBeDefined();
-      expect(deleteBlockNodeById).not.toHaveBeenCalled();
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('still validates target exists during dry run', () => {
@@ -389,11 +409,10 @@ describe('blocksDeleteWrapper', () => {
       ).toThrow(DocumentApiAdapterError);
     });
 
-    it('still rejects tracked mode during dry run', () => {
-      const { editor } = makeBlockDeleteEditor();
-      expect(() =>
-        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked', dryRun: true }),
-      ).toThrow(DocumentApiAdapterError);
+    it('still validates tracked capability during dry run', () => {
+      const { editor } = makeBlockDeleteEditor({ insertTrackedChange: null });
+      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked', dryRun: true }))
+        .toThrow(DocumentApiAdapterError);
     });
   });
 
@@ -435,11 +454,10 @@ describe('blocksDeleteWrapper', () => {
   // -------------------------------------------------------------------------
 
   describe('cache invalidation', () => {
-    it('calls deleteBlockNodeById with the resolved sdBlockId', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
+    it('deletes the resolved block range directly', () => {
+      const { editor, tr } = makeBlockDeleteEditor();
       blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'direct' });
-      expect(deleteBlockNodeById).toHaveBeenCalledWith('p1');
+      expect(tr.delete).toHaveBeenCalledWith(0, 7);
     });
   });
 

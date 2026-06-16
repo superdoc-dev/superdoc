@@ -208,6 +208,12 @@ export type TableAutoFitMode = 'fixedWidth' | 'fitContents' | 'fitWindow';
 export type TableAlignment = 'left' | 'center' | 'right';
 export type TableDirection = 'ltr' | 'rtl';
 export type TablePreferredWidthType = 'auto' | 'dxa' | 'pct';
+export type TablePreferredWidthReadType = TablePreferredWidthType;
+
+export interface TableRowWidthSpec {
+  value: number;
+  type: TablePreferredWidthType;
+}
 
 export interface TablesSetLayoutInput extends TableLocator {
   /**
@@ -218,9 +224,13 @@ export interface TablesSetLayoutInput extends TableLocator {
   /**
    * Preferred width encoding for `fixedWidth` tables.
    *
-   * - `auto` writes `<w:tblW w:w="0" w:type="auto"/>`.
+   * - `auto` writes `<w:tblW w:w="0" w:type="auto"/>`, allowing fixed-layout
+   *   tables whose overall width remains automatic while column widths are
+   *   authored separately.
    * - `dxa` writes a twips-based width.
    * - `pct` writes a percentage-based width.
+   *
+   * When omitted, existing adapter behavior determines the fallback width encoding.
    */
   preferredWidthType?: TablePreferredWidthType;
   alignment?: TableAlignment;
@@ -246,22 +256,48 @@ export type TablesInsertRowInput =
 
 export type TablesDeleteRowInput = DirectRowTargetLocator | TableScopedRowLocator;
 
+export type TableRowMoveDestination =
+  | { kind: 'first' }
+  | { kind: 'last' }
+  | { kind: 'before'; rowIndex: number }
+  | { kind: 'after'; rowIndex: number }
+  | { kind: 'before'; target: TableRowAddress }
+  | { kind: 'after'; target: TableRowAddress }
+  | { kind: 'before'; nodeId: string }
+  | { kind: 'after'; nodeId: string };
+
+export type TablesMoveRowInput = (DirectRowTargetLocator | TableScopedRowLocator) & {
+  destination: TableRowMoveDestination;
+};
+
 export type TablesSetRowHeightInput =
-  | (TableScopedRowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' })
-  | (DirectRowTargetLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' });
+  | (TableScopedRowLocator & { heightPt: number; rule?: 'atLeast' | 'exact' | 'auto' })
+  | (DirectRowTargetLocator & { heightPt: number; rule?: 'atLeast' | 'exact' | 'auto' });
 
 /** Uses {@link TableLocator} directly as input. */
 export type TablesDistributeRowsInput = TableLocator;
 
 export type TablesSetRowOptionsInput =
-  | (TableScopedRowLocator & {
+  | (
+    TableScopedRowLocator & {
       allowBreakAcrossPages?: boolean;
       repeatHeader?: boolean;
-    })
-  | (DirectRowTargetLocator & {
+      gridBefore?: number;
+      wBefore?: TableRowWidthSpec;
+      gridAfter?: number;
+      wAfter?: TableRowWidthSpec;
+    }
+  )
+  | (
+    DirectRowTargetLocator & {
       allowBreakAcrossPages?: boolean;
       repeatHeader?: boolean;
-    });
+      gridBefore?: number;
+      wBefore?: TableRowWidthSpec;
+      gridAfter?: number;
+      wAfter?: TableRowWidthSpec;
+    }
+  );
 
 // ---------------------------------------------------------------------------
 // Column operations
@@ -318,7 +354,6 @@ export interface TablesSplitCellInput extends CellLocator {
 
 export interface TablesSetCellPropertiesInput extends CellLocator {
   preferredWidthPt?: number;
-  preferredWidthType?: TablePreferredWidthType;
   verticalAlign?: 'top' | 'center' | 'bottom';
   wrapText?: boolean;
   fitText?: boolean;
@@ -597,14 +632,10 @@ export interface TablesSetTablePaddingInput extends TableLocator {
 }
 
 export interface TablesSetCellPaddingInput extends CellLocator {
-  /**
-   * Omitted sides are preserved as-is. Provide one or more sides to author
-   * partial cell margins like OOXML `tcMar` left/right-only overrides.
-   */
-  topPt?: number;
-  rightPt?: number;
-  bottomPt?: number;
-  leftPt?: number;
+  topPt: number;
+  rightPt: number;
+  bottomPt: number;
+  leftPt: number;
 }
 
 export interface TablesSetCellSpacingInput extends TableLocator {
@@ -712,6 +743,8 @@ export interface TablesGetPropertiesOutput {
    * Only present for `fixedWidth` tables. Absent when `autoFitMode` is `fitWindow`.
    */
   preferredWidth?: number;
+  /** The encoded OOXML width type when direct table width formatting is present. */
+  preferredWidthType?: TablePreferredWidthReadType;
   autoFitMode?: TableAutoFitMode;
   /** Absent when `tblLook` has no direct formatting. Only explicitly stored flags are emitted. */
   styleOptions?: TableStyleOptionsState;

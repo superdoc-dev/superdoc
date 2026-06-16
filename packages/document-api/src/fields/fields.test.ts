@@ -135,27 +135,6 @@ describe('fields validation', () => {
       ).toThrow(/cachedResultText/);
     });
 
-    it('throws INVALID_INPUT when serialization is not a recognized value', () => {
-      const adapter = makeAdapter();
-      expect(() =>
-        executeFieldsInsert(adapter, { mode: 'raw', instruction: 'REF bm \\h', serialization: 'fancy' } as any),
-      ).toThrow(/serialization/);
-    });
-
-    it('throws INVALID_INPUT when complexFormatting is provided without complex serialization', () => {
-      const adapter = makeAdapter();
-      expect(() =>
-        executeFieldsInsert(
-          adapter,
-          {
-            mode: 'raw',
-            instruction: 'REF bm \\h',
-            complexFormatting: { resultRunProps: { rStyle: 'Hyperlink' } },
-          } as any,
-        ),
-      ).toThrow(/complexFormatting/);
-    });
-
     it('delegates preserveCached input with a string cachedResultText to adapter.insert', () => {
       const adapter = makeAdapter();
       const input = {
@@ -163,35 +142,6 @@ describe('fields validation', () => {
         instruction: 'REF _Ref137575642 \\r \\h',
         cachedResultText: 'Exhibit A',
         updatePolicy: 'preserveCached',
-      };
-      executeFieldsInsert(adapter, input as any);
-      expect(adapter.insert).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
-    });
-
-    it('delegates complex field formatting input to adapter.insert', () => {
-      const adapter = makeAdapter();
-      const input = {
-        mode: 'raw',
-        instruction: 'HYPERLINK \\l "BookmarkOne"',
-        cachedResultText: 'Section 1(b)',
-        updatePolicy: 'preserveCached',
-        serialization: 'complex',
-        complexFormatting: {
-          markerRunProps: { color: { model: 'rgb', value: '000000' } },
-          instructionRunProps: {
-            italic: false,
-            underline: { style: 'none' },
-            color: { model: 'rgb', value: '000000' },
-            highlight: 'lightGray',
-          },
-          resultRunProps: {
-            rStyle: 'Hyperlink',
-            italic: false,
-            underline: { style: 'none' },
-            color: { model: 'rgb', value: '000000' },
-            highlight: 'lightGray',
-          },
-        },
       };
       executeFieldsInsert(adapter, input as any);
       expect(adapter.insert).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });

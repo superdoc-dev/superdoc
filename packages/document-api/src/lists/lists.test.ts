@@ -25,6 +25,11 @@ import {
   executeListsSetLevelLayout,
   executeListsSetLevelAlignment,
   executeListsSetLevelRestart,
+  executeListsApply,
+  executeListsContinueV2,
+  executeListsGetState,
+  executeListsRemoveV2,
+  executeListsRestartV2,
 } from './lists.js';
 
 const validTarget = { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' };
@@ -112,6 +117,34 @@ describe('validateListItemTarget (strict listItem)', () => {
     const adapter = stubAdapter();
     executeListsIndent(adapter, { target: validTarget });
     expect(adapter.indent).toHaveBeenCalled();
+  });
+});
+
+describe('v2 list capability fallbacks', () => {
+  it('returns CAPABILITY_UNAVAILABLE when legacy adapters omit v2 numbering-aware hooks', () => {
+    const adapter = stubAdapter();
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+
+    expect(executeListsGetState(adapter, { target })).toMatchObject({
+      success: false,
+      failure: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+    expect(executeListsApply(adapter, { target, seed: 'ordered' })).toMatchObject({
+      success: false,
+      failure: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+    expect(executeListsContinueV2(adapter, { target })).toMatchObject({
+      success: false,
+      failure: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+    expect(executeListsRestartV2(adapter, { target, startAt: 1 })).toMatchObject({
+      success: false,
+      failure: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+    expect(executeListsRemoveV2(adapter, { target })).toMatchObject({
+      success: false,
+      failure: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
   });
 });
 

@@ -17,7 +17,7 @@ function buildPretty(
     const sessionTypeLabel = session.sessionType === 'collab' ? 'collab' : 'local';
     const collabDocId = session.collaboration?.documentId ? `, doc ${session.collaboration.documentId}` : '';
     lines.push(
-      `${marker} ${session.sessionId} (${sessionTypeLabel}, ${session.dirty ? 'dirty' : 'clean'}, rev ${session.revision}${collabDocId})`,
+      `${marker} ${session.sessionId} (${sessionTypeLabel}, runtime ${session.runtime}, ${session.dirty ? 'dirty' : 'clean'}, rev ${session.revision}${collabDocId})`,
     );
   }
   return lines.join('\n');

@@ -13,7 +13,6 @@ import type {
   TableCell,
 } from '@superdoc/contracts';
 import { DEFAULT_FONT_MEASURE_CONTEXT, type FontMeasureContext } from '@superdoc/font-system';
-import { toCssFontFamily } from '@superdoc/font-utils';
 import type { AutoFitRowInput } from './autofit-columns.js';
 import type { WorkingTableCellInput, WorkingTableGridInput } from './autofit-normalize.js';
 import type { FixedLayoutResult } from './fixed-table-columns.js';
@@ -189,6 +188,12 @@ export type TableAutoFitContentMetricsResult = {
 
 type LruEntry<T> = {
   value: T;
+};
+
+type TokenFragment = {
+  text: string;
+  font: string;
+  letterSpacing: number;
 };
 
 /**
@@ -570,11 +575,11 @@ async function measureNestedTableIntrinsicWidthMetrics(
  */
 function measureParagraphMinTokenWidth(paragraph: ParagraphBlock, fontContext: FontMeasureContext): number {
   let widestToken = 0;
-  let currentTokenWidth = 0;
+  let currentTokenFragments: TokenFragment[] = [];
 
   const flushToken = (): void => {
-    widestToken = Math.max(widestToken, currentTokenWidth);
-    currentTokenWidth = 0;
+    widestToken = Math.max(widestToken, measureTokenFragments(currentTokenFragments));
+    currentTokenFragments = [];
   };
 
   for (const run of paragraph.runs) {
@@ -586,8 +591,8 @@ function measureParagraphMinTokenWidth(paragraph: ParagraphBlock, fontContext: F
     if (isTextLikeRun(run)) {
       accumulateTextRunMinTokenWidth(
         run,
-        (width) => {
-          currentTokenWidth += width;
+        (fragment) => {
+          currentTokenFragments.push(fragment);
         },
         flushToken,
         fontContext,
@@ -622,7 +627,7 @@ function measureParagraphMinTokenWidth(paragraph: ParagraphBlock, fontContext: F
  */
 function accumulateTextRunMinTokenWidth(
   run: Extract<Run, { text: string }>,
-  appendTokenPiece: (width: number) => void,
+  appendTokenPiece: (fragment: TokenFragment) => void,
   flushToken: () => void,
   fontContext: FontMeasureContext,
 ): void {
@@ -632,26 +637,54 @@ function accumulateTextRunMinTokenWidth(
   for (const boundary of run.text.matchAll(TOKEN_BOUNDARY_PATTERN)) {
     const boundaryStart = boundary.index ?? cursor;
     if (boundaryStart > cursor) {
-      appendTokenPiece(measureTextRunTokenSlice(run, cursor, boundaryStart, font));
+      appendTokenPiece(buildTextRunTokenFragment(run, cursor, boundaryStart, font));
     }
     flushToken();
     cursor = boundaryStart + boundary[0].length;
   }
 
   if (cursor < run.text.length) {
-    appendTokenPiece(measureTextRunTokenSlice(run, cursor, run.text.length, font));
+    appendTokenPiece(buildTextRunTokenFragment(run, cursor, run.text.length, font));
   }
 }
 
-function measureTextRunTokenSlice(
+function buildTextRunTokenFragment(
   run: Extract<Run, { text: string }>,
   start: number,
   end: number,
   font: string,
-): number {
+): TokenFragment {
   const token = run.text.slice(start, end);
-  const measuredToken = applyTextTransform(token, run, start);
-  return getMeasuredTextWidth(measuredToken, font, getLetterSpacing(run), getCanvasContext());
+  return {
+    text: applyTextTransform(token, run, start),
+    font,
+    letterSpacing: getLetterSpacing(run),
+  };
+}
+
+function measureTokenFragments(fragments: TokenFragment[]): number {
+  if (fragments.length === 0) {
+    return 0;
+  }
+
+  const mergedFragments: TokenFragment[] = [];
+
+  for (const fragment of fragments) {
+    const previous = mergedFragments[mergedFragments.length - 1];
+    if (previous && previous.font === fragment.font && previous.letterSpacing === fragment.letterSpacing) {
+      previous.text += fragment.text;
+      continue;
+    }
+
+    mergedFragments.push({ ...fragment });
+  }
+
+  const ctx = getCanvasContext();
+  let totalWidth = 0;
+  for (const fragment of mergedFragments) {
+    totalWidth += getMeasuredTextWidth(fragment.text, fragment.font, fragment.letterSpacing, ctx);
+  }
+  return totalWidth;
 }
 
 /**
@@ -810,7 +843,7 @@ function buildFontString(
     style: run.italic ? ('italic' as const) : ('normal' as const),
   };
   const physicalFamily = normalizeFontFamily(fontContext.resolvePhysical(normalizeFontFamily(run.fontFamily), face));
-  parts.push(toCssFontFamily(physicalFamily) ?? physicalFamily);
+  parts.push(physicalFamily);
   return parts.join(' ');
 }
 

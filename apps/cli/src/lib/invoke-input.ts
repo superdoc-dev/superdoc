@@ -73,6 +73,7 @@ const PARAM_RENAMES: Partial<Record<CliExposedOperationId, Record<string, string
 
 /** Fields that belong to the CLI layer, not the document API. */
 const CLI_LEVEL_KEYS = new Set(['doc', 'sessionId', 'out', 'dryRun', 'force', 'expectedRevision', 'changeMode']);
+const EXPECTED_REVISION_IN_INPUT = new Set<CliExposedOperationId>(['trackChanges.decide']);
 
 /**
  * Operations where `changeMode` is part of the API input schema, not a CLI-level option.
@@ -80,8 +81,14 @@ const CLI_LEVEL_KEYS = new Set(['doc', 'sessionId', 'out', 'dryRun', 'force', 'e
  */
 const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', 'mutations.preview']);
 
-const FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
-  operationId.startsWith('format.'),
+const INLINE_FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter(
+  (operationId): operationId is CliExposedOperationId =>
+    operationId.startsWith('format.') && !operationId.startsWith('format.paragraph.'),
+);
+const PARAGRAPH_FORMAT_TARGET_OPERATIONS = new Set<CliExposedOperationId>(
+  CLI_DOC_OPERATIONS.filter(
+    (operationId): operationId is CliExposedOperationId => operationId.startsWith('format.paragraph.'),
+  ),
 );
 
 // ---------------------------------------------------------------------------
@@ -97,7 +104,7 @@ const SELECTION_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'insert',
   'replace',
   'delete',
-  ...FORMAT_TARGET_OPERATIONS,
+  ...INLINE_FORMAT_TARGET_OPERATIONS,
 ]);
 
 /**
@@ -161,6 +168,14 @@ function textAddressToSelectionTarget(target: {
   };
 }
 
+function paragraphBlockIdToTarget(blockId: string): Record<string, unknown> {
+  return {
+    kind: 'block',
+    nodeType: 'paragraph',
+    nodeId: blockId,
+  };
+}
+
 function isCollapsedTextAddress(target: { range: { start: number; end: number } }): boolean {
   return target.range.start === target.range.end;
 }
@@ -187,11 +202,40 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
   if (!isRecord(apiInput)) return apiInput;
 
   if (apiInput.target !== undefined) {
+    if (PARAGRAPH_FORMAT_TARGET_OPERATIONS.has(operationId) && isTextAddressLike(apiInput.target)) {
+      throw new CliError(
+        'INVALID_ARGUMENT',
+        `${operationId} requires a block target. Use --block-id for a paragraph shortcut or pass a block-shaped --target-json.`,
+      );
+    }
     if (SELECTION_TARGET_OPERATIONS.has(operationId) && isTextAddressLike(apiInput.target)) {
       assertLegacySelectionTargetSupported(operationId, apiInput.target);
       return {
         ...apiInput,
         target: textAddressToSelectionTarget(apiInput.target),
+      };
+    }
+    return apiInput;
+  }
+
+  // --- Paragraph block-target mutations (format.paragraph.*) ---
+  if (PARAGRAPH_FORMAT_TARGET_OPERATIONS.has(operationId)) {
+    const blockId = apiInput.blockId;
+    if (typeof blockId === 'string') {
+      if (
+        typeof apiInput.start === 'number' ||
+        typeof apiInput.end === 'number' ||
+        typeof apiInput.offset === 'number'
+      ) {
+        throw new CliError(
+          'INVALID_ARGUMENT',
+          `${operationId} accepts --block-id as a paragraph shortcut but does not support --start, --end, or --offset. Use --target-json for explicit block targets.`,
+        );
+      }
+      const { blockId: _, ...rest } = apiInput;
+      return {
+        ...rest,
+        target: paragraphBlockIdToTarget(blockId),
       };
     }
     return apiInput;
@@ -217,6 +261,18 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
 
   // --- Text-address operations (comments.create, comments.patch) ---
   if (TEXT_ADDRESS_TARGET_OPERATIONS.has(operationId)) {
+    const trackedChangeId = apiInput.trackedChangeId;
+    if (typeof trackedChangeId === 'string') {
+      const { trackedChangeId: _, side, story, ...rest } = apiInput;
+      const target: Record<string, unknown> = { trackedChangeId };
+      if (typeof side === 'string') target.side = side;
+      if (story !== undefined) target.story = story;
+      return {
+        ...rest,
+        target,
+      };
+    }
+
     const blockId = apiInput.blockId;
     if (typeof blockId === 'string') {
       const start = typeof apiInput.start === 'number' ? apiInput.start : 0;
@@ -278,6 +334,10 @@ export function extractInvokeInput(operationId: CliExposedOperationId, cliInput:
   const apiInput: Record<string, unknown> = {};
   const keepChangeMode = CHANGEMODE_IN_INPUT.has(operationId);
   for (const [key, value] of Object.entries(cliInput)) {
+    if (key === 'expectedRevision' && EXPECTED_REVISION_IN_INPUT.has(operationId)) {
+      apiInput[key] = value;
+      continue;
+    }
     if (CLI_LEVEL_KEYS.has(key) && !(key === 'changeMode' && keepChangeMode)) continue;
     const apiKey = renames?.[key] ?? key;
     apiInput[apiKey] = value;

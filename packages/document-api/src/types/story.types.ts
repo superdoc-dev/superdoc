@@ -14,7 +14,7 @@ import type { SectionAddress } from '../sections/sections.types.js';
 // ---------------------------------------------------------------------------
 
 /** All recognized story types. */
-export const STORY_TYPES = ['body', 'headerFooterSlot', 'headerFooterPart', 'footnote', 'endnote'] as const;
+export const STORY_TYPES = ['body', 'headerFooterSlot', 'headerFooterPart', 'footnote', 'endnote', 'textbox'] as const;
 
 /** Valid header/footer story kinds. */
 export const STORY_HEADER_FOOTER_KINDS = ['header', 'footer'] as const;
@@ -99,6 +99,22 @@ export interface EndnoteStoryLocator {
 }
 
 /**
+ * A textbox story identified by a stable textbox id.
+ *
+ * The supported subset is DrawingML textbox content (`w:txbxContent` inside
+ * `w:drawing`) hosted in the main body story. VML textbox content
+ * (`v:textbox` / `w:pict`), linked textbox chains (`w:linkedTxbxContent`),
+ * nested textbox stories, and textbox stories inside headers/footers are
+ * rejected at admission time with named diagnostics rather than silently
+ * widened.
+ */
+export interface TextboxStoryLocator {
+  kind: 'story';
+  storyType: 'textbox';
+  textboxId: string;
+}
+
+/**
  * Identifies a content story within a document.
  *
  * Discriminate on `storyType` to narrow to a specific variant.
@@ -108,7 +124,8 @@ export type StoryLocator =
   | HeaderFooterSlotStoryLocator
   | HeaderFooterPartStoryLocator
   | FootnoteStoryLocator
-  | EndnoteStoryLocator;
+  | EndnoteStoryLocator
+  | TextboxStoryLocator;
 
 // ---------------------------------------------------------------------------
 // Type guards & helpers
@@ -144,6 +161,9 @@ export function isStoryLocator(value: unknown): value is StoryLocator {
     case 'footnote':
     case 'endnote':
       return isNonEmptyString(value.noteId);
+
+    case 'textbox':
+      return isNonEmptyString(value.textboxId);
   }
 }
 
@@ -211,6 +231,9 @@ export function storyLocatorToKey(locator: StoryLocator): string {
 
     case 'endnote':
       return `story:endnote:${locator.noteId}`;
+
+    case 'textbox':
+      return `story:textbox:${locator.textboxId}`;
   }
 }
 

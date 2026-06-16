@@ -32,9 +32,11 @@
  *   sections without overwriting their own page geometry. Intermediate / later
  *   source sections are not imported.
  *
- * `customXml`, `docProps`, source body content, comments/tracked-changes stores,
- * glossary, signatures, and body media are out of scope and reported, never
- * applied.
+ * Selected non-body package sidecars (`customXml`, `docProps/custom.xml`,
+ * comments, notes, people, keymap customizations, and `settings.xml.rels`) are
+ * imported when present so reconstructed content can reuse the source package
+ * substrate faithfully. Source body content, glossary, signatures, embeddings,
+ * and body media remain out of scope and are reported, never applied.
  *
  * Engine-agnostic contract + execution entry point. No ProseMirror/converter imports.
  */

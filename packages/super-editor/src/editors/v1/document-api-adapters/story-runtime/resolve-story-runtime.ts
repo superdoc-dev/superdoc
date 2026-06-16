@@ -187,6 +187,13 @@ export function resolveStoryRuntime(
   if (locator === undefined || locator.storyType === 'body') {
     return resolveBodyRuntime(hostEditor);
   }
+  if (locator.storyType === 'textbox') {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'Textbox stories are not supported by the v1 document-api runtime.',
+      { target: locator },
+    );
+  }
 
   // -----------------------------------------------------------------------
   // Non-body stories — validate key and dispatch

@@ -107,6 +107,7 @@ export function dispatchIntentTool(
         case 'set_layout': return execute('doc.tables.setLayout', rest);
         case 'insert_row': return execute('doc.tables.insertRow', rest);
         case 'delete_row': return execute('doc.tables.deleteRow', rest);
+        case 'move_row': return execute('doc.tables.moveRow', rest);
         case 'set_row': return execute('doc.tables.setRowHeight', rest);
         case 'set_row_options': return execute('doc.tables.setRowOptions', rest);
         case 'insert_column': return execute('doc.tables.insertColumn', rest);

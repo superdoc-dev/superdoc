@@ -9,6 +9,10 @@ import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
+import {
+  normalizeFloatingAnchorTop,
+  shouldMountFloatingCommentDialog,
+} from './floating-comment-positioning.js';
 
 const ESTIMATED_HEIGHT = 110;
 const OBSERVER_MARGIN = 600;
@@ -186,6 +190,15 @@ const getPendingAnchorTop = () => {
   return isNaN(top) ? null : top * zoom;
 };
 
+const shouldRenderDialog = (position) => {
+  return shouldMountFloatingCommentDialog({
+    id: position?.id,
+    visibleIds: visibleIds.value,
+    activeCommentInstanceId: activeCommentInstanceId.value,
+    comment: position?.commentRef,
+  });
+};
+
 const instantAlignmentInstanceKey = computed(() => {
   if (!instantSidebarAlignmentThreadId.value) {
     return null;
@@ -203,9 +216,11 @@ const allPositions = computed(() => {
   const positions = [];
   for (const instance of instances) {
     const key = instance?.id;
-    const top = getAnchorTop(instance);
+    const anchorTop = getAnchorTop(instance);
     const threadId = getThreadId(instance?.comment);
-    if (!key || !threadId || typeof top !== 'number' || isNaN(top)) continue;
+    if (!key || !threadId || typeof anchorTop !== 'number' || isNaN(anchorTop)) continue;
+
+    const top = normalizeFloatingAnchorTop(anchorTop, instance.comment);
 
     positions.push({
       id: key,
@@ -679,7 +694,7 @@ onBeforeUnmount(() => {
       >
         <!-- Only mount the heavy CommentDialog when near the viewport -->
         <CommentDialog
-          v-if="visibleIds.has(pos.id) || pos.id === activeCommentInstanceId || pos.id === 'pending'"
+          v-if="shouldRenderDialog(pos)"
           :key="pos.id + commentsRenderKey"
           @ready="handleDialog"
           @resize="handleResize(pos)"

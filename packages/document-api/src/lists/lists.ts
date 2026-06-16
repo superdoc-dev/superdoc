@@ -67,8 +67,14 @@ import type {
   ListsSetLevelTextInput,
   ListsSetLevelStartInput,
   ListsSetLevelLayoutInput,
+  ListsBlockTarget,
+  ListsGetStateInput,
+  ListsGetStateResult,
+  ListsApplyInput,
+  ListsContinueV2Input,
+  ListsRestartV2Input,
+  ListsRemoveV2Input,
 } from './lists.types.js';
-
 export type {
   ListInsertInput,
   ListsGetInput,
@@ -124,12 +130,17 @@ export type {
   ListsSetLevelTextInput,
   ListsSetLevelStartInput,
   ListsSetLevelLayoutInput,
+  ListsBlockTarget,
+  ListsGetStateInput,
+  ListsGetStateResult,
+  ListsApplyInput,
+  ListsContinueV2Input,
+  ListsRestartV2Input,
+  ListsRemoveV2Input,
 } from './lists.types.js';
-
 // ---------------------------------------------------------------------------
 // Validation enum sets
 // ---------------------------------------------------------------------------
-
 const VALID_BLOCK_NODE_TYPES: ReadonlySet<string> = new Set(BLOCK_NODE_TYPES);
 const VALID_LIST_KINDS: ReadonlySet<string> = new Set(LIST_KINDS);
 const VALID_INSERT_POSITIONS: ReadonlySet<string> = new Set(LIST_INSERT_POSITIONS);
@@ -139,17 +150,14 @@ const VALID_LEVEL_ALIGNMENTS: ReadonlySet<string> = new Set(LEVEL_ALIGNMENTS);
 const VALID_TRAILING_CHARACTERS: ReadonlySet<string> = new Set(TRAILING_CHARACTERS);
 const VALID_LIST_PRESETS: ReadonlySet<string> = new Set(LIST_PRESET_IDS);
 const VALID_CONTINUITY_VALUES: ReadonlySet<string> = new Set(['preserve', 'none']);
-
 // ---------------------------------------------------------------------------
 // Shared validators
 // ---------------------------------------------------------------------------
-
 function validateListInput(input: unknown, operationName: string): asserts input is Record<string, unknown> {
   if (!isRecord(input)) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} input must be a non-null object.`);
   }
 }
-
 /**
  * Validates a ListItemAddress shape at the given field name.
  * Strict: nodeType must be 'listItem'.
@@ -187,12 +195,10 @@ function validateListItemAddress(value: unknown, field: string, operationName: s
     );
   }
 }
-
 /** Convenience: validates input.target as a ListItemAddress. */
 function validateListItemTarget(input: { target?: unknown }, operationName: string): void {
   validateListItemAddress(input.target, 'target', operationName);
 }
-
 /**
  * Validates a BlockAddress shape: { kind: 'block', nodeType: 'paragraph', nodeId: string }.
  * In the lists namespace, BlockAddress always means a paragraph block.
@@ -227,7 +233,6 @@ function validateBlockAddress(value: unknown, field: string, operationName: stri
     );
   }
 }
-
 /**
  * Validates BlockAddress | BlockRange target shape.
  */
@@ -248,7 +253,6 @@ function validateBlockAddressOrRange(value: unknown, field: string, operationNam
     validateBlockAddress(value, field, operationName);
   }
 }
-
 function requireLevel(value: unknown, operationName: string): void {
   if (!isInteger(value) || (value as number) < 0) {
     throw new DocumentApiValidationError(
@@ -258,7 +262,6 @@ function requireLevel(value: unknown, operationName: string): void {
     );
   }
 }
-
 function requireEnum(value: unknown, field: string, validSet: ReadonlySet<string>, operationName: string): void {
   if (!validSet.has(value as string)) {
     throw new DocumentApiValidationError(
@@ -268,7 +271,6 @@ function requireEnum(value: unknown, field: string, validSet: ReadonlySet<string
     );
   }
 }
-
 function optionalBoolean(value: unknown, field: string, operationName: string): void {
   if (value !== undefined && typeof value !== 'boolean') {
     throw new DocumentApiValidationError(
@@ -278,7 +280,6 @@ function optionalBoolean(value: unknown, field: string, operationName: string): 
     );
   }
 }
-
 function optionalNumber(value: unknown, field: string, operationName: string): void {
   if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value as number))) {
     throw new DocumentApiValidationError(
@@ -288,7 +289,6 @@ function optionalNumber(value: unknown, field: string, operationName: string): v
     );
   }
 }
-
 function optionalInteger(value: unknown, field: string, operationName: string): void {
   if (value !== undefined && !isInteger(value)) {
     throw new DocumentApiValidationError(
@@ -298,7 +298,6 @@ function optionalInteger(value: unknown, field: string, operationName: string): 
     );
   }
 }
-
 function optionalLevelsArray(value: unknown, field: string, operationName: string): void {
   if (value === undefined) return;
   if (!Array.isArray(value)) {
@@ -317,7 +316,6 @@ function optionalLevelsArray(value: unknown, field: string, operationName: strin
     }
   }
 }
-
 function validateListLevelTemplate(entry: unknown, path: string, operationName: string): void {
   if (!isRecord(entry)) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} ${path} must be an object.`, {
@@ -376,7 +374,6 @@ function validateListLevelTemplate(entry: unknown, path: string, operationName: 
     optionalNumber(ind.firstLine, `${path}.indents.firstLine`, operationName);
   }
 }
-
 function validateListTemplate(value: unknown, field: string, operationName: string): void {
   if (!isRecord(value)) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${operationName} ${field} must be an object.`, {
@@ -402,9 +399,7 @@ function validateListTemplate(value: unknown, field: string, operationName: stri
     validateListLevelTemplate((t.levels as unknown[])[i], `${field}.levels[${i}]`, operationName);
   }
 }
-
 const VALID_SEQUENCE_MODES: ReadonlySet<string> = new Set(['new', 'continuePrevious']);
-
 function validateListsCreateFields(raw: Record<string, unknown>): void {
   const op = 'lists.create';
   if (raw.kind !== undefined) {
@@ -419,7 +414,6 @@ function validateListsCreateFields(raw: Record<string, unknown>): void {
       );
     }
   }
-
   // Validate sequence
   if (raw.sequence !== undefined) {
     if (!isRecord(raw.sequence)) {
@@ -430,7 +424,6 @@ function validateListsCreateFields(raw: Record<string, unknown>): void {
     }
     const seq = raw.sequence as Record<string, unknown>;
     requireEnum(seq.mode, 'sequence.mode', VALID_SEQUENCE_MODES, op);
-
     if (seq.mode === 'continuePrevious') {
       // Union rule: continuePrevious forbids preset, style, and startAt
       if (raw.preset !== undefined) {
@@ -459,32 +452,26 @@ function validateListsCreateFields(raw: Record<string, unknown>): void {
       optionalInteger(seq.startAt, 'sequence.startAt', op);
     }
   }
-
   // Validate preset
   if (raw.preset !== undefined) {
     requireEnum(raw.preset, 'preset', VALID_LIST_PRESETS, op);
   }
-
   // Validate style
   if (raw.style !== undefined) {
     validateListTemplate(raw.style, 'style', op);
   }
 }
-
 // ---------------------------------------------------------------------------
 // Adapter interface
 // ---------------------------------------------------------------------------
-
 export interface ListsAdapter {
   // Discovery
   list(query?: ListsListQuery): ListsListResult;
   get(input: ListsGetInput): ListItemInfo;
-
   // Kept operations
   insert(input: ListInsertInput, options?: MutationOptions): ListsInsertResult;
   indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult;
   outdent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult;
-
   // SD-1272 operations
   create(input: ListsCreateInput, options?: MutationOptions): ListsCreateResult;
   attach(input: ListsAttachInput, options?: MutationOptions): ListsMutateItemResult;
@@ -501,7 +488,6 @@ export interface ListsAdapter {
   canContinuePrevious(input: ListsCanContinuePreviousInput): ListsCanContinuePreviousResult;
   setLevelRestart(input: ListsSetLevelRestartInput, options?: MutationOptions): ListsMutateItemResult;
   convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult;
-
   // SD-1973 formatting operations
   applyTemplate(input: ListsApplyTemplateInput, options?: MutationOptions): ListsMutateItemResult;
   applyPreset(input: ListsApplyPresetInput, options?: MutationOptions): ListsMutateItemResult;
@@ -517,10 +503,8 @@ export interface ListsAdapter {
   ): ListsMutateItemResult;
   setLevelMarkerFont(input: ListsSetLevelMarkerFontInput, options?: MutationOptions): ListsMutateItemResult;
   clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult;
-
   // SD-2052 compound operation
   setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult;
-
   // SD-2025 user-facing operations
   getStyle(input: ListsGetStyleInput): ListsGetStyleResult;
   applyStyle(input: ListsApplyStyleInput, options?: MutationOptions): ListsMutateItemResult;
@@ -529,14 +513,23 @@ export interface ListsAdapter {
   setLevelText(input: ListsSetLevelTextInput, options?: MutationOptions): ListsMutateItemResult;
   setLevelStart(input: ListsSetLevelStartInput, options?: MutationOptions): ListsMutateItemResult;
   setLevelLayout(input: ListsSetLevelLayoutInput, options?: MutationOptions): ListsMutateItemResult;
+  // v2 numbering-aware list operations.
+  getState?(input: ListsGetStateInput): ListsGetStateResult;
+  apply?(input: ListsApplyInput, options?: MutationOptions): ListsMutateItemResult;
+  continue?(input: ListsContinueV2Input, options?: MutationOptions): ListsMutateItemResult;
+  restart?(input: ListsRestartV2Input, options?: MutationOptions): ListsMutateItemResult;
+  remove?(input: ListsRemoveV2Input, options?: MutationOptions): ListsMutateItemResult;
 }
-
-export type ListsApi = ListsAdapter;
-
+export interface ListsApi extends ListsAdapter {
+  getState(input: ListsGetStateInput): ListsGetStateResult;
+  apply(input: ListsApplyInput, options?: MutationOptions): ListsMutateItemResult;
+  continue(input: ListsContinueV2Input, options?: MutationOptions): ListsMutateItemResult;
+  restart(input: ListsRestartV2Input, options?: MutationOptions): ListsMutateItemResult;
+  remove(input: ListsRemoveV2Input, options?: MutationOptions): ListsMutateItemResult;
+}
 // ---------------------------------------------------------------------------
 // Execute wrappers: discovery
 // ---------------------------------------------------------------------------
-
 export function executeListsList(adapter: ListsAdapter, query?: ListsListQuery): ListsListResult {
   if (query !== undefined) {
     if (!isRecord(query as unknown)) {
@@ -582,17 +575,14 @@ export function executeListsList(adapter: ListsAdapter, query?: ListsListQuery):
   }
   return adapter.list(query);
 }
-
 export function executeListsGet(adapter: ListsAdapter, input: ListsGetInput): ListItemInfo {
   validateListInput(input, 'lists.get');
   validateListItemAddress(input.address, 'address', 'lists.get');
   return adapter.get(input);
 }
-
 // ---------------------------------------------------------------------------
 // Execute wrappers: kept operations
 // ---------------------------------------------------------------------------
-
 export function executeListsInsert(
   adapter: ListsAdapter,
   input: ListInsertInput,
@@ -612,7 +602,6 @@ export function executeListsInsert(
   }
   return adapter.insert(input, normalizeMutationOptions(options));
 }
-
 export function executeListsIndent(
   adapter: ListsAdapter,
   input: ListTargetInput,
@@ -621,7 +610,6 @@ export function executeListsIndent(
   validateListItemTarget(input, 'lists.indent');
   return adapter.indent(input, normalizeMutationOptions(options));
 }
-
 export function executeListsOutdent(
   adapter: ListsAdapter,
   input: ListTargetInput,
@@ -630,13 +618,10 @@ export function executeListsOutdent(
   validateListItemTarget(input, 'lists.outdent');
   return adapter.outdent(input, normalizeMutationOptions(options));
 }
-
 // ---------------------------------------------------------------------------
 // Execute wrappers: SD-1272 operations
 // ---------------------------------------------------------------------------
-
 const VALID_LIST_CREATE_MODES: ReadonlySet<string> = new Set(['empty', 'fromParagraphs']);
-
 export function executeListsCreate(
   adapter: ListsAdapter,
   input: ListsCreateInput,
@@ -667,7 +652,6 @@ export function executeListsCreate(
   validateListsCreateFields(raw);
   return adapter.create(input, normalizeMutationOptions(options));
 }
-
 export function executeListsAttach(
   adapter: ListsAdapter,
   input: ListsAttachInput,
@@ -679,7 +663,6 @@ export function executeListsAttach(
   optionalInteger(input.level, 'level', 'lists.attach');
   return adapter.attach(input, normalizeMutationOptions(options));
 }
-
 export function executeListsDetach(
   adapter: ListsAdapter,
   input: ListsDetachInput,
@@ -688,7 +671,6 @@ export function executeListsDetach(
   validateListItemTarget(input, 'lists.detach');
   return adapter.detach(input, normalizeMutationOptions(options));
 }
-
 export function executeListsDelete(
   adapter: ListsAdapter,
   input: ListsDeleteInput,
@@ -697,7 +679,6 @@ export function executeListsDelete(
   validateListItemTarget(input, 'lists.delete');
   return adapter.delete(input, normalizeMutationOptions(options));
 }
-
 export function executeListsJoin(
   adapter: ListsAdapter,
   input: ListsJoinInput,
@@ -707,13 +688,11 @@ export function executeListsJoin(
   requireEnum(input.direction, 'direction', VALID_JOIN_DIRECTIONS, 'lists.join');
   return adapter.join(input, normalizeMutationOptions(options));
 }
-
 export function executeListsCanJoin(adapter: ListsAdapter, input: ListsCanJoinInput): ListsCanJoinResult {
   validateListItemTarget(input, 'lists.canJoin');
   requireEnum(input.direction, 'direction', VALID_JOIN_DIRECTIONS, 'lists.canJoin');
   return adapter.canJoin(input);
 }
-
 export function executeListsSeparate(
   adapter: ListsAdapter,
   input: ListsSeparateInput,
@@ -723,7 +702,6 @@ export function executeListsSeparate(
   optionalBoolean(input.copyOverrides, 'copyOverrides', 'lists.separate');
   return adapter.separate(input, normalizeMutationOptions(options));
 }
-
 export function executeListsMerge(
   adapter: ListsAdapter,
   input: ListsMergeInput,
@@ -733,7 +711,6 @@ export function executeListsMerge(
   requireEnum(input.direction, 'direction', VALID_JOIN_DIRECTIONS, 'lists.merge');
   return adapter.merge(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSplit(
   adapter: ListsAdapter,
   input: ListsSplitInput,
@@ -743,7 +720,6 @@ export function executeListsSplit(
   optionalBoolean(input.restartNumbering, 'restartNumbering', 'lists.split');
   return adapter.split(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevel(
   adapter: ListsAdapter,
   input: ListsSetLevelInput,
@@ -753,7 +729,6 @@ export function executeListsSetLevel(
   requireLevel(input.level, 'lists.setLevel');
   return adapter.setLevel(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetValue(
   adapter: ListsAdapter,
   input: ListsSetValueInput,
@@ -769,7 +744,6 @@ export function executeListsSetValue(
   }
   return adapter.setValue(input, normalizeMutationOptions(options));
 }
-
 export function executeListsContinuePrevious(
   adapter: ListsAdapter,
   input: ListsContinuePreviousInput,
@@ -778,7 +752,6 @@ export function executeListsContinuePrevious(
   validateListItemTarget(input, 'lists.continuePrevious');
   return adapter.continuePrevious(input, normalizeMutationOptions(options));
 }
-
 export function executeListsCanContinuePrevious(
   adapter: ListsAdapter,
   input: ListsCanContinuePreviousInput,
@@ -786,7 +759,6 @@ export function executeListsCanContinuePrevious(
   validateListItemTarget(input, 'lists.canContinuePrevious');
   return adapter.canContinuePrevious(input);
 }
-
 export function executeListsSetLevelRestart(
   adapter: ListsAdapter,
   input: ListsSetLevelRestartInput,
@@ -806,7 +778,6 @@ export function executeListsSetLevelRestart(
   }
   return adapter.setLevelRestart(input, normalizeMutationOptions(options));
 }
-
 export function executeListsConvertToText(
   adapter: ListsAdapter,
   input: ListsConvertToTextInput,
@@ -816,11 +787,9 @@ export function executeListsConvertToText(
   optionalBoolean(input.includeMarker, 'includeMarker', 'lists.convertToText');
   return adapter.convertToText(input, normalizeMutationOptions(options));
 }
-
 // ---------------------------------------------------------------------------
 // Execute wrappers: SD-1973 formatting operations
 // ---------------------------------------------------------------------------
-
 export function executeListsApplyTemplate(
   adapter: ListsAdapter,
   input: ListsApplyTemplateInput,
@@ -831,7 +800,6 @@ export function executeListsApplyTemplate(
   optionalLevelsArray(input.levels, 'levels', 'lists.applyTemplate');
   return adapter.applyTemplate(input, normalizeMutationOptions(options));
 }
-
 export function executeListsApplyPreset(
   adapter: ListsAdapter,
   input: ListsApplyPresetInput,
@@ -842,7 +810,6 @@ export function executeListsApplyPreset(
   optionalLevelsArray(input.levels, 'levels', 'lists.applyPreset');
   return adapter.applyPreset(input, normalizeMutationOptions(options));
 }
-
 export function executeListsCaptureTemplate(
   adapter: ListsAdapter,
   input: ListsCaptureTemplateInput,
@@ -851,7 +818,6 @@ export function executeListsCaptureTemplate(
   optionalLevelsArray(input.levels, 'levels', 'lists.captureTemplate');
   return adapter.captureTemplate(input);
 }
-
 export function executeListsSetLevelNumbering(
   adapter: ListsAdapter,
   input: ListsSetLevelNumberingInput,
@@ -874,7 +840,6 @@ export function executeListsSetLevelNumbering(
   optionalInteger(input.start, 'start', 'lists.setLevelNumbering');
   return adapter.setLevelNumbering(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelBullet(
   adapter: ListsAdapter,
   input: ListsSetLevelBulletInput,
@@ -890,7 +855,6 @@ export function executeListsSetLevelBullet(
   }
   return adapter.setLevelBullet(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelPictureBullet(
   adapter: ListsAdapter,
   input: ListsSetLevelPictureBulletInput,
@@ -907,7 +871,6 @@ export function executeListsSetLevelPictureBullet(
   }
   return adapter.setLevelPictureBullet(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelAlignment(
   adapter: ListsAdapter,
   input: ListsSetLevelAlignmentInput,
@@ -918,7 +881,6 @@ export function executeListsSetLevelAlignment(
   requireEnum(input.alignment, 'alignment', VALID_LEVEL_ALIGNMENTS, 'lists.setLevelAlignment');
   return adapter.setLevelAlignment(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelIndents(
   adapter: ListsAdapter,
   input: ListsSetLevelIndentsInput,
@@ -931,7 +893,6 @@ export function executeListsSetLevelIndents(
   optionalNumber(input.firstLine, 'firstLine', 'lists.setLevelIndents');
   return adapter.setLevelIndents(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelTrailingCharacter(
   adapter: ListsAdapter,
   input: ListsSetLevelTrailingCharacterInput,
@@ -947,7 +908,6 @@ export function executeListsSetLevelTrailingCharacter(
   );
   return adapter.setLevelTrailingCharacter(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelMarkerFont(
   adapter: ListsAdapter,
   input: ListsSetLevelMarkerFontInput,
@@ -963,7 +923,6 @@ export function executeListsSetLevelMarkerFont(
   }
   return adapter.setLevelMarkerFont(input, normalizeMutationOptions(options));
 }
-
 export function executeListsClearLevelOverrides(
   adapter: ListsAdapter,
   input: ListsClearLevelOverridesInput,
@@ -973,7 +932,6 @@ export function executeListsClearLevelOverrides(
   requireLevel(input.level, 'lists.clearLevelOverrides');
   return adapter.clearLevelOverrides(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetType(
   adapter: ListsAdapter,
   input: ListsSetTypeInput,
@@ -986,17 +944,14 @@ export function executeListsSetType(
   }
   return adapter.setType(input, normalizeMutationOptions(options));
 }
-
 // ---------------------------------------------------------------------------
 // Execute wrappers: SD-2025 user-facing operations
 // ---------------------------------------------------------------------------
-
 export function executeListsGetStyle(adapter: ListsAdapter, input: ListsGetStyleInput): ListsGetStyleResult {
   validateListItemTarget(input, 'lists.getStyle');
   optionalLevelsArray(input.levels, 'levels', 'lists.getStyle');
   return adapter.getStyle(input);
 }
-
 export function executeListsApplyStyle(
   adapter: ListsAdapter,
   input: ListsApplyStyleInput,
@@ -1007,7 +962,6 @@ export function executeListsApplyStyle(
   optionalLevelsArray(input.levels, 'levels', 'lists.applyStyle');
   return adapter.applyStyle(input, normalizeMutationOptions(options));
 }
-
 export function executeListsRestartAt(
   adapter: ListsAdapter,
   input: ListsRestartAtInput,
@@ -1023,7 +977,6 @@ export function executeListsRestartAt(
   }
   return adapter.restartAt(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelNumberStyle(
   adapter: ListsAdapter,
   input: ListsSetLevelNumberStyleInput,
@@ -1039,7 +992,6 @@ export function executeListsSetLevelNumberStyle(
   }
   return adapter.setLevelNumberStyle(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelText(
   adapter: ListsAdapter,
   input: ListsSetLevelTextInput,
@@ -1055,7 +1007,6 @@ export function executeListsSetLevelText(
   }
   return adapter.setLevelText(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelStart(
   adapter: ListsAdapter,
   input: ListsSetLevelStartInput,
@@ -1072,7 +1023,6 @@ export function executeListsSetLevelStart(
   }
   return adapter.setLevelStart(input, normalizeMutationOptions(options));
 }
-
 export function executeListsSetLevelLayout(
   adapter: ListsAdapter,
   input: ListsSetLevelLayoutInput,
@@ -1100,4 +1050,108 @@ export function executeListsSetLevelLayout(
     optionalNumber(layout.tabStopAt, 'layout.tabStopAt', 'lists.setLevelLayout');
   }
   return adapter.setLevelLayout(input, normalizeMutationOptions(options));
+}
+// ---------------------------------------------------------------------------
+// Execute wrappers: v2 operations
+// ---------------------------------------------------------------------------
+const VALID_V2_LIST_BLOCK_NODE_TYPES: ReadonlySet<string> = new Set(['paragraph', 'listItem']);
+function validateV2BlockTarget(value: unknown, field: string, operationName: string): void {
+  if (!isRecord(value)) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} ${field} must be an object.`,
+      { field, value },
+    );
+  }
+  const v = value as Record<string, unknown>;
+  if (v.kind !== 'block') {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} ${field}.kind must be 'block', got "${String(v.kind)}".`,
+      { field: `${field}.kind`, value: v.kind },
+    );
+  }
+  if (typeof v.nodeType !== 'string' || !VALID_V2_LIST_BLOCK_NODE_TYPES.has(v.nodeType)) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} ${field}.nodeType must be 'paragraph' or 'listItem', got "${String(v.nodeType)}".`,
+      { field: `${field}.nodeType`, value: v.nodeType },
+    );
+  }
+  if (typeof v.nodeId !== 'string' || v.nodeId === '') {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} ${field}.nodeId must be a non-empty string.`,
+      { field: `${field}.nodeId`, value: v.nodeId },
+    );
+  }
+}
+function unavailableListsResult<TResult extends ListsGetStateResult | ListsMutateItemResult>(operationName: string): TResult {
+  return {
+    success: false,
+    failure: {
+      code: 'CAPABILITY_UNAVAILABLE',
+      message: `${operationName} is not available. The host engine has not provided an adapter for this capability.`,
+      details: { operation: operationName },
+    },
+  } as TResult;
+}
+export function executeListsGetState(
+  adapter: ListsAdapter,
+  input: ListsGetStateInput,
+): ListsGetStateResult {
+  validateListInput(input, 'lists.getState');
+  validateV2BlockTarget(input.target, 'target', 'lists.getState');
+  if (!adapter.getState) return unavailableListsResult<ListsGetStateResult>('lists.getState');
+  return adapter.getState(input);
+}
+export function executeListsApply(
+  adapter: ListsAdapter,
+  input: ListsApplyInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListInput(input, 'lists.apply');
+  validateV2BlockTarget(input.target, 'target', 'lists.apply');
+  requireEnum(input.seed, 'seed', VALID_LIST_KINDS, 'lists.apply');
+  if (input.reuseNumId !== undefined && typeof input.reuseNumId !== 'string') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'lists.apply reuseNumId must be a string when provided.',
+      { field: 'reuseNumId', value: input.reuseNumId },
+    );
+  }
+  optionalInteger(input.ilvl, 'ilvl', 'lists.apply');
+  if (!adapter.apply) return unavailableListsResult<ListsMutateItemResult>('lists.apply');
+  return adapter.apply(input, normalizeMutationOptions(options));
+}
+export function executeListsContinueV2(
+  adapter: ListsAdapter,
+  input: ListsContinueV2Input,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListInput(input, 'lists.continue');
+  validateV2BlockTarget(input.target, 'target', 'lists.continue');
+  if (!adapter.continue) return unavailableListsResult<ListsMutateItemResult>('lists.continue');
+  return adapter.continue(input, normalizeMutationOptions(options));
+}
+export function executeListsRestartV2(
+  adapter: ListsAdapter,
+  input: ListsRestartV2Input,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListInput(input, 'lists.restart');
+  validateV2BlockTarget(input.target, 'target', 'lists.restart');
+  optionalInteger(input.startAt, 'startAt', 'lists.restart');
+  if (!adapter.restart) return unavailableListsResult<ListsMutateItemResult>('lists.restart');
+  return adapter.restart(input, normalizeMutationOptions(options));
+}
+export function executeListsRemoveV2(
+  adapter: ListsAdapter,
+  input: ListsRemoveV2Input,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListInput(input, 'lists.remove');
+  validateV2BlockTarget(input.target, 'target', 'lists.remove');
+  if (!adapter.remove) return unavailableListsResult<ListsMutateItemResult>('lists.remove');
+  return adapter.remove(input, normalizeMutationOptions(options));
 }

@@ -252,6 +252,37 @@ describe('footnote-wrappers', () => {
     expect(update.success).toBe(true);
   });
 
+  it('returns CAPABILITY_UNAVAILABLE for structured insert bodies on v1-backed sessions', () => {
+    const editor = makeEditor([], []);
+
+    const result = footnotesInsertWrapper(editor, {
+      at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      type: 'footnote',
+      body: { kind: 'paragraph', paragraph: { inlines: [] } } as any,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+    }
+  });
+
+  it('returns CAPABILITY_UNAVAILABLE for structured update bodies on v1-backed sessions', () => {
+    const editor = makeEditor([{ id: '3', text: 'Line A' }], ['3']);
+
+    const result = footnotesUpdateWrapper(editor, {
+      target: { kind: 'entity', entityType: 'footnote', noteId: '3' },
+      patch: {
+        body: { kind: 'paragraph', paragraph: { inlines: [] } } as any,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+    }
+  });
+
   it('removes the footnote via compoundMutation and cleans OOXML part', () => {
     const editor = makeEditor(
       [

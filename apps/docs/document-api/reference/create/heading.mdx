@@ -56,12 +56,14 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | `heading.kind` | `"block"` | yes | Constant: `"block"` |
 | `heading.nodeId` | string | yes |  |
 | `heading.nodeType` | `"heading"` | yes | Constant: `"heading"` |
+| `heading.story` | StoryLocator | no | StoryLocator |
 | `insertionPoint` | TextAddress | yes | TextAddress |
 | `insertionPoint.blockId` | string | yes |  |
 | `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
 | `insertionPoint.range` | Range | yes | Range |
 | `insertionPoint.range.end` | integer | yes |  |
 | `insertionPoint.range.start` | integer | yes |  |
+| `insertionPoint.story` | StoryLocator | no | StoryLocator |
 | `ref` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
@@ -83,7 +85,11 @@ Returns a CreateHeadingResult with the new heading block ID and address.
   "heading": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "heading"
+    "nodeType": "heading",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "insertionPoint": {
     "blockId": "block-abc123",
@@ -91,6 +97,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   },
   "ref": "handle:abc123",

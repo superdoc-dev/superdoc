@@ -13,6 +13,7 @@ import type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
   SectionBreakCreateLocation,
+  SectionBreakRepresentation,
   SectionBreakType,
 } from '../sections/sections.types.js';
 import type { CreateTableOfContentsInput, CreateTableOfContentsResult, TocCreateLocation } from '../toc/toc.types.js';
@@ -66,6 +67,10 @@ function validateTargetOnlyCreateLocation(
       { field: 'at.target' },
     );
   }
+
+  if (isRecord(loc.target) && 'story' in loc.target) {
+    validateStoryLocator((loc.target as { story?: unknown }).story, 'at.target.story');
+  }
 }
 
 /**
@@ -94,6 +99,10 @@ function validateTargetOrNodeIdCreateLocation(at: TableCreateLocation, operation
       { fields: ['at.target', 'at.nodeId'] },
     );
   }
+
+  if (hasTarget && isRecord(loc.target) && 'story' in loc.target) {
+    validateStoryLocator((loc.target as { story?: unknown }).story, 'at.target.story');
+  }
 }
 
 /**
@@ -114,6 +123,10 @@ function normalizeCreateLocation<T extends CreateLocation>(location: T | undefin
 }
 
 const SECTION_BREAK_TYPES: readonly SectionBreakType[] = ['continuous', 'nextPage', 'evenPage', 'oddPage'] as const;
+const SECTION_BREAK_REPRESENTATIONS: readonly SectionBreakRepresentation[] = [
+  'asNewParagraph',
+  'attachToPreviousParagraph',
+] as const;
 
 function validateMarginValue(field: string, value: unknown): void {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
@@ -125,6 +138,14 @@ function validateMarginValue(field: string, value: unknown): void {
 }
 
 function validateCreateSectionBreakInput(input: CreateSectionBreakInput): void {
+  if (input.representation !== undefined && !SECTION_BREAK_REPRESENTATIONS.includes(input.representation)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `create.sectionBreak representation must be one of: ${SECTION_BREAK_REPRESENTATIONS.join(', ')}.`,
+      { field: 'representation', value: input.representation },
+    );
+  }
+
   if (input.breakType !== undefined && !SECTION_BREAK_TYPES.includes(input.breakType)) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
@@ -151,8 +172,10 @@ function validateCreateSectionBreakInput(input: CreateSectionBreakInput): void {
 
 export function normalizeCreateParagraphInput(input: CreateParagraphInput): CreateParagraphInput {
   return {
+    in: input.in,
     at: normalizeCreateLocation<ParagraphCreateLocation>(input.at, () => {}),
     text: input.text ?? '',
+    ...(input.in ? { in: input.in } : {}),
   };
 }
 
@@ -168,15 +191,21 @@ export function executeCreateParagraph(
   const at = normalizeCreateLocation<ParagraphCreateLocation>(input.at, (loc) =>
     validateTargetOnlyCreateLocation(loc, 'create.paragraph'),
   );
-  const normalized: CreateParagraphInput = { at, text: input.text ?? '' };
+  const normalized: CreateParagraphInput = {
+    at,
+    text: input.text ?? '',
+    ...(input.in ? { in: input.in } : {}),
+  };
   return adapter.paragraph(normalized, normalizeMutationOptions(options));
 }
 
 export function normalizeCreateHeadingInput(input: CreateHeadingInput): CreateHeadingInput {
   return {
+    in: input.in,
     level: input.level,
     at: normalizeCreateLocation<HeadingCreateLocation>(input.at, () => {}),
     text: input.text ?? '',
+    ...(input.in ? { in: input.in } : {}),
   };
 }
 
@@ -199,7 +228,12 @@ export function executeCreateHeading(
   const at = normalizeCreateLocation<HeadingCreateLocation>(input.at, (loc) =>
     validateTargetOnlyCreateLocation(loc, 'create.heading'),
   );
-  const normalized: CreateHeadingInput = { level: input.level, at, text: input.text ?? '' };
+  const normalized: CreateHeadingInput = {
+    level: input.level,
+    at,
+    text: input.text ?? '',
+    ...(input.in ? { in: input.in } : {}),
+  };
   return adapter.heading(normalized, normalizeMutationOptions(options));
 }
 
@@ -243,6 +277,7 @@ export function executeCreateTable(
 export function normalizeCreateSectionBreakInput(input: CreateSectionBreakInput): CreateSectionBreakInput {
   return {
     at: normalizeCreateLocation<SectionBreakCreateLocation>(input.at, () => {}),
+    representation: input.representation ?? 'asNewParagraph',
     breakType: input.breakType,
     pageMargins: input.pageMargins,
     headerFooterMargins: input.headerFooterMargins,
@@ -259,6 +294,7 @@ export function executeCreateSectionBreak(
   );
   const normalized: CreateSectionBreakInput = {
     at,
+    representation: input.representation ?? 'asNewParagraph',
     breakType: input.breakType,
     pageMargins: input.pageMargins,
     headerFooterMargins: input.headerFooterMargins,
@@ -270,8 +306,29 @@ export function executeCreateSectionBreak(
 export function normalizeCreateTableOfContentsInput(input: CreateTableOfContentsInput): CreateTableOfContentsInput {
   return {
     at: normalizeCreateLocation<TocCreateLocation>(input.at, () => {}),
+    instruction: input.instruction,
     config: input.config,
   };
+}
+
+function validateCreateTableOfContentsInput(input: CreateTableOfContentsInput): void {
+  if (input.instruction === undefined) {
+    return;
+  }
+  if (typeof input.instruction !== 'string' || input.instruction.trim().length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'create.tableOfContents instruction must be a non-empty string when provided.',
+      { field: 'instruction', value: input.instruction },
+    );
+  }
+  if (!/^\s*TOC\b/i.test(input.instruction)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'create.tableOfContents instruction must be a raw TOC field instruction beginning with TOC.',
+      { field: 'instruction', value: input.instruction },
+    );
+  }
 }
 
 export function executeCreateTableOfContents(
@@ -291,6 +348,7 @@ export function executeCreateTableOfContents(
     }
     validateTargetOnlyCreateLocation(loc, 'create.tableOfContents');
   });
-  const normalized: CreateTableOfContentsInput = { at, config: input.config };
+  const normalized: CreateTableOfContentsInput = { at, instruction: input.instruction, config: input.config };
+  validateCreateTableOfContentsInput(normalized);
   return adapter.tableOfContents(normalized, normalizeMutationOptions(options));
 }

@@ -18,6 +18,11 @@ export interface TextSelector {
    * Defaults to false (case-insensitive).
    */
   caseSensitive?: boolean;
+  /**
+   * When true, matches must start and end on a word boundary.
+   * Defaults to false.
+   */
+  wholeWord?: boolean;
 }
 
 export interface NodeSelector {

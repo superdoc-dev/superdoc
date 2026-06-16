@@ -77,6 +77,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Variant 2 (required: ref, inline)
 
@@ -145,13 +146,25 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
     "end": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 0,
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     },
     "kind": "selection",
     "start": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 0,
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   }
 }
@@ -175,16 +188,19 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.requestedTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
 | `resolution.target.range` | Range | yes | Range |
 | `resolution.target.range.end` | integer | yes |  |
 | `resolution.target.range.start` | integer | yes |  |
+| `resolution.target.story` | StoryLocator | no | StoryLocator |
 | `resolution.text` | string | yes |  |
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
@@ -207,16 +223,19 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.requestedTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
 | `resolution.target.range` | Range | yes | Range |
 | `resolution.target.range.end` | integer | yes |  |
 | `resolution.target.range.start` | integer | yes |  |
+| `resolution.target.story` | StoryLocator | no | StoryLocator |
 | `resolution.text` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
@@ -242,19 +261,35 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "range": {
         "end": 10,
         "start": 0
+      },
+      "story": {
+        "kind": "story",
+        "storyType": "body"
       }
     },
     "selectionTarget": {
       "end": {
         "blockId": "block-abc123",
         "kind": "text",
-        "offset": 0
+        "offset": 0,
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
       },
       "kind": "selection",
       "start": {
         "blockId": "block-abc123",
         "kind": "text",
-        "offset": 0
+        "offset": 0,
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
+      },
+      "story": {
+        "kind": "story",
+        "storyType": "body"
       }
     },
     "target": {
@@ -263,6 +298,10 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "range": {
         "end": 10,
         "start": 0
+      },
+      "story": {
+        "kind": "story",
+        "storyType": "body"
       }
     },
     "text": "Hello, world."

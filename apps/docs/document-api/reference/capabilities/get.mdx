@@ -340,6 +340,21 @@ _No fields._
 | `operations.blocks.list.dryRun` | boolean | yes |  |
 | `operations.blocks.list.reasons` | enum[] | no |  |
 | `operations.blocks.list.tracked` | boolean | yes |  |
+| `operations.blocks.merge` | object | yes |  |
+| `operations.blocks.merge.available` | boolean | yes |  |
+| `operations.blocks.merge.dryRun` | boolean | yes |  |
+| `operations.blocks.merge.reasons` | enum[] | no |  |
+| `operations.blocks.merge.tracked` | boolean | yes |  |
+| `operations.blocks.move` | object | yes |  |
+| `operations.blocks.move.available` | boolean | yes |  |
+| `operations.blocks.move.dryRun` | boolean | yes |  |
+| `operations.blocks.move.reasons` | enum[] | no |  |
+| `operations.blocks.move.tracked` | boolean | yes |  |
+| `operations.blocks.split` | object | yes |  |
+| `operations.blocks.split.available` | boolean | yes |  |
+| `operations.blocks.split.dryRun` | boolean | yes |  |
+| `operations.blocks.split.reasons` | enum[] | no |  |
+| `operations.blocks.split.tracked` | boolean | yes |  |
 | `operations.bookmarks.get` | object | yes |  |
 | `operations.bookmarks.get.available` | boolean | yes |  |
 | `operations.bookmarks.get.dryRun` | boolean | yes |  |
@@ -1165,6 +1180,11 @@ _No fields._
 | `operations.format.paragraph.setKeepOptions.dryRun` | boolean | yes |  |
 | `operations.format.paragraph.setKeepOptions.reasons` | enum[] | no |  |
 | `operations.format.paragraph.setKeepOptions.tracked` | boolean | yes |  |
+| `operations.format.paragraph.setMarkRunProps` | object | yes |  |
+| `operations.format.paragraph.setMarkRunProps.available` | boolean | yes |  |
+| `operations.format.paragraph.setMarkRunProps.dryRun` | boolean | yes |  |
+| `operations.format.paragraph.setMarkRunProps.reasons` | enum[] | no |  |
+| `operations.format.paragraph.setMarkRunProps.tracked` | boolean | yes |  |
 | `operations.format.paragraph.setOutlineLevel` | object | yes |  |
 | `operations.format.paragraph.setOutlineLevel.available` | boolean | yes |  |
 | `operations.format.paragraph.setOutlineLevel.dryRun` | boolean | yes |  |
@@ -1585,6 +1605,11 @@ _No fields._
 | `operations.insert.dryRun` | boolean | yes |  |
 | `operations.insert.reasons` | enum[] | no |  |
 | `operations.insert.tracked` | boolean | yes |  |
+| `operations.lists.apply` | object | yes |  |
+| `operations.lists.apply.available` | boolean | yes |  |
+| `operations.lists.apply.dryRun` | boolean | yes |  |
+| `operations.lists.apply.reasons` | enum[] | no |  |
+| `operations.lists.apply.tracked` | boolean | yes |  |
 | `operations.lists.applyPreset` | object | yes |  |
 | `operations.lists.applyPreset.available` | boolean | yes |  |
 | `operations.lists.applyPreset.dryRun` | boolean | yes |  |
@@ -1625,6 +1650,11 @@ _No fields._
 | `operations.lists.clearLevelOverrides.dryRun` | boolean | yes |  |
 | `operations.lists.clearLevelOverrides.reasons` | enum[] | no |  |
 | `operations.lists.clearLevelOverrides.tracked` | boolean | yes |  |
+| `operations.lists.continue` | object | yes |  |
+| `operations.lists.continue.available` | boolean | yes |  |
+| `operations.lists.continue.dryRun` | boolean | yes |  |
+| `operations.lists.continue.reasons` | enum[] | no |  |
+| `operations.lists.continue.tracked` | boolean | yes |  |
 | `operations.lists.continuePrevious` | object | yes |  |
 | `operations.lists.continuePrevious.available` | boolean | yes |  |
 | `operations.lists.continuePrevious.dryRun` | boolean | yes |  |
@@ -1655,6 +1685,11 @@ _No fields._
 | `operations.lists.get.dryRun` | boolean | yes |  |
 | `operations.lists.get.reasons` | enum[] | no |  |
 | `operations.lists.get.tracked` | boolean | yes |  |
+| `operations.lists.getState` | object | yes |  |
+| `operations.lists.getState.available` | boolean | yes |  |
+| `operations.lists.getState.dryRun` | boolean | yes |  |
+| `operations.lists.getState.reasons` | enum[] | no |  |
+| `operations.lists.getState.tracked` | boolean | yes |  |
 | `operations.lists.getStyle` | object | yes |  |
 | `operations.lists.getStyle.available` | boolean | yes |  |
 | `operations.lists.getStyle.dryRun` | boolean | yes |  |
@@ -1690,6 +1725,16 @@ _No fields._
 | `operations.lists.outdent.dryRun` | boolean | yes |  |
 | `operations.lists.outdent.reasons` | enum[] | no |  |
 | `operations.lists.outdent.tracked` | boolean | yes |  |
+| `operations.lists.remove` | object | yes |  |
+| `operations.lists.remove.available` | boolean | yes |  |
+| `operations.lists.remove.dryRun` | boolean | yes |  |
+| `operations.lists.remove.reasons` | enum[] | no |  |
+| `operations.lists.remove.tracked` | boolean | yes |  |
+| `operations.lists.restart` | object | yes |  |
+| `operations.lists.restart.available` | boolean | yes |  |
+| `operations.lists.restart.dryRun` | boolean | yes |  |
+| `operations.lists.restart.reasons` | enum[] | no |  |
+| `operations.lists.restart.tracked` | boolean | yes |  |
 | `operations.lists.restartAt` | object | yes |  |
 | `operations.lists.restartAt.available` | boolean | yes |  |
 | `operations.lists.restartAt.dryRun` | boolean | yes |  |
@@ -2125,6 +2170,11 @@ _No fields._
 | `operations.tables.move.dryRun` | boolean | yes |  |
 | `operations.tables.move.reasons` | enum[] | no |  |
 | `operations.tables.move.tracked` | boolean | yes |  |
+| `operations.tables.moveRow` | object | yes |  |
+| `operations.tables.moveRow.available` | boolean | yes |  |
+| `operations.tables.moveRow.dryRun` | boolean | yes |  |
+| `operations.tables.moveRow.reasons` | enum[] | no |  |
+| `operations.tables.moveRow.tracked` | boolean | yes |  |
 | `operations.tables.setAltText` | object | yes |  |
 | `operations.tables.setAltText.available` | boolean | yes |  |
 | `operations.tables.setAltText.dryRun` | boolean | yes |  |
@@ -2649,7 +2699,7 @@ _No fields._
     "blocks.delete": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "blocks.deleteRange": {
       "available": true,
@@ -2659,6 +2709,33 @@ _No fields._
     "blocks.list": {
       "available": true,
       "dryRun": false,
+      "tracked": false
+    },
+    "blocks.merge": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
+    "blocks.move": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
+    "blocks.split": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
       "tracked": false
     },
     "bookmarks.get": {
@@ -2979,7 +3056,7 @@ _No fields._
     "contentControls.move": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "contentControls.normalizeTagPayload": {
       "available": true,
@@ -3109,7 +3186,7 @@ _No fields._
     "create.image": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "create.paragraph": {
       "available": true,
@@ -3249,7 +3326,7 @@ _No fields._
     "footnotes.insert": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "footnotes.list": {
       "available": true,
@@ -3259,12 +3336,12 @@ _No fields._
     "footnotes.remove": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "footnotes.update": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.apply": {
       "available": true,
@@ -3414,97 +3491,106 @@ _No fields._
     "format.paragraph.clearAlignment": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearAllTabStops": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearBorder": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearDirection": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearIndentation": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearShading": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearSpacing": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.clearTabStop": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.resetDirectFormatting": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setAlignment": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setBorder": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setDirection": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setFlowOptions": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setIndentation": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setKeepOptions": {
       "available": true,
       "dryRun": true,
+      "tracked": true
+    },
+    "format.paragraph.setMarkRunProps": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "DRY_RUN_UNAVAILABLE"
+      ],
       "tracked": false
     },
     "format.paragraph.setOutlineLevel": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setShading": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setSpacing": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.paragraph.setTabStop": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "format.position": {
       "available": true,
@@ -3709,27 +3795,27 @@ _No fields._
     "images.convertToFloating": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.convertToInline": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.crop": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.delete": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.flip": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.get": {
       "available": true,
@@ -3749,7 +3835,7 @@ _No fields._
     "images.move": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.removeCaption": {
       "available": true,
@@ -3759,87 +3845,87 @@ _No fields._
     "images.replaceSource": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.resetCrop": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.rotate": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.scale": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setAltText": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setAnchorOptions": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setDecorative": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setHyperlink": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setLockAspectRatio": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setName": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setPosition": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setSize": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setWrapDistances": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setWrapSide": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setWrapType": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.setZOrder": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "images.updateCaption": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "index.configure": {
       "available": true,
@@ -3906,6 +3992,15 @@ _No fields._
       "dryRun": true,
       "tracked": true
     },
+    "lists.apply": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
     "lists.applyPreset": {
       "available": true,
       "dryRun": true,
@@ -3946,6 +4041,15 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "lists.continue": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
     "lists.continuePrevious": {
       "available": true,
       "dryRun": true,
@@ -3976,6 +4080,14 @@ _No fields._
       "dryRun": false,
       "tracked": false
     },
+    "lists.getState": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
     "lists.getStyle": {
       "available": true,
       "dryRun": false,
@@ -3984,7 +4096,7 @@ _No fields._
     "lists.indent": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "lists.insert": {
       "available": true,
@@ -4009,6 +4121,24 @@ _No fields._
     "lists.outdent": {
       "available": true,
       "dryRun": true,
+      "tracked": true
+    },
+    "lists.remove": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
+      "tracked": false
+    },
+    "lists.restart": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "TRACKED_MODE_UNAVAILABLE"
+      ],
       "tracked": false
     },
     "lists.restartAt": {
@@ -4309,12 +4439,12 @@ _No fields._
     "styles.paragraph.clearStyle": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "styles.paragraph.setStyle": {
       "available": true,
       "dryRun": true,
-      "tracked": false
+      "tracked": true
     },
     "tables.applyBorderPreset": {
       "available": true,
@@ -4444,6 +4574,15 @@ _No fields._
     "tables.move": {
       "available": true,
       "dryRun": true,
+      "tracked": false
+    },
+    "tables.moveRow": {
+      "available": false,
+      "dryRun": false,
+      "reasons": [
+        "OPERATION_UNAVAILABLE",
+        "DRY_RUN_UNAVAILABLE"
+      ],
       "tracked": false
     },
     "tables.setAltText": {
@@ -6750,6 +6889,111 @@ _No fields._
           "type": "object"
         },
         "blocks.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "blocks.merge": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "blocks.move": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "blocks.split": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -12559,6 +12803,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "format.paragraph.setMarkRunProps": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "format.paragraph.setOutlineLevel": {
           "additionalProperties": false,
           "properties": {
@@ -15499,6 +15778,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.apply": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.applyPreset": {
           "additionalProperties": false,
           "properties": {
@@ -15779,6 +16093,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.continue": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.continuePrevious": {
           "additionalProperties": false,
           "properties": {
@@ -15955,6 +16304,41 @@ _No fields._
           "type": "object"
         },
         "lists.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.getState": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -16200,6 +16584,76 @@ _No fields._
           "type": "object"
         },
         "lists.outdent": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.restart": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19279,6 +19733,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "tables.moveRow": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "tables.setAltText": {
           "additionalProperties": false,
           "properties": {
@@ -20524,6 +21013,9 @@ _No fields._
         "blocks.list",
         "blocks.delete",
         "blocks.deleteRange",
+        "blocks.split",
+        "blocks.merge",
+        "blocks.move",
         "format.apply",
         "format.bold",
         "format.italic",
@@ -20610,6 +21102,7 @@ _No fields._
         "format.paragraph.clearBorder",
         "format.paragraph.setShading",
         "format.paragraph.clearShading",
+        "format.paragraph.setMarkRunProps",
         "format.paragraph.setDirection",
         "format.paragraph.clearDirection",
         "lists.list",
@@ -20651,6 +21144,11 @@ _No fields._
         "lists.setLevelText",
         "lists.setLevelStart",
         "lists.setLevelLayout",
+        "lists.getState",
+        "lists.apply",
+        "lists.continue",
+        "lists.restart",
+        "lists.remove",
         "comments.create",
         "comments.patch",
         "comments.delete",
@@ -20676,6 +21174,7 @@ _No fields._
         "tables.setLayout",
         "tables.insertRow",
         "tables.deleteRow",
+        "tables.moveRow",
         "tables.setRowHeight",
         "tables.distributeRows",
         "tables.setRowOptions",

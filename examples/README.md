@@ -142,6 +142,14 @@ pnpm dev
 
 For the CDN example, open `index.html` directly or run `npx serve .`.
 
+## Security
+
+Example backend servers (`editor/collaboration/backends/node-sdk`, `editor/collaboration/providers/superdoc-yjs`, `editor/collaboration/providers/hocuspocus`, `ai/footnote-tool-agent`, `ai/streaming`, `editor/collaboration/backends/fastapi`) are for **local development only**. They listen on plain HTTP or unencrypted WebSocket and have no TLS configuration.
+
+**Never expose these servers directly to the internet.** If you need to run an example in a non-local environment, terminate TLS at a reverse proxy in front of the server.
+
+Risk acceptance: HTTP-only transport is an accepted trade-off for local example servers. Production deployments must add TLS termination externally.
+
 ## Documentation
 
 - [Quickstart](https://docs.superdoc.dev/getting-started/quickstart)

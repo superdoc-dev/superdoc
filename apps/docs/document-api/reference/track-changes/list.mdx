@@ -1,14 +1,14 @@
 ---
 title: trackChanges.list
 sidebarTitle: trackChanges.list
-description: List all tracked changes in the document.
+description: "List tracked changes in the document. Body-only by default; pass `in: <StoryLocator>` or `in: \"all\"` to widen scope."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-List all tracked changes in the document.
+List tracked changes in the document. Body-only by default; pass `in: <StoryLocator>` or `in: "all"` to widen scope.
 
 - Operation ID: `trackChanges.list`
 - API member path: `editor.doc.trackChanges.list(...)`
@@ -20,7 +20,7 @@ List all tracked changes in the document.
 
 ## Expected result
 
-Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.
+Returns a TrackChangesListResult of logical tracked-change entries with SuperDoc ids, semantic type/subtype, author/date/excerpt, revisionGroupId, flat projection fields (`grouping`, `insertedText`, `deletedText`, `formattingDeltaSummary`, `origin`, `imported`, `canonicalizationKind`, `addressKind`, `resolvableById`), optional overlap metadata, and source provenance via `sourceIds` / `wordRevisionIds`. Structural whole-table changes surface subtypes such as `table-insert` and `table-delete`.
 
 ## Input fields
 
@@ -29,7 +29,7 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
 | `in` | StoryLocator \| `"all"` | no | One of: StoryLocator, `"all"` |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
-| `type` | enum | no | `"insert"`, `"delete"`, `"replacement"`, `"format"` |
+| `type` | enum | no | `"insertion"`, `"deletion"`, `"replacement"`, `"formatting"`, `"move"`, `"structural"`, `"insert"`, `"delete"`, `"format"` |
 
 ### Example request
 
@@ -68,15 +68,15 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
           "storyType": "body"
         }
       },
-      "grouping": "standalone",
       "handle": {
         "ref": "handle:abc123",
         "refStability": "stable",
         "targetKind": "text"
       },
       "id": "id-001",
-      "pairedWithChangeId": null,
-      "type": "insert"
+      "state": "open",
+      "subtype": "example",
+      "type": "insertion"
     }
   ],
   "page": {
@@ -123,11 +123,16 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
       "type": "integer"
     },
     "type": {
-      "description": "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
+      "description": "Filter by change type. Canonical values: 'insertion', 'deletion', 'replacement', 'formatting', 'move', 'structural'. Legacy aliases 'insert', 'delete', and 'format' remain accepted during migration.",
       "enum": [
+        "insertion",
+        "deletion",
+        "replacement",
+        "formatting",
+        "move",
+        "structural",
         "insert",
         "delete",
-        "replacement",
         "format"
       ]
     }
@@ -152,6 +157,13 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
           "address": {
             "$ref": "#/$defs/TrackedChangeAddress"
           },
+          "addressKind": {
+            "enum": [
+              "entity",
+              "story-entity",
+              "unknown"
+            ]
+          },
           "author": {
             "type": "string"
           },
@@ -161,14 +173,40 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
           "authorImage": {
             "type": "string"
           },
+          "canonicalizationKind": {
+            "enum": [
+              "single-word-revision",
+              "paired-word-revision",
+              "generated-runtime-id",
+              "unknown"
+            ]
+          },
           "date": {
             "type": "string"
           },
           "deletedText": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "excerpt": {
             "type": "string"
+          },
+          "formattingDeltaSummary": {
+            "description": "Human-readable formatting delta summary for formatting changes; null otherwise.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "grouping": {
             "enum": [
@@ -183,20 +221,195 @@ Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`
           "id": {
             "type": "string"
           },
-          "insertedText": {
+          "imported": {
+            "type": "boolean"
+          },
+          "initials": {
             "type": "string"
           },
-          "pairedWithChangeId": {
-            "type": [
-              "string",
-              "null"
+          "insertedText": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ]
+          },
+          "origin": {
+            "enum": [
+              "word",
+              "google-docs",
+              "superdoc",
+              "unknown"
+            ]
+          },
+          "overlap": {
+            "additionalProperties": false,
+            "properties": {
+              "parentId": {
+                "description": "Parent logical tracked-change id when this change is an overlap child.",
+                "type": "string"
+              },
+              "preferredContextTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "description": "SuperDoc logical tracked-change id for this overlap layer.",
+                    "type": "string"
+                  },
+                  "relationship": {
+                    "enum": [
+                      "parent",
+                      "child",
+                      "standalone"
+                    ]
+                  },
+                  "type": {
+                    "description": "Canonical broad tracked-change type for this layer.",
+                    "enum": [
+                      "insertion",
+                      "deletion",
+                      "replacement",
+                      "formatting",
+                      "move",
+                      "structural",
+                      "insert",
+                      "delete",
+                      "format"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "relationship"
+                ],
+                "type": "object"
+              },
+              "preferredContextTargetId": {
+                "description": "Preferred child tracked-change id for context-menu/comment targeting.",
+                "type": "string"
+              },
+              "relationship": {
+                "enum": [
+                  "parent",
+                  "child",
+                  "standalone"
+                ]
+              },
+              "visualLayers": {
+                "description": "Ordered overlap layers, with the parent surface first and child layers after it.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "description": "SuperDoc logical tracked-change id for this overlap layer.",
+                      "type": "string"
+                    },
+                    "relationship": {
+                      "enum": [
+                        "parent",
+                        "child",
+                        "standalone"
+                      ]
+                    },
+                    "type": {
+                      "description": "Canonical broad tracked-change type for this layer.",
+                      "enum": [
+                        "insertion",
+                        "deletion",
+                        "replacement",
+                        "formatting",
+                        "move",
+                        "structural",
+                        "insert",
+                        "delete",
+                        "format"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "relationship"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "pairedWithChangeId": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvableById": {
+            "type": "boolean"
+          },
+          "revisionGroupId": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "additionalProperties": false,
+            "description": "Canonical multi-side source provenance. Provenance metadata only; never the canonical SuperDoc tracked-change id.",
+            "properties": {
+              "rsids": {
+                "description": "Word revision-save ids (`w:rsidR` / `w:rsidDel`) seen on contributing wrappers.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "wordIdDelete": {
+                "description": "Word `w:id` value from the deletion side of this logical change.",
+                "type": "string"
+              },
+              "wordIdInsert": {
+                "description": "Word `w:id` value from the insertion side of this logical change.",
+                "type": "string"
+              },
+              "wordIdOther": {
+                "description": "Word `w:id` values from other wrappers (for example moveFrom/moveTo).",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "accepted",
+              "rejected"
+            ]
+          },
+          "storyLocator": {
+            "$ref": "#/$defs/StoryLocator"
+          },
+          "subtype": {
+            "type": "string"
           },
           "type": {
             "enum": [
+              "insertion",
+              "deletion",
+              "replacement",
+              "formatting",
+              "move",
+              "structural",
               "insert",
               "delete",
-              "replacement",
               "format"
             ]
           },

@@ -343,6 +343,146 @@ describe('CLI host mode', () => {
   );
 
   test(
+    'surfaces stale track-changes decide failures as TRACK_CHANGE_NOT_FOUND errors in host mode',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
+
+      const sourceDoc = await resolveSourceDocFixture();
+      const docCopy = path.join(stateDir, 'stale-track-change-source.docx');
+      const trackedDoc = path.join(stateDir, 'stale-track-change.docx');
+      const acceptedDoc = path.join(stateDir, 'stale-track-change-accepted.docx');
+      await copyFile(sourceDoc, docCopy);
+
+      const host = launchHost(stateDir);
+
+      const find = await host.request('cli.invoke', {
+        argv: ['find', docCopy, '--type', 'text', '--pattern', 'Wilde', '--limit', '1'],
+        stdinBase64: '',
+      });
+      expect(find.error).toBeUndefined();
+      const findPayload = find.result as {
+        data?: {
+          result?: {
+            items?: Array<{
+              address?: {
+                nodeId?: string;
+              };
+            }>;
+          };
+        };
+      };
+      const firstMatch = findPayload.data?.result?.items?.[0]?.address;
+      expect(firstMatch?.nodeId).toBeDefined();
+      if (!firstMatch?.nodeId) {
+        throw new Error('Expected find to return an addressable text match.');
+      }
+
+      const selectionTarget = {
+        kind: 'selection',
+        start: { kind: 'text', blockId: firstMatch.nodeId, offset: 0 },
+        end: { kind: 'text', blockId: firstMatch.nodeId, offset: 0 },
+      };
+
+      const insert = await host.request('cli.invoke', {
+        argv: [
+          'insert',
+          docCopy,
+          '--target-json',
+          JSON.stringify(selectionTarget),
+          '--value',
+          'HOST_STALE_TRACKED_TOKEN',
+          '--change-mode',
+          'tracked',
+          '--out',
+          trackedDoc,
+        ],
+        stdinBase64: '',
+      });
+      expect(insert.error).toBeUndefined();
+
+      const firstSessionId = 'host-stale-track-change-session-a';
+      const openTracked = await host.request('cli.invoke', {
+        argv: ['open', trackedDoc, '--session', firstSessionId],
+        stdinBase64: '',
+      });
+      expect(openTracked.error).toBeUndefined();
+
+      const list = await host.request('cli.invoke', {
+        argv: ['track-changes', 'list', '--session', firstSessionId, '--limit', '1'],
+        stdinBase64: '',
+      });
+      expect(list.error).toBeUndefined();
+      const listPayload = list.result as {
+        data?: {
+          result?: {
+            items?: Array<{
+              address?: {
+                entityId?: string;
+              };
+            }>;
+          };
+        };
+      };
+      const changeId = listPayload.data?.result?.items?.[0]?.address?.entityId;
+      expect(changeId).toBeDefined();
+      if (!changeId) {
+        throw new Error('Expected track-changes list to return a tracked change id.');
+      }
+
+      const accept = await host.request('cli.invoke', {
+        argv: ['track-changes', 'accept', '--session', firstSessionId, '--id', changeId],
+        stdinBase64: '',
+      });
+      expect(accept.error).toBeUndefined();
+      const acceptPayload = accept.result as {
+        command: string;
+        data: unknown;
+      };
+      validateOperationResponseData('doc.trackChanges.decide', acceptPayload.data, acceptPayload.command);
+      const acceptData = acceptPayload.data as {
+        receipt?: { success?: boolean };
+        document?: { revision?: number };
+      };
+      expect(acceptData.receipt?.success).toBe(true);
+      expect(acceptData.document?.revision).toBe(1);
+
+      const save = await host.request('cli.invoke', {
+        argv: ['save', '--session', firstSessionId, '--out', acceptedDoc],
+        stdinBase64: '',
+      });
+      expect(save.error).toBeUndefined();
+
+      await host.shutdown();
+
+      const staleHost = launchHost(stateDir);
+      const sessionId = 'host-stale-track-change-session-b';
+      const open = await staleHost.request('cli.invoke', {
+        argv: ['open', acceptedDoc, '--session', sessionId],
+        stdinBase64: '',
+      });
+      expect(open.error).toBeUndefined();
+
+      const staleAccept = await staleHost.request('cli.invoke', {
+        argv: ['track-changes', 'accept', '--session', sessionId, '--id', changeId],
+        stdinBase64: '',
+      });
+      expect(staleAccept.result).toBeUndefined();
+      expect(staleAccept.error).toMatchObject({
+        code: expect.any(Number),
+        message: expect.stringContaining('Tracked change'),
+        data: {
+          cliCode: 'TRACK_CHANGE_NOT_FOUND',
+        },
+      });
+
+      await staleHost.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
+
+  test(
     'returns parse errors for malformed frames',
     async () => {
       const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));

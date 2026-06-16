@@ -181,4 +181,25 @@ describe('resolveToolbarSources', () => {
     expect(legacyGetPresentationEditor).not.toHaveBeenCalled();
     expect(result.presentationEditor).toBe(narrowPresentationEditor);
   });
+
+  it('accepts an explicit v2 active-editor facade without creating a v1 toolbar context', () => {
+    const result = resolveToolbarSources({
+      activeEditor: {
+        editorVersion: 2,
+        options: {
+          documentId: 'doc-v2',
+          documentMode: 'editing',
+        },
+        commands: null,
+        state: null,
+        view: null,
+      },
+    });
+
+    expect(result).toEqual({
+      activeEditor: null,
+      presentationEditor: null,
+      context: null,
+    });
+  });
 });

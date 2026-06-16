@@ -1,16 +1,34 @@
-import type { Receipt, ReceiptFailureResult, ReceiptSuccess } from '../types/index.js';
+import type { Receipt, ReceiptFailureResult, ReceiptSuccess, StoryLocator } from '../types/index.js';
 import type {
   CommentInfo,
   CommentTarget,
   CommentsListQuery,
   CommentsListResult,
+  TextSearchCommentTarget,
   TrackedChangeCommentTarget,
+  TrackedChangeCommentTargetSide,
 } from './comments.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, isTextTarget, assertNoUnknownFields } from '../validation-primitives.js';
-import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateStoryLocator } from '../validation/story-validator.js';
+import { isSelectionTarget } from '../validation/selection-target-validator.js';
+
+export type { TextSearchCommentTarget, TrackedChangeCommentTarget, TrackedChangeCommentTargetSide };
+
+function isTrackedChangeCommentTarget(value: unknown): value is TrackedChangeCommentTarget {
+  // Accept both the canonical `{ kind: 'trackedChange', trackedChangeId }`
+  // shape and the Labs compatibility shape `{ trackedChangeId }` with no
+  // explicit `kind`. Either way the downstream
+  // `validateTrackedChangeCommentTarget` enforces non-empty trackedChangeId,
+  // side enum, and no unknown fields. Targets that look like a TextAddress
+  // (kind === 'text') are routed to the text validator instead.
+  if (!isRecord(value)) return false;
+  const kind = (value as { kind?: unknown }).kind;
+  if (kind === 'trackedChange') return true;
+  if (kind !== undefined) return false;
+  return typeof (value as { trackedChangeId?: unknown }).trackedChangeId === 'string';
+}
 
 /**
  * Input for adding a comment to a text range.
@@ -25,8 +43,11 @@ export interface AddCommentInput {
    * The text range to attach the comment to.
    *
    * Pass a {@link TextAddress} for single-block ranges (e.g. from `find`'s
-   * `textRanges[0]`) or a {@link TextTarget} with multi-segment for
-   * selections that span multiple blocks.
+   * `textRanges[0]`), a {@link TextTarget} with multi-segment for
+   * selections that span multiple blocks, or a
+   * {@link TrackedChangeCommentTarget} that names a logical tracked-change
+   * id as a convenience anchor (the adapter normalizes it to the actual
+   * content range on the relevant revision side).
    */
   target?: CommentTarget;
   /** The comment body text. */
@@ -45,6 +66,11 @@ export interface ReplyToCommentInput {
 
 export interface MoveCommentInput {
   commentId: string;
+  /**
+   * New anchor target. Accepts a plain {@link TextAddress}, a
+   * {@link SelectionTarget}, or a {@link TrackedChangeCommentTarget} that
+   * names a logical tracked-change id as a convenience re-anchor target.
+   */
   target: CommentTarget;
 }
 
@@ -82,7 +108,7 @@ export interface GetCommentInput {
 }
 
 // ---------------------------------------------------------------------------
-// Canonical consolidated inputs (Phase 4 Wave 3)
+// Canonical consolidated inputs
 // ---------------------------------------------------------------------------
 
 /**
@@ -97,11 +123,23 @@ export interface CommentsCreateInput {
   /**
    * The text range to attach the comment to (root comments only).
    *
-   * Accepts either a single-block {@link TextAddress} or a multi-segment
-   * {@link TextTarget}. Prefer passing `editor.doc.selection.current().target`
-   * directly for selections that may span multiple blocks.
+   * Accepts either a single-block {@link TextAddress}, a multi-segment
+   * {@link TextTarget}, or a {@link TrackedChangeCommentTarget} that
+   * names a logical tracked-change id as a convenience anchor. Prefer
+   * passing `editor.doc.selection.current().target` directly for
+   * selections that may span multiple blocks.
    */
   target?: CommentTarget;
+  /**
+   * Compatibility shorthand for {@link TrackedChangeCommentTarget}. When
+   * `target` is omitted, execute normalizes this to
+   * `target: { trackedChangeId, side, story }` before validation.
+   */
+  trackedChangeId?: string;
+  /** Optional side for the `trackedChangeId` shorthand. */
+  side?: TrackedChangeCommentTargetSide;
+  /** Optional story for the `trackedChangeId` shorthand. */
+  story?: StoryLocator;
   /** Parent comment ID: when provided, creates a reply instead of a root comment. */
   parentCommentId?: string;
 }
@@ -118,7 +156,12 @@ export interface CommentsPatchInput {
   commentId: string;
   /** New body text (routes to edit). */
   text?: string;
-  /** New anchor range (routes to move). */
+  /**
+   * New anchor range (routes to move). Accepts a plain
+   * {@link TextAddress} or {@link SelectionTarget} for direct anchor replacement, or a
+   * {@link TrackedChangeCommentTarget} that names a logical
+   * tracked-change id as a convenience re-anchor target.
+   */
   target?: CommentTarget;
   /**
    * Lifecycle transition. `'resolved'` routes to resolve, `'active'`
@@ -198,33 +241,7 @@ export interface CommentsApi {
   list(query?: CommentsListQuery): CommentsListResult;
 }
 
-const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId']);
-
-function isTrackedChangeCommentTarget(value: unknown): value is TrackedChangeCommentTarget {
-  if (!isRecord(value)) return false;
-  if (value.kind !== undefined && value.kind !== 'trackedChange') return false;
-  return typeof value.trackedChangeId === 'string' && value.trackedChangeId.length > 0;
-}
-
-function validateCommentTarget(target: unknown, operationName: string): void {
-  if (isTextAddress(target) || isTextTarget(target) || isSelectionTarget(target)) {
-    return;
-  }
-
-  if (isTrackedChangeCommentTarget(target)) {
-    validateStoryLocator(target.story, 'target.story');
-    return;
-  }
-
-  throw new DocumentApiValidationError(
-    'INVALID_TARGET',
-    `${operationName} target must be a TextAddress, TextTarget, SelectionTarget, or tracked-change target.`,
-    {
-      field: 'target',
-      value: target,
-    },
-  );
-}
+const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId', 'trackedChangeId', 'side', 'story']);
 
 /**
  * Validates CommentsCreateInput for root comments (non-reply) and throws DocumentApiValidationError on violations.
@@ -236,7 +253,7 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
 
   assertNoUnknownFields(input, CREATE_COMMENT_ALLOWED_KEYS, 'comments.create');
 
-  const { target, text, parentCommentId } = input;
+  const { target, text, parentCommentId, trackedChangeId } = input;
   const hasTarget = target !== undefined;
   const isReply = parentCommentId !== undefined;
 
@@ -262,16 +279,112 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
         { fields: ['parentCommentId', 'target'] },
       );
     }
+    if (trackedChangeId !== undefined) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        'Cannot combine parentCommentId with trackedChangeId. Replies do not take a target.',
+        { fields: ['parentCommentId', 'trackedChangeId'] },
+      );
+    }
     return;
   }
 
-  if (!hasTarget) {
+  if (!hasTarget && trackedChangeId === undefined) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'comments.create requires a target for root comments.', {
       field: 'target',
     });
   }
 
-  validateCommentTarget(target, 'comments.create');
+  const effectiveTarget = hasTarget
+    ? target
+    : buildTrackedChangeTargetFromCreateShorthand(input as unknown as CommentsCreateInput);
+
+  if (isTrackedChangeCommentTarget(effectiveTarget)) {
+    validateTrackedChangeCommentTarget(effectiveTarget, 'comments.create');
+    return;
+  }
+
+  if (isTextSearchCommentTarget(effectiveTarget)) {
+    validateTextSearchCommentTarget(effectiveTarget, 'comments.create');
+    return;
+  }
+
+  if (!isTextAddress(effectiveTarget) && !isTextTarget(effectiveTarget) && !isSelectionTarget(effectiveTarget)) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'target must be a TextAddress, TextTarget, SelectionTarget, TrackedChangeCommentTarget, or TextSearchCommentTarget object.',
+      {
+        field: 'target',
+        value: effectiveTarget,
+      },
+    );
+  }
+}
+
+function buildTrackedChangeTargetFromCreateShorthand(
+  input: CommentsCreateInput,
+): TrackedChangeCommentTarget | undefined {
+  if (input.trackedChangeId === undefined) return undefined;
+  return {
+    trackedChangeId: input.trackedChangeId,
+    ...(input.side ? { side: input.side } : {}),
+    ...(input.story ? { story: input.story } : {}),
+  };
+}
+
+const TRACKED_CHANGE_COMMENT_TARGET_ALLOWED_KEYS = new Set(['kind', 'trackedChangeId', 'side', 'story']);
+const TEXT_SEARCH_COMMENT_TARGET_ALLOWED_KEYS = new Set(['text', 'story']);
+
+function isTextSearchCommentTarget(value: unknown): value is TextSearchCommentTarget {
+  if (!isRecord(value)) return false;
+  if ((value as { kind?: unknown }).kind !== undefined) return false;
+  return typeof (value as { text?: unknown }).text === 'string';
+}
+
+function validateTextSearchCommentTarget(target: TextSearchCommentTarget, operationName: string): void {
+  assertNoUnknownFields(
+    target as unknown as Record<string, unknown>,
+    TEXT_SEARCH_COMMENT_TARGET_ALLOWED_KEYS,
+    `${operationName} target`,
+  );
+  if (target.text.trim().length === 0) {
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} target.text must be non-empty.`, {
+      field: 'target.text',
+      value: target.text,
+    });
+  }
+  validateStoryLocator(target.story, 'target.story');
+}
+
+function validateTrackedChangeCommentTarget(target: TrackedChangeCommentTarget, operationName: string): void {
+  assertNoUnknownFields(
+    target as unknown as Record<string, unknown>,
+    TRACKED_CHANGE_COMMENT_TARGET_ALLOWED_KEYS,
+    `${operationName} target`,
+  );
+  const trackedChangeId = (target as { trackedChangeId?: unknown }).trackedChangeId;
+  if (typeof trackedChangeId !== 'string' || trackedChangeId.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} target.trackedChangeId must be a non-empty string.`,
+      {
+        field: 'target.trackedChangeId',
+        value: trackedChangeId,
+      },
+    );
+  }
+  const side = (target as { side?: unknown }).side;
+  if (side !== undefined && side !== 'inserted' && side !== 'deleted' && side !== 'source' && side !== 'destination') {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} target.side must be "inserted", "deleted", "source", or "destination" when provided.`,
+      {
+        field: 'target.side',
+        value: side,
+      },
+    );
+  }
+  validateStoryLocator((target as { story?: unknown }).story, 'target.story');
 }
 
 const PATCH_COMMENT_ALLOWED_KEYS = new Set(['commentId', 'target', 'text', 'status', 'isInternal']);
@@ -343,7 +456,20 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
   }
 
   if (hasTarget) {
-    validateCommentTarget(target, 'comments.patch');
+    if (isTrackedChangeCommentTarget(target)) {
+      validateTrackedChangeCommentTarget(target, 'comments.patch');
+    } else if (isTextSearchCommentTarget(target)) {
+      validateTextSearchCommentTarget(target, 'comments.patch');
+    } else if (!isTextAddress(target) && !isTextTarget(target) && !isSelectionTarget(target)) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'target must be a TextAddress, TextTarget, SelectionTarget, TrackedChangeCommentTarget, or TextSearchCommentTarget object.',
+        {
+          field: 'target',
+          value: target,
+        },
+      );
+    }
   }
 }
 
@@ -370,6 +496,20 @@ export function executeCommentsCreate(
 
   if (input.parentCommentId !== undefined) {
     return adapter.reply({ parentCommentId: input.parentCommentId, text: input.text }, options);
+  }
+  if (input.target === undefined && input.trackedChangeId !== undefined) {
+    const { trackedChangeId, side, story, text } = input;
+    return adapter.add(
+      {
+        text,
+        target: {
+          trackedChangeId,
+          ...(side ? { side } : {}),
+          ...(story ? { story } : {}),
+        },
+      },
+      options,
+    );
   }
   return adapter.add(input, options);
 }

@@ -843,8 +843,12 @@ function redistributeTowardContentWeightedShape(widths: number[], minBounds: num
     return widths;
   }
 
-  const demandWeights = widths.map((width, index) => {
-    const demand = Math.max(maxBounds[index], width, minBounds[index], 1);
+  const demandValues = widths.map((width, index) => Math.max(maxBounds[index], width, minBounds[index], 1));
+  if (areWidthsEffectivelyUniform(demandValues, 0.001)) {
+    return widths;
+  }
+
+  const demandWeights = demandValues.map((demand) => {
     return demand * demand;
   });
   const totalDemandWeight = demandWeights.reduce((sum, weight) => sum + weight, 0);
@@ -1187,6 +1191,16 @@ function sumWidths(widths: number[]): number {
   return widths.reduce((sum, width) => sum + Math.max(0, width), 0);
 }
 
+function areWidthsEffectivelyUniform(widths: number[], tolerance: number): boolean {
+  if (widths.length <= 1) {
+    return true;
+  }
+
+  const minWidth = Math.min(...widths);
+  const maxWidth = Math.max(...widths);
+  return maxWidth - minWidth <= tolerance;
+}
+
 function scaleToTargetWidth(widths: number[], targetWidth: number): number[] {
   const currentTotal = sumWidths(widths);
   if (currentTotal <= 0 || targetWidth <= 0) {
@@ -1219,10 +1233,24 @@ function finalizeResult(layoutMode: AutoFitLayoutMode, widths: number[], minColu
     return buildFallbackResult(layoutMode, minColumnWidth);
   }
 
+  const finalizedWidths = normalizeNearIntegerWidthVector(widths);
+
   return {
     layoutMode,
-    columnWidths: widths,
-    totalWidth: sumWidths(widths),
-    gridColumnCount: widths.length,
+    columnWidths: finalizedWidths,
+    totalWidth: sumWidths(finalizedWidths),
+    gridColumnCount: finalizedWidths.length,
   };
+}
+
+function normalizeNearIntegerWidthVector(widths: number[]): number[] {
+  const totalWidth = sumWidths(widths);
+  const roundedTotalWidth = Math.round(totalWidth);
+  if (Math.abs(totalWidth - roundedTotalWidth) > 1e-9) {
+    return widths;
+  }
+
+  const next = widths.slice();
+  next[next.length - 1] = Math.max(0, next[next.length - 1] + (roundedTotalWidth - totalWidth));
+  return next;
 }

@@ -1,14 +1,14 @@
 ---
 title: comments.patch
 sidebarTitle: comments.patch
-description: Patch fields on an existing comment (text, target, status, or isInternal).
+description: "Patch exactly one field on an existing comment (`text`, `target`, or `status`). The `target` branch accepts a plain TextAddress or a TrackedChangeCommentTarget, with or without `kind: \"trackedChange\"`, that names a logical tracked-change id. The legacy `isInternal` input is preserved in the schema for v1 backward compatibility but is not a supported v2 product behavior. V2 adapters MUST fail a `comments.patch` request containing `isInternal` with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). Multi-field patches and no-op edits are rejected with `INVALID_INPUT`; reply target / status patches are rejected with `INVALID_CONTEXT`."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Patch fields on an existing comment (text, target, status, or isInternal).
+Patch exactly one field on an existing comment (`text`, `target`, or `status`). The `target` branch accepts a plain TextAddress or a TrackedChangeCommentTarget, with or without `kind: "trackedChange"`, that names a logical tracked-change id. The legacy `isInternal` input is preserved in the schema for v1 backward compatibility but is not a supported v2 product behavior. V2 adapters MUST fail a `comments.patch` request containing `isInternal` with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). Multi-field patches and no-op edits are rejected with `INVALID_INPUT`; reply target / status patches are rejected with `INVALID_CONTEXT`.
 
 - Operation ID: `comments.patch`
 - API member path: `editor.doc.comments.patch(...)`
@@ -20,7 +20,7 @@ Patch fields on an existing comment (text, target, status, or isInternal).
 
 ## Expected result
 
-Returns a Receipt confirming the comment was updated; reports NO_OP if no fields changed.
+Returns a Receipt with `updated` populated on success. Reports `NO_OP` for byte-identical edits, rejects empty-body / trim-equivalent edits with `INVALID_INPUT`, no-op resolve/reopen with `INVALID_INPUT`, reply target/status with `INVALID_CONTEXT`, cross-story moves with `INVALID_CONTEXT`, materializing inherited slot moves with `CAPABILITY_UNAVAILABLE`, stale tracked-change targets with `TARGET_NOT_FOUND`, formatting / structural / unpaired-move tracked-change targets with `CAPABILITY_UNAVAILABLE`, and `isInternal` patches with `CAPABILITY_UNAVAILABLE`.
 
 ## Input fields
 
@@ -29,7 +29,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 | `commentId` | string | yes |  |
 | `isInternal` | boolean | no |  |
 | `status` | enum | no | `"resolved"`, `"active"` |
-| `target` | TextAddress \| TextTarget \| SelectionTarget \| CommentTrackedChangeTarget | no | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
+| `target` | TextAddress \| SelectionTarget \| CommentTrackedChangeTarget \| object | no | One of: TextAddress, SelectionTarget, CommentTrackedChangeTarget, object |
 | `text` | string | no |  |
 
 ### Example request
@@ -43,6 +43,10 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   },
   "text": "Hello, world."
@@ -55,9 +59,15 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `id` | string | no |  |
 | `inserted` | EntityAddress[] | no |  |
+| `invalidatedRefs` | AffectedRef[] | no |  |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
 | `removed` | EntityAddress[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
 | `updated` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -65,7 +75,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.code` | enum | yes | `"INVALID_INPUT"`, `"INVALID_TARGET"`, `"INVALID_CONTEXT"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"NO_OP"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -74,6 +84,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 
 ```json
 {
+  "id": "id-001",
   "inserted": [
     {
       "entityId": "entity-789",
@@ -81,14 +92,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "kind": "entity"
     }
   ],
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ]
+  "success": true
 }
 ```
 
@@ -101,7 +105,11 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 
 ## Non-applied failure codes
 
+- `INVALID_INPUT`
 - `INVALID_TARGET`
+- `INVALID_CONTEXT`
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
 - `NO_OP`
 
 ## Raw schemas
@@ -115,7 +123,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "type": "string"
     },
     "isInternal": {
-      "description": "When true, marks the comment as internal (hidden from external collaborators).",
+      "description": "Legacy v1/document-api compatibility field. Not a supported v2 behavior. V2 adapters MUST reject a `comments.patch` request containing `isInternal` with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). The field is preserved in the schema only so v1 callers keep their input shape (`comments-spec.md` §7, §14.6).",
       "type": "boolean"
     },
     "status": {
@@ -126,18 +134,32 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       ]
     },
     "target": {
+      "description": "New anchor for the comment. Accepts a plain TextAddress, a SelectionTarget {kind:'selection', start, end}, a TextSearchCommentTarget {text, story?}, or a TrackedChangeCommentTarget, with or without kind, that names a logical tracked-change id as a convenience re-anchor target .",
       "oneOf": [
         {
           "$ref": "#/$defs/TextAddress"
-        },
-        {
-          "$ref": "#/$defs/TextTarget"
         },
         {
           "$ref": "#/$defs/SelectionTarget"
         },
         {
           "$ref": "#/$defs/CommentTrackedChangeTarget"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
+            },
+            "text": {
+              "description": "Text to find and anchor the comment to. The adapter resolves the first body/story match.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -169,7 +191,11 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
           "properties": {
             "code": {
               "enum": [
+                "INVALID_INPUT",
                 "INVALID_TARGET",
+                "INVALID_CONTEXT",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE",
                 "NO_OP"
               ]
             },
@@ -217,7 +243,11 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "properties": {
         "code": {
           "enum": [
+            "INVALID_INPUT",
             "INVALID_TARGET",
+            "INVALID_CONTEXT",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
             "NO_OP"
           ]
         },

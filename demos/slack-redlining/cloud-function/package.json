@@ -12,6 +12,8 @@
   },
   "description": "",
   "dependencies": {
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.0.0",
     "@google-cloud/storage": "^7.16.0",
     "superdoc": "latest",
     "busboy": "0.3.0",

@@ -689,6 +689,196 @@ function makeDocumentApiForEditor(editor: Editor) {
   return createDocumentApi(assembleDocumentApiAdapters(editor));
 }
 
+const V1_STUB_PARAGRAPH_TARGET = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+const V1_STUB_SECOND_PARAGRAPH_TARGET = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p2' };
+const V1_STUB_TABLE_ROW_TARGET = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'row-1' };
+
+function runV1CompatibilityStubMutation(operationId: OperationId, options?: any) {
+  switch (operationId) {
+    case 'blocks.split': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).blocks.split(
+        { target: V1_STUB_PARAGRAPH_TARGET, offset: 1 },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'blocks.merge': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).blocks.merge(
+        { first: V1_STUB_PARAGRAPH_TARGET, second: V1_STUB_SECOND_PARAGRAPH_TARGET },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'blocks.move': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).blocks.move(
+        { source: V1_STUB_PARAGRAPH_TARGET, destination: V1_STUB_SECOND_PARAGRAPH_TARGET, placement: 'before' },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'format.paragraph.setMarkRunProps': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).format.paragraph.setMarkRunProps(
+        { target: V1_STUB_PARAGRAPH_TARGET, markRunProps: { bold: true } },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'lists.apply': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).lists.apply(
+        { target: V1_STUB_PARAGRAPH_TARGET, seed: 'ordered' },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'lists.continue': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).lists.continue({ target: V1_STUB_PARAGRAPH_TARGET }, options);
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'lists.restart': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).lists.restart(
+        { target: V1_STUB_PARAGRAPH_TARGET, startAt: 1 },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'lists.remove': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).lists.remove({ target: V1_STUB_PARAGRAPH_TARGET }, options);
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    case 'tables.moveRow': {
+      const { editor, dispatch } = makeTextEditor();
+      const result = makeDocumentApiForEditor(editor).tables.moveRow(
+        { target: V1_STUB_TABLE_ROW_TARGET, destination: { kind: 'last' } },
+        options,
+      );
+      if (options?.dryRun) expect(dispatch).not.toHaveBeenCalled();
+      return result;
+    }
+    default:
+      throw new Error(`Unhandled v1 compatibility stub op ${operationId}`);
+  }
+}
+
+function runV1CompatibilityStubThrowCase(operationId: OperationId) {
+  switch (operationId) {
+    case 'blocks.split':
+      return makeDocumentApiForEditor(makeTextEditor().editor).blocks.split(
+        { target: V1_STUB_PARAGRAPH_TARGET, offset: -1 } as any,
+      );
+    case 'blocks.merge':
+      return makeDocumentApiForEditor(makeTextEditor().editor).blocks.merge({
+        first: V1_STUB_PARAGRAPH_TARGET,
+        second: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+      } as any);
+    case 'blocks.move':
+      return makeDocumentApiForEditor(makeTextEditor().editor).blocks.move({
+        source: V1_STUB_PARAGRAPH_TARGET,
+        destination: V1_STUB_SECOND_PARAGRAPH_TARGET,
+        placement: 'sideways',
+      } as any);
+    case 'format.paragraph.setMarkRunProps':
+      return makeDocumentApiForEditor(makeTextEditor().editor).format.paragraph.setMarkRunProps({
+        target: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+        markRunProps: { bold: true },
+      } as any);
+    case 'lists.apply':
+      return makeDocumentApiForEditor(makeTextEditor().editor).lists.apply({
+        target: V1_STUB_PARAGRAPH_TARGET,
+        seed: 'romanette',
+      } as any);
+    case 'lists.continue':
+      return makeDocumentApiForEditor(makeTextEditor().editor).lists.continue({
+        target: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+      } as any);
+    case 'lists.restart':
+      return makeDocumentApiForEditor(makeTextEditor().editor).lists.restart({
+        target: V1_STUB_PARAGRAPH_TARGET,
+        startAt: 1.5,
+      } as any);
+    case 'lists.remove':
+      return makeDocumentApiForEditor(makeTextEditor().editor).lists.remove({
+        target: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+      } as any);
+    case 'tables.moveRow':
+      return makeDocumentApiForEditor(makeTextEditor().editor).tables.moveRow({
+        nodeId: 'table-1',
+        destination: { kind: 'last' },
+      } as any);
+    default:
+      throw new Error(`Unhandled v1 compatibility stub op ${operationId}`);
+  }
+}
+
+const V1_COMPATIBILITY_STUB_MUTATION_VECTORS: Partial<Record<OperationId, MutationVector>> = {
+  'blocks.split': {
+    throwCase: () => runV1CompatibilityStubThrowCase('blocks.split'),
+    failureCase: () => runV1CompatibilityStubMutation('blocks.split', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('blocks.split', { changeMode: 'direct' }),
+  },
+  'blocks.merge': {
+    throwCase: () => runV1CompatibilityStubThrowCase('blocks.merge'),
+    failureCase: () => runV1CompatibilityStubMutation('blocks.merge', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('blocks.merge', { changeMode: 'direct' }),
+  },
+  'blocks.move': {
+    throwCase: () => runV1CompatibilityStubThrowCase('blocks.move'),
+    failureCase: () => runV1CompatibilityStubMutation('blocks.move', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('blocks.move', { changeMode: 'direct' }),
+  },
+  'format.paragraph.setMarkRunProps': {
+    throwCase: () => runV1CompatibilityStubThrowCase('format.paragraph.setMarkRunProps'),
+    failureCase: () => runV1CompatibilityStubMutation('format.paragraph.setMarkRunProps', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('format.paragraph.setMarkRunProps', { changeMode: 'direct' }),
+  },
+  'lists.apply': {
+    throwCase: () => runV1CompatibilityStubThrowCase('lists.apply'),
+    failureCase: () => runV1CompatibilityStubMutation('lists.apply', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('lists.apply', { changeMode: 'direct' }),
+  },
+  'lists.continue': {
+    throwCase: () => runV1CompatibilityStubThrowCase('lists.continue'),
+    failureCase: () => runV1CompatibilityStubMutation('lists.continue', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('lists.continue', { changeMode: 'direct' }),
+  },
+  'lists.restart': {
+    throwCase: () => runV1CompatibilityStubThrowCase('lists.restart'),
+    failureCase: () => runV1CompatibilityStubMutation('lists.restart', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('lists.restart', { changeMode: 'direct' }),
+  },
+  'lists.remove': {
+    throwCase: () => runV1CompatibilityStubThrowCase('lists.remove'),
+    failureCase: () => runV1CompatibilityStubMutation('lists.remove', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('lists.remove', { changeMode: 'direct' }),
+  },
+  'tables.moveRow': {
+    throwCase: () => runV1CompatibilityStubThrowCase('tables.moveRow'),
+    failureCase: () => runV1CompatibilityStubMutation('tables.moveRow', { changeMode: 'direct' }),
+    applyCase: () => runV1CompatibilityStubMutation('tables.moveRow', { changeMode: 'direct' }),
+  },
+};
+
+const V1_COMPATIBILITY_STUB_DRY_RUN_VECTORS: Partial<Record<OperationId, () => unknown>> = {
+  'format.paragraph.setMarkRunProps': () =>
+    runV1CompatibilityStubMutation('format.paragraph.setMarkRunProps', { changeMode: 'direct', dryRun: true }),
+  'tables.moveRow': () => runV1CompatibilityStubMutation('tables.moveRow', { changeMode: 'direct', dryRun: true }),
+};
+
 function makeTextEditor(
   text = 'Hello',
   overrides: Partial<Editor> & {
@@ -1856,6 +2046,15 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
 
 /** Table stub ops that always throw CAPABILITY_UNAVAILABLE. */
 const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
+const V1_COMPATIBILITY_STUB_OPS: ReadonlySet<OperationId> = new Set(
+  Object.keys(V1_COMPATIBILITY_STUB_MUTATION_VECTORS) as OperationId[],
+);
+const V1_COMPATIBILITY_STUB_BLOCK_OPS: ReadonlySet<OperationId> = new Set(
+  ['blocks.split', 'blocks.merge', 'blocks.move'] as OperationId[],
+);
+const V1_COMPATIBILITY_STUB_DRY_RUN_OPS: ReadonlySet<OperationId> = new Set(
+  Object.keys(V1_COMPATIBILITY_STUB_DRY_RUN_VECTORS) as OperationId[],
+);
 
 /**
  * Plan-engine meta-operations that don't follow the standard throw/failure/apply
@@ -3516,6 +3715,16 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         spy.mockRestore();
       }
     },
+    failureCase: () =>
+      footnotesInsertWrapper(
+        makeRefEditor(),
+        {
+          type: 'footnote',
+          body: [{ type: 'paragraph', children: [{ text: 'x' }] }] as any,
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        },
+        { changeMode: 'direct' },
+      ),
   },
   'footnotes.update': {
     throwCase: () =>
@@ -3533,6 +3742,21 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
       return footnotesUpdateWrapper(
         makeRefEditor(),
         { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' }, patch: { content: 'New' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+        ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+        noteId: 'fn-1',
+        type: 'footnote',
+      });
+      return footnotesUpdateWrapper(
+        makeRefEditor(),
+        {
+          target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' },
+          patch: { body: [{ type: 'paragraph', children: [{ text: 'New' }] }] as any },
+        },
         { changeMode: 'direct' },
       );
     },
@@ -9197,6 +9421,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   // Reference namespace mutation vectors
   // -------------------------------------------------------------------------
 
+  ...V1_COMPATIBILITY_STUB_MUTATION_VECTORS,
   ...refNamespaceMutationVectors,
 };
 
@@ -11322,6 +11547,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
   },
+  ...V1_COMPATIBILITY_STUB_DRY_RUN_VECTORS,
   'footnotes.remove': () => {
     refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
       ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
@@ -11954,19 +12180,30 @@ describe('document-api adapter conformance', () => {
     expect(result.success, `${operationId} failureCase should return success=false`).toBe(false);
     if (result.success !== false || !result.failure) return;
     expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);
-    assertSchema(operationId, 'output', result);
+    if (!V1_COMPATIBILITY_STUB_BLOCK_OPS.has(operationId)) {
+      assertSchema(operationId, 'output', result);
+    }
     assertSchema(operationId, 'failure', result);
   });
 
   it.each(implementedMutatingOps)('no post-apply throw: %s', async (operationId) => {
     const vector = mutationVectors[operationId]!;
-    let result: { success?: boolean };
+    let result: { success?: boolean; failure?: { code?: string } };
     try {
       // Promise-aware: async operations (e.g. templates.apply) return a Promise.
-      result = (await Promise.resolve(vector.applyCase())) as { success?: boolean };
+      result = (await Promise.resolve(vector.applyCase())) as { success?: boolean; failure?: { code?: string } };
     } catch (error) {
       const err = error as Error;
       throw new Error(`${operationId} threw post-apply: ${err.message}\n${err.stack ?? ''}`);
+    }
+    if (V1_COMPATIBILITY_STUB_OPS.has(operationId)) {
+      expect(result.success, `${operationId} should report CAPABILITY_UNAVAILABLE on applyCase`).toBe(false);
+      expect(result.failure?.code).toBe('CAPABILITY_UNAVAILABLE');
+      if (!V1_COMPATIBILITY_STUB_BLOCK_OPS.has(operationId)) {
+        assertSchema(operationId, 'output', result);
+      }
+      assertSchema(operationId, 'failure', result);
+      return;
     }
     expect(result.success, `${operationId} should report success on applyCase`).toBe(true);
     assertSchema(operationId, 'output', result);
@@ -11976,7 +12213,14 @@ describe('document-api adapter conformance', () => {
   it.each(expectedDryRunOps)('dryRun non-mutation: %s', async (operationId) => {
     const run = dryRunVectors[operationId]!;
     // Promise-aware: async operations (e.g. templates.apply) return a Promise.
-    const result = (await Promise.resolve(run())) as { success?: boolean };
+    const result = (await Promise.resolve(run())) as { success?: boolean; failure?: { code?: string } };
+    if (V1_COMPATIBILITY_STUB_DRY_RUN_OPS.has(operationId)) {
+      expect(result.success, `${operationId} dryRun should report CAPABILITY_UNAVAILABLE`).toBe(false);
+      expect(result.failure?.code).toBe('CAPABILITY_UNAVAILABLE');
+      assertSchema(operationId, 'output', result);
+      assertSchema(operationId, 'failure', result);
+      return;
+    }
     expect(result.success).toBe(true);
     assertSchema(operationId, 'output', result);
     assertSchema(operationId, 'success', result);

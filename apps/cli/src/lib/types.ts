@@ -6,13 +6,12 @@ import type {
   ListItemAddress as DocumentApiListItemAddress,
   ListItemInfo as DocumentApiListItemInfo,
   ListKind as DocumentApiListKind,
-  ListSetTypeInput as DocumentApiListSetTypeInput,
-  ListsExitResult as DocumentApiListsExitResult,
   ListsGetInput as DocumentApiListsGetInput,
   ListsInsertResult as DocumentApiListsInsertResult,
   ListsListQuery as DocumentApiListsListQuery,
   ListsListResult as DocumentApiListsListResult,
   ListsMutateItemResult as DocumentApiListsMutateItemResult,
+  ListsSetTypeInput as DocumentApiListsSetTypeInput,
   ListTargetInput as DocumentApiListTargetInput,
   NodeAddress as DocumentApiNodeAddress,
   NodeKind as DocumentApiNodeKind,
@@ -38,17 +37,25 @@ export type ListsListQuery = DocumentApiListsListQuery;
 export type ListsListResult = DocumentApiListsListResult;
 export type ListsGetInput = DocumentApiListsGetInput;
 export type ListInsertInput = DocumentApiListInsertInput;
-export type ListSetTypeInput = DocumentApiListSetTypeInput;
+export type ListSetTypeInput = DocumentApiListsSetTypeInput;
 export type ListTargetInput = DocumentApiListTargetInput;
 export type ListsInsertResult = DocumentApiListsInsertResult;
 export type ListsMutateItemResult = DocumentApiListsMutateItemResult;
-export type ListsExitResult = DocumentApiListsExitResult;
 export type Selector = DocumentApiSelector;
 export type Query = DocumentApiQuery;
 export type FindOutput = DocumentApiFindOutput;
 
 /** User identity for attribution in comments, tracked changes, and collaboration presence. */
 export type UserIdentity = { name: string; email: string };
+
+/**
+ * Runtime kind selected when opening a document. v1 wraps the legacy
+ * `Editor` + v1 Document API adapters; v2 wraps an `SDDocumentSession`
+ * plus v2 adapters. Defaults to v1 when omitted.
+ */
+export type DocumentRuntimeKind = 'v1' | 'v2';
+
+export const ACCEPTED_RUNTIME_VALUES: readonly DocumentRuntimeKind[] = ['v1', 'v2'];
 
 export type OutputMode = 'json' | 'pretty';
 export type ExecutionMode = 'oneshot' | 'host';
@@ -82,6 +89,8 @@ export interface CommandContext {
   sessionId?: string;
   executionMode?: ExecutionMode;
   sessionPool?: SessionPool;
+  /** Indicates whether command args came from direct CLI flags or `call --input-json`. */
+  argumentSource?: 'cli' | 'input';
 }
 
 export interface DocumentSourceMeta {

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, shallowRef, reactive, computed, watch } from 'vue';
 import { comments_module_events } from '@superdoc/common';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
@@ -17,6 +17,10 @@ import {
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
 import { buildFloatingCommentInstances } from './helpers/floating-comment-instances.js';
+import {
+  isSyntheticTrackedChangeCommentLaneItem,
+  isV2SyntheticTrackedChangeRow,
+} from '../core/v2-integration/v2-integration.js';
 
 export const useCommentsStore = defineStore('comments', () => {
   const BODY_TRACKED_CHANGE_STORY = { kind: 'story', storyType: 'body' };
@@ -70,6 +74,21 @@ export const useCommentsStore = defineStore('comments', () => {
   const debounceTimers = {};
   const trackedChangeResolutionSnapshots = new WeakMap();
 
+  const isPreviewCommentsDebugEnabled = () => {
+    if (isDebugging) return true;
+    if (typeof window === 'undefined') return false;
+    return '__labsSuperDocV2PreviewDebug' in window;
+  };
+
+  const tracePreviewComments = (label, payload = null) => {
+    if (!isPreviewCommentsDebugEnabled()) return;
+    if (payload !== null) {
+      console.debug('[SuperDoc][comments-store]', label, payload);
+      return;
+    }
+    console.debug('[SuperDoc][comments-store]', label);
+  };
+
   const COMMENT_EVENTS = comments_module_events;
   const hasInitializedComments = ref(false);
   const hasSyncedCollaborationComments = ref(false);
@@ -103,6 +122,42 @@ export const useCommentsStore = defineStore('comments', () => {
   const pendingComment = ref(null);
   const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
 
+  // ui-phase3-002: SuperDoc-facing v2 comments adapter. Populated by
+  // SuperDoc.vue on `v2-editor-ready` so the store can route create / reply
+  // / edit / resolve / delete through the v2 host APIs instead of v1
+  // `activeEditor.commands`.
+  // shallowRef: preserve object identity. Vue's `ref()` deep-wraps assigned
+  // objects via `reactive()`, which would break the stamping identity check
+  // (`v2CommentsAdapter.value === adapter`). The adapter is opaque to the
+  // store; we never read reactive properties off it.
+  const v2CommentsAdapter = shallowRef(null);
+  const setV2CommentsAdapter = (adapter) => {
+    v2CommentsAdapter.value = adapter ?? null;
+  };
+  const getV2CommentsAdapter = (superdoc) => {
+    const fromFacade = superdoc?.activeEditor?.v2Comments ?? null;
+    if (fromFacade) return fromFacade;
+    return v2CommentsAdapter.value;
+  };
+  const isV2EditorActive = (superdoc) =>
+    superdoc?.activeEditor?.editorVersion === 2 || v2CommentsAdapter.value !== null;
+
+  // ui-phase3-003: SuperDoc-facing v2 tracked-change adapter. Populated by
+  // SuperDoc.vue on `v2-editor-ready` so the store can list / focus / decide
+  // tracked changes through v2 host APIs and route sidebar accept/reject
+  // through `host.dispatch({ kind: 'review.trackedChangeDecide', ... })`.
+  // shallowRef: preserve object identity for stamping. See note on
+  // `v2CommentsAdapter` above.
+  const v2TrackedChangesAdapter = shallowRef(null);
+  const setV2TrackedChangesAdapter = (adapter) => {
+    v2TrackedChangesAdapter.value = adapter ?? null;
+  };
+  const getV2TrackedChangesAdapter = (superdoc) => {
+    const fromFacade = superdoc?.activeEditor?.v2TrackedChanges ?? null;
+    if (fromFacade) return fromFacade;
+    return v2TrackedChangesAdapter.value;
+  };
+
   /**
    * Initialize the store
    *
@@ -122,6 +177,12 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));
+
+  const buildTrackedChangeImportedPositionId = (id) => {
+    const normalizedId = normalizeCommentId(id);
+    if (!normalizedId) return null;
+    return normalizedId.startsWith('imported:') ? normalizedId : `imported:${normalizedId}`;
+  };
 
   const getPositionEntryByAlias = (id) => {
     const normalizedId = normalizeCommentId(id);
@@ -182,8 +243,7 @@ export const useCommentsStore = defineStore('comments', () => {
     const matches = commentsList.value.filter((comment) => {
       if (!comment?.trackedChange) return false;
 
-      const aliases = [comment.trackedChangeAnchorKey, comment.commentId, comment.importedId];
-      return aliases.some((alias) => {
+      return getCommentAliasIds(comment).some((alias) => {
         const { entry } = getPositionEntryByAlias(alias);
         return isEquivalentTrackedChangePosition(targetEntry, entry);
       });
@@ -201,7 +261,11 @@ export const useCommentsStore = defineStore('comments', () => {
   const getComment = (id) => {
     if (id === undefined || id === null) return null;
     const directMatch = commentsList.value.find(
-      (c) => c.commentId == id || c.importedId == id || c.trackedChangeAnchorKey == id,
+      (c) =>
+        c.commentId == id ||
+        c.importedId == id ||
+        c.trackedChangeAnchorKey == id ||
+        (c?.trackedChange && buildTrackedChangeImportedPositionId(c.importedId) == id),
     );
     return directMatch || getTrackedChangeCommentByPositionAlias(id);
   };
@@ -244,20 +308,26 @@ export const useCommentsStore = defineStore('comments', () => {
 
       const commentId = resolvedComment.commentId ?? null;
       const importedId = resolvedComment.importedId ?? null;
+      const importedPositionId = resolvedComment.trackedChange
+        ? buildTrackedChangeImportedPositionId(importedId)
+        : null;
       const trackedChangeAnchorKey = resolvedComment.trackedChangeAnchorKey ?? null;
       if (trackedChangeAnchorKey && positions[trackedChangeAnchorKey]) return trackedChangeAnchorKey;
       if (commentId && positions[commentId]) return commentId;
       if (importedId && positions[importedId]) return importedId;
-      return trackedChangeAnchorKey ?? commentId ?? importedId ?? null;
+      if (importedPositionId && positions[importedPositionId]) return importedPositionId;
+      return trackedChangeAnchorKey ?? commentId ?? importedPositionId ?? importedId ?? null;
     }
 
     const commentId = commentOrId.commentId ?? null;
     const importedId = commentOrId.importedId ?? null;
+    const importedPositionId = commentOrId.trackedChange ? buildTrackedChangeImportedPositionId(importedId) : null;
     const trackedChangeAnchorKey = commentOrId.trackedChangeAnchorKey ?? null;
     if (trackedChangeAnchorKey && positions[trackedChangeAnchorKey]) return trackedChangeAnchorKey;
     if (commentId && positions[commentId]) return commentId;
     if (importedId && positions[importedId]) return importedId;
-    return trackedChangeAnchorKey ?? commentId ?? importedId ?? null;
+    if (importedPositionId && positions[importedPositionId]) return importedPositionId;
+    return trackedChangeAnchorKey ?? commentId ?? importedPositionId ?? importedId ?? null;
   };
 
   // Comments can be referenced by the imported DOCX id, the internal commentId, or a raw id
@@ -276,6 +346,7 @@ export const useCommentsStore = defineStore('comments', () => {
       comment?.trackedChangeAnchorKey,
       comment?.commentId,
       comment?.importedId,
+      comment?.trackedChange ? buildTrackedChangeImportedPositionId(comment?.importedId) : null,
     ]
       .map((id) => normalizeCommentId(id))
       .filter((id) => {
@@ -656,10 +727,15 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const setActiveComment = (superdoc, id) => {
     const activeEditor = superdoc?.activeEditor;
+    const v2Adapter = getV2CommentsAdapter(superdoc);
 
     // If no ID, we clear any focused comments
     if (id === undefined || id === null) {
       clearActiveCommentSelection();
+      if (v2Adapter) {
+        void v2Adapter.setActiveComment(null);
+        return;
+      }
       activeEditor?.commands?.setActiveComment({ commentId: null });
       return;
     }
@@ -671,6 +747,11 @@ export const useCommentsStore = defineStore('comments', () => {
 
     activeComment.value = comment.commentId;
     syncActiveFloatingInstanceWithComment(comment.commentId);
+    if (v2Adapter) {
+      // v2 mode: route through the review state target. Never touch v1 commands.
+      void v2Adapter.setActiveComment(comment.commentId);
+      return;
+    }
     activeEditor?.commands?.setActiveComment({ commentId: activeComment.value });
   };
 
@@ -703,8 +784,11 @@ export const useCommentsStore = defineStore('comments', () => {
       trackedChangeStoryKind,
       trackedChangeStoryLabel,
       trackedChangeAnchorKey,
+      importedId,
     } = params;
     const normalizedChangeId = changeId != null ? String(changeId) : null;
+    const hasImportedId = Object.prototype.hasOwnProperty.call(params, 'importedId');
+    const normalizedImportedId = hasImportedId ? (importedId != null ? String(importedId) : null) : undefined;
     const normalizedDocumentId = documentId != null ? String(documentId) : null;
 
     // Subsume inline tracked changes inside a tracked whole-table change: the
@@ -787,6 +871,7 @@ export const useCommentsStore = defineStore('comments', () => {
       creatorImage: authorImage,
       isInternal: false,
       importedAuthor,
+      ...(hasImportedId ? { importedId: normalizedImportedId } : {}),
       trackedChangeStory: normalizedTrackedChangeStory,
       trackedChangeStoryKind: normalizedTrackedChangeStoryKind,
       trackedChangeStoryLabel: normalizedTrackedChangeStoryLabel,
@@ -811,7 +896,11 @@ export const useCommentsStore = defineStore('comments', () => {
         }
         const commentId = trackedComment.commentId != null ? String(trackedComment.commentId) : null;
         const importedId = trackedComment.importedId != null ? String(trackedComment.importedId) : null;
-        return commentId === normalizedChangeId || importedId === normalizedChangeId;
+        return (
+          commentId === normalizedChangeId ||
+          importedId === normalizedChangeId ||
+          (normalizedImportedId !== undefined && normalizedImportedId != null && importedId === normalizedImportedId)
+        );
       };
 
       if (normalizedDocumentId) {
@@ -867,6 +956,9 @@ export const useCommentsStore = defineStore('comments', () => {
         creatorImage: authorImage ?? null,
         createdTime: date ?? null,
       };
+      if (hasImportedId) {
+        fields.importedId = normalizedImportedId;
+      }
 
       let didChange = false;
       for (const [key, value] of Object.entries(fields)) {
@@ -1009,29 +1101,66 @@ export const useCommentsStore = defineStore('comments', () => {
     }, delay);
   };
 
-  const getPendingSelectionSnapshot = (superdoc, selection) => {
-    if (selection?.source !== 'super-editor') return null;
+  const getPendingSelectionSnapshot = (superdoc, activeSelection) => {
+    if (activeSelection?.source !== 'super-editor') return null;
 
-    const editor = superdoc?.activeEditor;
-    const selectionDocumentId = selection?.documentId ?? null;
-    const editorDocumentId = editor?.options?.documentId ?? null;
-    if (!selectionDocumentId || !editorDocumentId || selectionDocumentId !== editorDocumentId) return null;
+    const selectionDocumentId = activeSelection?.documentId ?? null;
+    const editorDocumentId = superdoc?.activeEditor?.options?.documentId ?? null;
+    if (!selectionDocumentId || !editorDocumentId || selectionDocumentId !== editorDocumentId) {
+      return null;
+    }
+
+    let currentSelection;
+    try {
+      currentSelection = superdoc?.activeEditor?.doc?.selection?.current;
+    } catch {
+      return null;
+    }
+
+    if (typeof currentSelection !== 'function') return null;
 
     try {
-      return editor?.doc?.selection?.current?.() ?? null;
+      return currentSelection();
     } catch {
       return null;
     }
   };
 
   const showAddComment = (superdoc, targetClientY = null) => {
-    // Snapshot the selection BEFORE `insertComment('pending')` below adds
-    // the pending mark and the floating-bubble click clears the live DOM
-    // selection. Only SuperEditor selections have a Document API text
-    // target; PDF / non-editor selections intentionally emit null.
+    const v2Adapter = getV2CommentsAdapter(superdoc);
     const pendingSelection = getPendingSelectionSnapshot(superdoc, superdocStore.activeSelection);
     const event = { type: COMMENT_EVENTS.PENDING, pendingSelection };
     superdoc.emit('comments-update', event);
+
+    if (v2Adapter) {
+      // ui-phase3-002: v2 mode uses a Vue-only pending sidebar row backed by
+      // the v2 selection snapshot. We do not insert a fake 'pending' mark
+      // through v1 `insertComment`; commit later dispatches
+      // `comments.createFromSelection` after the user submits text.
+      const cap = v2Adapter.getCapabilityState?.();
+      if (cap && cap.canWrite === false) {
+        return { ok: false, reason: cap.reason };
+      }
+      if (!v2Adapter.hasRangeSelection?.()) {
+        return { ok: false, reason: 'editing-range-required' };
+      }
+      const docId = v2Adapter.documentId ?? superdoc?.activeEditor?.options?.documentId ?? null;
+      pendingComment.value = getPendingComment({
+        selection: {
+          source: 'super-editor',
+          documentId: docId,
+          page: 1,
+          selectionBounds: {},
+        },
+        documentId: docId,
+        parentCommentId: null,
+      });
+      if (!superdoc.config.isInternal) pendingComment.value.isInternal = false;
+      requestInstantSidebarAlignment(targetClientY, 'pending');
+      setActiveFloatingCommentInstance(null);
+      activeComment.value = pendingComment.value.commentId;
+      return { ok: true };
+    }
 
     const selection = { ...superdocStore.activeSelection };
     selection.selectionBounds = { ...selection.selectionBounds };
@@ -1058,6 +1187,7 @@ export const useCommentsStore = defineStore('comments', () => {
     requestInstantSidebarAlignment(targetClientY, 'pending');
     setActiveFloatingCommentInstance(null);
     activeComment.value = pendingComment.value.commentId;
+    return { ok: true };
   };
 
   /**
@@ -1244,6 +1374,11 @@ export const useCommentsStore = defineStore('comments', () => {
       clearActiveCommentSelection();
     }
 
+    // ui-phase3-002: in v2 mode the pending comment is Vue-only (no fake
+    // 'pending' document mark was inserted), so there is nothing to remove
+    // from the document. Calling v1 `removeComment` against the v2 facade
+    // would touch a null `commands` surface.
+    if (isV2EditorActive(superdoc)) return;
     superdoc?.activeEditor?.commands?.removeComment({ commentId: 'pending' });
   };
 
@@ -1255,6 +1390,65 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const addComment = ({ superdoc, comment, skipEditorUpdate = false, broadcastChanges = true }) => {
+    const v2Adapter = !skipEditorUpdate ? getV2CommentsAdapter(superdoc) : null;
+    if (v2Adapter && !comment.trackedChange) {
+      // ui-phase3-002: in v2 mode the create / reply path dispatches through
+      // the v2 host. Vue state is not mutated until the receipt commits and
+      // we refresh from `host.getHandles().comments.list()`. This keeps the
+      // sidebar receipt-driven; rejected dispatches never produce orphan
+      // sidebar rows.
+      const text = pendingComment.value ? currentCommentText.value : comment.commentText;
+      const parentCommentId = comment.parentCommentId
+        ? String(comment.parentCommentId)
+        : pendingComment.value
+          ? null
+          : null;
+      const invocation = (async () => {
+        try {
+          return await (parentCommentId
+            ? v2Adapter.reply({ parentCommentId, text })
+            : v2Adapter.commitPendingComment({ text }));
+        } catch (err) {
+          return { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+        }
+      })();
+      return invocation.then((outcome) => {
+        // Stamped-adapter guard: drop late results after teardown/remount.
+        if (!isCurrentV2CommentsAdapter(v2Adapter)) {
+          return { ok: false, reason: 'adapter-stale' };
+        }
+        if (!outcome?.ok) {
+          // Receipt / rejection / refresh-failure / adapter-threw: preserve
+          // the pending row/text so the user can retry or cancel explicitly.
+          // Do not invent a durable sidebar row, and do not call the v1
+          // pending-mark remover.
+          if (broadcastChanges) {
+            superdoc.emit('comments-update', {
+              type: COMMENT_EVENTS.PENDING,
+              rejected: true,
+              reason: outcome?.reason ?? 'v2-create-failed',
+              ...(outcome?.committed ? { committed: true } : {}),
+            });
+          }
+          return outcome;
+        }
+        const reconciled = reconcileCommentsFromV2({
+          superdoc,
+          adapter: v2Adapter,
+          documentId: v2Adapter.documentId,
+          items: outcome.items,
+        });
+        if (pendingComment.value) removePendingComment(superdoc);
+        if (broadcastChanges) {
+          superdoc.emit('comments-update', {
+            type: COMMENT_EVENTS.ADD,
+            comment: reconciled?.added?.getValues?.() ?? null,
+          });
+        }
+        return { ok: true, comment: reconciled?.added ?? null };
+      });
+    }
+
     let parentComment = commentsList.value.find((c) => c.commentId === activeComment.value);
     if (!parentComment) parentComment = comment;
 
@@ -1295,16 +1489,58 @@ export const useCommentsStore = defineStore('comments', () => {
       // Emit event for end users
       superdoc.emit('comments-update', event);
     }
+    return { ok: true, comment: newComment };
   };
 
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
     const commentIndex = commentsList.value.findIndex((c) => c.commentId === commentIdToDelete);
     const comment = commentsList.value[commentIndex];
     if (!comment) {
-      return;
+      return Promise.resolve({ ok: false, reason: 'comment-not-found' });
     }
     const { commentId, importedId } = comment;
     const { fileId } = comment;
+
+    const v2Adapter = getV2CommentsAdapter(superdoc);
+    if (v2Adapter && !comment.trackedChange) {
+      // ui-phase3-002: route delete through the v2 host. Vue state is not
+      // mutated until the receipt commits and we refresh from the v2 list.
+      const invocation = (async () => {
+        try {
+          return await v2Adapter.delete({ commentId });
+        } catch (err) {
+          return { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+        }
+      })();
+      return invocation.then((outcome) => {
+        // Stamped-adapter guard.
+        if (!isCurrentV2CommentsAdapter(v2Adapter)) {
+          return { ok: false, reason: 'adapter-stale' };
+        }
+        if (!outcome?.ok) {
+          superdoc.emit('comments-update', {
+            type: COMMENT_EVENTS.DELETED,
+            rejected: true,
+            comment: comment.getValues(),
+            reason: outcome?.reason ?? 'v2-delete-failed',
+            ...(outcome?.committed ? { committed: true } : {}),
+          });
+          return outcome;
+        }
+        reconcileCommentsFromV2({
+          superdoc,
+          adapter: v2Adapter,
+          documentId: v2Adapter.documentId ?? fileId,
+          items: outcome.items,
+        });
+        superdoc.emit('comments-update', {
+          type: COMMENT_EVENTS.DELETED,
+          comment: comment.getValues(),
+          changes: [{ key: 'deleted', commentId, fileId }],
+        });
+        return { ok: true };
+      });
+    }
 
     superdoc.activeEditor?.commands?.removeComment({ commentId, importedId });
 
@@ -1330,6 +1566,440 @@ export const useCommentsStore = defineStore('comments', () => {
 
     superdoc.emit('comments-update', event);
     syncCommentsToClients(superdoc, event);
+    return Promise.resolve({ ok: true });
+  };
+
+  // TCS Phase 0 / 004: store-owned v2 comment mutation helpers for reply,
+  // edit, and resolve. The store owns: adapter identity stamping, capability
+  // gating, success/rejection event emission, active-row clearing semantics,
+  // and reconciliation from v2 list results. Dialog code only owns transient
+  // input state (`isReplying`, `editingCommentId`, `currentCommentText`) and
+  // clears that state on success outcomes; rejected outcomes preserve it.
+  // Delete already routes through `deleteComment` above; that branch follows
+  // the same contract.
+  //
+  // Failure semantics for all helpers:
+  //   - empty / missing inputs reject before dispatch with a named reason
+  //   - capability gate (`canWrite === false`) returns the cap.reason without
+  //     dispatch; success-shaped events are not emitted
+  //   - adapter throws are normalized to `{ ok: false, reason: 'adapter-threw' }`
+  //   - stale-adapter (teardown/remount) returns `{ ok: false, reason: 'adapter-stale' }`
+  //   - rejected outcomes emit a single `comments-update` event with
+  //     `rejected: true` and a stable `reason`; rows are not mutated
+  //   - committed-but-refresh-failed (`outcome.committed === true`) is
+  //     surfaced honestly; we do NOT reconcile with `[]`
+  //   - successful outcomes reconcile through `reconcileCommentsFromV2(...)`
+  //     and emit an UPDATE / RESOLVED / DELETED event using existing shapes
+  const runV2CommentMutation = async ({
+    superdoc,
+    adapter,
+    fileId,
+    operation,
+    eventType,
+    rejectionFallbackReason,
+    rejectionEventExtras = {},
+    successEventBuilder,
+  }) => {
+    let outcome;
+    try {
+      outcome = await operation();
+    } catch (err) {
+      outcome = { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+    }
+
+    // Stamped-adapter guard: drop late results after teardown/remount. We
+    // intentionally do not emit anything in this case — the previous mount
+    // (and its dialog) is gone, and the new mount owns its own events.
+    if (!isCurrentV2CommentsAdapter(adapter)) {
+      return { ok: false, reason: 'adapter-stale' };
+    }
+
+    if (!outcome?.ok) {
+      const rejectedEvent = {
+        type: eventType,
+        rejected: true,
+        reason: outcome?.reason ?? rejectionFallbackReason,
+        ...(outcome?.committed ? { committed: true } : {}),
+        ...(outcome?.detail !== undefined ? { detail: outcome.detail } : {}),
+        ...rejectionEventExtras,
+      };
+      superdoc?.emit?.('comments-update', rejectedEvent);
+      return outcome;
+    }
+
+    const reconciled = reconcileCommentsFromV2({
+      superdoc,
+      adapter,
+      documentId: adapter.documentId ?? fileId,
+      items: outcome.items ?? [],
+    });
+
+    const successEvent = successEventBuilder?.({ outcome, reconciled }) ?? null;
+    if (successEvent) {
+      superdoc?.emit?.('comments-update', successEvent);
+    }
+    return { ok: true, items: outcome.items ?? [], reconciled };
+  };
+
+  /**
+   * Reply to an existing comment through the v2 adapter.
+   *
+   * Plan §4.1 rules:
+   *   - empty text rejects before dispatch with `comment-text-empty`
+   *   - missing parent rejects before dispatch with `parent-comment-id-missing`
+   *   - successful reply refreshes from v2 list and reconciles
+   *   - rejection preserves rows and emits a rejected `comments-update` event
+   *   - committed-but-refresh-failed surfaces honestly (no reconcile with `[]`)
+   */
+  const replyCommentV2 = async ({ superdoc, parentCommentId, text } = {}) => {
+    const v2Adapter = getV2CommentsAdapter(superdoc);
+    if (!v2Adapter) return { ok: false, reason: 'v2-comments-adapter-missing' };
+
+    const normalizedParent = parentCommentId != null ? String(parentCommentId) : null;
+    if (!normalizedParent) return { ok: false, reason: 'parent-comment-id-missing' };
+    if (typeof text !== 'string' || text.length === 0) {
+      return { ok: false, reason: 'comment-text-empty' };
+    }
+
+    const parent = commentsList.value.find((c) => String(c.commentId) === normalizedParent);
+    const fileId = parent?.fileId ?? v2Adapter.documentId ?? null;
+
+    return runV2CommentMutation({
+      superdoc,
+      adapter: v2Adapter,
+      fileId,
+      operation: () => v2Adapter.reply({ parentCommentId: normalizedParent, text }),
+      eventType: COMMENT_EVENTS.ADD,
+      rejectionFallbackReason: 'v2-reply-failed',
+      rejectionEventExtras: parent ? { comment: getCommentEventPayload(parent) } : {},
+      successEventBuilder: ({ reconciled }) => ({
+        type: COMMENT_EVENTS.ADD,
+        comment: reconciled?.added?.getValues?.() ?? null,
+      }),
+    });
+  };
+
+  /**
+   * Edit an existing comment through the v2 adapter.
+   *
+   * Plan §4.2 rules:
+   *   - empty replacement text rejects with `comment-text-empty` before dispatch
+   *   - successful edit refreshes from v2 list and reconciles row text
+   *   - rejection leaves original row + editing state intact, emits a
+   *     rejected `comments-update` event with a stable reason
+   */
+  const editCommentV2 = async ({ superdoc, commentId, text } = {}) => {
+    const v2Adapter = getV2CommentsAdapter(superdoc);
+    if (!v2Adapter) return { ok: false, reason: 'v2-comments-adapter-missing' };
+
+    const id = commentId != null ? String(commentId) : null;
+    if (!id) return { ok: false, reason: 'comment-id-missing' };
+    if (typeof text !== 'string' || text.length === 0) {
+      return { ok: false, reason: 'comment-text-empty' };
+    }
+
+    const existing = commentsList.value.find((c) => String(c.commentId) === id);
+    const fileId = existing?.fileId ?? v2Adapter.documentId ?? null;
+
+    return runV2CommentMutation({
+      superdoc,
+      adapter: v2Adapter,
+      fileId,
+      operation: () => v2Adapter.edit({ commentId: id, text }),
+      eventType: COMMENT_EVENTS.UPDATE,
+      rejectionFallbackReason: 'v2-edit-failed',
+      rejectionEventExtras: existing
+        ? { comment: getCommentEventPayload(existing), changes: [{ key: 'text', value: text }] }
+        : {},
+      successEventBuilder: () => {
+        const refreshed = commentsList.value.find((c) => String(c.commentId) === id) ?? existing;
+        if (!refreshed) return null;
+        return {
+          type: COMMENT_EVENTS.UPDATE,
+          comment: getCommentEventPayload(refreshed),
+          changes: [{ key: 'text', value: refreshed.commentText ?? text }],
+        };
+      },
+    });
+  };
+
+  /**
+   * Resolve an existing comment through the v2 adapter.
+   *
+   * Plan §4.3 rules:
+   *   - successful resolve refreshes from v2 list and clears the active
+   *     comment / dialog target if the resolved comment was active
+   *   - rejection leaves the row active, emits a rejected event
+   *   - active state must never reference a deleted/missing anchor — the
+   *     reconciler is already family-scoped (see TCS 001 §5)
+   */
+  const resolveCommentV2 = async ({ superdoc, commentId } = {}) => {
+    const v2Adapter = getV2CommentsAdapter(superdoc);
+    if (!v2Adapter) return { ok: false, reason: 'v2-comments-adapter-missing' };
+
+    const id = commentId != null ? String(commentId) : null;
+    if (!id) return { ok: false, reason: 'comment-id-missing' };
+
+    const existing = commentsList.value.find((c) => String(c.commentId) === id);
+    const fileId = existing?.fileId ?? v2Adapter.documentId ?? null;
+
+    const result = await runV2CommentMutation({
+      superdoc,
+      adapter: v2Adapter,
+      fileId,
+      operation: () => v2Adapter.resolve({ commentId: id }),
+      eventType: COMMENT_EVENTS.RESOLVED,
+      rejectionFallbackReason: 'v2-resolve-failed',
+      rejectionEventExtras: existing ? { comment: getCommentEventPayload(existing) } : {},
+      successEventBuilder: () => {
+        const refreshed = commentsList.value.find((c) => String(c.commentId) === id) ?? existing;
+        if (!refreshed) return null;
+        return {
+          type: COMMENT_EVENTS.RESOLVED,
+          comment: getCommentEventPayload(refreshed),
+        };
+      },
+    });
+
+    if (result?.ok) {
+      // Clear the active target only after the refreshed list confirms the
+      // resolved state (plan §4.3). The reconciler already drops the active
+      // row when the comment family no longer carries this row; this branch
+      // also clears active state when the row is still present but resolved.
+      const refreshed = commentsList.value.find((c) => String(c.commentId) === id);
+      const isResolved = Boolean(refreshed?.resolvedTime);
+      const activeKey = activeComment.value != null ? String(activeComment.value) : null;
+      if (isResolved && activeKey === id) {
+        clearActiveCommentSelection();
+      }
+    }
+
+    return result;
+  };
+
+  // TCS Phase 0 / 001: hydration + reconciliation helpers. Both are no-ops
+  // when the v2 adapter is missing; the v1 path keeps the existing
+  // `processLoadedDocxComments` flow.
+  //
+  // Async results are stamped with the adapter that produced them so late
+  // results after `onV2RenderCleared` (which calls
+  // `setV2CommentsAdapter(null)`) cannot mutate durable rows. The "current"
+  // adapter is the one resolved through `getV2CommentsAdapter(...)` at apply
+  // time; if it no longer matches the stamped adapter we drop the result.
+  //
+  // Adapter throws are caught at the store boundary and surfaced as
+  // `{ ok: false, reason: 'adapter-threw' }` so a buggy adapter cannot leave
+  // the store in an inconsistent state.
+
+  // Stamping signal: the store ref is authoritative for "v2 adapter is
+  // mounted on this store". `onV2RenderCleared` in `SuperDoc.vue` always
+  // calls `setV2CommentsAdapter(null)` / `setV2TrackedChangesAdapter(null)`
+  // on teardown / remount, so a late async result whose stamped adapter no
+  // longer matches the store ref is dropped without mutating durable rows.
+  // We intentionally do not consult the `activeEditor` facade here — plan
+  // §4 explicitly scopes teardown to the store/shell, not the facade.
+  const isCurrentV2CommentsAdapter = (adapter) => {
+    if (!adapter) return false;
+    return v2CommentsAdapter.value === adapter;
+  };
+  const isCurrentV2TrackedChangesAdapter = (adapter) => {
+    if (!adapter) return false;
+    return v2TrackedChangesAdapter.value === adapter;
+  };
+
+  const hydrateCommentsFromV2 = async ({ superdoc, adapter, documentId } = {}) => {
+    const effectiveAdapter = adapter ?? getV2CommentsAdapter(superdoc);
+    if (!effectiveAdapter || typeof effectiveAdapter.refresh !== 'function') {
+      return { ok: false, reason: 'adapter-missing' };
+    }
+    let result;
+    try {
+      result = await effectiveAdapter.refresh();
+    } catch (err) {
+      return { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+    }
+    if (!isCurrentV2CommentsAdapter(effectiveAdapter)) {
+      return { ok: false, reason: 'adapter-stale' };
+    }
+    if (!result?.ok) return result;
+    reconcileCommentsFromV2({
+      superdoc,
+      adapter: effectiveAdapter,
+      documentId,
+      items: result.items ?? [],
+    });
+    return { ok: true, items: result.items ?? [] };
+  };
+
+  const reconcileCommentsFromV2 = ({ superdoc, adapter, documentId, items } = {}) => {
+    if (!adapter || !Array.isArray(items)) return { added: null };
+    // Late results after teardown/remount are dropped — durable rows for the
+    // previous mount must not be mutated by a stale adapter result.
+    if (!isCurrentV2CommentsAdapter(adapter)) return { added: null, dropped: 'adapter-stale' };
+
+    const effectiveDocumentId = documentId ?? adapter.documentId ?? null;
+    const normalizedEffectiveDocumentId = effectiveDocumentId != null ? String(effectiveDocumentId) : null;
+    const document = effectiveDocumentId ? superdocStore.getDocument(effectiveDocumentId) : null;
+    const fileType = document?.type ?? null;
+    const isBlankV2CommentText = (value) => {
+      if (typeof value !== 'string') return true;
+      return value
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .trim().length === 0;
+    };
+    const isV2TrackedChangeSidecarCommentInput = (input) => {
+      if (!input || input.trackedChange === true) return false;
+      if (!input.trackedChangeParentId || input.parentCommentId) return false;
+      return isBlankV2CommentText(input.commentText);
+    };
+
+    // Capture active row family BEFORE mutation so active-row clearing is
+    // family-scoped: comment reconciliation must not clear an active
+    // tracked-change row (TCS Phase 0 §5).
+    const activeKey = activeComment.value != null ? String(activeComment.value) : null;
+    const previousActiveRow = activeKey
+      ? commentsList.value.find((c) => String(c.commentId) === activeKey) ?? null
+      : null;
+    const previousActivePendingMatch =
+      previousActiveRow != null &&
+      pendingComment.value != null &&
+      (previousActiveRow === pendingComment.value ||
+        (pendingComment.value.commentId != null &&
+          String(previousActiveRow.commentId ?? '') === String(pendingComment.value.commentId)));
+    const activeWasRealCommentInThisDoc =
+      previousActiveRow != null &&
+      !previousActivePendingMatch &&
+      previousActiveRow.trackedChange !== true &&
+      !isV2SyntheticTrackedChangeRow(previousActiveRow) &&
+      (normalizedEffectiveDocumentId == null ||
+        previousActiveRow.fileId == null ||
+        String(previousActiveRow.fileId) === normalizedEffectiveDocumentId);
+
+    // Build the next comment-family rows for the effective document.
+    // Synthetic tracked-change comment-lane items are filtered out at the
+    // store boundary; the real tracked-change family is owned by
+    // `reconcileTrackedChangesFromV2(...)`.
+    const incomingByCommentId = new Map();
+    for (const item of items) {
+      if (isSyntheticTrackedChangeCommentLaneItem(item)) continue;
+      const input = adapter.mapV2CommentToUseCommentInput(item, {
+        fileId: effectiveDocumentId,
+        fileType,
+      });
+      if (!input) continue;
+      if (isV2TrackedChangeSidecarCommentInput(input)) {
+        tracePreviewComments('hydrate:drop-v2-sidecar-comment', {
+          commentId: input.commentId ?? null,
+          importedId: input.importedId ?? null,
+          parentCommentId: input.parentCommentId ?? null,
+          trackedChangeParentId: input.trackedChangeParentId ?? null,
+          trackedChangeSide: input.trackedChangeSide ?? null,
+          commentText: input.commentText ?? null,
+        });
+        continue;
+      }
+      const cid = input.commentId != null ? String(input.commentId) : null;
+      if (!cid) continue;
+      incomingByCommentId.set(cid, input);
+    }
+
+    const belongsToReconciledDocument = (comment) => {
+      if (normalizedEffectiveDocumentId == null) return true;
+      const fid = comment?.fileId != null ? String(comment.fileId) : null;
+      if (fid == null) return true;
+      return fid === normalizedEffectiveDocumentId;
+    };
+
+    // Pinia/Vue can hand back distinct proxy wrappers for the same target
+    // when an object is referenced from two refs, so identity (`===`) alone
+    // is not sufficient — compare on commentId too.
+    const pendingCommentId =
+      pendingComment.value?.commentId != null ? String(pendingComment.value.commentId) : null;
+    const isPendingRow = (comment) => {
+      if (!comment || !pendingComment.value) return false;
+      if (comment === pendingComment.value) return true;
+      if (pendingCommentId != null && String(comment.commentId ?? '') === pendingCommentId) return true;
+      return false;
+    };
+
+    const isRealCommentFamilyRow = (comment) => {
+      if (!comment) return false;
+      if (isPendingRow(comment)) return false;
+      if (comment.trackedChange === true) return false;
+      if (isV2SyntheticTrackedChangeRow(comment)) return false;
+      return comment.commentId != null;
+    };
+
+    const applyUpdate = (existing, input) => {
+      existing.commentText = input.commentText ?? existing.commentText;
+      existing.isInternal = typeof input.isInternal === 'boolean' ? input.isInternal : existing.isInternal;
+      const hasResolvedTime = typeof input.resolvedTime === 'number';
+      if (hasResolvedTime) {
+        const preserveExistingResolvedTime =
+          input.resolvedTimeWasSynthesized === true && typeof existing.resolvedTime === 'number';
+        existing.resolvedTime = preserveExistingResolvedTime ? existing.resolvedTime : input.resolvedTime;
+        existing.resolvedByEmail = input.resolvedByEmail ?? null;
+        existing.resolvedByName = input.resolvedByName ?? null;
+      } else {
+        existing.resolvedTime = null;
+        existing.resolvedByEmail = null;
+        existing.resolvedByName = null;
+      }
+      if (input.parentCommentId !== undefined) existing.parentCommentId = input.parentCommentId;
+      // Preserve tracked-change association so
+      // `resolveLinkedCommentsForTrackedChangeDecision(...)` can match.
+      if (input.trackedChangeParentId !== undefined) {
+        existing.trackedChangeParentId = input.trackedChangeParentId;
+      }
+      if (input.trackedChangeSide !== undefined) {
+        existing.trackedChangeSide = input.trackedChangeSide;
+      }
+    };
+
+    const nextList = [];
+    const seenIncoming = new Set();
+    const addedComments = [];
+
+    for (const existing of commentsList.value) {
+      if (!isRealCommentFamilyRow(existing) || !belongsToReconciledDocument(existing)) {
+        // Preserve tracked-change rows, pending UI rows, and rows for other
+        // open documents. These are owned by other reconciliation paths.
+        nextList.push(existing);
+        continue;
+      }
+      const cid = String(existing.commentId);
+      const input = incomingByCommentId.get(cid);
+      if (input) {
+        applyUpdate(existing, input);
+        seenIncoming.add(cid);
+        nextList.push(existing);
+      }
+      // else: this real-comment-family row for the effective document is no
+      // longer in the v2 list → drop it.
+    }
+
+    for (const [cid, input] of incomingByCommentId.entries()) {
+      if (seenIncoming.has(cid)) continue;
+      const created = useComment(input);
+      nextList.push(created);
+      addedComments.push(created);
+    }
+
+    commentsList.value = nextList;
+
+    // Family-scoped active-row clearing: only clear when the active row was
+    // a real-comment-family row in this document AND it's no longer present.
+    if (
+      activeWasRealCommentInThisDoc &&
+      activeKey &&
+      !nextList.some((c) => String(c.commentId) === activeKey)
+    ) {
+      clearActiveCommentSelection();
+    }
+
+    void superdoc; // reserved for future emit (e.g., per-item RESOLVED events)
+    return { added: addedComments[addedComments.length - 1] ?? null };
   };
 
   /**
@@ -1794,6 +2464,7 @@ export const useCommentsStore = defineStore('comments', () => {
           (trackedChangeParentId && removedIds.has(trackedChangeParentId));
 
         if (!isLinkedToRemovedParent) return true;
+        if (comment.resolvedTime) return true;
 
         const commentId = comment.commentId != null ? String(comment.commentId) : null;
         const importedId = comment.importedId != null ? String(comment.importedId) : null;
@@ -1838,6 +2509,39 @@ export const useCommentsStore = defineStore('comments', () => {
     }
   };
 
+  const resolveLinkedCommentsForTrackedChangeDecision = ({ superdoc, comment } = {}) => {
+    if (!comment?.trackedChange) return 0;
+    const trackedChangeIds = new Set(getCommentAliasIds(comment));
+    const anchorKey = comment.trackedChangeAnchorKey != null ? String(comment.trackedChangeAnchorKey) : null;
+    if (anchorKey?.startsWith('tc::')) {
+      const rawId = anchorKey.slice(anchorKey.lastIndexOf('::') + 2);
+      if (rawId) trackedChangeIds.add(rawId);
+    }
+    if (!trackedChangeIds.size) return 0;
+
+    const resolveArgs = {
+      email: superdoc?.user?.email ?? null,
+      name: superdoc?.user?.name ?? null,
+      superdoc,
+    };
+    let resolvedCount = 0;
+
+    commentsList.value.forEach((linkedComment) => {
+      if (!linkedComment || linkedComment === comment) return;
+      if (linkedComment.resolvedTime) return;
+      const parentKeys = [linkedComment.trackedChangeParentId, linkedComment.parentCommentId]
+        .map((id) => normalizeCommentId(id))
+        .filter(Boolean);
+      if (!parentKeys.some((id) => trackedChangeIds.has(id))) return;
+      if (typeof linkedComment.resolveComment === 'function') {
+        linkedComment.resolveComment(resolveArgs);
+        resolvedCount += 1;
+      }
+    });
+
+    return resolvedCount;
+  };
+
   /**
    * Rebuild tracked-change comments from the current editor state.
    *
@@ -1851,6 +2555,118 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const decideTrackedChangeFromSidebar = ({ superdoc, comment, decision }) => {
     if (!comment?.trackedChange) return { ok: false };
+
+    // ui-phase3-003: v2 mode routes the decision through the v2 tracked-change
+    // adapter. The adapter dispatches `review.trackedChangeDecide` against the
+    // v2 host and refresh/prune is driven by the caller after the receipt
+    // commits. v1 callers fall through to the document-api / v1 command path.
+    const v2Adapter = getV2TrackedChangesAdapter(superdoc);
+    if (v2Adapter) {
+      // Plan §4.2: invalid decision values reject before dispatch. The
+      // adapter would also reject, but doing it here avoids a useless
+      // host round-trip and a misleading event-call ordering in callers
+      // that key off the return value.
+      if (decision !== 'accept' && decision !== 'reject') {
+        return Promise.resolve({ ok: false, reason: 'decision-invalid' });
+      }
+      // Capture the decided tracked-change id BEFORE dispatch so we can
+      // compare against the v2 host's active target after a successful
+      // refresh, even if the comment row has been pruned from the store
+      // by the reconcile step.
+      const decidedId =
+        comment?.commentId != null
+          ? String(comment.commentId)
+          : comment?.trackedChangeAnchorKey?.startsWith?.('tc::body::')
+            ? comment.trackedChangeAnchorKey.slice('tc::body::'.length)
+            : null;
+      const wasActiveBeforeDecide =
+        decidedId != null && String(activeComment.value ?? '') === decidedId;
+      const invocation = (async () => {
+        try {
+          return await (decision === 'accept' ? v2Adapter.accept(comment) : v2Adapter.reject(comment));
+        } catch (err) {
+          return { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+        }
+      })();
+      return invocation.then(async (outcome) => {
+        // Stamped-adapter guard: drop late decisions after teardown/remount.
+        if (!isCurrentV2TrackedChangesAdapter(v2Adapter)) {
+          return { ok: false, reason: 'adapter-stale' };
+        }
+        if (!outcome?.ok) return { ok: false, reason: outcome?.reason, detail: outcome?.detail };
+
+        // Plan §4.2: a committed decision MUST be followed by a successful
+        // refreshed v2 list before we prune the row, resolve linked
+        // comments, or clear the active target. If the list call fails or
+        // is dropped (stale adapter / teardown / remount), surface that
+        // honestly instead of coercing into success.
+        let listResult;
+        try {
+          listResult = await v2Adapter.listTrackedChanges();
+        } catch (err) {
+          return {
+            ok: false,
+            committed: true,
+            reason: 'relist-after-commit-failed',
+            detail: err?.message ?? String(err),
+          };
+        }
+        if (!isCurrentV2TrackedChangesAdapter(v2Adapter)) {
+          return { ok: false, committed: true, reason: 'adapter-stale' };
+        }
+        if (!listResult?.ok) {
+          return {
+            ok: false,
+            committed: true,
+            reason: 'relist-after-commit-failed',
+            detail: listResult?.reason ?? listResult?.detail ?? null,
+          };
+        }
+
+        // Plan §4.2: linked comments are resolved only after receipt success
+        // and post-list success, and BEFORE the prune step so the prune
+        // helper does not remove unresolved linked descendants. The list
+        // result has not yet been applied to the store at this point, so
+        // `commentsList` still contains the decided tracked-change row.
+        resolveLinkedCommentsForTrackedChangeDecision({ superdoc, comment });
+
+        const effectiveDocumentId =
+          v2Adapter.documentId ?? superdoc?.activeEditor?.documentId ?? null;
+        reconcileTrackedChangesFromV2({
+          superdoc,
+          adapter: v2Adapter,
+          documentId: effectiveDocumentId,
+          items: listResult.items ?? [],
+        });
+
+        // Plan §4.2: active target clears when the decided tracked-change row
+        // disappears from the refreshed list. The store's active row only
+        // clears when it pointed at the decided id; the v2 host's active
+        // target clears via the adapter helper, which is a no-op when the
+        // host's active target was not the decided row.
+        const liveIds = new Set(
+          (listResult.items ?? [])
+            .map((item) => (item && item.id != null ? String(item.id) : null))
+            .filter(Boolean),
+        );
+        const decidedStillLive = decidedId != null && liveIds.has(decidedId);
+        if (!decidedStillLive) {
+          if (wasActiveBeforeDecide) {
+            clearActiveCommentSelection();
+          }
+          if (decidedId && typeof v2Adapter.clearActiveTrackedChangeTargetIfMatches === 'function') {
+            try {
+              v2Adapter.clearActiveTrackedChangeTargetIfMatches(decidedId);
+            } catch {
+              /* best-effort host clear */
+            }
+          }
+        }
+
+        return { ok: true, success: true };
+      });
+    }
+
     const activeEditor = superdoc?.activeEditor;
     if (!activeEditor) return { ok: false };
 
@@ -1876,6 +2692,80 @@ export const useCommentsStore = defineStore('comments', () => {
     const command = activeEditor.commands?.[commandName];
     if (typeof command !== 'function') return { ok: false };
     return { ok: true, success: Boolean(command(id)) };
+  };
+
+  // ui-phase3-003: hydrate / reconcile tracked-change rows from the v2 host.
+  // On first hydration we populate the sidebar with comment-style rows. On
+  // subsequent reconciliations (post-decision refresh) we add new rows and
+  // prune rows whose tracked-change id is no longer reported by the v2
+  // `trackChanges.list()` result.
+  const hydrateTrackedChangesFromV2 = async ({ superdoc, adapter, documentId } = {}) => {
+    const effectiveAdapter = adapter ?? getV2TrackedChangesAdapter(superdoc);
+    if (!effectiveAdapter || typeof effectiveAdapter.listTrackedChanges !== 'function') {
+      return { ok: false, reason: 'adapter-missing' };
+    }
+    let result;
+    try {
+      result = await effectiveAdapter.listTrackedChanges();
+    } catch (err) {
+      return { ok: false, reason: 'adapter-threw', detail: err?.message ?? String(err) };
+    }
+    if (!isCurrentV2TrackedChangesAdapter(effectiveAdapter)) {
+      return { ok: false, reason: 'adapter-stale' };
+    }
+    if (!result?.ok) return result;
+    reconcileTrackedChangesFromV2({
+      superdoc,
+      adapter: effectiveAdapter,
+      documentId,
+      items: result.items ?? [],
+    });
+    return { ok: true, items: result.items ?? [] };
+  };
+
+  const reconcileTrackedChangesFromV2 = ({ superdoc, adapter, documentId, items } = {}) => {
+    if (!adapter || !Array.isArray(items)) return;
+    // Late results after teardown/remount are dropped.
+    if (!isCurrentV2TrackedChangesAdapter(adapter)) return;
+    const effectiveDocumentId = documentId ?? adapter.documentId ?? superdoc?.activeEditor?.documentId ?? null;
+    const liveAnchorKeys = new Set();
+    const liveIds = new Set();
+
+    for (const item of items) {
+      const params = adapter.mapV2TrackedChangeToCommentParams(item);
+      if (!params) continue;
+      // TCS Phase 0 / 005 §5: adapters may surface canonical v2 types that
+      // do not map to a Phase 0 dialog variant (`move` / `structural` /
+      // unknown). They return `{ event: 'omit', reason }` so callers can
+      // record the omission without rendering a blank row. We still treat
+      // the change as live for pruning so we don't churn the row out and
+      // back in across refreshes.
+      if (params.event === 'omit') {
+        if (params.changeId != null) liveIds.add(String(params.changeId));
+        continue;
+      }
+      if (effectiveDocumentId && params.documentId == null) {
+        params.documentId = effectiveDocumentId;
+      }
+      if (params.changeId != null) liveIds.add(String(params.changeId));
+      if (params.trackedChangeAnchorKey != null) {
+        liveAnchorKeys.add(String(params.trackedChangeAnchorKey));
+      }
+      // Reuse the existing tracked-change comment synthesis path. It maps
+      // params → useComment row, threads child comments, and emits the
+      // sidebar update event consistent with v1 behavior.
+      handleTrackedChangeUpdate({ superdoc, params, broadcastChanges: false });
+    }
+
+    if (!effectiveDocumentId) return;
+    // TCS Phase 0 §5: prune stale tracked-change rows after every successful
+    // refresh so accept/reject removals don't leave orphan sidebar rows. We
+    // feed both live raw id sets and live anchor-key sets. The helper is
+    // already scoped to `trackedChange === true` rows for the active
+    // document, so real comment rows and other documents are preserved.
+    pruneStaleTrackedChangeComments(liveIds, liveAnchorKeys, String(effectiveDocumentId), superdoc, {
+      broadcastChanges: false,
+    });
   };
 
   const syncTrackedChangeComments = ({ superdoc, editor, broadcastChanges = true }) => {
@@ -2198,6 +3088,35 @@ export const useCommentsStore = defineStore('comments', () => {
       if (canonicalKey && normalizedPositions[canonicalKey] === undefined) {
         normalizedPositions[canonicalKey] = entry;
       }
+    });
+
+    const resolveTrackedChangeEntry = (comment) => {
+      const aliasIds = [
+        comment?.trackedChangeAnchorKey,
+        comment?.commentId,
+        comment?.importedId,
+        buildTrackedChangeImportedPositionId(comment?.importedId),
+      ]
+        .map((id) => normalizeCommentId(id))
+        .filter(Boolean);
+      for (const aliasId of aliasIds) {
+        const entry = normalizedPositions[aliasId];
+        if (entry !== undefined) {
+          return { entry, aliasIds };
+        }
+      }
+      return { entry: null, aliasIds };
+    };
+
+    commentsList.value.forEach((comment) => {
+      if (!comment?.trackedChange) return;
+      const { entry, aliasIds } = resolveTrackedChangeEntry(comment);
+      if (!entry) return;
+      aliasIds.forEach((aliasId) => {
+        if (normalizedPositions[aliasId] === undefined) {
+          normalizedPositions[aliasId] = entry;
+        }
+      });
     });
 
     editorCommentPositions.value = normalizedPositions;
@@ -2605,5 +3524,25 @@ export const useCommentsStore = defineStore('comments', () => {
     clearInstantSidebarAlignment,
     syncTrackedChangeComments,
     decideTrackedChangeFromSidebar,
+
+    // ui-phase3-002: v2 comments adapter helpers
+    v2CommentsAdapter,
+    setV2CommentsAdapter,
+    getV2CommentsAdapter,
+    hydrateCommentsFromV2,
+    reconcileCommentsFromV2,
+    isV2EditorActive,
+
+    // TCS Phase 0 / 004: store-owned v2 comment mutation helpers.
+    replyCommentV2,
+    editCommentV2,
+    resolveCommentV2,
+
+    // ui-phase3-003: v2 tracked-change adapter helpers
+    v2TrackedChangesAdapter,
+    setV2TrackedChangesAdapter,
+    getV2TrackedChangesAdapter,
+    hydrateTrackedChangesFromV2,
+    reconcileTrackedChangesFromV2,
   };
 });

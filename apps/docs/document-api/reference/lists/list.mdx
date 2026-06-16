@@ -35,6 +35,7 @@ Returns a ListsListResult with an array of list item summaries and total count.
 | `within.kind` | `"block"` | no | Constant: `"block"` |
 | `within.nodeId` | string | no |  |
 | `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `within.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -44,7 +45,11 @@ Returns a ListsListResult with an array of list item summaries and total count.
   "within": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -71,7 +76,11 @@ Returns a ListsListResult with an array of list item summaries and total count.
       "address": {
         "kind": "block",
         "nodeId": "node-def456",
-        "nodeType": "listItem"
+        "nodeType": "listItem",
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
       },
       "handle": {
         "ref": "handle:abc123",

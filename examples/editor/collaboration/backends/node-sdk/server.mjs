@@ -31,6 +31,39 @@ let openResult = null;
 let initialized = false;
 let shuttingDown = false;
 
+// --- Simple in-memory rate limiter ------------------------------------------
+// This example is a raw node:http server (no Express), so it cannot reuse the
+// express-rate-limit middleware the demo servers use. A fixed-window per-client
+// counter is enough to stop one caller from hammering the document-mutating and
+// file-writing endpoints (/insert, /markdown, /download). 20 req/min matches the
+// Express demos. State is per-process and resets on restart.
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+// Every route this server serves. Unknown paths are rejected before any expensive
+// work (see handleRequest), so probing random URLs cannot trigger SDK init.
+const KNOWN_PATHS = new Set(['/', '/status', '/insert', '/markdown', '/download']);
+// Document-operation endpoints that must be throttled, gated before the expensive
+// ensureInitialized() call below.
+const THROTTLED_PATHS = new Set(['/insert', '/markdown', '/download']);
+/** @type {Map<string, { count: number, resetAt: number }>} */
+const rateLimitBuckets = new Map();
+
+function isRateLimited(req) {
+  const key = req.socket.remoteAddress ?? 'unknown';
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || now >= bucket.resetAt) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (bucket.count >= RATE_LIMIT_MAX) return true;
+
+  bucket.count += 1;
+  return false;
+}
+
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(statusCode, { 'content-type': 'application/json; charset=utf-8' });
@@ -105,8 +138,24 @@ async function handleRequest(req, res) {
     return;
   }
 
-  await ensureInitialized();
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? `127.0.0.1:${PORT}`}`);
+
+  // Reject unknown paths before any expensive work, so probing random URLs cannot
+  // trigger SDK connect/open on an uninitialized server.
+  if (!KNOWN_PATHS.has(url.pathname)) {
+    sendJson(res, 404, { ok: false, error: `Not found: ${url.pathname}` });
+    return;
+  }
+
+  // Throttle the document-operation endpoints before any expensive work, including
+  // ensureInitialized(), so over-limit requests cannot trigger repeated (and, on
+  // failure, retried) initialization attempts.
+  if (THROTTLED_PATHS.has(url.pathname) && isRateLimited(req)) {
+    sendJson(res, 429, { ok: false, error: 'Rate limit exceeded. Try again in a minute.' });
+    return;
+  }
+
+  await ensureInitialized();
 
   if (url.pathname === '/') {
     sendJson(res, 200, {
@@ -170,8 +219,6 @@ async function handleRequest(req, res) {
     createReadStream(DOWNLOAD_PATH).pipe(res);
     return;
   }
-
-  sendJson(res, 404, { ok: false, error: `Not found: ${url.pathname}` });
 }
 
 const server = createServer((req, res) => {

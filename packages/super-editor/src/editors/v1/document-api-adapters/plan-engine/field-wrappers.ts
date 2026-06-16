@@ -61,14 +61,18 @@ function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boole
 
 function rejectUnsupportedInsertOptions(input: FieldInsertInput): void {
   const unsupported: string[] = [];
+  const legacyInput = input as FieldInsertInput & {
+    serialization?: unknown;
+    complexFormatting?: unknown;
+  };
 
   if (input.cachedResultText !== undefined || input.updatePolicy === 'preserveCached') {
     unsupported.push('cachedResultText/updatePolicy: "preserveCached"');
   }
-  if (input.serialization === 'simple') {
+  if (legacyInput.serialization === 'simple') {
     unsupported.push('serialization: "simple"');
   }
-  if (input.complexFormatting !== undefined) {
+  if (legacyInput.complexFormatting !== undefined) {
     unsupported.push('complexFormatting');
   }
 

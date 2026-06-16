@@ -1,0 +1,912 @@
+---
+title: format.paragraph.setMarkRunProps
+sidebarTitle: format.paragraph.setMarkRunProps
+description: "Set the paragraph mark's run properties (w:pPr/w:rPr), e.g. the font size or specVanish carried by the paragraph-end mark. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Set the paragraph mark's run properties (w:pPr/w:rPr), e.g. the font size or specVanish carried by the paragraph-end mark. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`.
+
+- Operation ID: `format.paragraph.setMarkRunProps`
+- API member path: `editor.doc.format.paragraph.setMarkRunProps(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ParagraphMutationResult; reports NO_OP if the encoded mark run properties already match.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `markRunProps` | object | yes |  |
+| `markRunProps.baselineShift` | number | no |  |
+| `markRunProps.bold` | boolean | no |  |
+| `markRunProps.boldCs` | boolean | no |  |
+| `markRunProps.border` | object | no |  |
+| `markRunProps.border.color` | object(model="rgb") \| object(model="theme") \| object(model="auto") | no | One of: object(model="rgb"), object(model="theme"), object(model="auto") |
+| `markRunProps.border.frame` | boolean | no |  |
+| `markRunProps.border.shadow` | boolean | no |  |
+| `markRunProps.border.space` | number | no |  |
+| `markRunProps.border.style` | string | no |  |
+| `markRunProps.border.width` | number | no |  |
+| `markRunProps.caps` | boolean | no |  |
+| `markRunProps.characterScale` | number | no |  |
+| `markRunProps.characterSpacing` | number | no |  |
+| `markRunProps.color` | object(model="rgb") \| object(model="theme") \| object(model="auto") | no | One of: object(model="rgb"), object(model="theme"), object(model="auto") |
+| `markRunProps.cs` | boolean | no |  |
+| `markRunProps.doubleStrikethrough` | boolean | no |  |
+| `markRunProps.emboss` | boolean | no |  |
+| `markRunProps.fitTextWidth` | number | no |  |
+| `markRunProps.fontFamily` | string | no |  |
+| `markRunProps.fontSize` | number | no |  |
+| `markRunProps.fontSizeCs` | number | no |  |
+| `markRunProps.fonts` | object | no |  |
+| `markRunProps.fonts.ascii` | string | no |  |
+| `markRunProps.fonts.asciiTheme` | string | no |  |
+| `markRunProps.fonts.cs` | string | no |  |
+| `markRunProps.fonts.csTheme` | string | no |  |
+| `markRunProps.fonts.eastAsia` | string | no |  |
+| `markRunProps.fonts.eastAsiaTheme` | string | no |  |
+| `markRunProps.fonts.hAnsi` | string | no |  |
+| `markRunProps.fonts.hAnsiTheme` | string | no |  |
+| `markRunProps.fonts.hint` | string | no |  |
+| `markRunProps.highlight` | string | no |  |
+| `markRunProps.imprint` | boolean | no |  |
+| `markRunProps.italic` | boolean | no |  |
+| `markRunProps.italicCs` | boolean | no |  |
+| `markRunProps.kern` | number | no |  |
+| `markRunProps.lang` | object | no |  |
+| `markRunProps.lang.bidi` | string | no |  |
+| `markRunProps.lang.eastAsia` | string | no |  |
+| `markRunProps.lang.val` | string | no |  |
+| `markRunProps.outline` | boolean | no |  |
+| `markRunProps.rtl` | boolean | no |  |
+| `markRunProps.shading` | object | no |  |
+| `markRunProps.shading.color` | object(model="rgb") \| object(model="theme") \| object(model="auto") | no | One of: object(model="rgb"), object(model="theme"), object(model="auto") |
+| `markRunProps.shading.fill` | object(model="rgb") \| object(model="theme") \| object(model="auto") | no | One of: object(model="rgb"), object(model="theme"), object(model="auto") |
+| `markRunProps.shading.pattern` | string | no |  |
+| `markRunProps.shadow` | boolean | no |  |
+| `markRunProps.smallCaps` | boolean | no |  |
+| `markRunProps.specVanish` | boolean | no |  |
+| `markRunProps.strikethrough` | boolean | no |  |
+| `markRunProps.textEffect` | string | no |  |
+| `markRunProps.underline` | object | no |  |
+| `markRunProps.underline.color` | object(model="rgb") \| object(model="theme") \| object(model="auto") | no | One of: object(model="rgb"), object(model="theme"), object(model="auto") |
+| `markRunProps.underline.style` | string | no |  |
+| `markRunProps.vanish` | boolean | no |  |
+| `markRunProps.verticalAlign` | enum | no | `"baseline"`, `"superscript"`, `"subscript"` |
+| `markRunProps.webHidden` | boolean | no |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Example request
+
+```json
+{
+  "markRunProps": {
+    "fontSizeCs": 12.5,
+    "specVanish": true
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resolution` | object | yes |  |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `true` | yes | Constant: `true` |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "resolution": {
+    "target": {
+      "kind": "block",
+      "nodeId": "node-def456",
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
+    }
+  },
+  "success": true,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "markRunProps": {
+      "additionalProperties": false,
+      "description": "Paragraph-mark run properties (SDRunProps shape, e.g. fontSizeCs, specVanish).",
+      "minProperties": 1,
+      "properties": {
+        "baselineShift": {
+          "type": "number"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "boldCs": {
+          "type": "boolean"
+        },
+        "border": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "color": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "rgb"
+                    },
+                    "value": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "theme"
+                    },
+                    "shade": {
+                      "type": "integer"
+                    },
+                    "theme": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "tint": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "theme"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "auto"
+                    }
+                  },
+                  "required": [
+                    "model"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "space": {
+              "type": "number"
+            },
+            "style": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "width": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "caps": {
+          "type": "boolean"
+        },
+        "characterScale": {
+          "type": "number"
+        },
+        "characterSpacing": {
+          "type": "number"
+        },
+        "color": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "model": {
+                  "const": "rgb"
+                },
+                "value": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "model",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "model": {
+                  "const": "theme"
+                },
+                "shade": {
+                  "type": "integer"
+                },
+                "theme": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tint": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "model",
+                "theme"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "model": {
+                  "const": "auto"
+                }
+              },
+              "required": [
+                "model"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "cs": {
+          "type": "boolean"
+        },
+        "doubleStrikethrough": {
+          "type": "boolean"
+        },
+        "emboss": {
+          "type": "boolean"
+        },
+        "fitTextWidth": {
+          "type": "number"
+        },
+        "fontFamily": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "fonts": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "ascii": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "asciiTheme": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "cs": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "csTheme": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "eastAsia": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "eastAsiaTheme": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "hAnsi": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "hAnsiTheme": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "hint": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "fontSize": {
+          "type": "number"
+        },
+        "fontSizeCs": {
+          "type": "number"
+        },
+        "highlight": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "imprint": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "italicCs": {
+          "type": "boolean"
+        },
+        "kern": {
+          "type": "number"
+        },
+        "lang": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "bidi": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "eastAsia": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "val": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "outline": {
+          "type": "boolean"
+        },
+        "rtl": {
+          "type": "boolean"
+        },
+        "shading": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "color": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "rgb"
+                    },
+                    "value": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "theme"
+                    },
+                    "shade": {
+                      "type": "integer"
+                    },
+                    "theme": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "tint": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "theme"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "auto"
+                    }
+                  },
+                  "required": [
+                    "model"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "fill": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "rgb"
+                    },
+                    "value": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "theme"
+                    },
+                    "shade": {
+                      "type": "integer"
+                    },
+                    "theme": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "tint": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "theme"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "auto"
+                    }
+                  },
+                  "required": [
+                    "model"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "pattern": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "shadow": {
+          "type": "boolean"
+        },
+        "smallCaps": {
+          "type": "boolean"
+        },
+        "specVanish": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        },
+        "textEffect": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "underline": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "color": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "rgb"
+                    },
+                    "value": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "theme"
+                    },
+                    "shade": {
+                      "type": "integer"
+                    },
+                    "theme": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "tint": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "theme"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "const": "auto"
+                    }
+                  },
+                  "required": [
+                    "model"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "style": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "vanish": {
+          "type": "boolean"
+        },
+        "verticalAlign": {
+          "enum": [
+            "baseline",
+            "superscript",
+            "subscript"
+          ]
+        },
+        "webHidden": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParagraphAddress"
+        },
+        {
+          "$ref": "#/$defs/HeadingAddress"
+        },
+        {
+          "$ref": "#/$defs/ListItemAddress"
+        }
+      ]
+    }
+  },
+  "required": [
+    "target",
+    "markRunProps"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ParagraphAddress"
+                },
+                {
+                  "$ref": "#/$defs/HeadingAddress"
+                },
+                {
+                  "$ref": "#/$defs/ListItemAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "success",
+        "target",
+        "resolution"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ParagraphAddress"
+                },
+                {
+                  "$ref": "#/$defs/HeadingAddress"
+                },
+                {
+                  "$ref": "#/$defs/ListItemAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "target": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParagraphAddress"
+        },
+        {
+          "$ref": "#/$defs/HeadingAddress"
+        },
+        {
+          "$ref": "#/$defs/ListItemAddress"
+        }
+      ]
+    }
+  },
+  "required": [
+    "success",
+    "target",
+    "resolution"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

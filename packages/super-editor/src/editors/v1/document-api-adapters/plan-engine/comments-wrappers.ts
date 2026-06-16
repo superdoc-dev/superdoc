@@ -179,6 +179,7 @@ function buildTrackedChangeLink(snapshot: TrackedChangeSnapshot): CommentTracked
   const { trackedChangeText, deletedText } = trackedChangeTextFields(snapshot);
   return {
     trackedChange: true,
+    trackedChangeId: snapshot.address.entityId,
     trackedChangeType: publicTrackedChangeType(snapshot),
     trackedChangeDisplayType: trackedChangeDisplayType(snapshot),
     trackedChangeStory: snapshot.story,

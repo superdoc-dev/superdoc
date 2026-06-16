@@ -31,6 +31,7 @@ Returns a ListsInsertResult with the new list item address and block ID.
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 | `text` | string | no |  |
 
 ### Example request
@@ -41,7 +42,11 @@ Returns a ListsInsertResult with the new list item address and block ID.
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "text": "Hello, world."
 }
@@ -59,10 +64,12 @@ Returns a ListsInsertResult with the new list item address and block ID.
 | `insertionPoint.range` | Range | yes | Range |
 | `insertionPoint.range.end` | integer | yes |  |
 | `insertionPoint.range.start` | integer | yes |  |
+| `insertionPoint.story` | StoryLocator | no | StoryLocator |
 | `item` | ListItemAddress | yes | ListItemAddress |
 | `item.kind` | `"block"` | yes | Constant: `"block"` |
 | `item.nodeId` | string | yes |  |
 | `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `item.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
 
@@ -86,12 +93,20 @@ Returns a ListsInsertResult with the new list item address and block ID.
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   },
   "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true,
   "trackedChangeRefs": [

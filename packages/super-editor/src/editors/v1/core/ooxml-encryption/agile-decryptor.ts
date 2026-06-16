@@ -114,6 +114,10 @@ async function hash(algorithm: AlgorithmIdentifier, data: Uint8Array): Promise<U
 /**
  * Decrypt data using AES-CBC with no automatic padding removal.
  *
+ * AES-CBC is mandated by the MS-OFFCRYPTO (ECMA-376 §2.3.4) Agile Encryption
+ * spec — AES-GCM is not an option here. Integrity is provided separately via
+ * HMAC-SHA512 over the encrypted segments (see verifyHmac).
+ *
  * Web Crypto always enforces PKCS#7 padding on decrypt. The OOXML spec uses
  * raw AES-CBC (zero-padded to the block boundary, no PKCS#7). To bridge the
  * gap we encrypt a synthetic PKCS#7 padding block (16 bytes of 0x10) using

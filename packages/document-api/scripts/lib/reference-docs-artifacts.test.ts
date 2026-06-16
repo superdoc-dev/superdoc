@@ -11,7 +11,7 @@ describe('reference docs artifacts', () => {
 
     const trackedChangeGet = artifacts.get('apps/docs/document-api/reference/track-changes/get.mdx');
     expect(trackedChangeGet).toBeDefined();
-    expect(trackedChangeGet!).toContain('| `pairedWithChangeId` | string \\| null | no |  |');
+    expect(trackedChangeGet!).toContain('| `pairedWithChangeId` | string \\| null | no | One of: string, null |');
 
     const trackedChangeList = artifacts.get('apps/docs/document-api/reference/track-changes/list.mdx');
     expect(trackedChangeList).toBeDefined();
@@ -52,5 +52,25 @@ describe('reference docs artifacts', () => {
     expect(formatApply).toBeDefined();
     expect(formatApply!).toContain('title: format.apply');
     expect(formatApply!).toContain('- Operation ID: `format.apply`');
+  });
+
+  it('generates a non-empty markRunProps example for paragraph mark run props docs', () => {
+    const artifacts = artifactContentByPath();
+
+    const setMarkRunPropsDoc = artifacts.get(
+      'apps/docs/document-api/reference/format/paragraph/set-mark-run-props.mdx',
+    );
+    expect(setMarkRunPropsDoc).toBeDefined();
+    expect(setMarkRunPropsDoc!).not.toContain('"markRunProps": {}');
+    expect(setMarkRunPropsDoc!).toContain('"fontSizeCs"');
+  });
+
+  it('uses a valid raw TOC instruction in create.tableOfContents example requests', () => {
+    const artifacts = artifactContentByPath();
+
+    const createTocDoc = artifacts.get('apps/docs/document-api/reference/create/table-of-contents.mdx');
+    expect(createTocDoc).toBeDefined();
+    expect(createTocDoc!).toContain('"instruction": "TOC \\\\o \\"1-3\\" \\\\u \\\\h \\\\z"');
+    expect(createTocDoc!).not.toContain('"instruction": "example"');
   });
 });

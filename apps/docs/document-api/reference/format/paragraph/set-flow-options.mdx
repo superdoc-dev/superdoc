@@ -1,20 +1,20 @@
 ---
 title: format.paragraph.setFlowOptions
 sidebarTitle: format.paragraph.setFlowOptions
-description: Set contextual spacing, page-break-before, and suppress-auto-hyphens flags.
+description: "Set paragraph flow flags: contextual spacing, page-break-before, suppress-auto-hyphens, and the advanced layout toggles auto-space-DE, auto-space-DN, adjust-right-indent, and snap-to-grid."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Set contextual spacing, page-break-before, and suppress-auto-hyphens flags.
+Set paragraph flow flags: contextual spacing, page-break-before, suppress-auto-hyphens, and the advanced layout toggles auto-space-DE, auto-space-DN, adjust-right-indent, and snap-to-grid.
 
 - Operation ID: `format.paragraph.setFlowOptions`
 - API member path: `editor.doc.format.paragraph.setFlowOptions(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -45,6 +45,34 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 | `suppressAutoHyphens` | boolean | yes |  |
 | `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
+### Variant 4 (required: autoSpaceDE)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `autoSpaceDE` | boolean | yes |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 5 (required: autoSpaceDN)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `autoSpaceDN` | boolean | yes |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 6 (required: adjustRightInd)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `adjustRightInd` | boolean | yes |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 7 (required: snapToGrid)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `snapToGrid` | boolean | yes |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
 ### Example request
 
 ```json
@@ -53,7 +81,11 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -89,14 +121,22 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
     "target": {
       "kind": "block",
       "nodeId": "node-def456",
-      "nodeType": "paragraph"
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     }
   },
   "success": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -117,7 +157,7 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 ```json
 {
   "additionalProperties": false,
-  "oneOf": [
+  "anyOf": [
     {
       "required": [
         "target",
@@ -135,13 +175,49 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
         "target",
         "suppressAutoHyphens"
       ]
+    },
+    {
+      "required": [
+        "target",
+        "autoSpaceDE"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "autoSpaceDN"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "adjustRightInd"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "snapToGrid"
+      ]
     }
   ],
   "properties": {
+    "adjustRightInd": {
+      "type": "boolean"
+    },
+    "autoSpaceDE": {
+      "type": "boolean"
+    },
+    "autoSpaceDN": {
+      "type": "boolean"
+    },
     "contextualSpacing": {
       "type": "boolean"
     },
     "pageBreakBefore": {
+      "type": "boolean"
+    },
+    "snapToGrid": {
       "type": "boolean"
     },
     "suppressAutoHyphens": {

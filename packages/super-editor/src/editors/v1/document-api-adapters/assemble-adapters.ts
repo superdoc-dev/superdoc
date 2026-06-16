@@ -364,6 +364,13 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerPartDescriptor(numberingPartDescriptor);
 
   const ccAdapter = createContentControlsAdapter(editor);
+  const capabilityUnavailable = (message: string) => ({
+    success: false as const,
+    failure: {
+      code: 'CAPABILITY_UNAVAILABLE' as const,
+      message,
+    },
+  });
 
   // Register the setValue delegate for the restartAt wrapper
   registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
@@ -438,6 +445,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
       setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
       clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
+      setMarkRunProps: () =>
+        capabilityUnavailable('format.paragraph.setMarkRunProps is only available on v2-backed sessions.'),
       setDirection: (input, options) => paragraphsSetDirectionWrapper(editor, input, options),
       clearDirection: (input, options) => paragraphsClearDirectionWrapper(editor, input, options),
     },
@@ -454,6 +463,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       list: (input) => blocksListWrapper(editor, input),
       delete: (input, options) => blocksDeleteWrapper(editor, input, options),
       deleteRange: (input, options) => blocksDeleteRangeWrapper(editor, input, options),
+      split: () => capabilityUnavailable('blocks.split is only available on v2-backed sessions.'),
+      merge: () => capabilityUnavailable('blocks.merge is only available on v2-backed sessions.'),
+      move: () => capabilityUnavailable('blocks.move is only available on v2-backed sessions.'),
     },
     create: {
       paragraph: (input, options) => createParagraphWrapper(editor, input, options),
@@ -506,6 +518,11 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelText: (input, options) => listsSetLevelTextWrapper(editor, input, options),
       setLevelStart: (input, options) => listsSetLevelStartWrapper(editor, input, options),
       setLevelLayout: (input, options) => listsSetLevelLayoutWrapper(editor, input, options),
+      getState: () => capabilityUnavailable('lists.getState is only available on v2-backed sessions.'),
+      apply: () => capabilityUnavailable('lists.apply is only available on v2-backed sessions.'),
+      continue: () => capabilityUnavailable('lists.continue is only available on v2-backed sessions.'),
+      restart: () => capabilityUnavailable('lists.restart is only available on v2-backed sessions.'),
+      remove: () => capabilityUnavailable('lists.remove is only available on v2-backed sessions.'),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),
@@ -537,6 +554,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLayout: (input, options) => tablesSetLayoutWrapper(editor, input, options),
       insertRow: (input, options) => tablesInsertRowWrapper(editor, input, options),
       deleteRow: (input, options) => tablesDeleteRowWrapper(editor, input, options),
+      moveRow: () => capabilityUnavailable('tables.moveRow is only available on v2-backed sessions.'),
       setRowHeight: (input, options) => tablesSetRowHeightWrapper(editor, input, options),
       distributeRows: (input, options) => tablesDistributeRowsWrapper(editor, input, options),
       setRowOptions: (input, options) => tablesSetRowOptionsWrapper(editor, input, options),

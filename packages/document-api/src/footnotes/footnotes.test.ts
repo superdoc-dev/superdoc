@@ -109,6 +109,49 @@ describe('footnotes validation', () => {
       expect(() => executeFootnotesInsert(adapter, { type: 'footnote' } as any)).toThrow(DocumentApiValidationError);
     });
 
+    it('throws INVALID_INPUT when content and body are both provided', () => {
+      const adapter = makeAdapter();
+      expect(() =>
+        executeFootnotesInsert(adapter, {
+          type: 'footnote',
+          content: 'text',
+          body: { kind: 'paragraph', paragraph: { inlines: [] } },
+        } as any),
+      ).toThrow(DocumentApiValidationError);
+    });
+
+    it('delegates to adapter.insert for valid structured body input', () => {
+      const adapter = makeAdapter();
+      const input = {
+        type: 'footnote',
+        body: { kind: 'paragraph', paragraph: { inlines: [] } },
+      };
+      executeFootnotesInsert(adapter, input as any);
+      expect(adapter.insert).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
+    });
+
+    it('throws INVALID_INPUT when structured body is malformed', () => {
+      const adapter = makeAdapter();
+      expect(() =>
+        executeFootnotesInsert(adapter, {
+          type: 'footnote',
+          body: { kind: 'heading', heading: {} },
+        } as any),
+      ).toThrow(DocumentApiValidationError);
+
+      try {
+        executeFootnotesInsert(adapter, {
+          type: 'footnote',
+          body: { kind: 'heading', heading: {} },
+        } as any);
+      } catch (e: any) {
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.details?.causeCode).toBe('INVALID_PAYLOAD');
+      }
+
+      expect(adapter.insert).not.toHaveBeenCalled();
+    });
+
     it('delegates to adapter.insert for valid footnote input', () => {
       const adapter = makeAdapter();
       const input = { type: 'footnote', content: 'Hello' };
@@ -172,11 +215,46 @@ describe('footnotes validation', () => {
       expect(() => executeFootnotesUpdate(adapter, { target: null as any })).toThrow(DocumentApiValidationError);
     });
 
+    it('throws INVALID_INPUT when patch content and body are both provided', () => {
+      const adapter = makeAdapter();
+      expect(() =>
+        executeFootnotesUpdate(adapter, {
+          target: validTarget,
+          patch: {
+            content: 'text',
+            body: { kind: 'paragraph', paragraph: { inlines: [] } },
+          },
+        } as any),
+      ).toThrow(DocumentApiValidationError);
+    });
+
     it('delegates to adapter.update with normalized options', () => {
       const adapter = makeAdapter();
       const input = { target: validTarget };
       executeFootnotesUpdate(adapter, input as any, { dryRun: true });
       expect(adapter.update).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: true });
+    });
+
+    it('throws INVALID_INPUT when structured patch body is malformed', () => {
+      const adapter = makeAdapter();
+      expect(() =>
+        executeFootnotesUpdate(adapter, {
+          target: validTarget,
+          patch: { body: { kind: 'paragraph' } },
+        } as any),
+      ).toThrow(DocumentApiValidationError);
+
+      try {
+        executeFootnotesUpdate(adapter, {
+          target: validTarget,
+          patch: { body: { kind: 'paragraph' } },
+        } as any);
+      } catch (e: any) {
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.details?.causeCode).toBe('INVALID_PAYLOAD');
+      }
+
+      expect(adapter.update).not.toHaveBeenCalled();
     });
   });
 

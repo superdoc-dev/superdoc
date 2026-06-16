@@ -1,14 +1,14 @@
 ---
 title: comments.delete
 sidebarTitle: comments.delete
-description: Remove a comment or reply by ID.
+description: Remove a comment or reply by ID. Deleting a root cascades through every descendant reply.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Remove a comment or reply by ID.
+Remove a comment or reply by ID. Deleting a root cascades through every descendant reply.
 
 - Operation ID: `comments.delete`
 - API member path: `editor.doc.comments.delete(...)`
@@ -20,7 +20,7 @@ Remove a comment or reply by ID.
 
 ## Expected result
 
-Returns a Receipt confirming the comment was removed; reports NO_OP if the comment was already deleted.
+Returns a Receipt with every removed commentId in `removed` and every story touched in `affectedStories`. Rejects with `TARGET_NOT_FOUND` when the comment id does not exist and reports `NO_OP` when the command layer accepts the target but removes nothing.
 
 ## Input fields
 
@@ -42,9 +42,15 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `id` | string | no |  |
 | `inserted` | EntityAddress[] | no |  |
+| `invalidatedRefs` | AffectedRef[] | no |  |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
 | `removed` | EntityAddress[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
 | `updated` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -52,7 +58,7 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.code` | enum | yes | `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"NO_OP"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -61,6 +67,7 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
 
 ```json
 {
+  "id": "id-001",
   "inserted": [
     {
       "entityId": "entity-789",
@@ -68,14 +75,7 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
       "kind": "entity"
     }
   ],
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ]
+  "success": true
 }
 ```
 
@@ -86,6 +86,8 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
 
 ## Non-applied failure codes
 
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
 - `NO_OP`
 
 ## Raw schemas
@@ -122,6 +124,8 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
           "properties": {
             "code": {
               "enum": [
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE",
                 "NO_OP"
               ]
             },
@@ -169,6 +173,8 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
       "properties": {
         "code": {
           "enum": [
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
             "NO_OP"
           ]
         },

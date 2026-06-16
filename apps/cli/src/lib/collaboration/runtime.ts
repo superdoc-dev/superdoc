@@ -3,6 +3,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { Doc as YDoc } from 'yjs';
 import { CliError } from '../errors';
 import { attachProviderDiagnostics, type ProviderDiagnostics } from './diagnostics';
+import { DEFAULT_SYNC_TIMEOUT_MS } from './defaults';
 import { createLiveblocksRuntime } from './liveblocks';
 import { resolveCollaborationToken } from './resolve';
 import type {
@@ -12,11 +13,6 @@ import type {
   WebSocketCollaborationProfile,
 } from './types';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_SYNC_TIMEOUT_MS = 10_000;
 const SYNC_POLL_INTERVAL_MS = 25;
 
 // ---------------------------------------------------------------------------

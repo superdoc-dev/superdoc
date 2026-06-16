@@ -7,6 +7,10 @@
  *
  * Two branches: stateless (--doc) and session (unified local + collab,
  * host + oneshot).
+ *
+ * Runtime-neutral: dispatches through {@link OpenedRuntimeDocument} so v1
+ * (editor-backed) and v2 (SDDocumentSession-backed) sessions share the same
+ * orchestrator. Engine specifics (`editor.*`) MUST stay out of this file.
  */
 
 import { COMMAND_CATALOG } from '@superdoc/document-api';
@@ -16,16 +20,15 @@ import { cliCommandTokens } from '../cli/operation-set.js';
 import { assertExpectedRevision, markContextUpdated, withActiveContext, writeContextMetadata } from './context.js';
 import {
   exportOptionalSessionOutput,
-  exportToPath,
   openDocument,
   openSessionDocument,
-  type EditorWithDoc,
+  type OpenedRuntimeDocument,
 } from './document.js';
 import { mapInvokeError, mapFailedReceipt } from './error-mapping.js';
 import { CliError } from './errors.js';
 import { formatOutput } from './output-formatters.js';
 import { resolveResponseEnvelopeKey } from './response-envelope.js';
-import { syncCollaborativeSessionSnapshot } from './session-collab.js';
+import { syncCollaborativeSessionSnapshotFromOpened } from './session-collab.js';
 import { PRE_INVOKE_HOOKS, POST_INVOKE_HOOKS } from './special-handlers.js';
 import type { CommandExecution } from './types.js';
 import type { DocOperationRequest } from './generic-dispatch.js';
@@ -45,27 +48,49 @@ type DocumentPayload = {
   revision: number;
 };
 
+type FailedReceipt = {
+  success: false;
+  failure?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+};
+
+type OperationInvocationResult = {
+  result: unknown;
+  failedReceipt: FailedReceipt | null;
+};
+
+function isFailedReceipt(value: unknown): value is FailedReceipt {
+  if (typeof value !== 'object' || value == null) return false;
+  if (!('success' in value) || (value as { success?: unknown }).success !== false) return false;
+  return true;
+}
+
 function deriveCommandName(operationId: CliExposedOperationId): string {
   return cliCommandTokens(`doc.${operationId}` as `doc.${CliExposedOperationId}`).join(' ');
 }
 
-async function invokeOperation(
-  editor: EditorWithDoc,
+async function invokeOpenedDocumentOperation(
+  opened: OpenedRuntimeDocument,
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
   options?: Record<string, unknown>,
+  preserveFailedReceipt = false,
   commandName?: string,
-): Promise<unknown> {
+): Promise<OperationInvocationResult> {
   const apiInput = extractInvokeInput(operationId, input);
+  const invoke = (request: { operationId: string; input?: unknown; options?: unknown }) => opened.doc.invoke(request);
   const preHook = PRE_INVOKE_HOOKS[operationId];
-  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { editor }) : apiInput;
+  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { invoke }) : apiInput;
 
   let result: unknown;
   try {
     // Await so both synchronous throws and async rejections (e.g. the async
     // templates.apply path) are translated by mapInvokeError. Awaiting a
     // non-Promise result is a no-op for the synchronous operations.
-    result = await editor.doc.invoke({
+    result = await opened.doc.invoke({
       operationId,
       input: transformedInput,
       options,
@@ -74,12 +99,19 @@ async function invokeOperation(
     throw mapInvokeError(operationId, error, { commandName });
   }
 
+  const failedReceipt = isFailedReceipt(result) ? result : null;
+
   // Check for failed receipts (non-throwing failure path)
-  const failedReceiptError = mapFailedReceipt(operationId, result, { commandName });
-  if (failedReceiptError) throw failedReceiptError;
+  if (!preserveFailedReceipt) {
+    const failedReceiptError = mapFailedReceipt(operationId, result, { commandName });
+    if (failedReceiptError) throw failedReceiptError;
+  }
 
   const postHook = POST_INVOKE_HOOKS[operationId];
-  return postHook ? postHook(result, { editor, apiInput: transformedInput }) : result;
+  return {
+    result: postHook ? postHook(result, { invoke, apiInput: transformedInput }) : result,
+    failedReceipt,
+  };
 }
 
 function buildEnvelopeData(
@@ -113,6 +145,16 @@ function buildPrettyOutput(
     : `Revision ${document.revision}: ${verb}`;
 }
 
+function buildFailedReceiptPrettyOutput(
+  operationId: CliExposedOperationId,
+  document: DocumentPayload,
+  result: unknown,
+): string {
+  const failure = isFailedReceipt(result) ? result.failure : undefined;
+  const code = typeof failure?.code === 'string' && failure.code.length > 0 ? failure.code : 'COMMAND_FAILED';
+  return `Revision ${document.revision}: ${SUCCESS_VERB[operationId]} failed (${code})`;
+}
+
 export async function executeMutationOperation(request: DocOperationRequest): Promise<CommandExecution> {
   const { operationId, input, context } = request;
   // Resolve the response envelope key up front so a hint-table drift fails
@@ -123,7 +165,10 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
   const dryRun = readBoolean(input, 'dryRun');
   const changeMode = readChangeMode(input);
   const force = readBoolean(input, 'force');
-  const expectedRevision = readOptionalNumber(input, 'expectedRevision');
+  const expectedRevision =
+    operationId === 'trackChanges.decide' && typeof input.expectedRevision === 'string'
+      ? undefined
+      : readOptionalNumber(input, 'expectedRevision');
   const commandName = request.commandName ?? deriveCommandName(operationId);
 
   const catalog = COMMAND_CATALOG[operationId];
@@ -156,7 +201,15 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
     const source = doc === '-' ? 'stdin' : 'path';
     const opened = await openDocument(doc, context.io);
     try {
-      const result = await invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
+      const preserveFailedReceipt = context.executionMode === 'host';
+      const { result, failedReceipt } = await invokeOpenedDocumentOperation(
+        opened,
+        operationId,
+        input,
+        invokeOptions,
+        preserveFailedReceipt,
+        commandName,
+      );
       const document: DocumentPayload = {
         path: source === 'path' ? doc : undefined,
         source,
@@ -175,7 +228,19 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
         };
       }
 
-      const output = outPath ? await exportToPath(opened.editor, outPath, force) : undefined;
+      if (preserveFailedReceipt && failedReceipt) {
+        return {
+          command: commandName,
+          data: buildEnvelopeData(envelopeKey, document, result, {
+            changeMode,
+            dryRun: false,
+            output: outPath ? { path: outPath, skippedWrite: true } : undefined,
+          }),
+          pretty: buildFailedReceiptPrettyOutput(operationId, document, failedReceipt),
+        };
+      }
+
+      const output = outPath ? await opened.exportToPath(outPath, force) : undefined;
       return {
         command: commandName,
         data: buildEnvelopeData(envelopeKey, document, result, {
@@ -208,7 +273,15 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
       });
 
       try {
-        const result = await invokeOperation(opened.editor, operationId, input, invokeOptions, commandName);
+        const preserveFailedReceipt = isHostMode;
+        const { result, failedReceipt } = await invokeOpenedDocumentOperation(
+          opened,
+          operationId,
+          input,
+          invokeOptions,
+          preserveFailedReceipt,
+          commandName,
+        );
 
         if (dryRun) {
           const document: DocumentPayload = {
@@ -228,6 +301,25 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
           };
         }
 
+        if (preserveFailedReceipt && failedReceipt) {
+          const document: DocumentPayload = {
+            path: metadata.sourcePath,
+            source: metadata.source,
+            byteLength: opened.meta.byteLength,
+            revision: metadata.revision,
+          };
+          return {
+            command: commandName,
+            data: buildEnvelopeData(envelopeKey, document, result, {
+              changeMode,
+              dryRun: false,
+              context: { dirty: metadata.dirty, revision: metadata.revision },
+              output: outPath ? { path: outPath, skippedWrite: true } : undefined,
+            }),
+            pretty: buildFailedReceiptPrettyOutput(operationId, document, failedReceipt),
+          };
+        }
+
         // Persist based on mode
         let updatedMetadata: typeof metadata;
         let byteLength: number;
@@ -243,13 +335,14 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
           context.sessionPool!.updateMetadataRevision(metadata.contextId, updatedMetadata.revision);
           byteLength = opened.meta.byteLength;
         } else if (metadata.sessionType === 'collab') {
-          // Oneshot collab: sync snapshot to disk
-          const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);
+          // Oneshot collab: sync snapshot to disk (v1-only).
+          const synced = await syncCollaborativeSessionSnapshotFromOpened(context.io, metadata, paths, opened);
           updatedMetadata = synced.updatedMetadata;
           byteLength = synced.output.byteLength;
         } else {
-          // Oneshot local: export to disk
-          const workingOutput = await exportToPath(opened.editor, paths.workingDocPath, true);
+          // Oneshot local / v2: export to disk through the runtime-neutral
+          // contract.
+          const workingOutput = await opened.exportToPath(paths.workingDocPath, true);
           updatedMetadata = markContextUpdated(context.io, metadata, {
             dirty: true,
             revision: metadata.revision + 1,
@@ -258,7 +351,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
           byteLength = workingOutput.byteLength;
         }
 
-        const externalOutput = await exportOptionalSessionOutput(opened.editor, context.io, outPath, force);
+        const externalOutput = await exportOptionalSessionOutput(opened, context.io, outPath, force);
         const document: DocumentPayload = {
           path: updatedMetadata.sourcePath,
           source: updatedMetadata.source,

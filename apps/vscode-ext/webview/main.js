@@ -175,6 +175,10 @@ async function saveDocument() {
 }
 
 window.addEventListener('message', async (event) => {
+  if (event.origin !== window.origin) {
+    return;
+  }
+
   const message = event.data;
   if (!message?.type) {
     return;

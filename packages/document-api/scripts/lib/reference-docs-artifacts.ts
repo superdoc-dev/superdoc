@@ -15,6 +15,7 @@ import {
   PUBLIC_STEP_OP_CATALOG,
   REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
+  V1_RUNTIME_UNAVAILABLE_OPERATION_IDS,
   type ReferenceAliasDefinition,
   type ReferenceOperationGroupDefinition,
 } from '../../src/index.js';
@@ -25,6 +26,7 @@ const REFERENCE_INDEX_PATH = `${OUTPUT_ROOT}/index.mdx`;
 const OVERVIEW_PATH = 'apps/docs/document-api/available-operations.mdx';
 const OVERVIEW_OPERATIONS_START = '{/* DOC_API_OPERATIONS_START */}';
 const OVERVIEW_OPERATIONS_END = '{/* DOC_API_OPERATIONS_END */}';
+const V1_RUNTIME_UNAVAILABLE_OPERATION_SET = new Set<string>(V1_RUNTIME_UNAVAILABLE_OPERATION_IDS);
 
 interface OperationGroup {
   definition: ReferenceOperationGroupDefinition;
@@ -1004,11 +1006,22 @@ function buildCapabilitiesOutputExample(snapshot: ReturnType<typeof buildContrac
     operations: Object.fromEntries(
       snapshot.operations.map((entry) => [
         entry.operationId,
-        {
-          available: true,
-          tracked: entry.metadata.supportsTrackedMode,
-          dryRun: entry.metadata.supportsDryRun,
-        },
+        V1_RUNTIME_UNAVAILABLE_OPERATION_SET.has(entry.operationId)
+          ? {
+              available: false,
+              tracked: false,
+              dryRun: false,
+              reasons: [
+                'OPERATION_UNAVAILABLE',
+                ...(entry.metadata.supportsTrackedMode ? ['TRACKED_MODE_UNAVAILABLE'] : []),
+                ...(entry.metadata.supportsDryRun ? ['DRY_RUN_UNAVAILABLE'] : []),
+              ],
+            }
+          : {
+              available: true,
+              tracked: entry.metadata.supportsTrackedMode,
+              dryRun: entry.metadata.supportsDryRun,
+            },
       ]),
     ),
   };
@@ -1057,6 +1070,12 @@ function getOperationExamples(
         },
       },
       text: 'Hello, world.',
+    },
+    'create.tableOfContents': {
+      at: {
+        kind: 'documentStart',
+      },
+      instruction: 'TOC \\o "1-3" \\u \\h \\z',
     },
   };
 

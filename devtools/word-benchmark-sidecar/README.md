@@ -45,6 +45,14 @@ pnpm dev
   - Response: same shape as `POST /api/word-baseline`
 - `GET /api/word-baseline/jobs/:jobId/pages/:pageName`
 
+## Security
+
+This server is for **local development only**. It listens on plain HTTP (default `127.0.0.1:9185`) and has no TLS configuration.
+
+**Never expose this server to the network.** The default bind address is loopback-only. If you change `SUPERDOC_WORD_BASELINE_HOST`, terminate TLS at a reverse proxy in front of the server.
+
+Risk acceptance: HTTP-only transport is an accepted trade-off for this local dev tool.
+
 ## Environment
 
 - `SUPERDOC_WORD_BASELINE_HOST` (default `127.0.0.1`)

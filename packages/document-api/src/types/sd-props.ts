@@ -154,8 +154,6 @@ export interface SDParagraphBorders {
 // ---------------------------------------------------------------------------
 
 export interface SDRunProps {
-  /** Character style identifier (`w:rStyle`). */
-  rStyle?: string;
   fonts?: SDRunFonts;
   /** Convenience alias when one family applies across scripts. */
   fontFamily?: string;

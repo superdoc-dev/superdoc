@@ -42,7 +42,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
   open: {
     category: 'session',
     description:
-      'Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).',
+      "Open a document and create a persistent editing session. Pass `runtime: 'v1'` (default) or `runtime: 'v2'` to select the underlying engine. V2 single-socket collaboration supports only `y-websocket`; `hocuspocus` and `liveblocks` remain legacy v1-only collaboration providers. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).",
     requiresDocumentContext: false,
     sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
@@ -50,6 +50,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       properties: {
         active: { type: 'boolean' },
         contextId: { type: 'string' },
+        runtime: { type: 'string', enum: ['v1', 'v2'] },
         sessionType: { type: 'string' },
         document: {
           type: 'object',
@@ -88,16 +89,16 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
   save: {
     category: 'session',
     description:
-      'Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes.',
+      'Save the current session to the original file or a new path. Supports explicit review-preserving, final, and original export modes.',
     requiresDocumentContext: false,
     sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
       properties: {
         contextId: { type: 'string' },
+        runtime: { type: 'string', enum: ['v1', 'v2'] },
         saved: { type: 'boolean' },
         inPlace: { type: 'boolean' },
-        mode: { type: 'string', enum: ['review-preserving', 'final'] },
         document: {
           type: 'object',
           properties: {
@@ -121,6 +122,23 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
             byteLength: { type: 'number' },
           },
         },
+        mode: { type: 'string', enum: ['review-preserving', 'final', 'original'] },
+        report: {
+          type: 'object',
+          properties: {
+            warnings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code'],
+              },
+            },
+          },
+        },
       },
       required: ['contextId', 'saved'],
     },
@@ -134,6 +152,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       type: 'object',
       properties: {
         contextId: { type: 'string' },
+        runtime: { type: 'string', enum: ['v1', 'v2'] },
         closed: { type: 'boolean' },
         saved: { type: 'boolean' },
         discarded: { type: 'boolean' },
@@ -199,6 +218,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       properties: {
         active: { type: 'boolean' },
         contextId: { type: 'string' },
+        runtime: { type: 'string', enum: ['v1', 'v2'] },
         activeSessionId: { type: 'string' },
         requestedSessionId: { type: 'string' },
         projectRoot: { type: 'string' },
@@ -293,6 +313,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
             properties: {
               sessionId: { type: 'string' },
               sessionType: { type: 'string' },
+              runtime: { type: 'string', enum: ['v1', 'v2'] },
               dirty: { type: 'boolean' },
               revision: { type: 'number' },
               collaboration: {

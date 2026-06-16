@@ -197,6 +197,13 @@ export function footnotesInsertWrapper(
   const noteId = allocateNextNoteId(editor, converter, input.type);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId };
 
+  if (input.body !== undefined) {
+    return footnoteFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'footnotes.insert structured body content is only available on v2-backed sessions.',
+    );
+  }
+
   if (options?.dryRun) {
     return footnoteSuccess(address);
   }
@@ -266,6 +273,13 @@ export function footnotesUpdateWrapper(
 
   const resolved = resolveFootnoteTarget(editor.state.doc, input.target);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: resolved.noteId };
+
+  if (input.patch.body !== undefined) {
+    return footnoteFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'footnotes.update structured body content is only available on v2-backed sessions.',
+    );
+  }
 
   if (options?.dryRun || input.patch.content === undefined) {
     return footnoteSuccess(address);

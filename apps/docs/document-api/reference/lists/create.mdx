@@ -54,6 +54,7 @@ _No fields._
 | `item.kind` | `"block"` | yes | Constant: `"block"` |
 | `item.nodeId` | string | yes |  |
 | `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `item.story` | StoryLocator | no | StoryLocator |
 | `listId` | string | yes |  |
 | `success` | `true` | yes | Constant: `true` |
 
@@ -74,7 +75,11 @@ _No fields._
   "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "listId": "example",
   "success": true

@@ -37,6 +37,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | `within.kind` | `"block"` | no | Constant: `"block"` |
 | `within.nodeId` | string | no |  |
 | `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `within.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -55,7 +56,11 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
   "within": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -84,7 +89,11 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       "address": {
         "kind": "block",
         "nodeId": "node-def456",
-        "nodeType": "paragraph"
+        "nodeType": "paragraph",
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
       },
       "blocks": [
         {
@@ -145,13 +154,25 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
         "end": {
           "blockId": "block-abc123",
           "kind": "text",
-          "offset": 0
+          "offset": 0,
+          "story": {
+            "kind": "story",
+            "storyType": "body"
+          }
         },
         "kind": "selection",
         "start": {
           "blockId": "block-abc123",
           "kind": "text",
-          "offset": 0
+          "offset": 0,
+          "story": {
+            "kind": "story",
+            "storyType": "body"
+          }
+        },
+        "story": {
+          "kind": "story",
+          "storyType": "body"
         }
       }
     }
@@ -248,6 +269,10 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
             "type": {
               "const": "text",
               "description": "Must be 'text' for text pattern search."
+            },
+            "wholeWord": {
+              "description": "Require word-boundary matches. Default: false.",
+              "type": "boolean"
             }
           },
           "required": [

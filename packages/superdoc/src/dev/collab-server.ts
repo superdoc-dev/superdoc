@@ -1,3 +1,4 @@
+// DEV ONLY — plain HTTP/WS, no TLS. Never expose outside localhost.
 import { createServer } from 'node:http';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';

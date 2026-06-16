@@ -30,6 +30,7 @@ Returns a ListsMutateItemResult confirming attachment.
 | `attachTo.kind` | `"block"` | yes | Constant: `"block"` |
 | `attachTo.nodeId` | string | yes |  |
 | `attachTo.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `attachTo.story` | StoryLocator | no | StoryLocator |
 | `level` | integer | no |  |
 | `target` | BlockAddressOrRange | yes | BlockAddressOrRange |
 
@@ -40,7 +41,11 @@ Returns a ListsMutateItemResult confirming attachment.
   "attachTo": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "level": 1,
   "target": {
@@ -61,6 +66,7 @@ Returns a ListsMutateItemResult confirming attachment.
 | `item.kind` | `"block"` | yes | Constant: `"block"` |
 | `item.nodeId` | string | yes |  |
 | `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `item.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -80,7 +86,11 @@ Returns a ListsMutateItemResult confirming attachment.
   "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true
 }

@@ -10,6 +10,7 @@
 
 import type { BlockNodeAddress, TextAddress, TextTarget } from './types/index.js';
 import { BLOCK_NODE_TYPES } from './types/base.js';
+import { isStoryLocator } from './types/story.types.js';
 import { TABLE_NESTING_POLICY_VALUES } from './types/placement.js';
 import { DocumentApiValidationError } from './errors.js';
 
@@ -71,6 +72,7 @@ export function isBlockNodeAddress(value: unknown): value is BlockNodeAddress {
   if (value.kind !== 'block') return false;
   if (typeof value.nodeType !== 'string' || !BLOCK_NODE_TYPES_SET.has(value.nodeType)) return false;
   if (typeof value.nodeId !== 'string') return false;
+  if (value.story !== undefined && !isStoryLocator(value.story)) return false;
   return true;
 }
 

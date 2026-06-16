@@ -5,8 +5,6 @@ import { TABLE_COLOR_PATTERN as TABLE_BORDER_COLOR_PATTERN } from './color-forma
 import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
-  TablesSetCellPaddingInput,
-  TablesSetCellPropertiesInput,
   TablesSetLayoutInput,
   TablesSetTableOptionsInput,
   TableBorderSpec,
@@ -56,19 +54,21 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
   }
 }
 
-function validatePreferredWidthType(value: unknown, operationName: string): void {
-  if (value !== undefined && value !== 'dxa' && value !== 'auto' && value !== 'pct') {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      `${operationName}: preferredWidthType must be one of "dxa", "auto", or "pct"; received ${String(value)}.`,
-      { field: 'preferredWidthType', value },
-    );
-  }
-}
-
 function validateTablesSetLayoutInput(input: TablesSetLayoutInput): void {
   validateTableLocator(input, 'tables.setLayout');
-  validatePreferredWidthType(input.preferredWidthType, 'tables.setLayout');
+
+  if (
+    input.preferredWidthType !== undefined
+    && input.preferredWidthType !== 'dxa'
+    && input.preferredWidthType !== 'auto'
+    && input.preferredWidthType !== 'pct'
+  ) {
+    throw new DocumentApiValidationError(
+      'INVALID_ARGUMENT',
+      `tables.setLayout: preferredWidthType must be one of "dxa", "auto", or "pct"; received ${String(input.preferredWidthType)}.`,
+      { field: 'preferredWidthType', value: input.preferredWidthType },
+    );
+  }
 
   if (input.preferredWidthType === 'auto' && input.preferredWidth !== undefined && input.preferredWidth !== 0) {
     throw new DocumentApiValidationError(
@@ -76,79 +76,6 @@ function validateTablesSetLayoutInput(input: TablesSetLayoutInput): void {
       'tables.setLayout: preferredWidth must be omitted or 0 when preferredWidthType is "auto".',
       { fields: ['preferredWidth', 'preferredWidthType'] },
     );
-  }
-
-  if (
-    (input.preferredWidthType === 'dxa' || input.preferredWidthType === 'pct') &&
-    input.preferredWidth === undefined
-  ) {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      `tables.setLayout: preferredWidth is required when preferredWidthType is "${input.preferredWidthType}".`,
-      { fields: ['preferredWidth', 'preferredWidthType'] },
-    );
-  }
-}
-
-function validateNonNegativeFiniteNumber(value: unknown, field: string, operationName: string): void {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      `${operationName}: ${field} must be a non-negative finite number.`,
-      { field, value },
-    );
-  }
-}
-
-function validateTablesSetCellPropertiesInput(input: TablesSetCellPropertiesInput): void {
-  validateTableLocator(input, 'tables.setCellProperties');
-  validatePreferredWidthType(input.preferredWidthType, 'tables.setCellProperties');
-
-  if (input.preferredWidthPt !== undefined) {
-    validateNonNegativeFiniteNumber(input.preferredWidthPt, 'preferredWidthPt', 'tables.setCellProperties');
-  }
-
-  if (input.preferredWidthType === 'auto' && input.preferredWidthPt !== undefined && input.preferredWidthPt !== 0) {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      'tables.setCellProperties: preferredWidthPt must be omitted or 0 when preferredWidthType is "auto".',
-      { fields: ['preferredWidthPt', 'preferredWidthType'] },
-    );
-  }
-
-  if (
-    (input.preferredWidthType === 'dxa' || input.preferredWidthType === 'pct') &&
-    input.preferredWidthPt === undefined
-  ) {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      `tables.setCellProperties: preferredWidthPt is required when preferredWidthType is "${input.preferredWidthType}".`,
-      { fields: ['preferredWidthPt', 'preferredWidthType'] },
-    );
-  }
-}
-
-function validateTablesSetCellPaddingInput(input: TablesSetCellPaddingInput): void {
-  validateTableLocator(input, 'tables.setCellPadding');
-
-  const sides = [
-    ['topPt', input.topPt],
-    ['rightPt', input.rightPt],
-    ['bottomPt', input.bottomPt],
-    ['leftPt', input.leftPt],
-  ] as const;
-  const providedSides = sides.filter(([, value]) => value !== undefined);
-
-  if (providedSides.length === 0) {
-    throw new DocumentApiValidationError(
-      'INVALID_ARGUMENT',
-      'tables.setCellPadding: provide at least one padding side.',
-      { fields: ['topPt', 'rightPt', 'bottomPt', 'leftPt'] },
-    );
-  }
-
-  for (const [field, value] of providedSides) {
-    validateNonNegativeFiniteNumber(value, field, 'tables.setCellPadding');
   }
 }
 
@@ -320,24 +247,6 @@ export function executeTablesSetLayoutOp<TResult>(
   options?: MutationOptions,
 ): TResult {
   validateTablesSetLayoutInput(input);
-  return adapter(input, normalizeMutationOptions(options));
-}
-
-export function executeTablesSetCellPropertiesOp<TResult>(
-  adapter: (input: TablesSetCellPropertiesInput, options?: MutationOptions) => TResult,
-  input: TablesSetCellPropertiesInput,
-  options?: MutationOptions,
-): TResult {
-  validateTablesSetCellPropertiesInput(input);
-  return adapter(input, normalizeMutationOptions(options));
-}
-
-export function executeTablesSetCellPaddingOp<TResult>(
-  adapter: (input: TablesSetCellPaddingInput, options?: MutationOptions) => TResult,
-  input: TablesSetCellPaddingInput,
-  options?: MutationOptions,
-): TResult {
-  validateTablesSetCellPaddingInput(input);
   return adapter(input, normalizeMutationOptions(options));
 }
 

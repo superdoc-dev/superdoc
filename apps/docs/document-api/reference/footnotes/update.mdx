@@ -1,20 +1,20 @@
 ---
 title: footnotes.update
 sidebarTitle: footnotes.update
-description: Update the content of an existing footnote or endnote.
+description: "Update the content of an existing footnote or endnote. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Update the content of an existing footnote or endnote.
+Update the content of an existing footnote or endnote. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes.
 
 - Operation ID: `footnotes.update`
 - API member path: `editor.doc.footnotes.update(...)`
 - Mutates document: `yes`
 - Idempotency: `idempotent`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -26,8 +26,7 @@ Returns a FootnoteMutationResult indicating success with the updated footnote ad
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `patch` | object | yes |  |
-| `patch.content` | string | no |  |
+| `patch` | object \| object \| object | yes | One of: object, object, object |
 | `target` | object(kind="entity") | yes |  |
 | `target.entityType` | `"footnote"` | yes | Constant: `"footnote"` |
 | `target.kind` | `"entity"` | yes | Constant: `"entity"` |
@@ -92,7 +91,8 @@ Returns a FootnoteMutationResult indicating success with the updated footnote ad
 
 ## Non-applied failure codes
 
-- None
+- `INVALID_FRAGMENT`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 
@@ -102,13 +102,48 @@ Returns a FootnoteMutationResult indicating success with the updated footnote ad
   "additionalProperties": false,
   "properties": {
     "patch": {
-      "additionalProperties": false,
-      "properties": {
-        "content": {
-          "type": "string"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "description": "Structured SDM/1 note body patch.",
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "required": [
+            "body"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
         }
-      },
-      "type": "object"
+      ]
     },
     "target": {
       "additionalProperties": false,

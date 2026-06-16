@@ -1,14 +1,14 @@
 ---
 title: trackChanges.decide
 sidebarTitle: trackChanges.decide
-description: "Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story)."
+description: "Accept or reject tracked changes by logical id, by selected text range, by logical anchor range ({ anchor, relativeStart, relativeEnd }), or every active change in the document. Range targets may include overlap / side selectors and may partially resolve a change, splitting surviving content into new fragments with stable ids. Legacy `{ id, range: { kind: \"partial\", ... } }` targets are promoted only when the active adapter supports `decide()`; legacy fallback adapters fail closed with `INVALID_INPUT`. `input.expectedRevision` is accepted as a compatibility alias for mutation options."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story).
+Accept or reject tracked changes by logical id, by selected text range, by logical anchor range (\{ anchor, relativeStart, relativeEnd \}), or every active change in the document. Range targets may include overlap / side selectors and may partially resolve a change, splitting surviving content into new fragments with stable ids. Legacy `\{ id, range: \{ kind: "partial", ... \} \}` targets are promoted only when the active adapter supports `decide()`; legacy fallback adapters fail closed with `INVALID_INPUT`. `input.expectedRevision` is accepted as a compatibility alias for mutation options.
 
 - Operation ID: `trackChanges.decide`
 - API member path: `editor.doc.trackChanges.decide(...)`
@@ -20,14 +20,15 @@ Accept or reject tracked changes by ID, range, or scope: all (optionally filtere
 
 ## Expected result
 
-Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved and typed failures for unsupported or denied tracked-change decisions.
+Returns a Receipt. `removed` lists retired tracked-change ids; `inserted` lists successor fragment ids produced by partial range splits; `invalidatedRefs` lists every retired tracked-change ref plus cascade-deleted comment ids; `remappedRefs` carries surviving comment anchors moved by the decision; `affectedStories` lists touched stories; `textRangeShifts` reports per-story visible-text deltas; `txId` correlates with history. Failures: SPAN_FRAGMENTED when a range crosses an indivisible boundary, CAPABILITY_UNAVAILABLE for formatting / structural / move targets (not yet supported), TARGET_NOT_FOUND for retired ids or zero overlap, STALE_REVISION for stale expectedRevision, REVISION_MISMATCH for stale range coverage, NO_OP when \{ kind: 'all' \} resolves an empty target set.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `decision` | enum | yes | `"accept"`, `"reject"` |
-| `target` | object \| object(kind="range") \| object | yes | One of: object, object(kind="range"), object |
+| `expectedRevision` | string | no |  |
+| `target` | object(kind="id") \| object(kind="range") \| object(kind="range") \| object(kind="range") \| object(kind="all") \| object \| object \| object | yes | One of: object(kind="id"), object(kind="range"), object(kind="range"), object(kind="range"), object(kind="all"), object, object, object |
 
 ### Example request
 
@@ -50,9 +51,15 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `id` | string | no |  |
 | `inserted` | EntityAddress[] | no |  |
+| `invalidatedRefs` | AffectedRef[] | no |  |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
 | `removed` | EntityAddress[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
 | `updated` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -60,7 +67,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_INPUT"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"PERMISSION_DENIED"`, `"PRECONDITION_FAILED"`, `"COMMENT_CASCADE_PARTIAL"` |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_INPUT"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"PERMISSION_DENIED"`, `"PRECONDITION_FAILED"`, `"COMMENT_CASCADE_PARTIAL"`, `"SPAN_FRAGMENTED"`, `"STALE_REVISION"`, `"REVISION_MISMATCH"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -69,6 +76,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 
 ```json
 {
+  "id": "id-001",
   "inserted": [
     {
       "entityId": "entity-789",
@@ -76,14 +84,7 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
       "kind": "entity"
     }
   ],
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ]
+  "success": true
 }
 ```
 
@@ -104,6 +105,9 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 - `PERMISSION_DENIED`
 - `PRECONDITION_FAILED`
 - `COMMENT_CASCADE_PARTIAL`
+- `SPAN_FRAGMENTED`
+- `STALE_REVISION`
+- `REVISION_MISMATCH`
 
 ## Raw schemas
 
@@ -118,7 +122,12 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
         "reject"
       ]
     },
+    "expectedRevision": {
+      "description": "Backward-compatible alias for options.expectedRevision. Explicit mutation options take precedence when both are supplied.",
+      "type": "string"
+    },
     "target": {
+      "description": "Decision target. Canonical shapes: { kind: 'id', id, story? } (whole logical tracked change), { kind: 'range', range: TextTarget, overlap?, side?, story?, part? } or { kind: 'range', range: { anchor, relativeStart, relativeEnd }, overlap?, side?, story?, part? } (resolves only the selected overlap; may split fragments), { kind: 'all' } (every active tracked change). Legacy { id, story? } / { id, range: { kind: 'partial', start, end } } / { scope: 'all' } shapes are accepted and transparently promoted to canonical targets.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -126,9 +135,209 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
             "id": {
               "type": "string"
             },
+            "kind": {
+              "const": "id"
+            },
+            "moveRole": {
+              "description": "Optional move pairing assertion. 'pair' requires the resolved tracked change to be a paired move; 'source' / 'destination' further narrow to a specific half. When the assertion does not hold the decide adapter fails closed.",
+              "enum": [
+                "pair",
+                "source",
+                "destination"
+              ]
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "range"
+            },
+            "overlap": {
+              "description": "Optional logical overlap selector for callers that already resolved an ambiguous overlap surface. Adapter-owned interpretation.",
+              "type": "string"
+            },
+            "part": {
+              "description": "Compatibility alias used by older range callers; interpretation is adapter-owned.",
+              "type": "string"
+            },
             "range": {
-              "description": "Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.",
+              "$ref": "#/$defs/TextTarget"
+            },
+            "side": {
+              "description": "Optional revision side for paired replacement or move targets.",
+              "enum": [
+                "insert",
+                "inserted",
+                "delete",
+                "deleted",
+                "source",
+                "destination"
+              ]
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator",
+              "description": "Optional story containing the range target."
+            }
+          },
+          "required": [
+            "kind",
+            "range"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "range"
+            },
+            "overlap": {
+              "description": "Optional logical overlap selector for callers that already resolved an ambiguous overlap surface. Adapter-owned interpretation.",
+              "type": "string"
+            },
+            "part": {
+              "description": "Compatibility alias used by older range callers; interpretation is adapter-owned.",
+              "type": "string"
+            },
+            "range": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "type": "string"
+                },
+                "relativeEnd": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "relativeStart": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "anchor",
+                "relativeStart",
+                "relativeEnd"
+              ],
               "type": "object"
+            },
+            "side": {
+              "description": "Optional revision side for paired replacement or move targets.",
+              "enum": [
+                "insert",
+                "inserted",
+                "delete",
+                "deleted",
+                "source",
+                "destination"
+              ]
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator",
+              "description": "Optional story containing the range target."
+            }
+          },
+          "required": [
+            "kind",
+            "range"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "range"
+            },
+            "overlap": {
+              "description": "Optional logical overlap selector for callers that already resolved an ambiguous overlap surface. Adapter-owned interpretation.",
+              "type": "string"
+            },
+            "part": {
+              "description": "Compatibility alias used by older range callers; interpretation is adapter-owned.",
+              "type": "string"
+            },
+            "relativeEnd": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "relativeStart": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "side": {
+              "description": "Optional revision side for paired replacement or move targets.",
+              "enum": [
+                "insert",
+                "inserted",
+                "delete",
+                "deleted",
+                "source",
+                "destination"
+              ]
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator",
+              "description": "Optional story containing the range target."
+            }
+          },
+          "required": [
+            "kind",
+            "anchor",
+            "relativeStart",
+            "relativeEnd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "all"
+            },
+            "story": {
+              "description": "Optional explicit bulk filter. Omit or pass 'all' to target every revision-capable story, or pass a StoryLocator to scope the decision to one story.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/StoryLocator"
+                },
+                {
+                  "const": "all"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "moveRole": {
+              "description": "Optional move pairing assertion. 'pair' requires the resolved tracked change to be a paired move; 'source' / 'destination' further narrow to a specific half. When the assertion does not hold the decide adapter fails closed.",
+              "enum": [
+                "pair",
+                "source",
+                "destination"
+              ]
             },
             "story": {
               "$ref": "#/$defs/StoryLocator"
@@ -142,22 +351,37 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
         {
           "additionalProperties": false,
           "properties": {
-            "kind": {
-              "const": "range"
-            },
-            "part": {
-              "description": "Optional part discriminator for the range target.",
+            "id": {
               "type": "string"
             },
             "range": {
-              "$ref": "#/$defs/TextTarget"
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "kind": {
+                  "const": "partial"
+                },
+                "start": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind",
+                "start",
+                "end"
+              ],
+              "type": "object"
             },
             "story": {
               "$ref": "#/$defs/StoryLocator"
             }
           },
           "required": [
-            "kind",
+            "id",
             "range"
           ],
           "type": "object"
@@ -221,7 +445,10 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
                 "CAPABILITY_UNAVAILABLE",
                 "PERMISSION_DENIED",
                 "PRECONDITION_FAILED",
-                "COMMENT_CASCADE_PARTIAL"
+                "COMMENT_CASCADE_PARTIAL",
+                "SPAN_FRAGMENTED",
+                "STALE_REVISION",
+                "REVISION_MISMATCH"
               ]
             },
             "details": {},
@@ -275,7 +502,10 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
             "CAPABILITY_UNAVAILABLE",
             "PERMISSION_DENIED",
             "PRECONDITION_FAILED",
-            "COMMENT_CASCADE_PARTIAL"
+            "COMMENT_CASCADE_PARTIAL",
+            "SPAN_FRAGMENTED",
+            "STALE_REVISION",
+            "REVISION_MISMATCH"
           ]
         },
         "details": {},

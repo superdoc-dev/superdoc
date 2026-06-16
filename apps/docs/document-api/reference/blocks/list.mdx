@@ -1,14 +1,14 @@
 ---
 title: blocks.list
 sidebarTitle: blocks.list
-description: "List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering."
+description: "List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.
+List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`.
 
 - Operation ID: `blocks.list`
 - API member path: `editor.doc.blocks.list(...)`
@@ -26,6 +26,7 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `includeText` | boolean | no |  |
 | `limit` | number | no |  |
 | `nodeTypes` | enum[] | no |  |
@@ -35,7 +36,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 
 ```json
 {
-  "limit": 50,
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "offset": 0
 }
 ```
@@ -69,6 +73,11 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 ## Pre-apply throws
 
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -81,6 +90,9 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "includeText": {
       "description": "When true, includes the full flattened block text in each block entry.",
       "type": "boolean"

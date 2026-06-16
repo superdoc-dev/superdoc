@@ -14,7 +14,7 @@ Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct ru
 - API member path: `editor.doc.styles.paragraph.setStyle(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -37,7 +37,11 @@ Returns a ParagraphMutationResult; reports NO_OP if the style already matches. W
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -73,14 +77,22 @@ Returns a ParagraphMutationResult; reports NO_OP if the style already matches. W
     "target": {
       "kind": "block",
       "nodeId": "node-def456",
-      "nodeType": "paragraph"
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     }
   },
   "success": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```

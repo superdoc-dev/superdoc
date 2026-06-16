@@ -2,6 +2,7 @@ import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { assertTargetPresent } from '../validation-primitives.js';
+import { validateDocumentFragment } from '../validation/fragment-validator.js';
 import type {
   FootnoteAddress,
   FootnoteGetInput,
@@ -48,6 +49,39 @@ function validateFootnoteTarget(target: unknown, operationName: string): asserts
   }
 }
 
+function isStructuredBody(body: unknown): boolean {
+  if (Array.isArray(body)) {
+    return body.length > 0 && body.every((node) => node != null && typeof node === 'object');
+  }
+  return body != null && typeof body === 'object';
+}
+
+function validateStructuredBody(operationName: string, fieldName: string, body: unknown): void {
+  if (!isStructuredBody(body)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} ${fieldName} must be a content node or array of content nodes.`,
+    );
+  }
+
+  try {
+    validateDocumentFragment(body);
+  } catch (error) {
+    if (!(error instanceof DocumentApiValidationError)) {
+      throw error;
+    }
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} ${fieldName} must be a valid structured note fragment: ${error.message}`,
+      {
+        field: fieldName,
+        causeCode: error.code,
+        causeDetails: error.details,
+      },
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Execute wrappers
 // ---------------------------------------------------------------------------
@@ -72,8 +106,25 @@ export function executeFootnotesInsert(
       "footnotes.insert requires a type of 'footnote' or 'endnote'.",
     );
   }
-  if (typeof input.content !== 'string') {
+  const hasContent = (input as { content?: unknown }).content !== undefined;
+  const hasBody = (input as { body?: unknown }).body !== undefined;
+  if (hasContent && hasBody) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'footnotes.insert accepts either a content string or a structured body, not both.',
+    );
+  }
+  if (!hasContent && !hasBody) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'footnotes.insert requires a content string or a structured body.',
+    );
+  }
+  if (hasContent && typeof (input as { content?: unknown }).content !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'footnotes.insert requires a content string.');
+  }
+  if (hasBody) {
+    validateStructuredBody('footnotes.insert', 'body', (input as { body?: unknown }).body);
   }
   return adapter.insert(input, normalizeMutationOptions(options));
 }
@@ -84,6 +135,21 @@ export function executeFootnotesUpdate(
   options?: MutationOptions,
 ): FootnoteMutationResult {
   validateFootnoteTarget(input.target, 'footnotes.update');
+  const patch = input.patch ?? {};
+  const hasContent = patch.content !== undefined;
+  const hasBody = patch.body !== undefined;
+  if (hasContent && hasBody) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'footnotes.update patch accepts either content or body, not both.',
+    );
+  }
+  if (hasContent && typeof patch.content !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'footnotes.update patch.content must be a string.');
+  }
+  if (hasBody) {
+    validateStructuredBody('footnotes.update', 'patch.body', patch.body);
+  }
   return adapter.update(input, normalizeMutationOptions(options));
 }
 

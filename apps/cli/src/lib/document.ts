@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {
   Editor,
@@ -27,20 +27,60 @@ import {
   type RaceDetectionResult,
 } from './bootstrap';
 import { CliError } from './errors';
-import { pathExists } from './guards';
+import { type FileOutputMeta, writeBytesToPath } from './file-output.js';
 import { buildHeadlessCommentBridge } from './headless-comment-bridge';
 import type { ContextMetadata } from './context';
-import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
+import type { CliIO, DocumentRuntimeKind, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
 import type { SessionPool } from '../host/session-pool';
 
 export type EditorWithDoc = Editor & {
   doc: DocumentApi;
 };
 
-export interface OpenedDocument {
-  editor: EditorWithDoc;
+/**
+ * Runtime-neutral opened-document contract used by CLI orchestrators and the
+ * session pool. Engine specifics (v1 Editor / v2 SDDocumentSession) live
+ * inside the implementation, not on this surface.
+ */
+export interface OpenedRuntimeDocument {
+  runtime: DocumentRuntimeKind;
+  doc: {
+    invoke(request: { operationId: string; input?: unknown; options?: unknown }): unknown;
+  };
   meta: DocumentSourceMeta;
+  exportBytes(options?: RuntimeExportOptions): Promise<Uint8Array> | Uint8Array;
+  exportToPath(outputPath: string, force?: boolean, options?: RuntimeExportOptions): Promise<RuntimeFileExportMeta>;
   dispose(): void;
+}
+
+export type RuntimeExportMode = 'review-preserving' | 'final' | 'original';
+
+export interface RuntimeExportWarning {
+  readonly code: string;
+  readonly message?: string;
+}
+
+export interface RuntimeExportReport {
+  readonly warnings?: readonly RuntimeExportWarning[];
+}
+
+export interface RuntimeExportOptions {
+  readonly mode?: RuntimeExportMode;
+}
+
+export interface RuntimeFileExportMeta extends FileOutputMeta {
+  readonly mode?: RuntimeExportMode;
+  readonly report?: RuntimeExportReport;
+}
+
+/**
+ * V1-specific opened-document. Carries the legacy `EditorWithDoc` reference
+ * for v1-only code paths (collab sync, headless comment bridge). Other call
+ * sites must depend on {@link OpenedRuntimeDocument} only.
+ */
+export interface OpenedDocument extends OpenedRuntimeDocument {
+  runtime: 'v1';
+  editor: EditorWithDoc;
 }
 
 /** Content override options extracted before calling Editor.open(). */
@@ -55,6 +95,12 @@ type TrackChangesReplacementMode = 'paired' | 'independent';
 /** Options passed through to Editor.open() alongside content overrides. */
 export interface EditorPassThroughOptions {
   password?: string;
+  trackChanges?: {
+    replacements?: TrackChangesReplacementMode;
+  };
+  trackedChanges?: {
+    replacements?: TrackChangesReplacementMode;
+  };
   modules?: {
     trackChanges?: {
       replacements?: TrackChangesReplacementMode;
@@ -74,9 +120,14 @@ interface OpenDocumentOptions {
   user?: UserIdentity;
 }
 
-export interface FileOutputMeta {
-  path: string;
-  byteLength: number;
+export type { FileOutputMeta } from './file-output.js';
+
+function cloneBytes(bytes: Uint8Array): Uint8Array {
+  return new Uint8Array(bytes);
+}
+
+function normalizeV1ExportMode(mode: RuntimeExportOptions['mode']): RuntimeExportMode {
+  return mode ?? 'review-preserving';
 }
 
 function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
@@ -200,7 +251,7 @@ export async function openDocument(
       isHeadless: true,
       user: options.user
         ? { name: options.user.name, email: options.user.email, image: null }
-        : { id: 'cli', name: 'CLI' },
+        : { name: 'CLI', email: 'cli@superdoc.local', image: null },
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
@@ -276,13 +327,56 @@ export async function openDocument(
 
   const editorWithDoc = bindCurrentDocumentApi(editor);
 
+  return buildV1OpenedDocument(editorWithDoc, meta, () => {
+    commentBridge?.dispose();
+    editor.destroy();
+    domEnv.dispose();
+  }, cloneBytes(source));
+}
+
+/**
+ * Wrap a v1 `EditorWithDoc` instance in the runtime-neutral
+ * {@link OpenedRuntimeDocument} contract while keeping the original editor
+ * reference accessible for v1-only paths (collab sync, headless comment
+ * bridge).
+ */
+export function buildV1OpenedDocument(
+  editor: EditorWithDoc,
+  meta: DocumentSourceMeta,
+  disposeFn: () => void,
+  originalBytes: Uint8Array,
+): OpenedDocument {
   return {
-    editor: editorWithDoc,
+    runtime: 'v1',
+    editor,
     meta,
+    doc: {
+      invoke(request) {
+        return editor.doc.invoke(request as Parameters<DocumentApi['invoke']>[0]);
+      },
+    },
+    async exportBytes(options) {
+      const mode = normalizeV1ExportMode(options?.mode);
+      if (mode === 'original') {
+        return cloneBytes(originalBytes);
+      }
+      return exportEditorBytes(editor, { isFinalDoc: mode === 'final' });
+    },
+    async exportToPath(outputPath, force = false, options) {
+      const mode = normalizeV1ExportMode(options?.mode);
+      const bytes =
+        mode === 'original'
+          ? cloneBytes(originalBytes)
+          : await exportEditorBytes(editor, { isFinalDoc: mode === 'final' });
+      const output = await writeBytesToPath(bytes, outputPath, force);
+      return {
+        ...output,
+        mode,
+        report: { warnings: [] },
+      };
+    },
     dispose() {
-      commentBridge?.dispose();
-      editor.destroy();
-      domEnv.dispose();
+      disposeFn();
     },
   };
 }
@@ -351,7 +445,8 @@ export async function openCollaborativeDocument(
       throw new CliError('COLLABORATION_ROOM_EMPTY', decision.reason);
     }
 
-    const shouldSeed = decision.action === 'seed';
+    const bootstrapSource = decision.action === 'seed' ? decision.source : undefined;
+    const shouldSeed = bootstrapSource != null;
     // When joining an existing room, skip local doc reading — content
     // comes from the Yjs document, not from the local file path.
     const docForEditor = shouldSeed ? doc : undefined;
@@ -366,21 +461,19 @@ export async function openCollaborativeDocument(
 
     let raceDetection: RaceDetectionResult | undefined;
     if (shouldSeed) {
-      writeBootstrapMarker(runtime.ydoc, decision.source);
+      writeBootstrapMarker(runtime.ydoc, bootstrapSource);
       raceDetection = await detectBootstrapRace(runtime.ydoc);
     }
 
     const bootstrap: BootstrapResult = {
       roomState: finalRoomState,
       bootstrapApplied: shouldSeed,
-      bootstrapSource: shouldSeed ? decision.source : undefined,
+      bootstrapSource,
       raceSuspected: raceDetection?.raceSuspected,
       raceCompetitor: raceDetection?.raceSuspected ? raceDetection.competitor : undefined,
     };
     return {
-      editor: opened.editor,
-      meta: opened.meta,
-      bootstrap,
+      ...opened,
       dispose() {
         try {
           opened.dispose();
@@ -388,6 +481,7 @@ export async function openCollaborativeDocument(
           runtime.dispose();
         }
       },
+      bootstrap,
     };
   } catch (error) {
     runtime.dispose();
@@ -400,15 +494,24 @@ export async function openSessionDocument(
   io: CliIO,
   metadata: Pick<
     ContextMetadata,
-    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user' | 'revision'
+    | 'contextId'
+    | 'sessionType'
+    | 'collaboration'
+    | 'sourcePath'
+    | 'workingDocPath'
+    | 'trackChanges'
+    | 'user'
+    | 'revision'
+    | 'runtime'
   >,
   options: {
     sessionId?: string;
     executionMode?: ExecutionMode;
     sessionPool?: SessionPool;
   } = {},
-): Promise<OpenedDocument> {
+): Promise<OpenedRuntimeDocument> {
   const { executionMode, sessionPool, sessionId } = options;
+  const runtime: DocumentRuntimeKind = metadata.runtime ?? 'v1';
 
   // Host mode: always go through pool (local AND collab)
   if (executionMode === 'host' && sessionPool) {
@@ -416,14 +519,36 @@ export async function openSessionDocument(
     return sessionPool.acquire(
       resolvedSessionId,
       {
+        runtime,
         sessionType: metadata.sessionType,
         workingDocPath: metadata.workingDocPath ?? doc,
         metadataRevision: metadata.revision,
         user: metadata.user,
         collaboration: metadata.collaboration,
+        trackChanges: metadata.trackChanges,
       },
       io,
     );
+  }
+
+  const editorOpenOptions = metadata.trackChanges
+    ? {
+        trackChanges: metadata.trackChanges,
+        modules: { trackChanges: metadata.trackChanges },
+      }
+    : undefined;
+
+  // v2 session reopen — runtime-specific path.
+  if (runtime === 'v2') {
+    if (metadata.sessionType === 'collab') {
+      if (!metadata.collaboration) {
+        throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
+      }
+      const { openV2CollaborativeDocument } = await loadV2Runtime();
+      return openV2CollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user, editorOpenOptions });
+    }
+    const { openV2Document } = await loadV2Runtime();
+    return openV2Document(doc, io, { user: metadata.user, editorOpenOptions });
   }
 
   // Oneshot mode: open fresh, caller is responsible for dispose
@@ -431,10 +556,19 @@ export async function openSessionDocument(
     if (!metadata.collaboration) {
       throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
     }
-    return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
+    return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user, editorOpenOptions });
   }
 
-  return openDocument(doc, io, { user: metadata.user });
+  return openDocument(doc, io, { user: metadata.user, editorOpenOptions });
+}
+
+// Lazy loader so the CLI does not pull v2 engine bytes into the v1-only path.
+let v2RuntimeModulePromise: Promise<typeof import('./document-v2.js')> | null = null;
+export function loadV2Runtime(): Promise<typeof import('./document-v2.js')> {
+  if (!v2RuntimeModulePromise) {
+    v2RuntimeModulePromise = import('./document-v2.js');
+  }
+  return v2RuntimeModulePromise;
 }
 
 export async function getFileChecksum(path: string): Promise<string> {
@@ -465,21 +599,24 @@ export type OptionalExportResult = {
  * Attempts an optional session export, returning structured success/warning
  * data instead of throwing on failure.
  *
- * @param editor - The editor instance to export from
+ * Runtime-neutral: uses {@link OpenedRuntimeDocument.exportToPath} so v1 and
+ * v2 sessions both route through their own serializer.
+ *
+ * @param opened - Runtime-neutral opened document
  * @param io - CLI I/O for diagnostic warnings
  * @param outPath - Optional output path; returns `undefined` when absent
  * @param force - Whether to overwrite an existing file
  * @returns Export result with output or warning metadata, or `undefined` if no path
  */
 export async function exportOptionalSessionOutput(
-  editor: EditorWithDoc,
+  opened: OpenedRuntimeDocument,
   io: CliIO,
   outPath: string | undefined,
   force: boolean,
 ): Promise<OptionalExportResult | undefined> {
   if (!outPath) return undefined;
   try {
-    return { output: await exportToPath(editor, outPath, force) };
+    return { output: await opened.exportToPath(outPath, force) };
   } catch (error) {
     const code = error instanceof CliError ? error.code : 'FILE_WRITE_ERROR';
     const message = error instanceof Error ? error.message : String(error);
@@ -494,20 +631,7 @@ export async function exportOptionalSessionOutput(
   }
 }
 
-export async function exportToPath(
-  editor: Editor,
-  outputPath: string,
-  force = false,
-  options: { isFinalDoc?: boolean } = {},
-): Promise<FileOutputMeta> {
-  const exists = await pathExists(outputPath);
-  if (exists && !force) {
-    throw new CliError('OUTPUT_EXISTS', `Output path already exists: ${outputPath}`, {
-      path: outputPath,
-      hint: 'Use --force to overwrite.',
-    });
-  }
-
+export async function exportEditorBytes(editor: Editor, options: { isFinalDoc?: boolean } = {}): Promise<Uint8Array> {
   let exported: unknown;
   try {
     exported = await editor.exportDocument({ isFinalDoc: options.isFinalDoc });
@@ -518,19 +642,15 @@ export async function exportToPath(
     });
   }
 
-  const bytes = await toUint8Array(exported);
+  return toUint8Array(exported);
+}
 
-  try {
-    await writeFile(outputPath, bytes);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new CliError('FILE_WRITE_ERROR', `Failed to write output file: ${outputPath}`, {
-      message,
-    });
-  }
-
-  return {
-    path: outputPath,
-    byteLength: bytes.byteLength,
-  };
+export async function exportToPath(
+  editor: Editor,
+  outputPath: string,
+  force = false,
+  options: { isFinalDoc?: boolean } = {},
+): Promise<FileOutputMeta> {
+  const bytes = await exportEditorBytes(editor, options);
+  return writeBytesToPath(bytes, outputPath, force);
 }

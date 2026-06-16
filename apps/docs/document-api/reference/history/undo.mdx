@@ -20,7 +20,7 @@ Undo the most recent history-safe mutation in the document.
 
 ## Expected result
 
-Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.
+Returns a HistoryActionResult with noop flag, revision before/after, optional noop reason, and optional ref-effect fields such as inserted, removed, invalidatedRefs, remappedRefs, and affectedStories.
 
 ## Input fields
 
@@ -36,16 +36,39 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `collaboration` | object | no |  |
+| `collaboration.affectedShards` | string[] | no |  |
+| `collaboration.mode` | enum | no | `"session-local"`, `"single-shard"`, `"journaled-multi-shard"` |
+| `collaboration.opId` | string | no |  |
+| `collaboration.undoGroupId` | string | no |  |
+| `diagnosticCode` | string | no |  |
+| `inserted` | EntityAddress[] | no |  |
+| `invalidatedRefs` | AffectedRef[] | no |  |
 | `noop` | boolean | yes |  |
+| `reason` | enum | no | `"EMPTY_UNDO_STACK"`, `"EMPTY_REDO_STACK"`, `"NO_EFFECT"`, `"no-undo-available"`, `"no-redo-available"`, `"history-entry-missing"`, `"apply-rejected"` |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
+| `removed` | EntityAddress[] | no |  |
 | `revision` | object | yes |  |
 | `revision.after` | string | yes |  |
 | `revision.before` | string | yes |  |
+| `status` | enum | no | `"applied"`, `"noop"`, `"rejected"`, `"partial"`, `"repaired"` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `updated` | EntityAddress[] | no |  |
 
 ### Example response
 
 ```json
 {
+  "inserted": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ],
   "noop": true,
+  "reason": "EMPTY_UNDO_STACK",
   "revision": {
     "after": "example",
     "before": "example"
@@ -78,8 +101,80 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
+    "collaboration": {
+      "additionalProperties": false,
+      "properties": {
+        "affectedShards": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "session-local",
+            "single-shard",
+            "journaled-multi-shard"
+          ]
+        },
+        "opId": {
+          "type": "string"
+        },
+        "undoGroupId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "diagnosticCode": {
+      "type": "string"
+    },
+    "inserted": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    },
+    "invalidatedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRef"
+      },
+      "type": "array"
+    },
     "noop": {
       "type": "boolean"
+    },
+    "reason": {
+      "enum": [
+        "EMPTY_UNDO_STACK",
+        "EMPTY_REDO_STACK",
+        "NO_EFFECT",
+        "no-undo-available",
+        "no-redo-available",
+        "history-entry-missing",
+        "apply-rejected"
+      ]
+    },
+    "remappedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRefRemapping"
+      },
+      "type": "array"
+    },
+    "removed": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
     },
     "revision": {
       "additionalProperties": false,
@@ -96,6 +191,27 @@ _No fields._
         "after"
       ],
       "type": "object"
+    },
+    "status": {
+      "enum": [
+        "applied",
+        "noop",
+        "rejected",
+        "partial",
+        "repaired"
+      ]
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "updated": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
     }
   },
   "required": [
@@ -112,8 +228,80 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
+    "collaboration": {
+      "additionalProperties": false,
+      "properties": {
+        "affectedShards": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "session-local",
+            "single-shard",
+            "journaled-multi-shard"
+          ]
+        },
+        "opId": {
+          "type": "string"
+        },
+        "undoGroupId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "diagnosticCode": {
+      "type": "string"
+    },
+    "inserted": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    },
+    "invalidatedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRef"
+      },
+      "type": "array"
+    },
     "noop": {
       "type": "boolean"
+    },
+    "reason": {
+      "enum": [
+        "EMPTY_UNDO_STACK",
+        "EMPTY_REDO_STACK",
+        "NO_EFFECT",
+        "no-undo-available",
+        "no-redo-available",
+        "history-entry-missing",
+        "apply-rejected"
+      ]
+    },
+    "remappedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRefRemapping"
+      },
+      "type": "array"
+    },
+    "removed": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
     },
     "revision": {
       "additionalProperties": false,
@@ -130,6 +318,27 @@ _No fields._
         "after"
       ],
       "type": "object"
+    },
+    "status": {
+      "enum": [
+        "applied",
+        "noop",
+        "rejected",
+        "partial",
+        "repaired"
+      ]
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "updated": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
     }
   },
   "required": [

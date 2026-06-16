@@ -107,6 +107,7 @@ const mountDialog = async ({
   extraComments = [],
   props = {},
   commentsStoreOverrides = {},
+  superdocOverrides = {},
 } = {}) => {
   const baseComment = reactive({
     uid: 'uid-1',
@@ -148,6 +149,10 @@ const mountDialog = async ({
     clearInstantSidebarAlignment: vi.fn(),
     setActiveFloatingCommentInstance: vi.fn(),
     decideTrackedChangeFromSidebar: vi.fn(() => ({ ok: true, success: true })),
+    replyCommentV2: vi.fn(async () => ({ ok: true })),
+    editCommentV2: vi.fn(async () => ({ ok: true })),
+    resolveCommentV2: vi.fn(async () => ({ ok: true })),
+    reconcileCommentsFromV2: vi.fn(),
     getCommentDocumentId: vi.fn(
       (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
     ),
@@ -203,24 +208,27 @@ const mountDialog = async ({
     ...commentsStoreOverrides,
   };
 
+  const defaultActiveEditor = {
+    commands: {
+      setCursorById: vi.fn().mockReturnValue(true),
+      setActiveComment: vi.fn(),
+      rejectTrackedChangeById: vi.fn(),
+      acceptTrackedChangeById: vi.fn(),
+      setCommentInternal: vi.fn(),
+      resolveComment: vi.fn(),
+    },
+  };
+  const { activeEditor: activeEditorOverride, ...restSuperdocOverrides } = superdocOverrides;
   const superdocStub = {
     config: { role: 'editor', isInternal: true },
     users: [
       { name: 'Internal', email: 'internal@example.com', access: { role: 'internal' } },
       { name: 'External', email: 'external@example.com', access: { role: 'external' } },
     ],
-    activeEditor: {
-      commands: {
-        setCursorById: vi.fn().mockReturnValue(true),
-        setActiveComment: vi.fn(),
-        rejectTrackedChangeById: vi.fn(),
-        acceptTrackedChangeById: vi.fn(),
-        setCommentInternal: vi.fn(),
-        resolveComment: vi.fn(),
-      },
-    },
+    activeEditor: { ...defaultActiveEditor, ...(activeEditorOverride ?? {}) },
     focus: vi.fn(),
     emit: vi.fn(),
+    ...restSuperdocOverrides,
   };
 
   document.body.innerHTML = '<div id="host"></div>';
@@ -514,6 +522,37 @@ describe('CommentDialog.vue', () => {
     expect(superdocStub.activeEditor.commands.setActiveComment).toHaveBeenCalledWith({
       commentId: 'comment-fallback-1',
     });
+  });
+
+  it('in v2 mode keeps active UI state unchanged when focusComment fails', async () => {
+    const focusComment = vi.fn(async () => ({ ok: false, reason: 'comment-anchor-not-found' }));
+    const { wrapper, baseComment } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId: 'comment-1::page:0',
+      },
+      commentsStoreOverrides: {
+        activeComment: ref('existing-comment'),
+        activeFloatingCommentInstanceId: ref('existing-instance'),
+      },
+      superdocOverrides: {
+        activeEditor: {
+          editorVersion: 2,
+          v2Comments: { focusComment },
+          commands: null,
+        },
+      },
+    });
+
+    await wrapper.trigger('click');
+    await nextTick();
+
+    expect(focusComment).toHaveBeenCalledWith(baseComment);
+    expect(commentsStoreStub.activeComment.value).toBe('existing-comment');
+    expect(commentsStoreStub.activeFloatingCommentInstanceId.value).toBe('existing-instance');
+    expect(commentsStoreStub.requestInstantSidebarAlignment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.setActiveFloatingCommentInstance).not.toHaveBeenCalled();
+    expect(commentsStoreStub.clearInstantSidebarAlignment).toHaveBeenCalled();
   });
 
   it('prefers the actual visible highlight top after the scroll attempt', async () => {
@@ -903,6 +942,50 @@ describe('CommentDialog.vue', () => {
     await nextTick();
     expect(commentsStoreStub.activeComment.value).toBe(null);
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('in v2 mode calls custom tracked-change accept handler only after v2 decision succeeds', async () => {
+    let resolveDecision;
+    const decision = new Promise((resolve) => {
+      resolveDecision = resolve;
+    });
+    const customAcceptHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'insert',
+        trackedChangeText: 'Added',
+      },
+      commentsStoreOverrides: {
+        decideTrackedChangeFromSidebar: vi.fn(() => decision),
+      },
+      superdocOverrides: {
+        activeEditor: {
+          editorVersion: 2,
+          v2TrackedChanges: {
+            getCapabilityState: vi.fn(() => ({ canDecide: true, reason: null })),
+          },
+          commands: null,
+        },
+      },
+    });
+    superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+    wrapper.findComponent(CommentHeaderStub).vm.$emit('resolve');
+    await Promise.resolve();
+    expect(commentsStoreStub.decideTrackedChangeFromSidebar).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: baseComment, decision: 'accept' }),
+    );
+    expect(customAcceptHandler).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    resolveDecision({ ok: true, success: true });
+    await Promise.resolve();
+    await nextTick();
+
+    expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
   });
 
   it('calls custom reject handler instead of default behavior when configured', async () => {
@@ -1528,6 +1611,523 @@ describe('CommentDialog.vue', () => {
 
     // Verify cancelComment was called with the superdoc instance
     expect(commentsStoreStub.cancelComment).toHaveBeenCalledWith(superdocStub);
+  });
+
+  // TCS Phase 0 / 004: dialog-level integration tests for v2 reply / edit /
+  // resolve / delete. The dialog must call the store-owned helpers and must
+  // not call v1 `activeEditor.commands` for shipped comment mutations.
+  describe('TCS Phase 0 / 004 v2 comment dialog operations', () => {
+    const v2Editor = (overrides = {}) => ({
+      editorVersion: 2,
+      v2Comments: {
+        focusComment: vi.fn(async () => ({ ok: true })),
+        getCapabilityState: vi.fn(() => ({ canWrite: true, reason: null })),
+        ...overrides.v2Comments,
+      },
+      commands: null,
+      ...overrides,
+    });
+
+    it('reply submits via replyCommentV2 and clears reply state on success', async () => {
+      const replyCommentV2 = vi.fn(async () => ({ ok: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          replyCommentV2,
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>Reply text</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      await wrapper.find('.reply-pill').trigger('click');
+      await nextTick();
+
+      const replyButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Reply');
+      await replyButton.trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(replyCommentV2).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        parentCommentId: baseComment.commentId,
+        text: '<p>Reply text</p>',
+      });
+      // addComment must NOT be called in v2 reply path.
+      expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+      // v1 setCursorById etc. must not have run since commands === null.
+      expect(commentsStoreStub.currentCommentText.value).toBe('');
+    });
+
+    it('rejected v2 reply keeps reply editor open and preserves typed text', async () => {
+      const replyCommentV2 = vi.fn(async () => ({ ok: false, reason: 'author-required' }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          replyCommentV2,
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>Pending reply</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      await wrapper.find('.reply-pill').trigger('click');
+      await nextTick();
+
+      const replyButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Reply');
+      await replyButton.trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(replyCommentV2).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        parentCommentId: baseComment.commentId,
+        text: '<p>Pending reply</p>',
+      });
+      // Reply pill should NOT have replaced the expanded editor — i.e.
+      // isReplying remains true and the typed text was not wiped.
+      expect(wrapper.find('.reply-pill').exists()).toBe(false);
+      expect(commentsStoreStub.currentCommentText.value).toBe('<p>Pending reply</p>');
+    });
+
+    it('edit submits via editCommentV2 and clears edit state on success', async () => {
+      const editCommentV2 = vi.fn(async () => ({ ok: true }));
+      const { wrapper, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          editCommentV2,
+          editingCommentId: ref('comment-1'),
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>edited</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      await nextTick();
+      const updateButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Update');
+      await updateButton.trigger('click');
+      await nextTick();
+
+      expect(editCommentV2).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        commentId: 'comment-1',
+        text: '<p>edited</p>',
+      });
+      expect(commentsStoreStub.editingCommentId.value).toBeNull();
+    });
+
+    it('rejected v2 edit keeps editingCommentId active and preserves input text', async () => {
+      const editCommentV2 = vi.fn(async () => ({ ok: false, reason: 'author-required' }));
+      const { wrapper } = await mountDialog({
+        commentsStoreOverrides: {
+          editCommentV2,
+          editingCommentId: ref('comment-1'),
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>edited</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      await nextTick();
+      const updateButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Update');
+      await updateButton.trigger('click');
+      await nextTick();
+
+      expect(commentsStoreStub.editingCommentId.value).toBe('comment-1');
+      expect(commentsStoreStub.currentCommentText.value).toBe('<p>edited</p>');
+    });
+
+    it('resolve dispatches via resolveCommentV2 and does not call v1 resolveComment', async () => {
+      const resolveCommentV2 = vi.fn(async () => ({ ok: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          resolveCommentV2,
+          activeComment: ref('comment-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('resolve');
+      await nextTick();
+      await nextTick();
+
+      expect(resolveCommentV2).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        commentId: baseComment.commentId,
+      });
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+    });
+
+    it('rejected v2 resolve leaves active state untouched', async () => {
+      const resolveCommentV2 = vi.fn(async () => ({ ok: false, reason: 'author-required' }));
+      const { wrapper, baseComment } = await mountDialog({
+        commentsStoreOverrides: {
+          resolveCommentV2,
+          activeComment: ref('comment-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('resolve');
+      await nextTick();
+      await nextTick();
+
+      expect(commentsStoreStub.activeComment.value).toBe('comment-1');
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+    });
+
+    it('reject (non-tracked-change) routes through deleteComment in v2 mode', async () => {
+      const deleteComment = vi.fn(async () => ({ ok: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          deleteComment,
+          activeComment: ref('comment-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('reject');
+      await nextTick();
+      await nextTick();
+
+      expect(deleteComment).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        commentId: baseComment.commentId,
+      });
+    });
+
+    it('overflow-menu Delete uses the same store deleteComment path', async () => {
+      const deleteComment = vi.fn(async () => ({ ok: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        commentsStoreOverrides: {
+          deleteComment,
+          activeComment: ref('comment-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('overflow-select', 'delete');
+      await nextTick();
+
+      expect(deleteComment).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        commentId: baseComment.commentId,
+      });
+    });
+
+    it('Reply button is disabled when v2 reports canWrite === false', async () => {
+      const replyCommentV2 = vi.fn(async () => ({ ok: true }));
+      const { wrapper } = await mountDialog({
+        commentsStoreOverrides: {
+          replyCommentV2,
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>typed</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor({
+            v2Comments: {
+              focusComment: vi.fn(async () => ({ ok: true })),
+              getCapabilityState: vi.fn(() => ({ canWrite: false, reason: 'author-required' })),
+            },
+          }),
+        },
+      });
+
+      await wrapper.find('.reply-pill').trigger('click');
+      await nextTick();
+      const replyButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Reply');
+      expect(replyButton.attributes('disabled')).toBeDefined();
+      expect(replyButton.attributes('data-disabled-reason')).toBe('author-required');
+    });
+
+    it('Update button is disabled when v2 reports canWrite === false', async () => {
+      const editCommentV2 = vi.fn(async () => ({ ok: true }));
+      const { wrapper } = await mountDialog({
+        commentsStoreOverrides: {
+          editCommentV2,
+          editingCommentId: ref('comment-1'),
+          activeComment: ref('comment-1'),
+          currentCommentText: ref('<p>edited</p>'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor({
+            v2Comments: {
+              focusComment: vi.fn(async () => ({ ok: true })),
+              getCapabilityState: vi.fn(() => ({ canWrite: false, reason: 'author-required' })),
+            },
+          }),
+        },
+      });
+
+      await nextTick();
+      const updateButton = wrapper.findAll('button.reply-btn-primary').find((b) => b.text() === 'Update');
+      expect(updateButton.attributes('disabled')).toBeDefined();
+      expect(updateButton.attributes('data-disabled-reason')).toBe('author-required');
+    });
+
+    it('internal/external dropdown is hidden in v2 mode', async () => {
+      const { wrapper } = await mountDialog({
+        commentsStoreOverrides: {
+          activeComment: ref('comment-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      expect(wrapper.findComponent(InternalDropdownStub).exists()).toBe(false);
+    });
+  });
+
+  // TCS Phase 0 / 005: dialog-level integration tests for v2 tracked-change
+  // accept / reject. The dialog must route accept (resolve button) and
+  // reject through `decideTrackedChangeFromSidebar` in v2 mode and must
+  // not call v1 `acceptTrackedChangeById` / `rejectTrackedChangeById`
+  // commands. Failed outcomes must preserve active state and must NOT
+  // call any custom accept/reject callback.
+  describe('TCS Phase 0 / 005 v2 tracked-change dialog operations', () => {
+    const v2Editor = (overrides = {}) => ({
+      editorVersion: 2,
+      v2Comments: {
+        focusComment: vi.fn(async () => ({ ok: true })),
+        getCapabilityState: vi.fn(() => ({ canWrite: true, reason: null })),
+      },
+      v2TrackedChanges: {
+        focusTrackedChange: vi.fn(async () => ({ ok: true })),
+        getCapabilityState: vi.fn(() => ({ canDecide: true, reason: null })),
+        ...overrides.v2TrackedChanges,
+      },
+      commands: null,
+      ...overrides,
+    });
+
+    it('accept (resolve button) on a v2 tracked-change row dispatches through decideTrackedChangeFromSidebar and never calls v1 commands', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({ ok: true, success: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'insert',
+          trackedChangeText: 'added',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('resolve');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(decideTrackedChangeFromSidebar).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        comment: baseComment,
+        decision: 'accept',
+      });
+      // v1 tracked-change commands are intentionally null in v2 mode; they
+      // must never be reached. (commands === null on the v2 facade.)
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+    });
+
+    it('reject button on a v2 tracked-change row dispatches reject through decideTrackedChangeFromSidebar', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({ ok: true, success: true }));
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'delete',
+          deletedText: 'gone',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+
+      const header = wrapper.findComponent(CommentHeaderStub);
+      header.vm.$emit('reject');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(decideTrackedChangeFromSidebar).toHaveBeenCalledWith({
+        superdoc: superdocStub,
+        comment: baseComment,
+        decision: 'reject',
+      });
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+    });
+
+    it('failed v2 accept preserves active state and does NOT call the custom accept callback', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({
+        ok: false,
+        reason: 'review-target-invalidated',
+      }));
+      const customAcceptHandler = vi.fn();
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'insert',
+          trackedChangeText: 'added',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+      superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+      wrapper.findComponent(CommentHeaderStub).vm.$emit('resolve');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(decideTrackedChangeFromSidebar).toHaveBeenCalled();
+      // Failed dispatch must NOT invoke custom callbacks or v1 fallbacks.
+      expect(customAcceptHandler).not.toHaveBeenCalled();
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+      // Active state preserved so the user can retry.
+      expect(commentsStoreStub.activeComment.value).toBe('tc-1');
+    });
+
+    it('failed v2 reject preserves active state and does NOT call the custom reject callback', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({
+        ok: false,
+        reason: 'receipt-failure',
+      }));
+      const customRejectHandler = vi.fn();
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'delete',
+          deletedText: 'gone',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+      superdocStub.config.onTrackedChangeBubbleReject = customRejectHandler;
+
+      wrapper.findComponent(CommentHeaderStub).vm.$emit('reject');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(decideTrackedChangeFromSidebar).toHaveBeenCalled();
+      expect(customRejectHandler).not.toHaveBeenCalled();
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+      expect(commentsStoreStub.activeComment.value).toBe('tc-1');
+    });
+
+    it('committed v2 decision + failed post-list (relist-after-commit-failed) preserves the active row and skips callbacks', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({
+        ok: false,
+        committed: true,
+        reason: 'relist-after-commit-failed',
+      }));
+      const customAcceptHandler = vi.fn();
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'insert',
+          trackedChangeText: 'added',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+      superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+      wrapper.findComponent(CommentHeaderStub).vm.$emit('resolve');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(decideTrackedChangeFromSidebar).toHaveBeenCalled();
+      // Plan §4.2: committed + failed-list is a failure outcome. The dialog
+      // must NOT treat it as success — no callback, no v1 resolveComment.
+      expect(customAcceptHandler).not.toHaveBeenCalled();
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+      expect(commentsStoreStub.activeComment.value).toBe('tc-1');
+    });
+
+    it('successful v2 accept clears active state and invokes the custom accept callback after dispatch resolves', async () => {
+      const decideTrackedChangeFromSidebar = vi.fn(async () => ({ ok: true, success: true }));
+      const customAcceptHandler = vi.fn();
+      const { wrapper, baseComment, superdocStub } = await mountDialog({
+        baseCommentOverrides: {
+          commentId: 'tc-1',
+          trackedChange: true,
+          trackedChangeType: 'insert',
+          trackedChangeText: 'added',
+          trackedChangeAnchorKey: 'tc::body::tc-1',
+        },
+        commentsStoreOverrides: {
+          decideTrackedChangeFromSidebar,
+          activeComment: ref('tc-1'),
+        },
+        superdocOverrides: {
+          activeEditor: v2Editor(),
+        },
+      });
+      superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+      wrapper.findComponent(CommentHeaderStub).vm.$emit('resolve');
+      await Promise.resolve();
+      await nextTick();
+      await nextTick();
+
+      expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+      // v1 resolveComment must not have been called even after success —
+      // v2 prunes the row through reconcile, not the v1 ghost-bubble path.
+      expect(baseComment.resolveComment).not.toHaveBeenCalled();
+      expect(commentsStoreStub.activeComment.value).toBeNull();
+    });
   });
 
   describe('readOnly mode', () => {

@@ -390,6 +390,9 @@ describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
       commentText: 'user-authored tracked comment',
       creatorName: 'A',
     });
+
+    const linkedInfo = toCommentInfo(store[0]);
+    expect(linkedInfo.trackedChangeLink?.trackedChangeId).toBe('tc-root-1');
   });
 
   it('normalizes legacy collaboration tracked change types before storing them', () => {
@@ -416,8 +419,10 @@ describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
     const insertInfo = toCommentInfo(findCommentEntity(store, 'track-insert')!);
     const replacementInfo = toCommentInfo(findCommentEntity(store, 'replacement')!);
     expect(insertInfo.trackedChangeType).toBe('insert');
+    expect(insertInfo.trackedChangeLink?.trackedChangeId).toBe('track-insert');
     expect(insertInfo.trackedChangeLink?.trackedChangeType).toBe('insert');
     expect(replacementInfo.trackedChangeType).toBe('replacement');
+    expect(replacementInfo.trackedChangeLink?.trackedChangeId).toBe('replacement');
     expect(replacementInfo.trackedChangeLink?.trackedChangeType).toBe('replacement');
   });
 

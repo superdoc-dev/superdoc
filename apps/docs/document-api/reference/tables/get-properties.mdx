@@ -77,6 +77,7 @@ Returns a TablesGetPropertiesOutput with direct table layout and style state, in
 | `direction` | enum | no | `"ltr"`, `"rtl"` |
 | `nodeId` | string | yes |  |
 | `preferredWidth` | number | no |  |
+| `preferredWidthType` | enum | no | `"dxa"`, `"auto"`, `"pct"` |
 | `styleId` | string | no |  |
 | `styleOptions` | object | no |  |
 | `styleOptions.bandedColumns` | boolean | no |  |
@@ -374,6 +375,13 @@ Returns a TablesGetPropertiesOutput with direct table layout and style state, in
     },
     "preferredWidth": {
       "type": "number"
+    },
+    "preferredWidthType": {
+      "enum": [
+        "dxa",
+        "auto",
+        "pct"
+      ]
     },
     "styleId": {
       "type": "string"

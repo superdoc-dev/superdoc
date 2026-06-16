@@ -2,8 +2,8 @@
  * Blocks convenience wrappers — bridge blocks.list, blocks.delete, and
  * blocks.deleteRange to the plan engine's execution path.
  *
- * Follows the same domain-command wrapper pattern as create-wrappers.ts
- * and lists-wrappers.ts.
+ * Uses raw transactions so direct and tracked mode share the same preflight
+ * validation and target resolution path.
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
@@ -31,17 +31,16 @@ import {
 } from '../helpers/node-address-resolver.js';
 import { computeTextContentLength } from '../helpers/text-offset-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { getRevision } from './revision-tracker.js';
+import { checkRevision, getRevision } from './revision-tracker.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-type DeleteBlockNodeByIdCommand = (id: string) => boolean;
 
 const SUPPORTED_DELETE_NODE_TYPES = new Set<string>(DELETABLE_BLOCK_NODE_TYPES);
 const REJECTED_DELETE_NODE_TYPES = new Set(['tableRow', 'tableCell']);
@@ -352,7 +351,10 @@ export function blocksDeleteWrapper(
   input: BlocksDeleteInput,
   options?: MutationOptions,
 ): BlocksDeleteResult {
-  rejectTrackedMode('blocks.delete', options);
+  const mode = options?.changeMode ?? 'direct';
+  if (mode === 'tracked') {
+    ensureTrackedCapability(editor, { operation: 'blocks.delete' });
+  }
 
   const index = getBlockIndex(editor);
   const candidate = findBlockByIdStrict(index, input.target);
@@ -369,34 +371,19 @@ export function blocksDeleteWrapper(
 
   const sdBlockId = resolveSdBlockId(candidate);
 
-  const deleteBlockNodeById = requireEditorCommand(
-    editor.commands?.deleteBlockNodeById,
-    'blocks.delete',
-  ) as DeleteBlockNodeByIdCommand;
-
   validateCommandLayerUniqueness(editor, sdBlockId);
 
   if (options?.dryRun) {
     return { success: true, deleted: input.target, deletedBlock };
   }
+  checkRevision(editor, options?.expectedRevision);
 
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const didApply = deleteBlockNodeById(sdBlockId);
-      if (didApply) clearIndexCache(editor);
-      return didApply;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    throw new DocumentApiAdapterError(
-      'INTERNAL_ERROR',
-      'blocks.delete command returned false despite passing all pre-apply checks. This is an internal invariant violation.',
-      { sdBlockId, target: input.target },
-    );
-  }
+  const tr = editor.state.tr;
+  tr.delete(candidate.pos, candidate.end);
+  if (mode === 'tracked') applyTrackedMutationMeta(tr);
+  else applyDirectMutationMeta(tr);
+  editor.dispatch(tr);
+  clearIndexCache(editor);
 
   return { success: true, deleted: input.target, deletedBlock };
 }

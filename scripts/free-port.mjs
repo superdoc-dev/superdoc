@@ -7,6 +7,11 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const portArg = process.argv[2] ?? '9990';
 const port = String(portArg).trim();
 
+if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+  console.error(`[free-port] Invalid port: ${port}`);
+  process.exit(1);
+}
+
 const getPidsOnPort = () => {
   try {
     const output = execSync(`lsof -ti tcp:${port}`, {

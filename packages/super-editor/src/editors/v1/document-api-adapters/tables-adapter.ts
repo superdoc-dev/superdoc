@@ -2917,8 +2917,11 @@ export function tablesSetCellPropertiesAdapter(
 
     const attrUpdates: Record<string, unknown> = {};
     const cellPropUpdates: Record<string, unknown> = {};
+    const preferredWidthType = (input as TablesSetCellPropertiesInput & {
+      preferredWidthType?: TablePreferredWidthType;
+    }).preferredWidthType;
 
-    const preferredWidth = buildCellPreferredWidth(input.preferredWidthPt, input.preferredWidthType);
+    const preferredWidth = buildCellPreferredWidth(input.preferredWidthPt, preferredWidthType);
     if (preferredWidth) {
       const colspan = (currentAttrs.colspan as number) || 1;
       if (preferredWidth.type === 'dxa' && input.preferredWidthPt !== undefined) {

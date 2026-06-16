@@ -5,9 +5,9 @@
  * This guards against example drift by running each example through:
  *  1. Shell-accurate tokenization (strip quotes, split on spaces)
  *  2. Command-token stripping (same as the CLI router)
- *  3. `parseCommandArgs` with the operation's full option spec set
- *  4. `ensureValidArgs` — rejects unknown flags and type mismatches
- *  5. JSON payload validation — every --*-json flag must contain valid JSON
+ *  3. The real wrapper/parser path (`parseWrapperOperationInput`)
+ *  4. Invoke-input normalization (`extractInvokeInput`) for doc-backed commands
+ *  5. Parser-level validation for helper and CLI-only command surfaces
  *
  * If a flag is renamed, removed, misspelled, or a JSON payload is malformed,
  * this test catches it before the example ships in `describe command` output.
@@ -17,9 +17,12 @@ import { describe, expect, test } from 'bun:test';
 import { DOC_COMMAND_EXAMPLES } from '../cli/command-examples';
 import { CLI_HELPER_COMMANDS } from '../cli/helper-commands';
 import { CLI_COMMAND_SPECS } from '../cli/commands';
+import { toDocApiId } from '../cli';
 import { CLI_OPERATION_OPTION_SPECS } from '../cli/operation-params';
 import { CLI_ONLY_OPERATIONS } from '../cli/types';
 import { parseCommandArgs, parseGlobalArgs, ensureValidArgs } from '../lib/args';
+import { extractInvokeInput } from '../lib/invoke-input';
+import { parseWrapperOperationInput } from '../lib/operation-wrapper-input';
 import type { CliOperationId } from '../cli/operation-set';
 import type { OptionSpec } from '../lib/args';
 
@@ -56,6 +59,8 @@ const WRAPPER_EXTRA_SPECS: Partial<Record<string, OptionSpec[]>> = {
   ],
   'doc.create.paragraph': [
     { name: 'input-file', type: 'string' },
+    { name: 'in-json', type: 'string' },
+    { name: 'in-file', type: 'string' },
     { name: 'text', type: 'string' },
     { name: 'at', type: 'string' },
     { name: 'at-json', type: 'string' },
@@ -186,33 +191,20 @@ function validateJsonPayloads(options: Record<string, unknown>): string[] {
 
 describe('DOC_COMMAND_EXAMPLES parse through real CLI parser', () => {
   for (const [docApiId, examples] of Object.entries(DOC_COMMAND_EXAMPLES)) {
-    const cliOpId = `doc.${docApiId}`;
+    const cliOpId = `doc.${docApiId}` as CliOperationId;
     const commandSpec = CLI_COMMAND_SPECS.find((s) => s.operationId === cliOpId && !s.alias);
-    const fullSpecs = buildFullOptionSpecs(cliOpId);
 
     for (const example of examples) {
-      test(`${docApiId}: ${example.slice(0, 80)}...`, () => {
+      test(`${docApiId}: ${example.slice(0, 80)}...`, async () => {
         expect(commandSpec).toBeDefined();
 
-        // 1. Tokenize like a shell
         const allTokens = shellTokenize(example);
-
-        // 2. Strip superdoc + command tokens
         const flagTokens = extractCommandArgTokens(allTokens, commandSpec!.tokens);
+        const cliInput = await parseWrapperOperationInput(cliOpId, flagTokens, commandSpec!.key);
+        const invokeOperationId = toDocApiId(cliOpId);
 
-        // 3. Parse through the real CLI parser
-        const parsed = parseCommandArgs(flagTokens, fullSpecs);
-
-        // 4. Validate: no unknown flags, no type errors
-        expect(parsed.unknown).toEqual([]);
-        expect(parsed.errors).toEqual([]);
-
-        // ensureValidArgs would throw on unknown/errors — verify it doesn't
-        expect(() => ensureValidArgs(parsed)).not.toThrow();
-
-        // 5. Validate JSON payloads are syntactically valid
-        const jsonErrors = validateJsonPayloads(parsed.options);
-        expect(jsonErrors).toEqual([]);
+        expect(invokeOperationId).not.toBeNull();
+        expect(() => extractInvokeInput(invokeOperationId!, cliInput)).not.toThrow();
       });
     }
   }

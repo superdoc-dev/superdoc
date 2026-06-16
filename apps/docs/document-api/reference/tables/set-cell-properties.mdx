@@ -30,7 +30,6 @@ Returns a TableMutationResult receipt; reports NO_OP if cell properties already 
 | --- | --- | --- | --- |
 | `fitText` | boolean | no |  |
 | `preferredWidthPt` | number | no |  |
-| `preferredWidthType` | enum | no | `"dxa"`, `"auto"`, `"pct"` |
 | `target` | TableCellAddress | yes | TableCellAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -45,7 +44,6 @@ Returns a TableMutationResult receipt; reports NO_OP if cell properties already 
 | `fitText` | boolean | no |  |
 | `nodeId` | string | yes |  |
 | `preferredWidthPt` | number | no |  |
-| `preferredWidthType` | enum | no | `"dxa"`, `"auto"`, `"pct"` |
 | `verticalAlign` | enum | no | `"top"`, `"center"`, `"bottom"` |
 | `wrapText` | boolean | no |  |
 
@@ -54,12 +52,12 @@ Returns a TableMutationResult receipt; reports NO_OP if cell properties already 
 ```json
 {
   "preferredWidthPt": 12.5,
-  "preferredWidthType": "dxa",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "tableCell"
-  }
+  },
+  "verticalAlign": "top"
 }
 ```
 
@@ -148,13 +146,6 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     },
     "preferredWidthPt": {
       "type": "number"
-    },
-    "preferredWidthType": {
-      "enum": [
-        "dxa",
-        "auto",
-        "pct"
-      ]
     },
     "target": {
       "$ref": "#/$defs/TableCellAddress"

@@ -52,6 +52,7 @@ function normalizeSelector(selector: Selector): NodeSelector | TextSelector {
         pattern: text.pattern,
         ...(text.mode != null && { mode: text.mode }),
         ...(text.caseSensitive != null && { caseSensitive: text.caseSensitive }),
+        ...(text.wholeWord != null && { wholeWord: text.wholeWord }),
       };
     }
     if (selector.type === 'node') {

@@ -431,6 +431,10 @@ const isEditingAnyComment = computed(() => {
 
 const shouldShowInternalExternal = computed(() => {
   if (!proxy.$superdoc.config.isInternal) return false;
+  // ui-phase3-002: the v2 host does not model `isInternal` today, so the
+  // dropdown would only mutate Vue state without surviving save/reopen.
+  // Hide it in v2 mode until a v2 internal/external surface ships.
+  if (isV2Mode.value) return false;
   return !suppressInternalExternal.value && !props.comment.trackedChange;
 });
 
@@ -438,8 +442,9 @@ const hasTextContent = computed(() => {
   return currentCommentText.value && currentCommentText.value !== '<p></p>';
 });
 
-const setFocus = () => {
+const setFocus = async () => {
   const editor = proxy.$superdoc.activeEditor;
+  const v2Adapter = editor?.editorVersion === 2 ? (editor?.v2Comments ?? null) : null;
   const isTrackedChange = Boolean(props.comment?.trackedChange);
   const targetClientY = getPreferredCommentFocusTargetClientY();
   const isInstanceScopedDialog = props.floatingInstanceId != null;
@@ -448,6 +453,36 @@ const setFocus = () => {
     (activeComment.value !== props.comment.commentId ||
       (isInstanceScopedDialog && currentFloatingInstanceId.value !== activeFloatingCommentInstanceId.value));
   let instantAlignmentTargetY = targetClientY;
+
+  // ui-phase3-002: in v2 mode, all setFocus work routes through the v2
+  // comments adapter. Do not touch PresentationEditor, setCursorById, or v1
+  // setActiveComment — those surfaces do not exist in v2.
+  if (v2Adapter) {
+    // ui-phase3-003: tracked-change rows route through the v2 tracked-change
+    // adapter so the painted [data-track-change-id] carriers are the focus
+    // target (not the comment-anchor carriers, which tracked changes lack).
+    const trackedChangeAdapter =
+      editor?.editorVersion === 2 && isTrackedChange ? (editor?.v2TrackedChanges ?? null) : null;
+    const result = await (trackedChangeAdapter
+      ? trackedChangeAdapter.focusTrackedChange(props.comment)
+      : v2Adapter.focusComment(props.comment));
+    if (!result?.ok) {
+      clearInstantSidebarAlignment();
+      return result;
+    }
+    if (!props.comment.resolvedTime) {
+      activeComment.value = props.comment.commentId;
+      if (props.floatingInstanceId) {
+        setActiveFloatingCommentInstance(props.floatingInstanceId);
+      }
+    }
+    if (willChangeActiveDialog) {
+      requestInstantSidebarAlignment(targetClientY, props.comment.commentId, props.floatingInstanceId ?? null);
+    } else {
+      clearInstantSidebarAlignment();
+    }
+    return result;
+  }
 
   // Move cursor to the comment location and set active comment in a single PM
   // transaction. This prevents a race where position-based comment detection in the
@@ -577,7 +612,27 @@ const handleClickOutside = (e) => {
   isCommentHighlighted.value = false;
 };
 
-const handleAddComment = () => {
+const handleAddComment = async () => {
+  // TCS Phase 0 / 004 §4.1: in v2 mode route an existing-thread reply through
+  // the store-owned `replyCommentV2` helper. Pending (new-comment) create is
+  // deferred to a later phase and still uses the v1 `addComment` path.
+  if (isV2Mode.value && v2CommentsAdapter.value && !pendingComment.value) {
+    const outcome = await commentsStore.replyCommentV2({
+      superdoc: proxy.$superdoc,
+      parentCommentId: props.comment.commentId,
+      text: currentCommentText.value,
+    });
+    if (!outcome?.ok) {
+      // Plan §4.1: keep reply editor open and typed text intact for retry.
+      nextTick(() => emit('resize'));
+      return outcome;
+    }
+    isReplying.value = false;
+    currentCommentText.value = '';
+    nextTick(() => emit('resize'));
+    return outcome;
+  }
+
   const options = {
     documentId: props.comment.fileId,
     isInternal: pendingComment.value ? pendingComment.value.isInternal : isInternal.value,
@@ -590,40 +645,141 @@ const handleAddComment = () => {
   }
 
   const comment = commentsStore.getPendingComment(options);
-  addComment({ superdoc: proxy.$superdoc, comment });
-  isReplying.value = false;
-  nextTick(() => emit('resize'));
+  // ui-phase3-002: pre-populate the new comment's text from the current
+  // input so the v2 path can read the value off the comment model itself
+  // (the v2 dispatch happens before Vue state mutation, so the store cannot
+  // rely on commentText being attached later).
+  if (!pendingComment.value && currentCommentText.value) {
+    comment.setText({ text: currentCommentText.value, suppressUpdate: true });
+  }
+  Promise.resolve(addComment({ superdoc: proxy.$superdoc, comment })).finally(() => {
+    isReplying.value = false;
+    nextTick(() => emit('resize'));
+  });
 };
 
-const handleReject = () => {
+const isV2Mode = computed(() => proxy.$superdoc?.activeEditor?.editorVersion === 2);
+const v2CommentsAdapter = computed(() => (isV2Mode.value ? (proxy.$superdoc?.activeEditor?.v2Comments ?? null) : null));
+// ui-phase3-003: v2 tracked-change adapter accessor — routes accept/reject
+// through `host.dispatch({ kind: 'review.trackedChangeDecide', ... })`.
+const v2TrackedChangesAdapter = computed(() =>
+  isV2Mode.value ? (proxy.$superdoc?.activeEditor?.v2TrackedChanges ?? null) : null,
+);
+const v2WriteCapability = computed(() => {
+  if (!v2CommentsAdapter.value) return null;
+  return v2CommentsAdapter.value.getCapabilityState?.() ?? null;
+});
+const isV2WriteDisabled = computed(() => {
+  if (!isV2Mode.value) return false;
+  const cap = v2WriteCapability.value;
+  if (!cap) return false;
+  return cap.canWrite === false;
+});
+const v2TrackedChangeCapability = computed(() => {
+  if (!v2TrackedChangesAdapter.value) return null;
+  return v2TrackedChangesAdapter.value.getCapabilityState?.() ?? null;
+});
+
+const getResolveDisabledReason = (comment) => {
+  if (isV2Mode.value && comment?.trackedChange) {
+    // Tracked-change accept (resolve) routes through the v2 adapter. Disable
+    // the control only when the v2 host reports a real precondition.
+    if (!v2TrackedChangesAdapter.value) return 'v2-tracked-change-adapter-missing';
+    const cap = v2TrackedChangeCapability.value;
+    if (cap && cap.canDecide === false) return cap.reason ?? 'v2-tracked-change-unavailable';
+    return null;
+  }
+  if (isV2WriteDisabled.value) {
+    return v2WriteCapability.value?.reason ?? 'v2-write-unavailable';
+  }
+  return null;
+};
+const getRejectDisabledReason = (comment) => {
+  if (isV2Mode.value && comment?.trackedChange) {
+    if (!v2TrackedChangesAdapter.value) return 'v2-tracked-change-adapter-missing';
+    const cap = v2TrackedChangeCapability.value;
+    if (cap && cap.canDecide === false) return cap.reason ?? 'v2-tracked-change-unavailable';
+    return null;
+  }
+  if (isV2WriteDisabled.value) {
+    return v2WriteCapability.value?.reason ?? 'v2-write-unavailable';
+  }
+  return null;
+};
+
+// TCS Phase 0 / 004 §5: when v2 reports canWrite === false (e.g.
+// `author-required`, host not ready), overflow-menu Edit / Delete must hide
+// or disable. We surface a stable reason through CommentHeader so the menu
+// can filter both options consistently with the visible resolve/reject
+// disabled treatment.
+const v2OverflowWriteDisabledReason = computed(() => {
+  if (!isV2Mode.value) return null;
+  if (!isV2WriteDisabled.value) return null;
+  return v2WriteCapability.value?.reason ?? 'v2-write-unavailable';
+});
+
+const handleReject = async () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
 
-  // Custom handlers always resolve so the bubble disappears from
-  // getFloatingComments (SD-2049). The internal decision path only resolves
-  // when the decision actually applied — otherwise the tracked marks are
-  // still in the document and the thread must stay open (SD-3386).
-  let decisionApplied = true;
-  if (props.comment.trackedChange && typeof customHandler === 'function') {
-    customHandler(props.comment, proxy.$superdoc.activeEditor);
-  } else if (props.comment.trackedChange) {
-    const result = commentsStore.decideTrackedChangeFromSidebar({
+  if (props.comment.trackedChange) {
+    if (isV2Mode.value) {
+      // ui-phase3-003: route tracked-change reject through the store-owned
+      // v2 adapter path. Vue state and customer callbacks run only after the
+      // v2 receipt commits and the store reconciles from trackChanges.list().
+      // Vue state is NOT mutated until the dispatch commits and the store
+      // bubble handlers receive the v2 facade explicitly after success.
+      const outcome = await commentsStore.decideTrackedChangeFromSidebar({
+        superdoc: proxy.$superdoc,
+        comment: props.comment,
+        decision: 'reject',
+      });
+      if (!outcome?.ok || outcome.success === false) return;
+      if (typeof customHandler === 'function') {
+        customHandler(props.comment, proxy.$superdoc.activeEditor);
+      }
+      nextTick(() => {
+        commentsStore.lastUpdate = new Date();
+        activeComment.value = null;
+        commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+      });
+      return;
+    }
+
+    // Custom handlers always resolve so the bubble disappears from
+    // getFloatingComments (SD-2049). The internal decision path only resolves
+    // when the decision actually applied; otherwise the tracked marks are
+    // still in the document and the thread must stay open (SD-3386).
+    let decisionApplied = true;
+    if (typeof customHandler === 'function') {
+      customHandler(props.comment, proxy.$superdoc.activeEditor);
+    } else {
+      const outcome = commentsStore.decideTrackedChangeFromSidebar({
+        superdoc: proxy.$superdoc,
+        comment: props.comment,
+        decision: 'reject',
+      });
+      decisionApplied = Boolean(outcome?.ok) && outcome.success !== false;
+    }
+
+    if (decisionApplied) {
+      props.comment.resolveComment({
+        id: superdocStore.user.id,
+        email: superdocStore.user.email,
+        name: superdocStore.user.name,
+        superdoc: proxy.$superdoc,
+        decision: 'reject',
+      });
+    }
+  } else if (isV2Mode.value && v2CommentsAdapter.value) {
+    // ui-phase3-002: route delete through the v2 host. Vue state mutates
+    // only after the receipt commits and we refresh from the v2 list.
+    const outcome = await commentsStore.deleteComment({
       superdoc: proxy.$superdoc,
-      comment: props.comment,
-      decision: 'reject',
+      commentId: props.comment.commentId,
     });
-    decisionApplied = Boolean(result?.ok) && result?.success !== false;
+    if (!outcome?.ok) return;
   } else {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
-  }
-
-  if (props.comment.trackedChange && decisionApplied) {
-    props.comment.resolveComment({
-      id: superdocStore.user.id,
-      email: superdocStore.user.email,
-      name: superdocStore.user.name,
-      superdoc: proxy.$superdoc,
-      decision: 'reject',
-    });
   }
 
   // Always cleanup the dialog state
@@ -635,34 +791,71 @@ const handleReject = () => {
   });
 };
 
-const handleResolve = () => {
+const handleResolve = async () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
 
-  // Custom handlers always resolve so the bubble disappears from
-  // getFloatingComments (SD-2049). The internal decision path only resolves
-  // when the decision actually applied — otherwise the tracked marks are
-  // still in the document and the thread must stay open (SD-3386).
-  let decisionApplied = true;
-  if (props.comment.trackedChange && typeof customHandler === 'function') {
-    customHandler(props.comment, proxy.$superdoc.activeEditor);
-  } else {
-    if (props.comment.trackedChange) {
-      const result = commentsStore.decideTrackedChangeFromSidebar({
-        superdoc: proxy.$superdoc,
-        comment: props.comment,
-        decision: 'accept',
-      });
-      decisionApplied = Boolean(result?.ok) && result?.success !== false;
+  // ui-phase3-003: route tracked-change accept through the v2 adapter when
+  // v2 mode is active. Vue state mutates only after the dispatch commits and
+  // the store reconciles from `host.getHandles().trackChanges.list()`.
+  if (props.comment.trackedChange && isV2Mode.value) {
+    const outcome = await commentsStore.decideTrackedChangeFromSidebar({
+      superdoc: proxy.$superdoc,
+      comment: props.comment,
+      decision: 'accept',
+    });
+    if (!outcome?.ok || outcome.success === false) return;
+    if (typeof customHandler === 'function') {
+      customHandler(props.comment, proxy.$superdoc.activeEditor);
     }
+    nextTick(() => {
+      commentsStore.lastUpdate = new Date();
+      activeComment.value = null;
+      commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+    });
+    return;
   }
 
-  if (decisionApplied) {
+  let v1TrackedChangeDecisionApplied = true;
+  if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handlers always resolve so the bubble disappears from
+    // getFloatingComments (SD-2049).
+    customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else if (props.comment.trackedChange) {
+    const outcome = commentsStore.decideTrackedChangeFromSidebar({
+      superdoc: proxy.$superdoc,
+      comment: props.comment,
+      decision: 'accept',
+    });
+    v1TrackedChangeDecisionApplied = Boolean(outcome?.ok) && outcome.success !== false;
+  } else if (isV2Mode.value && v2CommentsAdapter.value) {
+    // TCS Phase 0 / 004 §4.3: route resolve through the store-owned
+    // `resolveCommentV2` helper. The store owns capability gating, adapter
+    // identity stamping, reconciliation, the active-row clearing decision,
+    // and the rejected `comments-update` event. Plan §4.3: leave the row
+    // active on rejection so the user can retry.
+    const outcome = await commentsStore.resolveCommentV2({
+      superdoc: proxy.$superdoc,
+      commentId: props.comment.commentId,
+    });
+    if (!outcome?.ok) return;
+  } else {
     props.comment.resolveComment({
       id: superdocStore.user.id,
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
-      ...(props.comment.trackedChange ? { decision: 'accept' } : {}),
+    });
+  }
+
+  // For v1 tracked changes we still need to resolve the local Vue model so the
+  // bubble disappears from getFloatingComments after the document decision works.
+  if (props.comment.trackedChange && !isV2Mode.value && v1TrackedChangeDecisionApplied) {
+    props.comment.resolveComment({
+      id: superdocStore.user.id,
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+      decision: 'accept',
     });
   }
 
@@ -695,7 +888,23 @@ const handleOverflowSelect = (value, comment) => {
   }
 };
 
-const handleCommentUpdate = (comment) => {
+const handleCommentUpdate = async (comment) => {
+  // TCS Phase 0 / 004 §4.2: in v2 mode route edit through the store-owned
+  // `editCommentV2` helper. The store owns capability gating, adapter
+  // identity stamping, reconciliation, and emits the rejected event when the
+  // dispatch / refresh fails. The dialog only owns `editingCommentId` and
+  // text input; we keep both intact on rejection so the user can retry.
+  if (isV2Mode.value && v2CommentsAdapter.value) {
+    const outcome = await commentsStore.editCommentV2({
+      superdoc: proxy.$superdoc,
+      commentId: comment.commentId,
+      text: currentCommentText.value,
+    });
+    if (!outcome?.ok) return outcome;
+    editingCommentId.value = null;
+    removePendingComment(proxy.$superdoc);
+    return outcome;
+  }
   editingCommentId.value = null;
   comment.setText({ text: currentCommentText.value, superdoc: proxy.$superdoc });
   removePendingComment(proxy.$superdoc);
@@ -859,6 +1068,9 @@ watch(editingCommentId, (commentId) => {
           :timestamp="getProcessedDate(comment.createdTime)"
           :comment="comment"
           :is-active="isDialogActive"
+          :resolve-disabled-reason="getResolveDisabledReason(comment)"
+          :reject-disabled-reason="getRejectDisabledReason(comment)"
+          :write-disabled-reason="v2OverflowWriteDisabledReason"
           @resolve="handleResolve"
           @reject="handleReject"
           @overflow-select="handleOverflowSelect($event, comment)"
@@ -951,8 +1163,9 @@ watch(editingCommentId, (commentId) => {
               <button
                 class="sd-button primary reply-btn-primary"
                 @click.stop.prevent="handleCommentUpdate(comment)"
-                :disabled="!hasTextContent"
-                :class="{ 'sd-is-disabled': !hasTextContent }"
+                :disabled="!hasTextContent || isV2WriteDisabled"
+                :class="{ 'sd-is-disabled': !hasTextContent || isV2WriteDisabled }"
+                :data-disabled-reason="isV2WriteDisabled ? (v2WriteCapability?.reason ?? null) : null"
               >
                 Update
               </button>
@@ -1011,8 +1224,9 @@ watch(editingCommentId, (commentId) => {
             <button
               class="sd-button primary reply-btn-primary"
               @click.stop.prevent="handleAddComment"
-              :disabled="!hasTextContent"
-              :class="{ 'sd-is-disabled': !hasTextContent }"
+              :disabled="!hasTextContent || isV2WriteDisabled"
+              :class="{ 'sd-is-disabled': !hasTextContent || isV2WriteDisabled }"
+              :data-disabled-reason="isV2WriteDisabled ? (v2WriteCapability?.reason ?? null) : null"
             >
               Reply
             </button>

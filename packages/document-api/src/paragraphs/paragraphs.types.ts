@@ -7,6 +7,7 @@
 
 import type { BlockNodeAddress } from '../types/base.js';
 import type { ReceiptFailure } from '../types/receipt.js';
+import type { SDRunProps } from '../types/sd-props.js';
 
 // ---------------------------------------------------------------------------
 // Target
@@ -139,6 +140,14 @@ export interface ParagraphsSetFlowOptionsInput {
   contextualSpacing?: boolean;
   pageBreakBefore?: boolean;
   suppressAutoHyphens?: boolean;
+  /** `w:autoSpaceDE` — auto-space between East-Asian and Latin text. */
+  autoSpaceDE?: boolean;
+  /** `w:autoSpaceDN` — auto-space between East-Asian text and numbers. */
+  autoSpaceDN?: boolean;
+  /** `w:adjustRightInd` — auto-adjust right indent for East-Asian grids. */
+  adjustRightInd?: boolean;
+  /** `w:snapToGrid` — snap the paragraph to the document grid. */
+  snapToGrid?: boolean;
 }
 
 /** paragraphs.setTabStop */
@@ -174,6 +183,17 @@ export interface ParagraphsSetBorderInput {
 export interface ParagraphsClearBorderInput {
   target: ParagraphTarget;
   side: ClearBorderSide;
+}
+
+/** paragraphs.setMarkRunProps */
+export interface ParagraphsSetMarkRunPropsInput {
+  target: ParagraphTarget;
+  /**
+   * Paragraph-mark run properties (`w:pPr/w:rPr`). Stored through the same
+   * internal shape used by structured paragraph materialization, so values
+   * round-trip through `paragraph.props.markRunProps`.
+   */
+  markRunProps: SDRunProps;
 }
 
 /** paragraphs.setShading */

@@ -7,7 +7,7 @@
 
 import type { NodeKind } from '../types/base.js';
 import type { SelectionTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { ReceiptFailure, ReceiptInsert } from '../types/receipt.js';
 
 // ---------------------------------------------------------------------------
 // Enums and constants
@@ -209,6 +209,7 @@ export interface ContentControlMutationSuccess {
   success: true;
   contentControl: ContentControlTarget;
   updatedRef?: ContentControlTarget;
+  trackedChangeRefs?: ReceiptInsert[];
 }
 
 export interface ContentControlMutationFailure {

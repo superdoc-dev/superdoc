@@ -28,29 +28,31 @@ Returns a TableMutationResult receipt; reports NO_OP if cell padding already mat
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `bottomPt` | number | no |  |
-| `leftPt` | number | no |  |
-| `rightPt` | number | no |  |
+| `bottomPt` | number | yes |  |
+| `leftPt` | number | yes |  |
+| `rightPt` | number | yes |  |
 | `target` | TableCellAddress | yes | TableCellAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"tableCell"` | yes | Constant: `"tableCell"` |
-| `topPt` | number | no |  |
+| `topPt` | number | yes |  |
 
 ### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `bottomPt` | number | no |  |
-| `leftPt` | number | no |  |
+| `bottomPt` | number | yes |  |
+| `leftPt` | number | yes |  |
 | `nodeId` | string | yes |  |
-| `rightPt` | number | no |  |
-| `topPt` | number | no |  |
+| `rightPt` | number | yes |  |
+| `topPt` | number | yes |  |
 
 ### Example request
 
 ```json
 {
+  "bottomPt": 12.5,
+  "leftPt": 12.5,
   "rightPt": 12.5,
   "target": {
     "kind": "block",
@@ -125,28 +127,6 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 ```json
 {
   "additionalProperties": false,
-  "anyOf": [
-    {
-      "required": [
-        "topPt"
-      ]
-    },
-    {
-      "required": [
-        "rightPt"
-      ]
-    },
-    {
-      "required": [
-        "bottomPt"
-      ]
-    },
-    {
-      "required": [
-        "leftPt"
-      ]
-    }
-  ],
   "oneOf": [
     {
       "required": [
@@ -183,6 +163,12 @@ When present, `result.table` is the follow-up address to reuse after this call. 
       "type": "number"
     }
   },
+  "required": [
+    "topPt",
+    "rightPt",
+    "bottomPt",
+    "leftPt"
+  ],
   "type": "object"
 }
 ```

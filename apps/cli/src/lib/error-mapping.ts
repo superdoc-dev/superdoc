@@ -9,6 +9,7 @@
  * without throwing.
  */
 
+import { V1_RUNTIME_UNAVAILABLE_OPERATION_IDS } from '@superdoc/document-api';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { OPERATION_FAMILY, type OperationFamily } from '../cli/operation-hints.js';
 import { CliError, type AdapterLikeError, type CliErrorCode } from './errors.js';
@@ -18,9 +19,14 @@ type ErrorMappingContext = {
 };
 
 const TRACK_CHANGES_REVIEW_HELPER_COMMANDS = new Set(['track-changes accept', 'track-changes reject']);
+const V1_RUNTIME_UNAVAILABLE_OPERATION_SET = new Set<string>(V1_RUNTIME_UNAVAILABLE_OPERATION_IDS);
 
 function isTrackChangesReviewHelper(operationId: CliExposedOperationId, context?: ErrorMappingContext): boolean {
   return operationId === 'trackChanges.decide' && TRACK_CHANGES_REVIEW_HELPER_COMMANDS.has(context?.commandName ?? '');
+}
+
+function isV1RuntimeUnavailableOperation(operationId: CliExposedOperationId): boolean {
+  return V1_RUNTIME_UNAVAILABLE_OPERATION_SET.has(operationId);
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +49,15 @@ function extractErrorDetails(error: unknown): unknown {
   return maybe?.details;
 }
 
+const IMAGE_INVALID_INPUT_COMMAND_FAILED_OPERATIONS: ReadonlySet<CliExposedOperationId> = new Set([
+  'images.setSize',
+  'images.setZOrder',
+]);
+
+function shouldSurfaceImageInvalidInputAsCommandFailed(operationId: CliExposedOperationId): boolean {
+  return IMAGE_INVALID_INPUT_COMMAND_FAILED_OPERATIONS.has(operationId);
+}
+
 // ---------------------------------------------------------------------------
 // Per-family error mappers (thrown errors)
 // ---------------------------------------------------------------------------
@@ -63,13 +78,24 @@ function mapTrackChangesError(
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'TARGET_NOT_FOUND' || (typeof message === 'string' && message.includes('was not found'))) {
+  if (
+    code === 'TRACK_CHANGE_NOT_FOUND' ||
+    code === 'TARGET_NOT_FOUND' ||
+    (typeof message === 'string' && message.includes('was not found'))
+  ) {
     return new CliError('TRACK_CHANGE_NOT_FOUND', message, { operationId, details });
+  }
+
+  if (code === 'INVALID_INPUT' || code === 'INVALID_TARGET') {
+    return new CliError(code, message, { operationId, details });
   }
 
   if (code === 'COMMAND_UNAVAILABLE' || code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
   }
+
+  const planEngineError = tryMapPlanEngineError(operationId, error, code);
+  if (planEngineError) return planEngineError;
 
   if (error instanceof CliError) return error;
   return new CliError('COMMAND_FAILED', message, { operationId, details });
@@ -79,16 +105,25 @@ function mapCommentsError(operationId: CliExposedOperationId, error: unknown, co
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
 
+  if (code === 'INVALID_TARGET') {
+    return new CliError('INVALID_TARGET', message, { operationId, details });
+  }
+
+  if (
+    code === 'INVALID_INPUT' ||
+    code === 'INVALID_CONTEXT' ||
+    code === 'CAPABILITY_UNAVAILABLE' ||
+    code === 'TARGET_NOT_FOUND'
+  ) {
+    return new CliError(code, message, { operationId, details });
+  }
+
   if (code === 'TARGET_NOT_FOUND' || (typeof message === 'string' && message.includes('could not be resolved'))) {
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'INVALID_TARGET') {
-    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
-  }
-
   if (code === 'COMMAND_UNAVAILABLE') {
-    return new CliError('COMMAND_FAILED', message, { operationId, details });
+    return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
   }
 
   if (error instanceof CliError) return error;
@@ -109,6 +144,9 @@ function mapListsError(operationId: CliExposedOperationId, error: unknown, code:
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
+    if (code === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
   }
 
@@ -123,6 +161,19 @@ function mapListsError(operationId: CliExposedOperationId, error: unknown, code:
 function mapImagesError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
+  const nestedFailure = (details as { failure?: unknown } | undefined)?.failure;
+
+  // Image operations that document "already in target state" as a command-level
+  // failure (no-op convertToInline, removeCaption when no caption present, etc.)
+  // surface NO_OP as COMMAND_FAILED at the public envelope.
+  if (
+    code === 'NO_OP' &&
+    (operationId === 'images.convertToInline' ||
+      operationId === 'images.removeCaption' ||
+      operationId === 'images.convertToFloating')
+  ) {
+    return new CliError('COMMAND_FAILED', message, { operationId, details });
+  }
 
   if (code === 'TARGET_NOT_FOUND') {
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
@@ -132,8 +183,23 @@ function mapImagesError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
   }
 
+  if (code === 'INVALID_INPUT') {
+    return new CliError(
+      shouldSurfaceImageInvalidInputAsCommandFailed(operationId) ? 'COMMAND_FAILED' : 'INVALID_INPUT',
+      message,
+      { operationId, details },
+    );
+  }
+
   if (code === 'CAPABILITY_UNAVAILABLE' || code === 'COMMAND_UNAVAILABLE') {
+    if (code === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     return new CliError('COMMAND_FAILED', message, { operationId, details });
+  }
+
+  if (code === 'COMMAND_FAILED' && nestedFailure) {
+    return new CliError('COMMAND_FAILED', message, { operationId, failure: nestedFailure });
   }
 
   if (error instanceof CliError) return error;
@@ -153,6 +219,9 @@ function mapTablesError(operationId: CliExposedOperationId, error: unknown, code
   }
 
   if (code === 'CAPABILITY_UNAVAILABLE' || code === 'COMMAND_UNAVAILABLE') {
+    if (code === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     return new CliError('COMMAND_FAILED', message, { operationId, details });
   }
 
@@ -180,6 +249,9 @@ function mapTextMutationError(operationId: CliExposedOperationId, error: unknown
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
+    if (code === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
   }
 
@@ -217,11 +289,18 @@ function mapCreateError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('INVALID_TARGET', message, { operationId, details });
   }
 
+  if (code === 'INVALID_INPUT') {
+    return new CliError('INVALID_INPUT', message, { operationId, details });
+  }
+
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
   }
 
   if (code === 'CAPABILITY_UNAVAILABLE') {
+    if (isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     const reason = (details as { reason?: string } | undefined)?.reason;
     if (reason === 'tracked_mode_unsupported') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
@@ -250,6 +329,9 @@ function mapBlocksError(operationId: CliExposedOperationId, error: unknown, code
   }
 
   if (code === 'CAPABILITY_UNAVAILABLE') {
+    if (isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+    }
     const reason = (details as { reason?: string } | undefined)?.reason;
     if (reason === 'tracked_mode_unsupported') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
@@ -305,6 +387,10 @@ function mapQueryError(operationId: CliExposedOperationId, error: unknown, code:
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
+  if (code === 'AMBIGUOUS_MATCH') {
+    return new CliError('COMMAND_FAILED', `AMBIGUOUS_MATCH: ${message}`, { operationId, details });
+  }
+
   if (error instanceof CliError) return error;
   return new CliError('COMMAND_FAILED', message, { operationId, details });
 }
@@ -319,7 +405,9 @@ function mapQueryError(operationId: CliExposedOperationId, error: unknown, code:
  * that consumers depend on for programmatic triage.
  */
 const PLAN_ENGINE_PASSTHROUGH_CODES: ReadonlySet<CliErrorCode> = new Set<CliErrorCode>([
+  'TARGET_NOT_FOUND',
   'REVISION_MISMATCH',
+  'STALE_REVISION',
   'REVISION_CHANGED_SINCE_COMPILE',
   'PLAN_CONFLICT_OVERLAP',
   'DOCUMENT_IDENTITY_CONFLICT',
@@ -330,6 +418,7 @@ const PLAN_ENGINE_PASSTHROUGH_CODES: ReadonlySet<CliErrorCode> = new Set<CliErro
   'PRECONDITION_FAILED',
   'CROSS_BLOCK_MATCH',
   'SPAN_FRAGMENTED',
+  'NO_OP',
 ]);
 
 /**
@@ -398,6 +487,29 @@ function mapTemplatesError(operationId: CliExposedOperationId, error: unknown, c
   return new CliError('COMMAND_FAILED', message, { operationId, details });
 }
 
+/**
+ * Operation IDs where TARGET_NOT_FOUND / NO_OP failures must be surfaced as the
+ * public `COMMAND_FAILED` envelope. The labs requirements contract treats
+ * delete-on-missing, get-on-missing, and similar fail-closed mutations as
+ * command-level failures rather than typed target lookup errors.
+ */
+const FAIL_CLOSED_COMMAND_FAILED_OPERATIONS: ReadonlySet<string> = new Set<string>([
+  'contentControls.delete',
+  'contentControls.get',
+  'contentControls.unwrap',
+  'contentControls.group.ungroup',
+  'contentControls.normalizeWordCompatibility',
+  'citations.bibliography.remove',
+  'citations.bibliography.get',
+  'headerFooters.parts.delete',
+  'permissionRanges.create',
+  'permissionRanges.remove',
+  'permissionRanges.get',
+  'sections.get',
+  'sections.setHeaderFooterRef',
+  'sections.setLinkToPrevious',
+]);
+
 const FAMILY_MAPPERS: Record<
   OperationFamily,
   (
@@ -420,9 +532,36 @@ const FAMILY_MAPPERS: Record<
   diff: mapDiffError,
   templates: mapTemplatesError,
   general: (operationId, error, code) => {
+    const details = extractErrorDetails(error);
+
+    // Fail-closed operations: TARGET_NOT_FOUND and NO_OP map to COMMAND_FAILED.
+    if (FAIL_CLOSED_COMMAND_FAILED_OPERATIONS.has(operationId) && (code === 'TARGET_NOT_FOUND' || code === 'NO_OP')) {
+      return new CliError('COMMAND_FAILED', extractErrorMessage(error), {
+        operationId,
+        details,
+      });
+    }
+
     // Plan-engine errors pass through with original code and structured details
     const planEngineError = tryMapPlanEngineError(operationId, error, code);
     if (planEngineError) return planEngineError;
+
+    if (code === 'COMMAND_FAILED') {
+      const nestedFailure = (details as { failure?: unknown } | undefined)?.failure;
+      if (nestedFailure) {
+        return new CliError('COMMAND_FAILED', extractErrorMessage(error), {
+          operationId,
+          failure: nestedFailure,
+        });
+      }
+    }
+
+    if (code === 'CAPABILITY_UNAVAILABLE' || code === 'COMMAND_UNAVAILABLE') {
+      return new CliError('CAPABILITY_UNAVAILABLE', extractErrorMessage(error), {
+        operationId,
+        details,
+      });
+    }
 
     if (error instanceof CliError) return error;
     return new CliError('COMMAND_FAILED', extractErrorMessage(error), { operationId });
@@ -492,9 +631,27 @@ export function mapFailedReceipt(
   const failureCode = failure.code;
   const failureMessage = failure.message ?? `${operationId}: operation failed.`;
 
-  // Plan-engine codes pass through with original code and structured details
-  if (failureCode && (PLAN_ENGINE_PASSTHROUGH_CODES as ReadonlySet<string>).has(failureCode)) {
-    return new CliError(failureCode as CliErrorCode, failureMessage, { operationId, failure });
+  // Fail-closed operations: TARGET_NOT_FOUND / NO_OP map to COMMAND_FAILED.
+  if (
+    FAIL_CLOSED_COMMAND_FAILED_OPERATIONS.has(operationId) &&
+    (failureCode === 'TARGET_NOT_FOUND' || failureCode === 'NO_OP')
+  ) {
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  // Image NO_OP "already in target state" is a command-level failure per contract.
+  if (
+    family === 'images' &&
+    failureCode === 'NO_OP' &&
+    (operationId === 'images.convertToInline' ||
+      operationId === 'images.removeCaption' ||
+      operationId === 'images.convertToFloating')
+  ) {
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  if (failureCode === 'INVALID_INPUT' && shouldSurfaceImageInvalidInputAsCommandFailed(operationId)) {
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }
 
   // Track-changes family
@@ -505,22 +662,38 @@ export function mapFailedReceipt(
       }
       return new CliError('TARGET_NOT_FOUND', failureMessage, { operationId, failure });
     }
+    if (failureCode === 'TRACK_CHANGE_NOT_FOUND' || failureCode === 'TARGET_NOT_FOUND') {
+      return new CliError('TRACK_CHANGE_NOT_FOUND', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'INVALID_INPUT' || failureCode === 'INVALID_TARGET') {
+      return new CliError(failureCode, failureMessage, { operationId, failure });
+    }
     if (failureCode === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
-    if (failureCode === 'INVALID_TARGET') {
-      return new CliError('TRACK_CHANGE_NOT_FOUND', failureMessage, { operationId, failure });
+    if (failureCode && (PLAN_ENGINE_PASSTHROUGH_CODES as ReadonlySet<string>).has(failureCode)) {
+      return new CliError(failureCode as CliErrorCode, failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }
 
+  // Plan-engine codes pass through with original code and structured details
+  if (failureCode && (PLAN_ENGINE_PASSTHROUGH_CODES as ReadonlySet<string>).has(failureCode)) {
+    return new CliError(failureCode as CliErrorCode, failureMessage, { operationId, failure });
+  }
+
   // Comments family
   if (family === 'comments') {
-    if (failureCode === 'TARGET_NOT_FOUND') {
-      return new CliError('TARGET_NOT_FOUND', failureMessage, { operationId, failure });
-    }
     if (failureCode === 'INVALID_TARGET') {
-      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+      return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
+    }
+    if (
+      failureCode === 'INVALID_INPUT' ||
+      failureCode === 'INVALID_CONTEXT' ||
+      failureCode === 'CAPABILITY_UNAVAILABLE' ||
+      failureCode === 'TARGET_NOT_FOUND'
+    ) {
+      return new CliError(failureCode, failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }
@@ -531,6 +704,9 @@ export function mapFailedReceipt(
       return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      if (isV1RuntimeUnavailableOperation(operationId)) {
+        return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+      }
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
@@ -538,7 +714,13 @@ export function mapFailedReceipt(
 
   // Text mutation family
   if (family === 'textMutation') {
+    if (failureCode === 'TARGET_NOT_FOUND') {
+      return new CliError('TARGET_NOT_FOUND', failureMessage, { operationId, failure });
+    }
     if (failureCode === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || failureCode === 'CAPABILITY_UNAVAILABLE') {
+      if (failureCode === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+        return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+      }
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     if (failureCode === 'INVALID_TARGET') {
@@ -551,6 +733,9 @@ export function mapFailedReceipt(
   if (family === 'blocks') {
     if (failureCode === 'INVALID_TARGET') {
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'CAPABILITY_UNAVAILABLE' && isV1RuntimeUnavailableOperation(operationId)) {
+      return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }
@@ -591,6 +776,9 @@ export function mapFailedReceipt(
     if (failureCode === 'INVALID_TARGET') {
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
     }
+    if (failureCode === 'INVALID_INPUT') {
+      return new CliError('INVALID_INPUT', failureMessage, { operationId, failure });
+    }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }
 
@@ -603,6 +791,9 @@ export function mapFailedReceipt(
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      if (isV1RuntimeUnavailableOperation(operationId)) {
+        return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+      }
       return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
@@ -626,5 +817,8 @@ export function mapFailedReceipt(
   }
 
   // Default
+  if (family === 'general' && (failureCode === 'CAPABILITY_UNAVAILABLE' || failureCode === 'COMMAND_UNAVAILABLE')) {
+    return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
+  }
   return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
 }

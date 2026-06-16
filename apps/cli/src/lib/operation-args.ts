@@ -98,7 +98,10 @@ function acceptsLegacyTextAddressTarget(
   if (param.name !== 'target' || !isTextAddressLike(value)) return false;
   const docApiId = toDocApiId(operationId);
   return (
-    docApiId === 'insert' || docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true
+    docApiId === 'insert' ||
+    docApiId === 'replace' ||
+    docApiId === 'delete' ||
+    (docApiId?.startsWith('format.') === true && !docApiId.startsWith('format.paragraph.'))
   );
 }
 
@@ -289,7 +292,7 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
   if (schema.type === 'json') return;
 
   if (schema.enum) {
-    if (!schema.enum.includes(value)) {
+    if (typeof value !== 'string' || !schema.enum.includes(value)) {
       throw new CliError('VALIDATION_ERROR', `${path} must be one of: ${schema.enum.join(', ')}.`);
     }
     return;

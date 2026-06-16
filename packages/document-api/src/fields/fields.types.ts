@@ -1,7 +1,6 @@
 import type { TextTarget } from '../types/address.js';
 import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
-import type { SDRunProps } from '../types/sd-props.js';
 
 // ---------------------------------------------------------------------------
 // Address (composite identity)
@@ -17,11 +16,17 @@ export interface FieldAddress {
    * with `fieldId`, the v2 runtime resolves the field by its stable identity
    * first and only falls back to the legacy `blockId + occurrenceIndex +
    * nestingDepth` lookup when no stable handle is bound.
+   *
+   * Stability is session-scoped: the handle survives common structural edits
+   * that insert, rebuild, or remove other fields in the same story. True
+   * removal of the addressed field still invalidates the handle. The field
+   * is not part of the persisted OOXML id model.
    */
   storyId?: string;
   /**
-   * Optional session-stable field id for v2 callers. The field is not part of
-   * the persisted OOXML id model.
+   * Optional session-stable field id for v2 callers. See `storyId` for the
+   * stability contract. The legacy fields remain required so v1 callers and
+   * the shared schema keep their existing shape.
    */
   fieldId?: string;
 }
@@ -43,44 +48,30 @@ export interface FieldGetInput {
 /**
  * Controls how an inserted field's display result is produced.
  *
- * - `rebuild` (default): inserts an empty cached result for later rebuild.
- * - `preserveCached`: writes the supplied `cachedResultText` as the visible
- *   result without implying a rebuild.
+ * - `rebuild` (default): existing behavior. The field is inserted with an empty
+ *   cached result and is expected to be recomputed via `fields.rebuild`.
+ * - `preserveCached`: the field is inserted with its visible/cached result frozen
+ *   to the supplied `cachedResultText`. No rebuild is performed or implied. This
+ *   is intended for exact reproduction of imported documents where the original
+ *   Word-cached result must survive round-trips.
  */
 export type FieldUpdatePolicy = 'rebuild' | 'preserveCached';
-
-export type FieldSerialization = 'simple' | 'complex';
-
-export interface FieldComplexFormatting {
-  /** Run properties for `fldChar begin/separate/end` marker runs. */
-  markerRunProps?: SDRunProps;
-  /** Run properties for the `instrText` run. */
-  instructionRunProps?: SDRunProps;
-  /** Run properties for the visible result run. */
-  resultRunProps?: SDRunProps;
-}
 
 export interface FieldInsertInput {
   at: TextTarget;
   instruction: string;
   mode: 'raw'; // Required gating flag
   /**
-   * Exact cached/visible result text. Required when `updatePolicy` is
-   * `'preserveCached'`.
+   * Optional. When `updatePolicy` is `'preserveCached'`, this exact string is
+   * written as the field's cached/visible result. Required (must be a string)
+   * for `preserveCached`; ignored otherwise.
    */
   cachedResultText?: string;
   /**
-   * Optional. Defaults to current `'rebuild'` behavior. Set to
-   * `'preserveCached'` to freeze imported cached result text.
+   * Optional. Defaults to current `'rebuild'` behavior. Set to `'preserveCached'`
+   * to freeze the imported cached result text instead of recomputing it.
    */
   updatePolicy?: FieldUpdatePolicy;
-  /**
-   * Optional. Defaults to `'simple'`. Set to `'complex'` to emit begin /
-   * instruction / separate / result / end runs instead of a `fldSimple`.
-   */
-  serialization?: FieldSerialization;
-  /** Run-property payload for complex field serialization. */
-  complexFormatting?: FieldComplexFormatting;
 }
 
 export interface FieldRebuildInput {

@@ -49,6 +49,17 @@ describe('executeCommentsCreate validation', () => {
     }
   });
 
+  it('accepts a text SelectionTarget and forwards it to the adapter', () => {
+    const adapter = stubAdapter();
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'b1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'b1', offset: 5 },
+    };
+    executeCommentsCreate(adapter, { text: 'comment', target });
+    expect(adapter.add).toHaveBeenCalledWith({ text: 'comment', target }, undefined);
+  });
+
   it('returns the created comment id on success', () => {
     const adapter = stubAdapter();
     const target = { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } };

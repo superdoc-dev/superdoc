@@ -23,15 +23,12 @@
  * Import DAG: this file imports only from `metadata-types.ts` and
  * `../types/receipt.js`: no contract-internal circular deps.
  */
-
 import type { ReceiptFailureCode } from '../types/receipt.js';
 import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } from './metadata-types.js';
 import { INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from '../format/inline-run-patch.js';
-
 // ---------------------------------------------------------------------------
 // Reference group key
 // ---------------------------------------------------------------------------
-
 export type ReferenceGroupKey =
   | 'core'
   | 'blocks'
@@ -70,11 +67,9 @@ export type ReferenceGroupKey =
   | 'permissionRanges'
   | 'customXml'
   | 'metadata';
-
 // ---------------------------------------------------------------------------
 // Entry shape
 // ---------------------------------------------------------------------------
-
 export interface OperationDefinitionEntry {
   memberPath: string;
   description: string;
@@ -89,11 +84,9 @@ export interface OperationDefinitionEntry {
   /** Action enum value within the intent group (e.g. 'insert', 'replace'). */
   intentAction?: string;
 }
-
 // ---------------------------------------------------------------------------
 // Intent group metadata: tool-level names and descriptions
 // ---------------------------------------------------------------------------
-
 export interface IntentGroupMeta {
   toolName: string;
   description: string;
@@ -105,6 +98,31 @@ export interface IntentGroupMeta {
   inputExamples?: Record<string, unknown>[];
 }
 
+export const V1_RUNTIME_UNAVAILABLE_OPERATION_IDS = [
+  'blocks.split',
+  'blocks.merge',
+  'blocks.move',
+  'lists.getState',
+  'lists.apply',
+  'lists.continue',
+  'lists.restart',
+  'lists.remove',
+  'format.paragraph.setMarkRunProps',
+  'tables.moveRow',
+] as const;
+
+const V2_BACKED_ONLY_DESCRIPTION_NOTE =
+  ' Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`.';
+
+function v2BackedOnlyDescription(description: string): string {
+  return `${description}${V2_BACKED_ONLY_DESCRIPTION_NOTE}`;
+}
+
+const FOOTNOTE_STRUCTURED_BODY_V1_NOTE =
+  ' Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes.';
+
+const FIELD_PRESERVE_CACHED_V1_NOTE =
+  ' The current v1 runtime supports rebuild flows; `cachedResultText` / `updatePolicy: "preserveCached"` currently return `CAPABILITY_UNAVAILABLE`.';
 export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: {
     toolName: 'superdoc_search',
@@ -401,7 +419,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'To create a comment, first use superdoc_search to find the target text, then pass action "create" with the comment text and a target built from items[0].blocks. For a single-block match use {kind:"text", blockId: items[0].blocks[0].blockId, range: items[0].blocks[0].range}. For a cross-block match use {kind:"text", segments: items[0].blocks.map(b => ({blockId: b.blockId, range: b.range}))}. Do NOT use items[0].highlightRange (snippet-relative, not block-relative) or items[0].target (a SelectionTarget, not accepted by comments.create). ' +
       'For threaded replies, pass "parentId" with the parent comment ID. ' +
       'Action "list" returns all comments with optional pagination (limit, offset) and filtering (includeResolved:true to include resolved). ' +
-      'Action "get" retrieves a single comment by ID. Action "update" changes status to "resolved" or marks as internal. Action "delete" removes a comment or reply by ID. ' +
+      'Action "get" retrieves a single comment by ID. Action "update" changes comment text, re-anchors the thread, or changes status to "resolved". The legacy `isInternal` field remains in schema for v1 compatibility but the v2 surface rejects it with `CAPABILITY_UNAVAILABLE`. Action "delete" removes a comment or reply by ID. ' +
       'Do NOT pass "ref", "id", or "parentId" when creating a new top-level comment; only "action", "text", and "target" are needed.',
     inputExamples: [
       {
@@ -424,6 +442,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Do NOT use this tool unless the document has tracked changes. Use superdoc_get_content info to check the tracked change count first.',
     inputExamples: [
       { action: 'list' },
+      { action: 'list', type: 'insertion', limit: 10 },
       { action: 'list', type: 'replacement', limit: 10 },
       { action: 'decide', decision: 'accept', target: { id: '<changeId>' } },
       {
@@ -502,14 +521,13 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     ],
   },
 };
-
 // ---------------------------------------------------------------------------
 // Metadata helpers (moved from command-catalog.ts)
 // ---------------------------------------------------------------------------
-
 const NONE_FAILURES: readonly ReceiptFailureCode[] = [];
 const NONE_THROWS: readonly PreApplyThrowCode[] = [];
-
+const INVALID_FRAGMENT_FAILURES: readonly ReceiptFailureCode[] = ['INVALID_FRAGMENT'];
+const FOOTNOTE_MUTATION_FAILURES: readonly ReceiptFailureCode[] = ['INVALID_FRAGMENT', 'CAPABILITY_UNAVAILABLE'];
 function readOperation(
   options: {
     idempotency?: OperationIdempotency;
@@ -533,7 +551,6 @@ function readOperation(
     remediationHints: options.remediationHints,
   };
 }
-
 function mutationOperation(options: {
   idempotency: OperationIdempotency;
   supportsDryRun: boolean;
@@ -561,11 +578,9 @@ function mutationOperation(options: {
     returnsPromise: options.returnsPromise,
   };
 }
-
 // Throw-code shorthand arrays
 const T_NOT_FOUND = ['TARGET_NOT_FOUND'] as const;
 const T_NOT_FOUND_CAPABLE = ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'] as const;
-
 // Plan-engine throw-code arrays
 const T_PLAN_ENGINE = [
   'REVISION_MISMATCH',
@@ -584,15 +599,12 @@ const T_PLAN_ENGINE = [
   'DOCUMENT_IDENTITY_CONFLICT',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
-
 // Table-command throw-code arrays.
 // All mutation operations include CAPABILITY_UNAVAILABLE (contract invariant).
 // _TRACKED suffix signals the operation also supports tracked change mode.
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
-
 // Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
 const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
-
 // Content controls throw-code families
 const T_CC_READ = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_CC_MUTATION = [
@@ -607,7 +619,6 @@ const T_CC_MUTATION = [
 const T_CC_TYPED = [...T_CC_MUTATION, 'TYPE_MISMATCH'] as const;
 const T_CC_TYPED_READ = [...T_CC_READ, 'TYPE_MISMATCH'] as const;
 const T_CC_RAW = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'REVISION_MISMATCH', 'CAPABILITY_UNAVAILABLE'] as const;
-
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 const T_SECTION_CREATE = [
   'TARGET_NOT_FOUND',
@@ -634,7 +645,6 @@ const T_HEADER_FOOTER_MUTATION = [
   'CAPABILITY_UNAVAILABLE',
   'INTERNAL_ERROR',
 ] as const;
-
 // Story-scoped throw-code arrays
 const T_STORY = [
   'STORY_NOT_FOUND',
@@ -643,13 +653,11 @@ const T_STORY = [
   'CROSS_STORY_PLAN',
   'MATERIALIZATION_FAILED',
 ] as const;
-
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_MUTATION_REMOVE = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_REF_INSERT = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
-
 // Protection / permission-range throw-code arrays
 const T_PROTECTION_READ = ['CAPABILITY_UNAVAILABLE'] as const;
 const T_PROTECTION_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -660,27 +668,22 @@ const T_PERM_RANGE_MUTATION = [
   'INVALID_INPUT',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
-
 type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
-
 function camelToKebab(value: string): string {
   return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
-
 function formatInlineAliasDescription(key: InlineRunPatchKey): string {
   if (key === 'rtl') {
     return 'Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL.';
   }
   return `Set or clear the \`${key}\` inline run property on the target text range.`;
 }
-
 function formatInlineAliasExpectedResult(key: InlineRunPatchKey): string {
   if (key === 'rtl') {
     return 'Returns a TextMutationReceipt confirming only the inline run property patch was applied to the target range; paragraph direction is unchanged.';
   }
   return 'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.';
 }
-
 const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
   Object.fromEntries(
     INLINE_PROPERTY_REGISTRY.map((entry) => {
@@ -704,11 +707,9 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
       return [operationId, definition];
     }),
   ) as Record<FormatInlineAliasOperationId, OperationDefinitionEntry>;
-
 // ---------------------------------------------------------------------------
 // Canonical definitions
 // ---------------------------------------------------------------------------
-
 export const OPERATION_DEFINITIONS = {
   get: {
     memberPath: 'get',
@@ -771,7 +772,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
-
     intentGroup: 'get_content',
     intentAction: 'text',
   },
@@ -836,7 +836,6 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'get_content',
     intentAction: 'extract',
   },
-
   clearContent: {
     memberPath: 'clearContent',
     description: 'Clear all document body content, leaving a single empty paragraph.',
@@ -852,7 +851,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'clear-content.mdx',
     referenceGroup: 'core',
   },
-
   insert: {
     memberPath: 'insert',
     description:
@@ -982,23 +980,21 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'format',
     skipAsATool: true,
   },
-
   'blocks.list': {
     memberPath: 'blocks.list',
     description:
-      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.',
+      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`.',
     expectedResult:
       'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, optional text, isEmpty), and the current document revision.',
     requiresDocumentContext: true,
     metadata: readOperation({
-      throws: ['INVALID_INPUT'],
+      throws: ['INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
     intentGroup: 'get_content',
     intentAction: 'blocks',
   },
-
   'blocks.delete': {
     memberPath: 'blocks.delete',
     description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
@@ -1008,7 +1004,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: NONE_FAILURES,
       throws: [
         'TARGET_NOT_FOUND',
@@ -1017,12 +1013,12 @@ export const OPERATION_DEFINITIONS = {
         'INVALID_TARGET',
         'INVALID_INPUT',
         'INTERNAL_ERROR',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'blocks/delete.mdx',
     referenceGroup: 'blocks',
   },
-
   'blocks.deleteRange': {
     memberPath: 'blocks.deleteRange',
     description:
@@ -1042,12 +1038,84 @@ export const OPERATION_DEFINITIONS = {
         'INVALID_INPUT',
         'CAPABILITY_UNAVAILABLE',
         'INTERNAL_ERROR',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'blocks/delete-range.mdx',
     referenceGroup: 'blocks',
   },
-
+  'blocks.split': {
+    memberPath: 'blocks.split',
+    description: v2BackedOnlyDescription(
+      'Split a paragraph at a visible-text offset, producing two paragraphs. Preserves unambiguous simple run properties around the cut. Rejects when the paragraph contains fields, content controls, drawings, equations, or unsupported tracked-change wrappers.',
+    ),
+    expectedResult:
+      'Returns a BlocksSplitResult; on success carries the new tail paragraph address, affectedStories, and (for engines that report them) story-absolute textRangeShifts and a txId for history correlation.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_CONTEXT',
+        'INVALID_INPUT',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/split.mdx',
+    referenceGroup: 'blocks',
+  },
+  'blocks.merge': {
+    memberPath: 'blocks.merge',
+    description: v2BackedOnlyDescription(
+      'Merge two adjacent paragraphs in the same story. The first paragraph keeps its pPr; the second paragraph is removed. Rejects when either paragraph carries a w:sectPr or when their numbering definitions differ.',
+    ),
+    expectedResult:
+      'Returns a BlocksMergeResult; on success carries the removed paragraph address plus affectedStories, textRangeShifts, and a txId.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_CONTEXT',
+        'INVALID_INPUT',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/merge.mdx',
+    referenceGroup: 'blocks',
+  },
+  'blocks.move': {
+    memberPath: 'blocks.move',
+    description: v2BackedOnlyDescription(
+      'Move a paragraph within the same story to a new anchor paragraph (before or after). Cross-story and relationship-bearing moves reject with named reasons. Tracked-mode authoring emits paired `<w:moveFrom>` / `<w:moveTo>` review state with explicit move range marker identity; safe content (no comment/bookmark/permission anchors and no pre-existing tracked wrappers) is required for tracked authoring.',
+    ),
+    expectedResult:
+      'Returns a BlocksMoveResult; on success carries the moved paragraph address plus affectedStories and a txId. Tracked-mode results include `trackedChangeRefs` pointing at the paired move review entity.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_CONTEXT',
+        'INVALID_INPUT',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/move.mdx',
+    referenceGroup: 'blocks',
+  },
   'format.apply': {
     memberPath: 'format.apply',
     description: 'Apply inline run-property patch changes to the target range with explicit set/clear semantics.',
@@ -1066,7 +1134,6 @@ export const OPERATION_DEFINITIONS = {
     intentAction: 'inline',
   },
   ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
-
   'styles.apply': {
     memberPath: 'styles.apply',
     description:
@@ -1084,7 +1151,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'styles/apply.mdx',
     referenceGroup: 'styles',
   },
-
   'templates.apply': {
     memberPath: 'templates.apply',
     description:
@@ -1115,7 +1181,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'templates/apply.mdx',
     referenceGroup: 'templates',
   },
-
   'create.paragraph': {
     memberPath: 'create.paragraph',
     description: 'Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.',
@@ -1165,7 +1230,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'create/section-break.mdx',
     referenceGroup: 'create',
   },
-
   'sections.list': {
     memberPath: 'sections.list',
     description: 'List sections in deterministic order with section-target handles.',
@@ -1457,9 +1521,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'sections/clear-page-borders.mdx',
     referenceGroup: 'sections',
   },
-
   // --- styles.paragraph.* ---
-
   'styles.paragraph.setStyle': {
     memberPath: 'styles.paragraph.setStyle',
     description:
@@ -1470,7 +1532,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1487,16 +1549,14 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
     referenceDocPath: 'styles/paragraph/clear-style.mdx',
     referenceGroup: 'styles.paragraph',
   },
-
   // --- format.paragraph.* ---
-
   'format.paragraph.resetDirectFormatting': {
     memberPath: 'format.paragraph.resetDirectFormatting',
     description:
@@ -1506,7 +1566,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1522,7 +1582,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1539,7 +1599,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1548,13 +1608,13 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.paragraph.setIndentation': {
     memberPath: 'format.paragraph.setIndentation',
-    description: 'Set paragraph indentation properties (left, right, firstLine, hanging) in twips.',
+    description: 'Set paragraph indentation properties (signed left/right, firstLine, hanging) in twips.',
     expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1571,7 +1631,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1586,7 +1646,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1603,7 +1663,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1618,7 +1678,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1633,7 +1693,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1642,13 +1702,14 @@ export const OPERATION_DEFINITIONS = {
   },
   'format.paragraph.setFlowOptions': {
     memberPath: 'format.paragraph.setFlowOptions',
-    description: 'Set contextual spacing, page-break-before, and suppress-auto-hyphens flags.',
+    description:
+      'Set paragraph flow flags: contextual spacing, page-break-before, suppress-auto-hyphens, and the advanced layout toggles auto-space-DE, auto-space-DN, adjust-right-indent, and snap-to-grid.',
     expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if all flags already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1665,7 +1726,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1680,7 +1741,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1695,7 +1756,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1710,7 +1771,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1725,7 +1786,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1740,7 +1801,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1755,11 +1816,29 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
     referenceDocPath: 'format/paragraph/clear-shading.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setMarkRunProps': {
+    memberPath: 'format.paragraph.setMarkRunProps',
+    description: v2BackedOnlyDescription(
+      "Set the paragraph mark's run properties (w:pPr/w:rPr), e.g. the font size or specVanish carried by the paragraph-end mark.",
+    ),
+    expectedResult:
+      'Returns a ParagraphMutationResult; reports NO_OP if the encoded mark run properties already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-mark-run-props.mdx',
     referenceGroup: 'format.paragraph',
   },
   'format.paragraph.setDirection': {
@@ -1770,7 +1849,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
@@ -1787,14 +1866,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_PARAGRAPH_MUTATION,
     }),
     referenceDocPath: 'format/paragraph/clear-direction.mdx',
     referenceGroup: 'format.paragraph',
   },
-
   'lists.list': {
     memberPath: 'lists.list',
     description: 'List all list nodes in the document, optionally filtered by scope.',
@@ -1919,7 +1997,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
@@ -1936,7 +2014,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
@@ -2122,7 +2200,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/convert-to-text.mdx',
     referenceGroup: 'lists',
   },
-
   // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
@@ -2316,7 +2393,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/clear-level-overrides.mdx',
     referenceGroup: 'lists',
   },
-
   // SD-2025: User-facing list style operations
   'lists.getStyle': {
     memberPath: 'lists.getStyle',
@@ -2428,19 +2504,122 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/set-level-layout.mdx',
     referenceGroup: 'lists',
   },
-
+  // v2 numbering-aware list operation surface.
+  'lists.getState': {
+    memberPath: 'lists.getState',
+    description: v2BackedOnlyDescription(
+      'Read the numbering-aware list state for a paragraph (numId, ilvl, abstract reference, level format). Returns null when the target is not a list item.',
+    ),
+    expectedResult:
+      'Returns a ListsGetStateResult with `isListItem` plus numId/ilvl/abstract/numFmt metadata when present.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'],
+      throws: [...T_NOT_FOUND_CAPABLE],
+    }),
+    referenceDocPath: 'lists/get-state.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.apply': {
+    memberPath: 'lists.apply',
+    description: v2BackedOnlyDescription(
+      'Apply a numbering definition to a paragraph. When `/word/numbering.xml` is absent it is materialized atomically together with the package content-type override and document relationship. Seeds bullet or ordered single-level definitions when no `reuseNumId` is provided.',
+    ),
+    expectedResult:
+      'Returns a ListsMutateItemResult receipt with txId; partsChanged includes numbering / content-types / rels when first-list materialization fires.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_CONTEXT',
+        'INVALID_INPUT',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.continue': {
+    memberPath: 'lists.continue',
+    description: v2BackedOnlyDescription(
+      "Continue from the previous compatible list item in the same story. Adopts the previous paragraph's numId+ilvl. Rejects with named reasons when no compatible previous item exists or when an intervening structural boundary blocks the continuation.",
+    ),
+    expectedResult: 'Returns a ListsMutateItemResult receipt with txId.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE', 'INVALID_CONTEXT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/continue.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.restart': {
+    memberPath: 'lists.restart',
+    description: v2BackedOnlyDescription(
+      'Restart numbering at a list item. Creates a new `<w:num>` that references the existing `<w:abstractNumId>` with a `<w:lvlOverride><w:startOverride/></w:lvlOverride>`. Distant paragraphs sharing the old numId are intentionally untouched.',
+    ),
+    expectedResult: 'Returns a ListsMutateItemResult receipt with txId; partsChanged includes /word/numbering.xml.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_CONTEXT',
+        'INVALID_INPUT',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/restart.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.remove': {
+    memberPath: 'lists.remove',
+    description: v2BackedOnlyDescription(
+      'Strip the `<w:numPr>` from a list-item paragraph. The numbering definition in `/word/numbering.xml` is intentionally NOT modified; orphan cleanup is handled by the export-side stripper.',
+    ),
+    expectedResult: 'Returns a ListsMutateItemResult receipt with txId.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE', 'INVALID_CONTEXT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/remove.mdx',
+    referenceGroup: 'lists',
+  },
   'comments.create': {
     memberPath: 'comments.create',
-    description: 'Create a new comment thread (or reply when parentCommentId is given).',
+    description:
+      'Create a new comment thread (or reply when parentCommentId is given). Accepts TextAddress / TextTarget anchors, or a TrackedChangeCommentTarget that names a logical tracked-change id. The tracked-change target accepts both the explicit kind form and the Labs-compatible trackedChangeId-only form; the adapter normalizes it to a Word-compatible content anchor on the requested revision side.',
     expectedResult:
-      'Returns a Receipt confirming the comment was created, including the new comment id; reports NO_OP if the anchor target is invalid.',
+      'Returns a Receipt with the new commentId in `id` and `inserted` on success; rejects whitespace-only bodies, unsupported anchor contexts, and cross-story targets. Tracked-change comment targets support insertion, deletion, replacement, and paired-move revisions; they fail with `TARGET_NOT_FOUND` for stale ids, `CAPABILITY_UNAVAILABLE` for formatting / structural revisions and unpaired move sides, and `INVALID_TARGET` for incompatible side requests or ambiguous replacement targets that omit a required `side`.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: false,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: [
+        'INVALID_INPUT',
+        'INVALID_TARGET',
+        'INVALID_CONTEXT',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
@@ -2449,14 +2628,23 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.patch': {
     memberPath: 'comments.patch',
-    description: 'Patch fields on an existing comment (text, target, status, or isInternal).',
-    expectedResult: 'Returns a Receipt confirming the comment was updated; reports NO_OP if no fields changed.',
+    description:
+      'Patch exactly one field on an existing comment (`text`, `target`, or `status`). The `target` branch accepts a plain TextAddress or a TrackedChangeCommentTarget, with or without `kind: "trackedChange"`, that names a logical tracked-change id. The legacy `isInternal` input is preserved in the schema for v1 backward compatibility but is not a supported v2 product behavior. V2 adapters MUST fail a `comments.patch` request containing `isInternal` with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). Multi-field patches and no-op edits are rejected with `INVALID_INPUT`; reply target / status patches are rejected with `INVALID_CONTEXT`.',
+    expectedResult:
+      'Returns a Receipt with `updated` populated on success. Reports `NO_OP` for byte-identical edits, rejects empty-body / trim-equivalent edits with `INVALID_INPUT`, no-op resolve/reopen with `INVALID_INPUT`, reply target/status with `INVALID_CONTEXT`, cross-story moves with `INVALID_CONTEXT`, materializing inherited slot moves with `CAPABILITY_UNAVAILABLE`, stale tracked-change targets with `TARGET_NOT_FOUND`, formatting / structural / unpaired-move tracked-change targets with `CAPABILITY_UNAVAILABLE`, and `isInternal` patches with `CAPABILITY_UNAVAILABLE`.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      possibleFailureCodes: [
+        'INVALID_INPUT',
+        'INVALID_TARGET',
+        'INVALID_CONTEXT',
+        'TARGET_NOT_FOUND',
+        'CAPABILITY_UNAVAILABLE',
+        'NO_OP',
+      ],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'comments/patch.mdx',
@@ -2466,15 +2654,15 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.delete': {
     memberPath: 'comments.delete',
-    description: 'Remove a comment or reply by ID.',
+    description: 'Remove a comment or reply by ID. Deleting a root cascades through every descendant reply.',
     expectedResult:
-      'Returns a Receipt confirming the comment was removed; reports NO_OP if the comment was already deleted.',
+      'Returns a Receipt with every removed commentId in `removed` and every story touched in `affectedStories`. Rejects with `TARGET_NOT_FOUND` when the comment id does not exist and reports `NO_OP` when the command layer accepts the target but removes nothing.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE', 'NO_OP'],
       throws: T_NOT_FOUND_CAPABLE,
     }),
     referenceDocPath: 'comments/delete.mdx',
@@ -2510,12 +2698,12 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'comment',
     intentAction: 'list',
   },
-
   'trackChanges.list': {
     memberPath: 'trackChanges.list',
-    description: 'List all tracked changes in the document.',
+    description:
+      'List tracked changes in the document. Body-only by default; pass `in: <StoryLocator>` or `in: "all"` to widen scope.',
     expectedResult:
-      'Returns a TrackChangesListResult with tracked change entries (`insert`, `delete`, `replacement`, `format`), total count, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.',
+      'Returns a TrackChangesListResult of logical tracked-change entries with SuperDoc ids, semantic type/subtype, author/date/excerpt, revisionGroupId, flat projection fields (`grouping`, `insertedText`, `deletedText`, `formattingDeltaSummary`, `origin`, `imported`, `canonicalizationKind`, `addressKind`, `resolvableById`), optional overlap metadata, and source provenance via `sourceIds` / `wordRevisionIds`. Structural whole-table changes surface subtypes such as `table-insert` and `table-delete`.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2528,9 +2716,9 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
-    description: 'Retrieve a single tracked change by ID.',
+    description: 'Retrieve a single tracked change by SuperDoc logical id.',
     expectedResult:
-      'Returns a TrackChangeInfo object with the change type (`insert`, `delete`, `replacement`, `format`), author, date, affected content, and raw imported Word OOXML revision IDs (`w:id`) when available. Whole-table tracked insertions and deletions are surfaced through the legacy `insert` / `delete` types.',
+      'Returns a TrackChangeInfo object with the logical id, semantic type/subtype, state, target, before/after snapshots, author/initials/email, date, revisionGroupId, splitFromId, replacement or move side metadata when applicable, story locator, excerpt, optional overlap metadata, and source provenance via `sourceIds` / `wordRevisionIds`. Structural whole-table changes surface subtypes such as `table-insert` and `table-delete`.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2541,9 +2729,10 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.decide': {
     memberPath: 'trackChanges.decide',
-    description: 'Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story).',
+    description:
+      'Accept or reject tracked changes by logical id, by selected text range, by logical anchor range ({ anchor, relativeStart, relativeEnd }), or every active change in the document. Range targets may include overlap / side selectors and may partially resolve a change, splitting surviving content into new fragments with stable ids. Legacy `{ id, range: { kind: "partial", ... } }` targets are promoted only when the active adapter supports `decide()`; legacy fallback adapters fail closed with `INVALID_INPUT`. `input.expectedRevision` is accepted as a compatibility alias for mutation options.',
     expectedResult:
-      'Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved and typed failures for unsupported or denied tracked-change decisions.',
+      "Returns a Receipt. `removed` lists retired tracked-change ids; `inserted` lists successor fragment ids produced by partial range splits; `invalidatedRefs` lists every retired tracked-change ref plus cascade-deleted comment ids; `remappedRefs` carries surviving comment anchors moved by the decision; `affectedStories` lists touched stories; `textRangeShifts` reports per-story visible-text deltas; `txId` correlates with history. Failures: SPAN_FRAGMENTED when a range crosses an indivisible boundary, CAPABILITY_UNAVAILABLE for formatting / structural / move targets (not yet supported), TARGET_NOT_FOUND for retired ids or zero overlap, STALE_REVISION for stale expectedRevision, REVISION_MISMATCH for stale range coverage, NO_OP when { kind: 'all' } resolves an empty target set.",
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -2558,6 +2747,9 @@ export const OPERATION_DEFINITIONS = {
         'PERMISSION_DENIED',
         'PRECONDITION_FAILED',
         'COMMENT_CASCADE_PARTIAL',
+        'SPAN_FRAGMENTED',
+        'STALE_REVISION',
+        'REVISION_MISMATCH',
       ],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_INPUT', 'INVALID_TARGET'],
     }),
@@ -2566,7 +2758,6 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'track_changes',
     intentAction: 'decide',
   },
-
   'query.match': {
     memberPath: 'query.match',
     description:
@@ -2580,11 +2771,9 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
-
     intentGroup: 'search',
     intentAction: 'match',
   },
-
   'ranges.resolve': {
     memberPath: 'ranges.resolve',
     description:
@@ -2600,7 +2789,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
   },
-
   'selection.current': {
     memberPath: 'selection.current',
     description:
@@ -2616,7 +2804,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'selection/current.mdx',
     referenceGroup: 'selection',
   },
-
   'mutations.preview': {
     memberPath: 'mutations.preview',
     description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',
@@ -2632,7 +2819,6 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'mutations',
     intentAction: 'preview',
   },
-
   'mutations.apply': {
     memberPath: 'mutations.apply',
     description: 'Execute a mutation plan atomically against the document.',
@@ -2658,7 +2844,6 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'mutations',
     intentAction: 'apply',
   },
-
   'plan.execute': {
     memberPath: 'plan.execute',
     description:
@@ -2679,7 +2864,6 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'mutations',
     skipAsATool: true,
   },
-
   'capabilities.get': {
     memberPath: 'capabilities',
     description: 'Query runtime capabilities supported by the current document engine.',
@@ -2692,11 +2876,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'capabilities/get.mdx',
     referenceGroup: 'capabilities',
   },
-
   // -------------------------------------------------------------------------
   // Create: table
   // -------------------------------------------------------------------------
-
   'create.table': {
     memberPath: 'create.table',
     description: 'Create a new table at the target position.',
@@ -2714,11 +2896,9 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'create',
     intentAction: 'table',
   },
-
   // -------------------------------------------------------------------------
   // Tables: lifecycle
   // -------------------------------------------------------------------------
-
   'tables.convertFromText': {
     memberPath: 'tables.convertFromText',
     description: 'Convert a text range into a table.',
@@ -2768,7 +2948,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'tables.move': {
     memberPath: 'tables.move',
-    description: 'Move a table to a new position in the document.',
+    description:
+      'Move a table to a new position in the document.',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the table is already at the target position.',
     requiresDocumentContext: true,
@@ -2812,11 +2993,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/convert-to-text.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Tables: layout
   // -------------------------------------------------------------------------
-
   'tables.setLayout': {
     memberPath: 'tables.setLayout',
     description: 'Set the layout mode of the target table.',
@@ -2835,11 +3014,9 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'table',
     intentAction: 'set_layout',
   },
-
   // -------------------------------------------------------------------------
   // Tables: row structure
   // -------------------------------------------------------------------------
-
   'tables.insertRow': {
     memberPath: 'tables.insertRow',
     description:
@@ -2874,6 +3051,24 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'tables',
     intentGroup: 'table',
     intentAction: 'delete_row',
+  },
+  'tables.moveRow': {
+    memberPath: 'tables.moveRow',
+    description: v2BackedOnlyDescription('Move a row to a new position within the same table.'),
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the row is already at the requested position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/move-row.mdx',
+    referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'move_row',
   },
   'tables.setRowHeight': {
     memberPath: 'tables.setRowHeight',
@@ -2924,11 +3119,9 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'table',
     intentAction: 'set_row_options',
   },
-
   // -------------------------------------------------------------------------
   // Tables: column structure
   // -------------------------------------------------------------------------
-
   'tables.insertColumn': {
     memberPath: 'tables.insertColumn',
     description:
@@ -2996,11 +3189,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/distribute-columns.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Tables: cell structure
   // -------------------------------------------------------------------------
-
   'tables.insertCell': {
     memberPath: 'tables.insertCell',
     description: 'Insert a new cell into a table row.',
@@ -3040,8 +3231,8 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'INVALID_CONTEXT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_CONTEXT'],
     }),
     referenceDocPath: 'tables/merge-cells.mdx',
     referenceGroup: 'tables',
@@ -3057,8 +3248,8 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'INVALID_CONTEXT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_CONTEXT'],
     }),
     referenceDocPath: 'tables/unmerge-cells.mdx',
     referenceGroup: 'tables',
@@ -3074,8 +3265,8 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_CONTEXT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_CONTEXT'],
     }),
     referenceDocPath: 'tables/split-cell.mdx',
     referenceGroup: 'tables',
@@ -3122,11 +3313,9 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'table',
     intentAction: 'set_cell_text',
   },
-
   // -------------------------------------------------------------------------
   // Tables: data + accessibility
   // -------------------------------------------------------------------------
-
   'tables.sort': {
     memberPath: 'tables.sort',
     description: 'Sort table rows by a column value.',
@@ -3157,11 +3346,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/set-alt-text.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Tables: style
   // -------------------------------------------------------------------------
-
   'tables.setStyle': {
     memberPath: 'tables.setStyle',
     description: 'Apply a named table style to the target table.',
@@ -3345,11 +3532,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/clear-cell-spacing.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Tables: convenience operations (SD-2129)
   // -------------------------------------------------------------------------
-
   'tables.applyStyle': {
     memberPath: 'tables.applyStyle',
     description:
@@ -3424,11 +3609,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/apply-preset.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Tables: read operations (B4 ref handoff)
   // -------------------------------------------------------------------------
-
   'tables.get': {
     memberPath: 'tables.get',
     description: 'Retrieve table structure and dimensions by locator.',
@@ -3510,7 +3693,6 @@ export const OPERATION_DEFINITIONS = {
   // -------------------------------------------------------------------------
   // Create: table of contents
   // -------------------------------------------------------------------------
-
   'create.tableOfContents': {
     memberPath: 'create.tableOfContents',
     description: 'Insert a new table of contents at the target position.',
@@ -3526,11 +3708,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'create/table-of-contents.mdx',
     referenceGroup: 'create',
   },
-
   // -------------------------------------------------------------------------
   // TOC: lifecycle + configuration
   // -------------------------------------------------------------------------
-
   'toc.list': {
     memberPath: 'toc.list',
     description: 'List all tables of contents in the document.',
@@ -3600,11 +3780,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'toc/remove.mdx',
     referenceGroup: 'toc',
   },
-
   // -------------------------------------------------------------------------
   // TOC: TC entry management (SD-1977)
   // -------------------------------------------------------------------------
-
   'toc.markEntry': {
     memberPath: 'toc.markEntry',
     description: 'Insert a TC (table of contents entry) field at the target paragraph.',
@@ -3674,11 +3852,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'toc/edit-entry.mdx',
     referenceGroup: 'toc',
   },
-
   // -------------------------------------------------------------------------
   // History
   // -------------------------------------------------------------------------
-
   'history.get': {
     memberPath: 'history.get',
     description: 'Query the current undo/redo history state of the document.',
@@ -3691,12 +3867,11 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'history/get.mdx',
     referenceGroup: 'history',
   },
-
   'history.undo': {
     memberPath: 'history.undo',
     description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
+      'Returns a HistoryActionResult with noop flag, revision before/after, optional noop reason, and optional ref-effect fields such as inserted, removed, invalidatedRefs, remappedRefs, and affectedStories.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -3707,16 +3882,14 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
-
     intentGroup: 'edit',
     intentAction: 'undo',
   },
-
   'history.redo': {
     memberPath: 'history.redo',
     description: 'Redo the most recently undone action in the document.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
+      'Returns a HistoryActionResult with noop flag, revision before/after, optional noop reason, and optional ref-effect fields such as inserted, removed, invalidatedRefs, remappedRefs, and affectedStories.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -3730,11 +3903,9 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'edit',
     intentAction: 'redo',
   },
-
   // -------------------------------------------------------------------------
   // Create: image
   // -------------------------------------------------------------------------
-
   'create.image': {
     memberPath: 'create.image',
     description: 'Insert a new image at the target position.',
@@ -3743,18 +3914,16 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'create/image.mdx',
     referenceGroup: 'create',
   },
-
   // -------------------------------------------------------------------------
   // Images: lifecycle + placement
   // -------------------------------------------------------------------------
-
   'images.list': {
     memberPath: 'images.list',
     description: 'List all images in the document.',
@@ -3764,7 +3933,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'images/list.mdx',
     referenceGroup: 'images',
   },
-
   'images.get': {
     memberPath: 'images.get',
     description: 'Get details for a specific image by its stable ID.',
@@ -3778,7 +3946,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'images/get.mdx',
     referenceGroup: 'images',
   },
-
   'images.delete': {
     memberPath: 'images.delete',
     description: 'Delete an image from the document.',
@@ -3787,30 +3954,30 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/delete.mdx',
     referenceGroup: 'images',
   },
-
   'images.move': {
     memberPath: 'images.move',
-    description: 'Move an image to a new location in the document.',
-    expectedResult: 'Returns an ImagesMutationResult indicating success or failure.',
+    description:
+      'Move an image to a new location in the document. Tracked-mode authoring supports safe sole inline-image body paragraphs and emits paired `<w:moveFrom>` / `<w:moveTo>` wrappers with explicit move range marker identity.',
+    expectedResult:
+      'Returns an ImagesMutationResult indicating success or failure. Tracked-mode results include `trackedChangeRefs` pointing at the paired move review entity.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/move.mdx',
     referenceGroup: 'images',
   },
-
   'images.convertToInline': {
     memberPath: 'images.convertToInline',
     description: 'Convert a floating image to inline placement.',
@@ -3819,14 +3986,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/convert-to-inline.mdx',
     referenceGroup: 'images',
   },
-
   'images.convertToFloating': {
     memberPath: 'images.convertToFloating',
     description: 'Convert an inline image to floating placement.',
@@ -3835,14 +4001,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/convert-to-floating.mdx',
     referenceGroup: 'images',
   },
-
   'images.setSize': {
     memberPath: 'images.setSize',
     description: 'Set explicit width/height for an image.',
@@ -3851,14 +4016,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-size.mdx',
     referenceGroup: 'images',
   },
-
   'images.setWrapType': {
     memberPath: 'images.setWrapType',
     description: 'Set the text wrapping type for a floating image.',
@@ -3867,14 +4031,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-wrap-type.mdx',
     referenceGroup: 'images',
   },
-
   'images.setWrapSide': {
     memberPath: 'images.setWrapSide',
     description: 'Set which side(s) text wraps around a floating image.',
@@ -3883,14 +4046,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-wrap-side.mdx',
     referenceGroup: 'images',
   },
-
   'images.setWrapDistances': {
     memberPath: 'images.setWrapDistances',
     description: 'Set the text-wrap distance margins for a floating image.',
@@ -3899,14 +4061,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-wrap-distances.mdx',
     referenceGroup: 'images',
   },
-
   'images.setPosition': {
     memberPath: 'images.setPosition',
     description: 'Set the anchor position for a floating image.',
@@ -3915,14 +4076,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-position.mdx',
     referenceGroup: 'images',
   },
-
   'images.setAnchorOptions': {
     memberPath: 'images.setAnchorOptions',
     description: 'Set anchor behavior options for a floating image.',
@@ -3931,14 +4091,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-anchor-options.mdx',
     referenceGroup: 'images',
   },
-
   'images.setZOrder': {
     memberPath: 'images.setZOrder',
     description: 'Set the z-order (relativeHeight) for a floating image.',
@@ -3947,16 +4106,14 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/set-z-order.mdx',
     referenceGroup: 'images',
   },
-
   // --- SD-2100: Geometry ---
-
   'images.scale': {
     memberPath: 'images.scale',
     description: 'Scale an image by a uniform factor applied to both dimensions.',
@@ -3965,14 +4122,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/scale.mdx',
     referenceGroup: 'images',
   },
-
   'images.setLockAspectRatio': {
     memberPath: 'images.setLockAspectRatio',
     description: 'Lock or unlock the aspect ratio for an image.',
@@ -3981,14 +4137,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-lock-aspect-ratio.mdx',
     referenceGroup: 'images',
   },
-
   'images.rotate': {
     memberPath: 'images.rotate',
     description: 'Set the absolute rotation angle for an image.',
@@ -3997,14 +4152,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/rotate.mdx',
     referenceGroup: 'images',
   },
-
   'images.flip': {
     memberPath: 'images.flip',
     description: 'Set horizontal and/or vertical flip state for an image.',
@@ -4013,14 +4167,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/flip.mdx',
     referenceGroup: 'images',
   },
-
   'images.crop': {
     memberPath: 'images.crop',
     description: 'Apply rectangular edge-percentage crop to an image.',
@@ -4029,14 +4182,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/crop.mdx',
     referenceGroup: 'images',
   },
-
   'images.resetCrop': {
     memberPath: 'images.resetCrop',
     description: 'Remove all cropping from an image.',
@@ -4045,16 +4197,14 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: T_IMAGE_COMMAND,
     }),
     referenceDocPath: 'images/reset-crop.mdx',
     referenceGroup: 'images',
   },
-
   // --- SD-2100: Content replacement ---
-
   'images.replaceSource': {
     memberPath: 'images.replaceSource',
     description: 'Replace the image source while preserving identity and placement.',
@@ -4063,16 +4213,14 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/replace-source.mdx',
     referenceGroup: 'images',
   },
-
   // --- SD-2100: Semantic metadata ---
-
   'images.setAltText': {
     memberPath: 'images.setAltText',
     description: 'Set the accessibility description (alt text) for an image.',
@@ -4081,14 +4229,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-alt-text.mdx',
     referenceGroup: 'images',
   },
-
   'images.setDecorative': {
     memberPath: 'images.setDecorative',
     description: 'Mark or unmark an image as decorative.',
@@ -4097,14 +4244,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-decorative.mdx',
     referenceGroup: 'images',
   },
-
   'images.setName': {
     memberPath: 'images.setName',
     description: 'Set the object name for an image.',
@@ -4113,14 +4259,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-name.mdx',
     referenceGroup: 'images',
   },
-
   'images.setHyperlink': {
     memberPath: 'images.setHyperlink',
     description: 'Set or remove the hyperlink attached to an image.',
@@ -4129,16 +4274,14 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/set-hyperlink.mdx',
     referenceGroup: 'images',
   },
-
   // --- SD-2100: Caption lifecycle ---
-
   'images.insertCaption': {
     memberPath: 'images.insertCaption',
     description: 'Insert a caption paragraph below the image.',
@@ -4154,7 +4297,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'images/insert-caption.mdx',
     referenceGroup: 'images',
   },
-
   'images.updateCaption': {
     memberPath: 'images.updateCaption',
     description: 'Update the text of an existing caption paragraph.',
@@ -4163,14 +4305,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
       throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
     }),
     referenceDocPath: 'images/update-caption.mdx',
     referenceGroup: 'images',
   },
-
   'images.removeCaption': {
     memberPath: 'images.removeCaption',
     description: 'Remove the caption paragraph from below the image.',
@@ -4186,11 +4327,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'images/remove-caption.mdx',
     referenceGroup: 'images',
   },
-
   // -------------------------------------------------------------------------
   // Hyperlinks: discovery + CRUD
   // -------------------------------------------------------------------------
-
   'hyperlinks.list': {
     memberPath: 'hyperlinks.list',
     description: 'List all hyperlinks in the document, with optional filtering by href, anchor, or display text.',
@@ -4284,11 +4423,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'hyperlinks/remove.mdx',
     referenceGroup: 'hyperlinks',
   },
-
   // =========================================================================
   // headerFooters.*
   // =========================================================================
-
   'headerFooters.list': {
     memberPath: 'headerFooters.list',
     description: 'List header/footer slot entries across sections.',
@@ -4418,13 +4555,10 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'header-footers/parts/delete.mdx',
     referenceGroup: 'headerFooters',
   },
-
   // =========================================================================
   // Content Controls (SD-2070)
   // =========================================================================
-
   // --- A. Core CRUD + Discovery ---
-
   'create.contentControl': {
     memberPath: 'create.contentControl',
     description: 'Create a new content control (SDT) in the document.',
@@ -4440,7 +4574,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/create.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.list': {
     memberPath: 'contentControls.list',
     description: 'List all content controls in the document with optional type/tag filtering.',
@@ -4450,7 +4583,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/list.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.get': {
     memberPath: 'contentControls.get',
     description: 'Retrieve a single content control by target.',
@@ -4460,7 +4592,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/get.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.listInRange': {
     memberPath: 'contentControls.listInRange',
     description: 'List content controls within a block range.',
@@ -4470,7 +4601,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/list-in-range.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.selectByTag': {
     memberPath: 'contentControls.selectByTag',
     description: 'Select content controls matching a specific tag value.',
@@ -4480,7 +4610,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/select-by-tag.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.selectByTitle': {
     memberPath: 'contentControls.selectByTitle',
     description: 'Select content controls matching a specific title (alias) value.',
@@ -4490,7 +4619,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/select-by-title.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.listChildren': {
     memberPath: 'contentControls.listChildren',
     description: 'List direct child content controls nested inside the target.',
@@ -4500,7 +4628,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/list-children.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.getParent': {
     memberPath: 'contentControls.getParent',
     description: 'Get the parent content control of the target, if any.',
@@ -4510,7 +4637,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/get-parent.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.wrap': {
     memberPath: 'contentControls.wrap',
     description: 'Wrap existing content with a new content control.',
@@ -4526,7 +4652,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/wrap.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.unwrap': {
     memberPath: 'contentControls.unwrap',
     description: 'Remove the content control wrapper, preserving its content in place.',
@@ -4542,7 +4667,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/unwrap.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.delete': {
     memberPath: 'contentControls.delete',
     description: 'Delete a content control and its content from the document.',
@@ -4558,7 +4682,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/delete.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.copy': {
     memberPath: 'contentControls.copy',
     description: 'Copy a content control to a destination position. Copied SDTs receive new IDs.',
@@ -4574,23 +4697,23 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/copy.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.move': {
     memberPath: 'contentControls.move',
-    description: 'Move a content control to a new position. Preserves original IDs.',
-    expectedResult: 'Returns a ContentControlMutationResult with the updated target position.',
+    description:
+      'Move a content control to a new position. Direct moves preserve the original ID; tracked-mode authoring supports safe top-level block SDTs and remaps the destination SDT ID to avoid duplicate live anchors.',
+    expectedResult:
+      'Returns a ContentControlMutationResult with the updated target position. Tracked-mode results include `trackedChangeRefs` pointing at the paired move review entity.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['NO_OP', 'CAPABILITY_UNAVAILABLE'],
       throws: T_CC_MUTATION,
     }),
     referenceDocPath: 'content-controls/move.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.patch': {
     memberPath: 'contentControls.patch',
     description: 'Patch metadata properties on a content control (tag, alias, appearance, color, etc.).',
@@ -4606,7 +4729,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/patch.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.setLockMode': {
     memberPath: 'contentControls.setLockMode',
     description: 'Set the lock mode on a content control.',
@@ -4622,7 +4744,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/set-lock-mode.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.setType': {
     memberPath: 'contentControls.setType',
     description:
@@ -4639,7 +4760,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/set-type.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.getContent': {
     memberPath: 'contentControls.getContent',
     description: 'Get the text content of a content control.',
@@ -4649,7 +4769,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/get-content.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.replaceContent': {
     memberPath: 'contentControls.replaceContent',
     description: 'Replace the entire content of a content control.',
@@ -4665,7 +4784,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/replace-content.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.clearContent': {
     memberPath: 'contentControls.clearContent',
     description: 'Clear all content inside a content control, leaving it empty.',
@@ -4681,7 +4799,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/clear-content.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.appendContent': {
     memberPath: 'contentControls.appendContent',
     description: 'Append content to the end of a content control.',
@@ -4697,7 +4814,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/append-content.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.prependContent': {
     memberPath: 'contentControls.prependContent',
     description: 'Prepend content to the beginning of a content control.',
@@ -4713,7 +4829,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/prepend-content.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.insertBefore': {
     memberPath: 'contentControls.insertBefore',
     description: 'Insert content immediately before a content control.',
@@ -4729,7 +4844,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/insert-before.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.insertAfter': {
     memberPath: 'contentControls.insertAfter',
     description: 'Insert content immediately after a content control.',
@@ -4745,9 +4859,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/insert-after.mdx',
     referenceGroup: 'contentControls',
   },
-
   // --- B. Data Binding + Raw/Compatibility ---
-
   'contentControls.getBinding': {
     memberPath: 'contentControls.getBinding',
     description: 'Get the data binding metadata (w:dataBinding) of a content control.',
@@ -4757,7 +4869,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/get-binding.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.setBinding': {
     memberPath: 'contentControls.setBinding',
     description: 'Set data binding metadata on a content control.',
@@ -4773,7 +4884,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/set-binding.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.clearBinding': {
     memberPath: 'contentControls.clearBinding',
     description: 'Remove data binding metadata from a content control.',
@@ -4789,7 +4899,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/clear-binding.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.getRawProperties': {
     memberPath: 'contentControls.getRawProperties',
     description: 'Get the raw sdtPr properties of a content control as a passthrough hash.',
@@ -4799,7 +4908,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/get-raw-properties.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.patchRawProperties': {
     memberPath: 'contentControls.patchRawProperties',
     description: 'Apply raw XML-level patches to the sdtPr subtree of a content control.',
@@ -4815,7 +4923,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/patch-raw-properties.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.validateWordCompatibility': {
     memberPath: 'contentControls.validateWordCompatibility',
     description: 'Validate a content control for Word compatibility issues.',
@@ -4825,7 +4932,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/validate-word-compatibility.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.normalizeWordCompatibility': {
     memberPath: 'contentControls.normalizeWordCompatibility',
     description: 'Normalize a content control to resolve Word compatibility issues.',
@@ -4841,7 +4947,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/normalize-word-compatibility.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.normalizeTagPayload': {
     memberPath: 'contentControls.normalizeTagPayload',
     description: 'Normalize a content control tag between plain-string and JSON-encoded formats.',
@@ -4857,9 +4962,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/normalize-tag-payload.mdx',
     referenceGroup: 'contentControls',
   },
-
   // --- C. Typed Controls ---
-
   'contentControls.text.setMultiline': {
     memberPath: 'contentControls.text.setMultiline',
     description: 'Set or clear the multiline attribute on a plain-text content control.',
@@ -4875,7 +4978,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/text/set-multiline.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.text.setValue': {
     memberPath: 'contentControls.text.setValue',
     description: 'Set the text value of a plain-text content control.',
@@ -4891,7 +4993,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/text/set-value.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.text.clearValue': {
     memberPath: 'contentControls.text.clearValue',
     description: 'Clear the text value of a plain-text content control.',
@@ -4907,7 +5008,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/text/clear-value.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.setValue': {
     memberPath: 'contentControls.date.setValue',
     description: 'Set the date value of a date content control.',
@@ -4923,7 +5023,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/set-value.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.clearValue': {
     memberPath: 'contentControls.date.clearValue',
     description: 'Clear the date value of a date content control.',
@@ -4939,7 +5038,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/clear-value.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.setDisplayFormat': {
     memberPath: 'contentControls.date.setDisplayFormat',
     description: 'Set the display format string for a date content control.',
@@ -4955,7 +5053,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/set-display-format.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.setDisplayLocale': {
     memberPath: 'contentControls.date.setDisplayLocale',
     description: 'Set the display locale for a date content control.',
@@ -4971,7 +5068,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/set-display-locale.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.setStorageFormat': {
     memberPath: 'contentControls.date.setStorageFormat',
     description: 'Set the XML storage format for a date content control.',
@@ -4987,7 +5083,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/set-storage-format.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.date.setCalendar': {
     memberPath: 'contentControls.date.setCalendar',
     description: 'Set the calendar type for a date content control.',
@@ -5003,7 +5098,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/date/set-calendar.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.checkbox.getState': {
     memberPath: 'contentControls.checkbox.getState',
     description: 'Get the checked state of a checkbox content control.',
@@ -5013,7 +5107,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/checkbox/get-state.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.checkbox.setState': {
     memberPath: 'contentControls.checkbox.setState',
     description: 'Set the checked state of a checkbox content control.',
@@ -5029,7 +5122,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/checkbox/set-state.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.checkbox.toggle': {
     memberPath: 'contentControls.checkbox.toggle',
     description: 'Toggle the checked state of a checkbox content control.',
@@ -5045,7 +5137,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/checkbox/toggle.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.checkbox.setSymbolPair': {
     memberPath: 'contentControls.checkbox.setSymbolPair',
     description: 'Set the checked and unchecked symbol glyphs for a checkbox content control.',
@@ -5061,7 +5152,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/checkbox/set-symbol-pair.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.choiceList.getItems': {
     memberPath: 'contentControls.choiceList.getItems',
     description: 'Get the list items and selected value of a comboBox or dropDownList content control.',
@@ -5071,7 +5161,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/choice-list/get-items.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.choiceList.setItems': {
     memberPath: 'contentControls.choiceList.setItems',
     description: 'Replace the list items of a comboBox or dropDownList content control.',
@@ -5087,7 +5176,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/choice-list/set-items.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.choiceList.setSelected': {
     memberPath: 'contentControls.choiceList.setSelected',
     description: 'Set the selected value of a comboBox or dropDownList content control.',
@@ -5103,9 +5191,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/choice-list/set-selected.mdx',
     referenceGroup: 'contentControls',
   },
-
   // --- D. Repeating Section + Group ---
-
   'contentControls.repeatingSection.listItems': {
     memberPath: 'contentControls.repeatingSection.listItems',
     description: 'List the repeating section items inside a repeating section content control.',
@@ -5115,7 +5201,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/list-items.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.repeatingSection.insertItemBefore': {
     memberPath: 'contentControls.repeatingSection.insertItemBefore',
     description: 'Insert a new item before a specific index in a repeating section.',
@@ -5131,7 +5216,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/insert-item-before.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.repeatingSection.insertItemAfter': {
     memberPath: 'contentControls.repeatingSection.insertItemAfter',
     description: 'Insert a new item after a specific index in a repeating section.',
@@ -5147,7 +5231,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/insert-item-after.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.repeatingSection.cloneItem': {
     memberPath: 'contentControls.repeatingSection.cloneItem',
     description: 'Clone a repeating section item at the given index. Cloned SDTs receive new IDs.',
@@ -5163,7 +5246,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/clone-item.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.repeatingSection.deleteItem': {
     memberPath: 'contentControls.repeatingSection.deleteItem',
     description: 'Delete a repeating section item at the given index.',
@@ -5179,7 +5261,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/delete-item.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.repeatingSection.setAllowInsertDelete': {
     memberPath: 'contentControls.repeatingSection.setAllowInsertDelete',
     description: 'Set the allowInsertDelete flag on a repeating section.',
@@ -5195,7 +5276,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/repeating-section/set-allow-insert-delete.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.group.wrap': {
     memberPath: 'contentControls.group.wrap',
     description: 'Wrap a content control inside a new group content control. Always nests; not idempotent.',
@@ -5211,7 +5291,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/group/wrap.mdx',
     referenceGroup: 'contentControls',
   },
-
   'contentControls.group.ungroup': {
     memberPath: 'contentControls.group.ungroup',
     description: 'Remove the group designation from a group content control.',
@@ -5227,10 +5306,8 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'content-controls/group/ungroup.mdx',
     referenceGroup: 'contentControls',
   },
-
   // Bookmarks
   // -------------------------------------------------------------------------
-
   'bookmarks.list': {
     memberPath: 'bookmarks.list',
     description: 'List all bookmarks in the document.',
@@ -5300,11 +5377,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'bookmarks/remove.mdx',
     referenceGroup: 'bookmarks',
   },
-
   // -------------------------------------------------------------------------
   // Footnotes
   // -------------------------------------------------------------------------
-
   'footnotes.list': {
     memberPath: 'footnotes.list',
     description: 'List all footnotes and endnotes in the document.',
@@ -5330,14 +5405,14 @@ export const OPERATION_DEFINITIONS = {
   },
   'footnotes.insert': {
     memberPath: 'footnotes.insert',
-    description: 'Insert a new footnote or endnote at a target location.',
+    description: `Insert a new footnote or endnote at a target location.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
     expectedResult: 'Returns a FootnoteMutationResult indicating success with the footnote address or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: NONE_FAILURES,
+      supportsTrackedMode: true,
+      possibleFailureCodes: FOOTNOTE_MUTATION_FAILURES,
       throws: T_REF_INSERT,
     }),
     referenceDocPath: 'footnotes/insert.mdx',
@@ -5345,15 +5420,15 @@ export const OPERATION_DEFINITIONS = {
   },
   'footnotes.update': {
     memberPath: 'footnotes.update',
-    description: 'Update the content of an existing footnote or endnote.',
+    description: `Update the content of an existing footnote or endnote.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
     expectedResult:
       'Returns a FootnoteMutationResult indicating success with the updated footnote address or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: NONE_FAILURES,
+      supportsTrackedMode: true,
+      possibleFailureCodes: FOOTNOTE_MUTATION_FAILURES,
       throws: T_REF_MUTATION,
     }),
     referenceDocPath: 'footnotes/update.mdx',
@@ -5367,7 +5442,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: false,
+      supportsTrackedMode: true,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
     }),
@@ -5389,11 +5464,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'footnotes/configure.mdx',
     referenceGroup: 'footnotes',
   },
-
   // -------------------------------------------------------------------------
   // Cross-References
   // -------------------------------------------------------------------------
-
   'crossRefs.list': {
     memberPath: 'crossRefs.list',
     description: 'List all cross-reference fields in the document.',
@@ -5464,11 +5537,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'cross-refs/remove.mdx',
     referenceGroup: 'crossRefs',
   },
-
   // -------------------------------------------------------------------------
   // Index
   // -------------------------------------------------------------------------
-
   'index.list': {
     memberPath: 'index.list',
     description: 'List all index blocks in the document.',
@@ -5552,11 +5623,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'index/remove.mdx',
     referenceGroup: 'index',
   },
-
   // -------------------------------------------------------------------------
   // Index: XE entry management
   // -------------------------------------------------------------------------
-
   'index.entries.list': {
     memberPath: 'index.entries.list',
     description: 'List all XE (index entry) fields in the document.',
@@ -5625,11 +5694,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'index/entries-remove.mdx',
     referenceGroup: 'index',
   },
-
   // -------------------------------------------------------------------------
   // Captions
   // -------------------------------------------------------------------------
-
   'captions.list': {
     memberPath: 'captions.list',
     description: 'List all caption paragraphs in the document.',
@@ -5713,11 +5780,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'captions/configure.mdx',
     referenceGroup: 'captions',
   },
-
   // -------------------------------------------------------------------------
   // Fields
   // -------------------------------------------------------------------------
-
   'fields.list': {
     memberPath: 'fields.list',
     description: 'List all fields in the document.',
@@ -5743,7 +5808,7 @@ export const OPERATION_DEFINITIONS = {
   },
   'fields.insert': {
     memberPath: 'fields.insert',
-    description: 'Insert a raw field code at a target location.',
+    description: `Insert a raw field code at a target location, optionally preserving cached result text.${FIELD_PRESERVE_CACHED_V1_NOTE}`,
     expectedResult: 'Returns a FieldMutationResult indicating success with the field address or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -5786,11 +5851,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'fields/remove.mdx',
     referenceGroup: 'fields',
   },
-
   // -------------------------------------------------------------------------
   // Citations
   // -------------------------------------------------------------------------
-
   'citations.list': {
     memberPath: 'citations.list',
     description: 'List all citation marks in the document.',
@@ -5859,11 +5922,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'citations/remove.mdx',
     referenceGroup: 'citations',
   },
-
   // -------------------------------------------------------------------------
   // Citations: sources
   // -------------------------------------------------------------------------
-
   'citations.sources.list': {
     memberPath: 'citations.sources.list',
     description: 'List all citation sources in the document store.',
@@ -5932,11 +5993,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'citations/sources-remove.mdx',
     referenceGroup: 'citations',
   },
-
   // -------------------------------------------------------------------------
   // Citations: bibliography
   // -------------------------------------------------------------------------
-
   'citations.bibliography.get': {
     memberPath: 'citations.bibliography.get',
     description: 'Get information about the bibliography block.',
@@ -6009,11 +6068,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'citations/bibliography-remove.mdx',
     referenceGroup: 'citations',
   },
-
   // -------------------------------------------------------------------------
   // Authorities
   // -------------------------------------------------------------------------
-
   'authorities.list': {
     memberPath: 'authorities.list',
     description: 'List all table-of-authorities blocks in the document.',
@@ -6097,11 +6154,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'authorities/remove.mdx',
     referenceGroup: 'authorities',
   },
-
   // -------------------------------------------------------------------------
   // Authorities: TA entry management
   // -------------------------------------------------------------------------
-
   'authorities.entries.list': {
     memberPath: 'authorities.entries.list',
     description: 'List all TA (authority entry) fields in the document.',
@@ -6170,11 +6225,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'authorities/entries-remove.mdx',
     referenceGroup: 'authorities',
   },
-
   // ---------------------------------------------------------------------------
   // diff.*
   // ---------------------------------------------------------------------------
-
   'diff.capture': {
     memberPath: 'diff.capture',
     description:
@@ -6227,7 +6280,6 @@ export const OPERATION_DEFINITIONS = {
   // =========================================================================
   // protection.*
   // =========================================================================
-
   'protection.get': {
     memberPath: 'protection.get',
     description:
@@ -6273,11 +6325,9 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'protection',
     skipAsATool: true,
   },
-
   // =========================================================================
   // permissionRanges.*
   // =========================================================================
-
   'permissionRanges.list': {
     memberPath: 'permissionRanges.list',
     description:
@@ -6351,11 +6401,9 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'permissionRanges',
     skipAsATool: true,
   },
-
   // -------------------------------------------------------------------------
   // Custom XML Parts (ECMA-376 Part 1 §15.2.5, §15.2.6, §22.5)
   // -------------------------------------------------------------------------
-
   'customXml.parts.list': {
     memberPath: 'customXml.parts.list',
     description:
@@ -6434,11 +6482,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'custom-xml/parts/remove.mdx',
     referenceGroup: 'customXml',
   },
-
   // -------------------------------------------------------------------------
   // Anchored metadata (composition over customXml.parts + contentControls)
   // -------------------------------------------------------------------------
-
   'metadata.attach': {
     memberPath: 'metadata.attach',
     description:
@@ -6528,27 +6574,20 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'metadata',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
-
 // ---------------------------------------------------------------------------
 // Derived identities (immutable)
 // ---------------------------------------------------------------------------
-
 export type OperationId = keyof typeof OPERATION_DEFINITIONS;
-
 export const OPERATION_IDS: readonly OperationId[] = Object.freeze(Object.keys(OPERATION_DEFINITIONS) as OperationId[]);
-
 export const SINGLETON_OPERATION_IDS: readonly OperationId[] = Object.freeze(
   OPERATION_IDS.filter((id) => !id.includes('.')),
 );
-
 export const NAMESPACED_OPERATION_IDS: readonly OperationId[] = Object.freeze(
   OPERATION_IDS.filter((id) => id.includes('.')),
 );
-
 // ---------------------------------------------------------------------------
 // Typed projection helper (single contained cast)
 // ---------------------------------------------------------------------------
-
 /**
  * Projects a value from each operation definition entry into a keyed record.
  *

@@ -14,7 +14,7 @@ Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, le
 - API member path: `editor.doc.format.paragraph.setAlignment(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -37,7 +37,11 @@ Returns a ParagraphMutationResult; reports NO_OP if the alignment already matche
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -73,14 +77,22 @@ Returns a ParagraphMutationResult; reports NO_OP if the alignment already matche
     "target": {
       "kind": "block",
       "nodeId": "node-def456",
-      "nodeType": "paragraph"
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     }
   },
   "success": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```

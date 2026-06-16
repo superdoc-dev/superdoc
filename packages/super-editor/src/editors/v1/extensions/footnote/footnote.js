@@ -1,5 +1,7 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
+import { insertFootnoteAtCursor } from './insert-footnote.js';
+import { getSelectedNoteMarker, deleteSelectedNoteMarker } from './delete-note-marker.js';
 
 const toSuperscriptDigits = (value) => {
   const map = {
@@ -117,6 +119,39 @@ export const FootnoteReference = Node.create({
     return ({ node, editor, getPos, decorations }) => {
       const htmlAttributes = this.options.htmlAttributes;
       return new FootnoteReferenceNodeView(node, getPos, decorations, editor, htmlAttributes);
+    };
+  },
+
+  addCommands() {
+    return {
+      /**
+       * SD-3400: thin command shim over {@link insertFootnoteAtCursor} so any
+       * custom toolbar can call `editor.commands.insertFootnote()`.
+       * Intentionally NOT registered in the default toolbar (per SD-3400).
+       */
+      insertFootnote:
+        () =>
+        ({ editor, tr }) => {
+          // The document API dispatches its own (compound) transactions, which
+          // would leave the CommandService transaction stale — suppress it.
+          tr.setMeta('preventDispatch', true);
+          return insertFootnoteAtCursor(editor);
+        },
+
+      /**
+       * SD-3400: thin command shim over {@link deleteSelectedNoteMarker}.
+       * Runs before `deleteSelection` in the Backspace/Delete chains so the
+       * second stage of the staged marker delete also prunes the OOXML note
+       * element ("remove on both sides").
+       */
+      deleteSelectedNoteMarker:
+        () =>
+        ({ editor, state, tr }) => {
+          if (!getSelectedNoteMarker(state)) return false;
+          // Same preventDispatch reason as insertFootnote above.
+          tr.setMeta('preventDispatch', true);
+          return deleteSelectedNoteMarker(editor);
+        },
     };
   },
 

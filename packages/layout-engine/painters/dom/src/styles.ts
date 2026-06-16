@@ -1154,6 +1154,64 @@ menclose::after {
 }
 `;
 
+/**
+ * SD-3400: footnote/endnote note content uses a text (I-beam) cursor like body
+ * text, not the default arrow. Note fragments are painted as generic
+ * `.superdoc-fragment` elements distinguished only by their block-id prefix
+ * (footnote-/endnote-/__sd_semantic_footnote-/__sd_semantic_endnote-), so the
+ * cursor rule keys off `data-block-id`. The renderer marks these fragments
+ * contenteditable=false, so without this rule the browser shows a default arrow
+ * over editable note text.
+ */
+const FOOTNOTE_STYLES = `
+[data-block-id^="footnote-"],
+[data-block-id^="endnote-"],
+[data-block-id^="__sd_semantic_footnote-"],
+[data-block-id^="__sd_semantic_endnote-"] {
+  cursor: text;
+}
+
+/* SD-3400: body reference markers are interactive (double-click opens the
+ * note). Pointer cursor + a hover pill signal clickability without affecting
+ * layout (background/box-shadow are paint-only). */
+[data-note-reference] {
+  cursor: pointer;
+  border-radius: 2px;
+  position: relative;
+}
+/* The painted digit is ~6x11px — far too small to hover or double-click
+ * reliably. An invisible pseudo-element halo expands the interactive target
+ * (hover, cursor, clicks all hit the marker span) without moving any text. */
+[data-note-reference]::after {
+  content: '';
+  position: absolute;
+  inset: -4px -5px;
+}
+[data-note-reference]:hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #d3e3fd);
+  box-shadow: 0 0 0 2px var(--sd-content-controls-block-hover-bg, #d3e3fd);
+}
+
+/* SD-3400: while a note session is open, highlight the note's fragments at the
+ * page bottom so the focus change is visible. Applied by PresentationEditor on
+ * activation, re-applied after each paint, removed on session exit. The pulse
+ * draws the eye when focus jumps from the body reference to the note. */
+.sd-note-session-active {
+  background-color: rgba(98, 155, 231, 0.07);
+  /* Thin accent bar with breathing room: the first shadow masks a 3px gap with
+   * the page background, the second paints a 1px bar beyond it. Box-shadows
+   * paint outside the box, so the note line itself is untouched. */
+  box-shadow:
+    -3px 0 0 0 var(--sd-page-bg, #ffffff),
+    -4px 0 0 0 rgba(98, 155, 231, 0.55);
+  animation: sd-note-activate-pulse 0.6s ease-out 1;
+}
+@keyframes sd-note-activate-pulse {
+  0% { background-color: rgba(98, 155, 231, 0.22); }
+  100% { background-color: rgba(98, 155, 231, 0.07); }
+}
+`;
+
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
@@ -1162,6 +1220,7 @@ let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
 let mathMencloseStylesInjected = false;
+let footnoteStylesInjected = false;
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
   if (printStylesInjected || !doc) return;
@@ -1244,4 +1303,17 @@ export const ensureMathMencloseStyles = (doc: Document | null | undefined) => {
   styleEl.textContent = MATH_MENCLOSE_STYLES;
   doc.head?.appendChild(styleEl);
   mathMencloseStylesInjected = true;
+};
+
+/**
+ * Injects footnote/endnote interaction styles (text cursor over note content)
+ * into the document head. Injected once per document lifecycle. (SD-3400)
+ */
+export const ensureFootnoteStyles = (doc: Document | null | undefined) => {
+  if (footnoteStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-footnote-styles', 'true');
+  styleEl.textContent = FOOTNOTE_STYLES;
+  doc.head?.appendChild(styleEl);
+  footnoteStylesInjected = true;
 };

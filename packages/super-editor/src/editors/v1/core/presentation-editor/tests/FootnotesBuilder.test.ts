@@ -352,6 +352,48 @@ describe('buildFootnotesInput', () => {
       expect(firstRun?.vertAlign).toBe('superscript');
     });
 
+    it('falls back to the document default font when the first run carries none (SD-3400)', () => {
+      // Fallback chain: explicit first-run size -> document default -> constant.
+      // The mock toFlowBlocks produces runs without fontSize/fontFamily, so the
+      // marker must pick up the docDefaults run properties (half-points -> px).
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] },
+      ]);
+      const context = {
+        footnoteNumberById: { '1': 1 },
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: { runProperties: { fontSize: 22, fontFamily: { ascii: 'Times New Roman' } } },
+          latentStyles: {},
+          styles: {},
+        },
+      } as unknown as ConverterContext;
+
+      const result = buildFootnotesInput(editorState, converter, context, undefined);
+
+      const marker = (blocksFromResult(result)?.[0] as { runs?: Array<{ fontSize?: number; fontFamily?: string }> })
+        ?.runs?.[0];
+      // 22 half-points = 11pt = 11 / 0.75 px, then superscript-scaled.
+      expect(marker?.fontSize).toBeCloseTo((11 / 0.75) * SUBSCRIPT_SUPERSCRIPT_SCALE, 5);
+      expect(marker?.fontFamily).toBe('Times New Roman');
+    });
+
+    it('keeps the constant marker fallback when neither run nor doc defaults carry a size', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] },
+      ]);
+      const context = createMockConverterContext({ '1': 1 });
+
+      const result = buildFootnotesInput(editorState, converter, context, undefined);
+
+      const marker = (blocksFromResult(result)?.[0] as { runs?: Array<{ fontSize?: number; fontFamily?: string }> })
+        ?.runs?.[0];
+      expect(marker?.fontSize).toBe(12 * SUBSCRIPT_SUPERSCRIPT_SCALE);
+      expect(marker?.fontFamily).toBe('Arial');
+    });
+
     it('uses correct display number from context', () => {
       const editorState = createMockEditorState([{ id: '5', pos: 10 }]);
       const converter = createMockConverter([

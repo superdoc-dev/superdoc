@@ -49,6 +49,14 @@ describe('footnoteReferenceToBlock', () => {
     expect(run.text).toBe('1');
   });
 
+  it('stamps interaction data attributes on the painted marker (SD-3400)', () => {
+    const run = footnoteReferenceToBlock(makeParams());
+
+    // Drives the hover/clickability affordance and active-note matching.
+    expect(run.dataAttrs?.['data-note-reference']).toBe('footnote');
+    expect(run.dataAttrs?.['data-note-id']).toBe('1');
+  });
+
   it('does not emit Unicode superscript glyphs', () => {
     const run = footnoteReferenceToBlock(makeParams());
 

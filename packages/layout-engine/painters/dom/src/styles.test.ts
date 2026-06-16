@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ensureSdtContainerStyles, ensureTrackChangeStyles, lineStyles } from './styles.js';
+import { ensureFootnoteStyles, ensureSdtContainerStyles, ensureTrackChangeStyles, lineStyles } from './styles.js';
 
 describe('lineStyles', () => {
   it('sets height and lineHeight from the argument', () => {
@@ -11,6 +11,34 @@ describe('lineStyles', () => {
   it('sets fontSize to 0 to eliminate the CSS strut', () => {
     const styles = lineStyles(20);
     expect(styles.fontSize).toBe('0');
+  });
+});
+
+describe('ensureFootnoteStyles', () => {
+  it('renders a text cursor over footnote and endnote note content (SD-3400)', () => {
+    ensureFootnoteStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-footnote-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Note fragments are generic .superdoc-fragment elements keyed by block-id prefix.
+    expect(cssText).toContain('[data-block-id^="footnote-"]');
+    expect(cssText).toContain('[data-block-id^="endnote-"]');
+    expect(cssText).toContain('[data-block-id^="__sd_semantic_footnote-"]');
+    expect(cssText).toContain('cursor: text;');
+  });
+
+  it('signals clickability on body reference markers and highlights the active note (SD-3400)', () => {
+    ensureFootnoteStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-footnote-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('[data-note-reference]');
+    expect(cssText).toContain('cursor: pointer;');
+    expect(cssText).toContain('[data-note-reference]:hover');
+    expect(cssText).toContain('.sd-note-session-active');
+    expect(cssText).toContain('sd-note-activate-pulse');
   });
 });
 

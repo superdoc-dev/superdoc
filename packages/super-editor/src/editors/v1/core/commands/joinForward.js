@@ -1,4 +1,6 @@
 import { joinForward as originalJoinForward } from 'prosemirror-commands';
+import { isNoteStorySession } from './linkedStyleSplitHelpers.js';
+import { findParagraphDepth, restoreParagraphPropertiesAfterDispatch } from './noteParagraphStyle.js';
 
 /**
  * Join two nodes forward.
@@ -12,7 +14,13 @@ import { joinForward as originalJoinForward } from 'prosemirror-commands';
  * https://prosemirror.net/docs/ref/#commands.joinForward
  */
 //prettier-ignore
-export const joinForward = () => ({ state, dispatch }) => {
+export const joinForward = () => ({ state, dispatch, editor }) => {
+  // SD-3400: keep the current paragraph's note style on forward joins.
+  if (dispatch && isNoteStorySession(editor)) {
+    const depth = findParagraphDepth(state.selection.$from);
+    const props = depth ? state.selection.$from.node(depth).attrs?.paragraphProperties : null;
+    dispatch = restoreParagraphPropertiesAfterDispatch(dispatch, props);
+  }
   const { selection, doc } = state;
   const { $from } = selection;
 

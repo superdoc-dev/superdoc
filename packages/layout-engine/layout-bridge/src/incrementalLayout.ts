@@ -1878,6 +1878,38 @@ export async function incrementalLayout(
           // just inflated dead reserve. Overflow now propagates naturally:
           // any continuation beyond next-page capacity stays in
           // pendingByColumn and lands on page+2, page+3, etc.
+          // Tallest per-column cluster demand for a page's anchored footnotes.
+          // The carry-forward bump counts only the FIRST LINE of the last entry
+          // (the rest continues onto the following page); the terminal-page bump
+          // needs full heights because there is nowhere to continue.
+          const clusterDemandFor = (targetPageIndex: number, lastEntryFirstLineOnly: boolean): number => {
+            let demand = 0;
+            for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
+              const ids = idsByColumn.get(targetPageIndex)?.get(cIdx) ?? [];
+              if (ids.length === 0) continue;
+              let columnCluster = 0;
+              for (let i = 0; i < ids.length; i += 1) {
+                const isLast = i === ids.length - 1;
+                columnCluster += lastEntryFirstLineOnly && isLast ? firstLineOf(ids[i]) : fullHeightOf(ids[i]);
+                if (i > 0) columnCluster += safeGap;
+              }
+              if (columnCluster > demand) demand = columnCluster;
+            }
+            return demand;
+          };
+
+          // Physical band cap for a page: content height minus a minimum body strip.
+          const maxBandFor = (targetPageIndex: number): number => {
+            const page = layoutForPages.pages?.[targetPageIndex];
+            const size = page?.size ?? layoutForPages.pageSize ?? DEFAULT_PAGE_SIZE;
+            const top = normalizeMargin(page?.margins?.top, DEFAULT_MARGINS.top);
+            const bottom = normalizeMargin(page?.margins?.bottom, DEFAULT_MARGINS.bottom);
+            const physicalContentHeight = Math.max(0, size.h - top - bottom);
+            return Math.max(0, physicalContentHeight - MIN_FOOTNOTE_BODY_HEIGHT * 20);
+          };
+
+          const bandOverhead = safeSeparatorSpacingBefore + continuationDividerHeight + safeTopPadding;
+
           if (pageIndex + 1 < pageCount) {
             let continuationDemand = 0;
             pendingByColumn.forEach((entries) => {
@@ -1889,30 +1921,12 @@ export async function incrementalLayout(
               });
             });
             // Next page's mandatory cluster demand (ordered minimum).
-            let nextClusterDemand = 0;
-            for (let cIdx = 0; cIdx < columnCount; cIdx += 1) {
-              const idsNext = idsByColumn.get(pageIndex + 1)?.get(cIdx) ?? [];
-              if (idsNext.length === 0) continue;
-              let columnCluster = 0;
-              for (let i = 0; i < idsNext.length; i += 1) {
-                const isLast = i === idsNext.length - 1;
-                columnCluster += isLast ? firstLineOf(idsNext[i]) : fullHeightOf(idsNext[i]);
-                if (i > 0) columnCluster += safeGap;
-              }
-              if (columnCluster > nextClusterDemand) nextClusterDemand = columnCluster;
-            }
+            const nextClusterDemand = clusterDemandFor(pageIndex + 1, true);
             if (continuationDemand > 0 || nextClusterDemand > 0) {
-              const overhead = safeSeparatorSpacingBefore + continuationDividerHeight + safeTopPadding;
-              const nextPage = layoutForPages.pages?.[pageIndex + 1];
-              const nextPageSize = nextPage?.size ?? layoutForPages.pageSize ?? DEFAULT_PAGE_SIZE;
-              const nextTop = normalizeMargin(nextPage?.margins?.top, DEFAULT_MARGINS.top);
-              const nextBottomRaw = normalizeMargin(nextPage?.margins?.bottom, DEFAULT_MARGINS.bottom);
-              const physicalContentHeight = Math.max(0, nextPageSize.h - nextTop - nextBottomRaw);
-              const minBodyHeight = MIN_FOOTNOTE_BODY_HEIGHT * 20;
-              const nextPageMaxBand = Math.max(0, physicalContentHeight - minBodyHeight);
+              const nextPageMaxBand = maxBandFor(pageIndex + 1);
               // The band has a single overhead block (separator + padding)
               // whether or not we have a cluster.
-              const overheadForBand = nextClusterDemand > 0 || continuationDemand > 0 ? overhead : 0;
+              const overheadForBand = nextClusterDemand > 0 || continuationDemand > 0 ? bandOverhead : 0;
               // Mandatory cluster room (cluster slices only, no overhead).
               const clusterRoomPx =
                 nextClusterDemand > 0 ? Math.min(nextClusterDemand, Math.max(0, nextPageMaxBand - overheadForBand)) : 0;
@@ -1923,6 +1937,24 @@ export async function incrementalLayout(
               // clamped at the physical band cap.
               const finalReserve = Math.min(clusterRoomPx + continuationToReservePx + overheadForBand, nextPageMaxBand);
               reserves[pageIndex + 1] = Math.max(reserves[pageIndex + 1] ?? 0, Math.ceil(finalReserve));
+            }
+          } else {
+            // SD-3400: terminal-page footnote reserve bump.
+            // The carry-forward bump above only runs when there is a next page to
+            // drain onto. On the LAST page a footnote anchored here has nowhere to
+            // continue, so once the body fills the page the bodyMaxY-derived
+            // maxReserve collapses to ~0, placeFootnote can place nothing, and
+            // reserves[pageIndex] stays 0 — the body never yields and the footnote
+            // is silently dropped. When the placed reserve is short of the anchored
+            // demand, bump this page's reserve to that demand (capped at the
+            // physical band) so the next relayout pass shrinks the body and the
+            // footnote renders on its anchor page (matching Word). Guarded on
+            // `< clusterDemand` so pages whose footnote already placed fully are
+            // untouched — no gap/regression on non-dense pages.
+            const clusterDemand = clusterDemandFor(pageIndex, false);
+            if (clusterDemand > 0 && (reserves[pageIndex] ?? 0) < clusterDemand) {
+              const finalReserve = Math.min(clusterDemand + bandOverhead, maxBandFor(pageIndex));
+              reserves[pageIndex] = Math.max(reserves[pageIndex] ?? 0, Math.ceil(finalReserve));
             }
           }
         }

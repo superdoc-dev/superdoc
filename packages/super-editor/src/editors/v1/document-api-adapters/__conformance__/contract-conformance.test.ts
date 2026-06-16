@@ -12214,6 +12214,12 @@ describe('document-api adapter conformance', () => {
       'tables.setRowOptions',
       'tables.setColumnWidth',
       'tables.distributeColumns',
+      // Row/column structural ops cannot produce a decidable tracked change in
+      // the review model (only whole-table insert/delete is decidable), so they
+      // report supportsTrackedMode: false and reject changeMode: 'tracked'.
+      'tables.deleteRow',
+      'tables.insertColumn',
+      'tables.deleteColumn',
       'tables.convertFromText',
       'tables.split',
       'tables.convertToText',
@@ -12254,10 +12260,9 @@ describe('document-api adapter conformance', () => {
     const trackedTableOps: OperationId[] = [
       'create.table',
       'tables.delete',
+      // tables.insertRow stamps a structural rowInsert revision that exports as
+      // <w:ins>; the row/column structural ops do not support tracked mode.
       'tables.insertRow',
-      'tables.deleteRow',
-      'tables.insertColumn',
-      'tables.deleteColumn',
     ] as OperationId[];
 
     for (const opId of trackedTableOps) {
@@ -12283,28 +12288,45 @@ describe('document-api adapter conformance', () => {
       { changeMode: 'tracked' },
     );
     expect(insertRowResult.success).toBe(true);
+  });
 
-    // tables.deleteRow with tracked mode
-    const deleteRowResult = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
-      changeMode: 'tracked',
-    });
-    expect(deleteRowResult.success).toBe(true);
+  it('rejects changeMode=tracked with CAPABILITY_UNAVAILABLE for row/column structural ops', () => {
+    // deleteRow/insertColumn/deleteColumn cannot produce a decidable tracked
+    // change in the review model, so they must fail loudly rather than silently
+    // applying directly (which for the deletes is data loss in suggesting mode).
+    const editor = makeTableEditor({ insertTrackedChange: vi.fn(() => true) });
+    (editor as any).options = { user: { name: 'Agent', email: 'agent@test.com' } };
+    initRevision(editor);
 
-    // tables.insertColumn with tracked mode
-    const insertColResult = tablesInsertColumnWrapper(
-      editor,
-      { nodeId: 'table-1', columnIndex: 0, position: 'right' },
-      { changeMode: 'tracked' },
+    const expectCapabilityUnavailable = (fn: () => unknown, opId: string) => {
+      let capturedCode: string | null = null;
+      try {
+        fn();
+      } catch (error) {
+        capturedCode = (error as { code?: string }).code ?? null;
+      }
+      expect(capturedCode, `${opId} should throw CAPABILITY_UNAVAILABLE in tracked mode`).toBe(
+        'CAPABILITY_UNAVAILABLE',
+      );
+    };
+
+    expectCapabilityUnavailable(
+      () => tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'tracked' }),
+      'tables.deleteRow',
     );
-    expect(insertColResult.success).toBe(true);
-
-    // tables.deleteColumn with tracked mode
-    const deleteColResult = tablesDeleteColumnWrapper(
-      editor,
-      { nodeId: 'table-1', columnIndex: 0 },
-      { changeMode: 'tracked' },
+    expectCapabilityUnavailable(
+      () =>
+        tablesInsertColumnWrapper(
+          editor,
+          { nodeId: 'table-1', columnIndex: 0, position: 'right' },
+          { changeMode: 'tracked' },
+        ),
+      'tables.insertColumn',
     );
-    expect(deleteColResult.success).toBe(true);
+    expectCapabilityUnavailable(
+      () => tablesDeleteColumnWrapper(editor, { nodeId: 'table-1', columnIndex: 0 }, { changeMode: 'tracked' }),
+      'tables.deleteColumn',
+    );
   });
 
   // ---------------------------------------------------------------------------

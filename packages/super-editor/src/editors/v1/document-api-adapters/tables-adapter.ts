@@ -922,6 +922,75 @@ function insertRowInTable(
   return true;
 }
 
+/**
+ * Stamp a structural `rowInsert` revision on a single table row that was
+ * inserted via the document API's `tables.insertRow` adapter.
+ *
+ * The tracked-transaction pipeline (inline overlap compiler) cannot represent
+ * raw `tableRow` insert steps, so this structural revision is stamped directly
+ * on the row's `trackChange` attribute — the same shape the importer lands from
+ * `<w:ins>` inside `<w:trPr>` (see `super-converter/v3/handlers/w/tr/row-track-change.js`,
+ * and the canonical whole-table authoring path in
+ * `extensions/track-changes/trackChangesHelpers/stampTableRows.js`).
+ *
+ * Scope note: the stamp makes the row export as a tracked insertion (`<w:ins>`),
+ * which Word can accept/reject. It is NOT, however, a decidable in-app
+ * structural change: SuperDoc's review model only treats a WHOLE-table
+ * insert/delete as decidable (`structuralRowChanges.js`); a single tracked row
+ * inside an otherwise-untracked table is surfaced as `partial-rows` /
+ * `decidable: false`. All rows of one `insertRow` call share `revision` so they
+ * read as one logical change if/when row-level decidability is added.
+ *
+ * @param tr - The transaction containing the inserted row.
+ * @param tablePos - Absolute position of the table node.
+ * @param rowIndex - Index of the newly inserted row within the table.
+ * @param editor - The editor instance (used for user attribution).
+ * @param revision - Shared revision identity (groupId + ISO date) for the call.
+ */
+function stampInsertedRowTrackChange(
+  tr: Transaction,
+  tablePos: number,
+  rowIndex: number,
+  editor: Editor,
+  revision: { revisionGroupId: string; date: string },
+): void {
+  const user = editor.options?.user;
+  if (!user) return;
+
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return;
+
+  // Walk the table children to find the absolute position of the target row.
+  let rowPos = tablePos + 1;
+  const maxRow = Math.min(rowIndex, tableNode.childCount - 1);
+  for (let r = 0; r < maxRow; r++) {
+    rowPos += tableNode.child(r).nodeSize;
+  }
+
+  const rowNode = tr.doc.nodeAt(rowPos);
+  if (!rowNode || rowNode.type.name !== 'tableRow') return;
+  // Don't clobber an existing structural revision.
+  if ((rowNode.attrs as Record<string, unknown>)?.trackChange) return;
+
+  const trackChange = {
+    type: 'rowInsert' as const,
+    // Word assigns a distinct w:id per row; the shared revisionGroupId groups
+    // them as one logical change.
+    id: uuidv4(),
+    author: user.name || '',
+    authorId: user.id || '',
+    authorEmail: user.email || '',
+    authorImage: user.image || '',
+    date: revision.date,
+    revisionGroupId: revision.revisionGroupId,
+  };
+
+  tr.setNodeMarkup(rowPos, undefined, {
+    ...(rowNode.attrs as Record<string, unknown>),
+    trackChange,
+  });
+}
+
 function addColumnToTableForSplit(
   tr: Transaction,
   tablePos: number,
@@ -1368,6 +1437,10 @@ export function tablesInsertRowAdapter(
     const position = normalizedAny.position ?? 'below';
     const schema = editor.state.schema;
 
+    // One shared revision identity for all rows inserted by this call, so the
+    // structural enumerator can group them as a single logical change.
+    const revision = mode === 'tracked' ? { revisionGroupId: uuidv4(), date: new Date().toISOString() } : null;
+
     for (let i = 0; i < count; i++) {
       // Re-read the table from the (possibly modified) transaction
       const currentTableNode = tr.doc.nodeAt(tablePos);
@@ -1386,10 +1459,18 @@ export function tablesInsertRowAdapter(
       if (!didInsertRow) {
         return toTableFailure('INVALID_TARGET', 'Row insertion could not be applied.');
       }
+
+      // In tracked mode, stamp the inserted row with a structural revision
+      // (rowInsert) so it exports as a tracked insertion (`<w:ins>`). We stamp
+      // directly rather than relying on the trackedTransaction pipeline because
+      // the inline overlap compiler cannot represent tableRow insert steps. See
+      // stampInsertedRowTrackChange for the in-app decidability caveat.
+      if (revision) {
+        stampInsertedRowTrackChange(tr, tablePos, insertIdx, editor, revision);
+      }
     }
 
-    if (mode === 'tracked') applyTrackedMutationMeta(tr);
-    else applyDirectMutationMeta(tr);
+    applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
     return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));
@@ -1407,10 +1488,10 @@ export function tablesDeleteRowAdapter(
   input: TablesDeleteRowInput,
   options?: MutationOptions,
 ): TableMutationResult {
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: 'tables.deleteRow' });
-  }
+  // Row-level structural deletion has no decidable tracked-change
+  // representation in the review model; reject tracked mode rather than
+  // silently deleting the row untracked (data loss in suggesting mode).
+  rejectTrackedMode('tables.deleteRow', options);
 
   const resolved = resolveRowLocator(editor, input as RowLocatorFields, 'tables.deleteRow');
   const { table, rowIndex, rowNode, rowPos } = resolved;
@@ -1461,8 +1542,7 @@ export function tablesDeleteRowAdapter(
       }
     }
 
-    if (mode === 'tracked') applyTrackedMutationMeta(tr);
-    else applyDirectMutationMeta(tr);
+    applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
     return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));
@@ -1647,10 +1727,10 @@ export function tablesInsertColumnAdapter(
   input: TablesInsertColumnInput,
   options?: MutationOptions,
 ): TableMutationResult {
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: 'tables.insertColumn' });
-  }
+  // Column structure changes have no tracked-change representation (OOXML
+  // tracks rows, not columns); reject tracked mode rather than silently
+  // applying the column insert untracked.
+  rejectTrackedMode('tables.insertColumn', options);
 
   // Resolve shorthand to a concrete columnIndex + left/right before
   // delegating to the column locator (which requires columnIndex). Two cases:
@@ -1709,8 +1789,7 @@ export function tablesInsertColumnAdapter(
       }
     }
 
-    if (mode === 'tracked') applyTrackedMutationMeta(tr);
-    else applyDirectMutationMeta(tr);
+    applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
     return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));
@@ -1728,10 +1807,10 @@ export function tablesDeleteColumnAdapter(
   input: TablesDeleteColumnInput,
   options?: MutationOptions,
 ): TableMutationResult {
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: 'tables.deleteColumn' });
-  }
+  // Column structure changes have no tracked-change representation (OOXML
+  // tracks rows, not columns); reject tracked mode rather than silently
+  // deleting the column untracked (data loss in suggesting mode).
+  rejectTrackedMode('tables.deleteColumn', options);
 
   const resolved = resolveColumnLocator(editor, input, 'tables.deleteColumn');
   const { table, columnIndex, columnCount } = resolved;
@@ -1761,8 +1840,7 @@ export function tablesDeleteColumnAdapter(
       }
     }
 
-    if (mode === 'tracked') applyTrackedMutationMeta(tr);
-    else applyDirectMutationMeta(tr);
+    applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
     return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));

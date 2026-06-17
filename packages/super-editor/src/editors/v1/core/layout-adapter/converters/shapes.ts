@@ -13,7 +13,6 @@ import type {
   TextboxDrawing,
   VectorShapeDrawing,
   ShapeGroupDrawing,
-  ImageAnchor,
   CustomGeometryData,
   SourceAnchor,
   ShapeTextContent,
@@ -46,6 +45,7 @@ import {
   ptToPx,
 } from '../utilities.js';
 import { getLastParagraphFont } from './paragraph.js';
+import { normalizeGraphicAnchor } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -53,11 +53,6 @@ import { getLastParagraphFont } from './paragraph.js';
 
 const WRAP_TYPES = new Set(['None', 'Square', 'Tight', 'Through', 'TopAndBottom', 'Inline']);
 const WRAP_TEXT_VALUES = new Set(['bothSides', 'left', 'right', 'largest']);
-const H_RELATIVE_VALUES = new Set(['column', 'page', 'margin']);
-const V_RELATIVE_VALUES = new Set(['paragraph', 'page', 'margin']);
-const H_ALIGN_VALUES = new Set(['left', 'center', 'right']);
-const V_ALIGN_VALUES = new Set(['top', 'center', 'bottom']);
-
 // ============================================================================
 // Helper Functions - Wrap & Anchor Normalization
 // ============================================================================
@@ -453,112 +448,6 @@ const normalizeWrap = (value: unknown): ImageBlock['wrap'] | undefined => {
 };
 
 /**
- * Normalize anchor relative positioning value
- *
- * @param value - Raw relative positioning value
- * @param allowed - Set of allowed values
- * @returns Valid relative position string or undefined if invalid
- *
- * @example
- * ```typescript
- * normalizeAnchorRelative('column', H_RELATIVE_VALUES) // => 'column'
- * normalizeAnchorRelative('invalid', H_RELATIVE_VALUES) // => undefined
- * ```
- */
-const normalizeAnchorRelative = (value: unknown, allowed: Set<string>): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  return allowed.has(value) ? value : undefined;
-};
-
-/**
- * Normalize anchor alignment value
- *
- * @param value - Raw alignment value
- * @param allowed - Set of allowed alignment values
- * @returns Valid alignment string or undefined if invalid
- *
- * @example
- * ```typescript
- * normalizeAnchorAlign('center', H_ALIGN_VALUES) // => 'center'
- * normalizeAnchorAlign('invalid', H_ALIGN_VALUES) // => undefined
- * ```
- */
-const normalizeAnchorAlign = (value: unknown, allowed: Set<string>): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  return allowed.has(value) ? value : undefined;
-};
-
-/**
- * Normalize anchor data from OOXML attributes
- *
- * @param value - Raw anchor data object
- * @param attrs - Node attributes for fallback values
- * @param wrapBehindDoc - Optional behindDoc value from wrap config
- * @returns Normalized anchor configuration, or undefined if no anchor data present
- *
- * @example
- * ```typescript
- * normalizeAnchorData(
- *   { hRelativeFrom: 'column', vRelativeFrom: 'paragraph', offsetH: 50 },
- *   {},
- *   false
- * ) // => { isAnchored: true, hRelativeFrom: 'column', vRelativeFrom: 'paragraph', offsetH: 50 }
- *
- * normalizeAnchorData(null, { isAnchor: true }, undefined)
- * // => { isAnchored: true }
- * ```
- */
-const normalizeAnchorData = (
-  value: unknown,
-  attrs: Record<string, unknown>,
-  wrapBehindDoc?: boolean,
-): ImageAnchor | undefined => {
-  const raw = isPlainObject(value) ? value : undefined;
-  const marginOffset = isPlainObject(attrs.marginOffset) ? attrs.marginOffset : undefined;
-  const simplePos = isPlainObject(attrs.simplePos) ? attrs.simplePos : undefined;
-  const originalAttrs = isPlainObject(attrs.originalAttributes) ? attrs.originalAttributes : undefined;
-  const isAnchored = attrs.isAnchor === true || Boolean(raw);
-
-  const anchor: ImageAnchor = {};
-  if (isAnchored) {
-    anchor.isAnchored = true;
-  }
-
-  const hRelative = normalizeAnchorRelative(raw?.hRelativeFrom, H_RELATIVE_VALUES);
-  if (hRelative) anchor.hRelativeFrom = hRelative as ImageAnchor['hRelativeFrom'];
-
-  const vRelative = normalizeAnchorRelative(raw?.vRelativeFrom, V_RELATIVE_VALUES);
-  if (vRelative) anchor.vRelativeFrom = vRelative as ImageAnchor['vRelativeFrom'];
-
-  const alignH = normalizeAnchorAlign(raw?.alignH, H_ALIGN_VALUES);
-  if (alignH) anchor.alignH = alignH as ImageAnchor['alignH'];
-
-  const alignV = normalizeAnchorAlign(raw?.alignV, V_ALIGN_VALUES);
-  if (alignV) anchor.alignV = alignV as ImageAnchor['alignV'];
-
-  const offsetH = pickNumber(marginOffset?.horizontal ?? marginOffset?.left ?? raw?.offsetH ?? simplePos?.x);
-  if (offsetH != null) anchor.offsetH = offsetH;
-
-  const offsetV = pickNumber(marginOffset?.top ?? marginOffset?.vertical ?? raw?.offsetV ?? simplePos?.y);
-  if (offsetV != null) anchor.offsetV = offsetV;
-
-  const behindDoc = toBoolean(raw?.behindDoc ?? wrapBehindDoc ?? originalAttrs?.behindDoc);
-  if (behindDoc != null) anchor.behindDoc = behindDoc;
-
-  const hasData =
-    anchor.isAnchored ||
-    anchor.hRelativeFrom != null ||
-    anchor.vRelativeFrom != null ||
-    anchor.alignH != null ||
-    anchor.alignV != null ||
-    anchor.offsetH != null ||
-    anchor.offsetV != null ||
-    anchor.behindDoc != null;
-
-  return hasData ? anchor : undefined;
-};
-
-/**
  * Build a DrawingBlock from normalized shape attributes
  *
  * This helper eliminates code duplication across all shape converters by
@@ -605,7 +494,11 @@ export const buildDrawingBlock = (
     );
   }
   const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
-  const baseAnchor = normalizeAnchorData(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
+  const baseAnchor = normalizeGraphicAnchor({
+    anchorData: rawAttrs.anchorData,
+    attrs: rawAttrs,
+    wrapBehindDoc: normalizedWrap?.behindDoc,
+  });
   const pos = positions.get(node);
   const attrsWithPm: Record<string, unknown> = { ...rawAttrs };
   if (pos) {

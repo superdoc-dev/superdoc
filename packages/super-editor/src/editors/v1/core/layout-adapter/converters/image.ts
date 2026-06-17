@@ -4,7 +4,7 @@
  * Handles conversion of ProseMirror image nodes to ImageBlocks
  */
 
-import type { ImageBlock, BoxSpacing, ImageAnchor, SourceAnchor } from '@superdoc/contracts';
+import type { ImageBlock, BoxSpacing, SourceAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
@@ -15,7 +15,9 @@ import {
   resolveFloatingZIndex,
   readImageHyperlink,
   mergeWrapDistancesFromPadding,
+  toBoolean,
 } from '../utilities.js';
+import { normalizeGraphicAnchor } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -23,11 +25,6 @@ import {
 
 const WRAP_TYPES = new Set(['None', 'Square', 'Tight', 'Through', 'TopAndBottom', 'Inline']);
 const WRAP_TEXT_VALUES = new Set(['bothSides', 'left', 'right', 'largest']);
-const H_RELATIVE_VALUES = new Set(['column', 'page', 'margin']);
-const V_RELATIVE_VALUES = new Set(['paragraph', 'page', 'margin']);
-const H_ALIGN_VALUES = new Set(['left', 'center', 'right']);
-const V_ALIGN_VALUES = new Set(['top', 'center', 'bottom']);
-
 // ============================================================================
 // Helper Functions - Type Checking
 // ============================================================================
@@ -96,21 +93,6 @@ const normalizePolygon = (value: unknown): number[][] | undefined => {
   return polygon.length > 0 ? polygon : undefined;
 };
 
-const toBoolean = (value: unknown): boolean | undefined => {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') {
-    if (value === 1) return true;
-    if (value === 0) return false;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === '1' || normalized === 'true') return true;
-    if (normalized === '0' || normalized === 'false') return false;
-  }
-  return undefined;
-};
-
 const normalizeWrap = (value: unknown): ImageBlock['wrap'] | undefined => {
   if (!isPlainObject(value)) {
     return undefined;
@@ -151,66 +133,6 @@ const normalizeWrap = (value: unknown): ImageBlock['wrap'] | undefined => {
   }
 
   return wrap;
-};
-
-const normalizeAnchorRelative = (value: unknown, allowed: Set<string>): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  return allowed.has(value) ? value : undefined;
-};
-
-const normalizeAnchorAlign = (value: unknown, allowed: Set<string>): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  return allowed.has(value) ? value : undefined;
-};
-
-const normalizeAnchorData = (
-  value: unknown,
-  attrs: Record<string, unknown>,
-  wrapBehindDoc?: boolean,
-): ImageAnchor | undefined => {
-  const raw = isPlainObject(value) ? value : undefined;
-  const marginOffset = isPlainObject(attrs.marginOffset) ? attrs.marginOffset : undefined;
-  const simplePos = isPlainObject(attrs.simplePos) ? attrs.simplePos : undefined;
-  const originalAttrs = isPlainObject(attrs.originalAttributes) ? attrs.originalAttributes : undefined;
-  const isAnchored = attrs.isAnchor === true || Boolean(raw);
-
-  const anchor: ImageAnchor = {};
-  if (isAnchored) {
-    anchor.isAnchored = true;
-  }
-
-  const hRelative = normalizeAnchorRelative(raw?.hRelativeFrom, H_RELATIVE_VALUES);
-  if (hRelative) anchor.hRelativeFrom = hRelative as ImageAnchor['hRelativeFrom'];
-
-  const vRelative = normalizeAnchorRelative(raw?.vRelativeFrom, V_RELATIVE_VALUES);
-  if (vRelative) anchor.vRelativeFrom = vRelative as ImageAnchor['vRelativeFrom'];
-
-  const alignH = normalizeAnchorAlign(raw?.alignH, H_ALIGN_VALUES);
-  if (alignH) anchor.alignH = alignH as ImageAnchor['alignH'];
-
-  const alignV = normalizeAnchorAlign(raw?.alignV, V_ALIGN_VALUES);
-  if (alignV) anchor.alignV = alignV as ImageAnchor['alignV'];
-
-  const offsetH = pickNumber(marginOffset?.horizontal ?? marginOffset?.left ?? raw?.offsetH ?? simplePos?.x);
-  if (offsetH != null) anchor.offsetH = offsetH;
-
-  const offsetV = pickNumber(marginOffset?.top ?? marginOffset?.vertical ?? raw?.offsetV ?? simplePos?.y);
-  if (offsetV != null) anchor.offsetV = offsetV;
-
-  const behindDoc = toBoolean(raw?.behindDoc ?? wrapBehindDoc ?? originalAttrs?.behindDoc);
-  if (behindDoc != null) anchor.behindDoc = behindDoc;
-
-  const hasData =
-    anchor.isAnchored ||
-    anchor.hRelativeFrom != null ||
-    anchor.vRelativeFrom != null ||
-    anchor.alignH != null ||
-    anchor.alignV != null ||
-    anchor.offsetH != null ||
-    anchor.offsetV != null ||
-    anchor.behindDoc != null;
-
-  return hasData ? anchor : undefined;
 };
 
 // ============================================================================
@@ -258,7 +180,11 @@ export function imageNodeToBlock(
   if (normalizedWrap) {
     mergeWrapDistancesFromPadding(normalizedWrap, toBoxSpacing(attrs.padding as Record<string, unknown> | undefined));
   }
-  let anchor = normalizeAnchorData(attrs.anchorData, attrs, normalizedWrap?.behindDoc);
+  let anchor = normalizeGraphicAnchor({
+    anchorData: attrs.anchorData,
+    attrs,
+    wrapBehindDoc: normalizedWrap?.behindDoc,
+  });
   if (!anchor && normalizedWrap) {
     anchor = { isAnchored: true };
     if (normalizedWrap.behindDoc != null) {

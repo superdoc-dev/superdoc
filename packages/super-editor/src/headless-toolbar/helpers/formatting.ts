@@ -1,6 +1,7 @@
 import { parseSizeUnit } from '../../editors/v1/core/utilities/parseSizeUnit.js';
 import { isNegatedMark } from '../../editors/v1/components/toolbar/format-negation.js';
 import { getActiveFormatting } from '../../editors/v1/core/helpers/getActiveFormatting.js';
+import { getSelectionFormattingState } from '../../editors/v1/core/helpers/getMarksFromSelection.js';
 import { getFileOpener, processAndInsertImageFile } from '../../editors/v1/extensions/image/imageHelpers/index.js';
 import { TextSelection, Selection } from 'prosemirror-state';
 import { getCurrentResolvedParagraphProperties, isFieldAnnotationSelection, resolveStateEditor } from './context.js';
@@ -84,6 +85,14 @@ export const hasNegatedFormattingMark = (formatting: FormattingEntry[], markName
   const rawActiveMark = formatting.find((mark) => mark.name === markName);
   if (!rawActiveMark || !hasFormattingAttrs(rawActiveMark)) return false;
   return isNegatedMark(rawActiveMark.name, rawActiveMark.attrs);
+};
+
+const hasMixedRunProperty = (stateEditor: any, propertyName: string) => {
+  const selection = stateEditor?.state?.selection;
+  if (!selection || selection.empty !== false) return false;
+
+  const formattingState = getSelectionFormattingState(stateEditor.state, stateEditor);
+  return Boolean(formattingState.mixedRunProperties?.[propertyName]);
 };
 
 type FormatCommandsStorage = {
@@ -257,12 +266,14 @@ export const createFontFamilyStateDeriver =
     const normalizedValues = values.map((value) => normalizeFontFamilyValue(value));
     const uniqueValues = [...new Set(normalizedValues)];
     const hasDirectValue = uniqueValues.length > 0;
+    const hasMixedFontFamily = hasMixedRunProperty(stateEditor, 'fontFamily');
 
     // Note (parity gap): legacy also has an empty-paragraph special-case:
     // const paragraphFontFamily = getParagraphFontFamilyFromProperties
     // item.activate({ fontFamily: paragraphFontFamily });
 
-    const canUseLinkedStyle = !hasDirectValue && isFormattingActivatedFromLinkedStyle(context, 'font-family');
+    const canUseLinkedStyle =
+      !hasDirectValue && !hasMixedFontFamily && isFormattingActivatedFromLinkedStyle(context, 'font-family');
     const paragraphProps = canUseLinkedStyle ? getCurrentResolvedParagraphProperties(context) : null;
     const documentEditor = context?.presentationEditor?.editor ?? context?.editor ?? null;
 
@@ -270,10 +281,10 @@ export const createFontFamilyStateDeriver =
       ? documentEditor?.converter?.linkedStyles?.find((style: any) => style.id === paragraphProps?.styleId)
       : null;
     const linkedStyleValue = normalizeFontFamilyValue(linkedStyle?.definition?.styles?.['font-family']) ?? null;
-    const value = uniqueValues.length === 1 ? uniqueValues[0] : linkedStyleValue;
+    const value = uniqueValues.length === 1 ? uniqueValues[0] : hasMixedFontFamily ? null : linkedStyleValue;
 
     return {
-      active: uniqueValues.length > 0 || linkedStyleValue != null,
+      active: hasMixedFontFamily || uniqueValues.length > 0 || linkedStyleValue != null,
       disabled: false,
       value,
     };

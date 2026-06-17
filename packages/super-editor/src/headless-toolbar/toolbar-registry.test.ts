@@ -340,6 +340,81 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('reports a mixed font-family selection as active with no value', () => {
+    getActiveFormattingMock.mockReturnValueOnce([]);
+
+    const registry = createToolbarRegistry();
+    const state = registry['font-family']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            selection: {
+              empty: false,
+              from: 2,
+              to: 8,
+            },
+            doc: {
+              nodesBetween: vi.fn((from, to, callback) => {
+                callback(
+                  {
+                    isText: true,
+                    text: 'AB',
+                  },
+                  1,
+                );
+                callback(
+                  {
+                    isText: true,
+                    text: 'CD',
+                  },
+                  5,
+                );
+              }),
+              resolve: vi.fn((pos) => ({
+                depth: 2,
+                marks: vi.fn(() => []),
+                node: vi.fn((depth) => {
+                  if (depth === 2) {
+                    return {
+                      type: { name: 'run' },
+                      attrs: {
+                        runProperties:
+                          pos === 2 ? { fontFamily: { ascii: 'Aptos' } } : { fontFamily: { ascii: 'Times New Roman' } },
+                      },
+                    };
+                  }
+                  if (depth === 1) {
+                    return {
+                      type: { name: 'paragraph' },
+                      attrs: {},
+                      content: { size: 4 },
+                    };
+                  }
+                  return { type: { name: 'doc' }, attrs: {} };
+                }),
+              })),
+            },
+            schema: {
+              marks: {},
+            },
+          },
+          converter: {
+            convertedXml: {},
+          },
+          storage: {},
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: null,
+    });
+  });
+
   it('derives font-family value from linked style when no direct fontFamily mark is active', () => {
     getActiveFormattingMock.mockReturnValueOnce([]);
 

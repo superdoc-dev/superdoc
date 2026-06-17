@@ -62,6 +62,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
       resolvedRunProperties: {},
       inlineRunProperties: {},
       styleRunProperties: {},
+      mixedRunProperties: null,
     };
   }
 
@@ -86,6 +87,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
+    mixedRunProperties: null,
   };
 }
 
@@ -109,9 +111,12 @@ export function getFormattingStateForRange(state, from, to, editor) {
 }
 
 function aggregateFormattingSegments(state, editor, segments) {
-  const resolvedRunProperties = intersectRunProperties(segments.map((segment) => segment.resolvedRunProperties));
-  const inlineRunProperties = intersectRunProperties(segments.map((segment) => segment.inlineRunProperties));
-  const styleRunProperties = intersectRunProperties(segments.map((segment) => segment.styleRunProperties));
+  const resolvedRunPropertiesList = segments.map((segment) => segment.resolvedRunProperties);
+  const inlineRunPropertiesList = segments.map((segment) => segment.inlineRunProperties);
+  const styleRunPropertiesList = segments.map((segment) => segment.styleRunProperties);
+  const resolvedRunProperties = intersectRunProperties(resolvedRunPropertiesList);
+  const inlineRunProperties = intersectRunProperties(inlineRunPropertiesList);
+  const styleRunProperties = intersectRunProperties(styleRunPropertiesList);
   const resolvedMarks = createMarksFromRunProperties(state, resolvedRunProperties, editor);
   const inlineMarks = createMarksFromRunProperties(state, inlineRunProperties, editor);
 
@@ -121,6 +126,7 @@ function aggregateFormattingSegments(state, editor, segments) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
+    mixedRunProperties: getMixedRunProperties(resolvedRunPropertiesList),
   };
 }
 
@@ -148,6 +154,23 @@ function intersectRunProperties(runPropertiesList) {
   });
 
   return Object.keys(intersection).length ? intersection : null;
+}
+
+function getMixedRunProperties(runPropertiesList) {
+  const filtered = runPropertiesList.filter((props) => props && typeof props === 'object');
+  if (filtered.length <= 1) return null;
+
+  const keys = new Set(filtered.flatMap((props) => Object.keys(props)));
+  const mixed = {};
+  keys.forEach((key) => {
+    const values = filtered.map((props) => (Object.prototype.hasOwnProperty.call(props, key) ? props[key] : undefined));
+    const first = JSON.stringify(values[0]);
+    if (values.some((value) => JSON.stringify(value) !== first)) {
+      mixed[key] = true;
+    }
+  });
+
+  return Object.keys(mixed).length ? mixed : null;
 }
 
 /**

@@ -877,6 +877,21 @@ describe('updateToolbarState', () => {
       expect(item.activate).toHaveBeenCalledWith({}, true);
     });
 
+    it('activates fontFamily with isMultiple flag when snapshot reports active without a value (mixed selection)', () => {
+      const item = buildItem('fontFamily', { defaultLabel: { value: 'Arial' } });
+      toolbar.toolbarItems = [item];
+      toolbar.snapshot = {
+        commands: {
+          'document-mode': { value: 'editing' },
+          'font-family': { active: true, value: null, disabled: false },
+        },
+      };
+
+      toolbar.updateToolbarState();
+      expect(item.activate).toHaveBeenCalledWith({}, true);
+      expect(item.deactivate).not.toHaveBeenCalled();
+    });
+
     it('disables tableActions when every table command is disabled', () => {
       const item = buildItem('tableActions', { disabled: { value: false } });
       toolbar.toolbarItems = [item];

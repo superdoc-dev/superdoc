@@ -304,6 +304,52 @@ describe('getMarksFromSelection', () => {
       expect(result.inlineRunProperties).toEqual({ bold: true });
     });
 
+    it('marks fontFamily as mixed when a range crosses runs with different fonts', () => {
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [
+          runSchema.node('run', { runProperties: { fontFamily: { ascii: 'Aptos' } } }, [runSchema.text('AB')]),
+          runSchema.node('run', { runProperties: { fontFamily: { ascii: 'Times New Roman' } } }, [
+            runSchema.text('CD'),
+          ]),
+        ]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      const rangeState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 2, 8)));
+
+      const result = getSelectionFormattingState(rangeState, { converter: { convertedXml: {} } });
+
+      expect(result.resolvedRunProperties?.fontFamily).toBeUndefined();
+      expect(result.mixedRunProperties).toEqual({ fontFamily: true });
+    });
+
+    it('marks fontFamily as mixed when selected runs differ only by cs font metadata', () => {
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [
+          runSchema.node(
+            'run',
+            { runProperties: { fontFamily: { ascii: 'Times New Roman', hAnsi: 'Times New Roman' } } },
+            [runSchema.text('AB')],
+          ),
+          runSchema.node(
+            'run',
+            {
+              runProperties: {
+                fontFamily: { ascii: 'Times New Roman', hAnsi: 'Times New Roman', cs: 'Times New Roman' },
+              },
+            },
+            [runSchema.text('CD')],
+          ),
+        ]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      const rangeState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 2, 8)));
+
+      const result = getSelectionFormattingState(rangeState, { converter: { convertedXml: {} } });
+
+      expect(result.resolvedRunProperties?.fontFamily).toBeUndefined();
+      expect(result.mixedRunProperties).toEqual({ fontFamily: true });
+    });
+
     it('normalizes empty nodeAfter runProperties to null and falls back to cursor marks', () => {
       const testDoc = runSchema.node('doc', null, [
         runSchema.node('paragraph', null, [runSchema.node('run', { runProperties: {} }, [runSchema.text('Hello')])]),

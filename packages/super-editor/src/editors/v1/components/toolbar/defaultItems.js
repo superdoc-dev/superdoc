@@ -65,7 +65,13 @@ export const makeDefaultItems = ({
       ariaLabel: 'Font family',
     },
     options: fontOptions,
-    onActivate: ({ fontFamily }) => {
+    onActivate: ({ fontFamily } = {}, isMultiple = false) => {
+      if (isMultiple) {
+        fontButton.label.value = '';
+        fontButton.selectedValue.value = '';
+        return;
+      }
+
       if (!fontFamily) return;
       fontFamily = fontFamily.split(',')[0]; // in case of fonts with fallbacks
       fontButton.label.value = fontFamily;

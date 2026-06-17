@@ -707,6 +707,10 @@ export class SuperToolbar extends EventEmitter {
     return Boolean(commandState?.active) && commandState?.value == null;
   }
 
+  #isFontFamilyMixedState(commandState) {
+    return Boolean(commandState?.active) && commandState?.value == null;
+  }
+
   #applyHeadlessState(item) {
     if (item.name.value === 'tableActions') {
       const tableActionStates = TABLE_ACTION_COMMAND_IDS.map((commandId) => this.snapshot?.commands?.[commandId]);
@@ -748,6 +752,11 @@ export class SuperToolbar extends EventEmitter {
       fontFamily: () => {
         if (commandState?.value != null) {
           item.activate({ fontFamily: commandState.value });
+          return;
+        }
+
+        if (this.#isFontFamilyMixedState(commandState)) {
+          item.activate({}, true);
           return;
         }
 

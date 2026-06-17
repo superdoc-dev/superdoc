@@ -158,6 +158,86 @@ const makeBlockSdtState = (lockMode: string) => {
   return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, findTextPos(doc, 'Block field') + 1)));
 };
 
+const textStyleFontSchema = new Schema({
+  nodes: {
+    doc: { content: 'paragraph+' },
+    paragraph: {
+      content: 'text*',
+      group: 'block',
+      attrs: { paragraphProperties: { default: null } },
+      toDOM: () => ['p', 0],
+    },
+    text: { group: 'inline' },
+  },
+  marks: {
+    textStyle: {
+      attrs: { fontFamily: { default: null } },
+      toDOM: () => ['span', 0],
+    },
+  },
+});
+
+const runFontSchema = new Schema({
+  nodes: {
+    doc: { content: 'paragraph+' },
+    paragraph: {
+      content: 'inline*',
+      group: 'block',
+      attrs: { paragraphProperties: { default: null } },
+      toDOM: () => ['p', 0],
+    },
+    run: {
+      content: 'text*',
+      group: 'inline',
+      inline: true,
+      attrs: { runProperties: { default: null } },
+      toDOM: () => ['span', 0],
+    },
+    text: { group: 'inline' },
+  },
+  marks: {
+    link: {
+      attrs: { href: { default: null } },
+      toDOM: () => ['a', 0],
+    },
+    textStyle: {
+      attrs: { fontFamily: { default: null }, csFontFamily: { default: null } },
+      toDOM: () => ['span', 0],
+    },
+  },
+});
+
+const fontFamilyObject = (name: string) => ({ ascii: name, eastAsia: name, hAnsi: name, cs: name });
+
+const selectTextRange = (schema: Schema, doc: any, from: number, to: number) => {
+  const baseState = EditorState.create({ schema, doc });
+  return baseState.apply(baseState.tr.setSelection(TextSelection.create(doc, from, to)));
+};
+
+const getFontFamilyToolbarState = (state: EditorState, translatedLinkedStyles: Record<string, any> = {}) => {
+  const registry = createToolbarRegistry();
+  return registry['font-family']?.state({
+    context: {
+      ...createContext(),
+      editor: {
+        state,
+        converter: {
+          convertedXml: {},
+          translatedNumbering: {},
+          translatedLinkedStyles: {
+            docDefaults: { runProperties: {}, paragraphProperties: {} },
+            latentStyles: {},
+            styles: {},
+            ...translatedLinkedStyles,
+          },
+        },
+        storage: {},
+      } as any,
+    },
+    superdoc: {},
+  });
+};
+
 describe('createToolbarRegistry', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -418,62 +498,103 @@ describe('createToolbarRegistry', () => {
   it('reports mixed textStyle font-family marks as active with no value', () => {
     getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Arial' } }]);
 
-    const registry = createToolbarRegistry();
-    const state = registry['font-family']?.state({
-      context: {
-        ...createContext(),
-        editor: {
-          state: {
-            selection: {
-              empty: false,
-              from: 1,
-              to: 12,
-            },
-            doc: {
-              nodesBetween: vi.fn((_from, _to, callback) => {
-                callback(
-                  {
-                    isText: true,
-                    text: 'Times',
-                    marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Times New Roman' } }],
-                  },
-                  1,
-                );
-                callback(
-                  {
-                    isText: true,
-                    text: 'Arial',
-                    marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Arial' } }],
-                  },
-                  7,
-                );
-              }),
-              resolve: vi.fn(() => ({
-                depth: 1,
-                marks: vi.fn(() => []),
-                node: vi.fn((depth) =>
-                  depth === 1
-                    ? {
-                        type: { name: 'paragraph' },
-                        attrs: {},
-                        content: { size: 11 },
-                      }
-                    : { type: { name: 'doc' }, attrs: {} },
-                ),
-              })),
-            },
-            schema: {
-              marks: {},
-            },
-          },
-          converter: {
-            convertedXml: {},
-          },
-          storage: {},
-        } as any,
-      },
-      superdoc: {},
+    const times = textStyleFontSchema.marks.textStyle.create({ fontFamily: 'Times New Roman' });
+    const arial = textStyleFontSchema.marks.textStyle.create({ fontFamily: 'Arial' });
+    const doc = textStyleFontSchema.node('doc', null, [
+      textStyleFontSchema.node('paragraph', null, [
+        textStyleFontSchema.text('Times', [times]),
+        textStyleFontSchema.text(' Arial', [arial]),
+      ]),
+    ]);
+    const editorState = selectTextRange(textStyleFontSchema, doc, 1, doc.content.size - 1);
+    const state = getFontFamilyToolbarState(editorState);
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: null,
     });
+  });
+
+  it('keeps a direct font-family value when unmarked text resolves to the same default font', () => {
+    getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Arial' } }]);
+
+    const fontFamily = fontFamilyObject('Arial');
+    const arial = textStyleFontSchema.marks.textStyle.create({ fontFamily: 'Arial' });
+    const doc = textStyleFontSchema.node('doc', null, [
+      textStyleFontSchema.node('paragraph', null, [
+        textStyleFontSchema.text('Direct', [arial]),
+        textStyleFontSchema.text(' Plain'),
+      ]),
+    ]);
+    const editorState = selectTextRange(textStyleFontSchema, doc, 1, doc.content.size - 1);
+    const state = getFontFamilyToolbarState(editorState, {
+      docDefaults: { runProperties: { fontFamily }, paragraphProperties: {} },
+      styles: {
+        Normal: { default: true, runProperties: { fontFamily } },
+      },
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'Arial',
+    });
+  });
+
+  it('keeps a direct font-family value when uniform direct marks override link run metadata', () => {
+    getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Arial' } }]);
+
+    const desiredFont = runFontSchema.marks.textStyle.create({ fontFamily: 'Courier New, monospace' });
+    const link = runFontSchema.marks.link.create({ href: 'https://example.com/one' });
+    const doc = runFontSchema.node('doc', null, [
+      runFontSchema.node('paragraph', null, [
+        runFontSchema.node('run', { runProperties: { fontFamily: { ascii: 'Arial' } } }, [
+          runFontSchema.text('Before 6.5%', [desiredFont]),
+        ]),
+        runFontSchema.node(
+          'run',
+          { runProperties: { styleId: 'Hyperlink', fontFamily: { ascii: 'Arial', cs: 'Arial' } } },
+          [runFontSchema.text('[1]', [link, desiredFont])],
+        ),
+        runFontSchema.node('run', { runProperties: { fontFamily: { ascii: 'Arial' } } }, [
+          runFontSchema.text(' after', [desiredFont]),
+        ]),
+      ]),
+    ]);
+    const editorState = selectTextRange(runFontSchema, doc, 2, doc.content.size - 1);
+    const state = getFontFamilyToolbarState(editorState);
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'Courier New',
+    });
+  });
+
+  it('reports no font-family value when hyperlink and surrounding text differ by cs font metadata', () => {
+    getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Times New Roman' } }]);
+
+    const times = runFontSchema.marks.textStyle.create({ fontFamily: 'Times New Roman, serif' });
+    const timesWithBodyCs = runFontSchema.marks.textStyle.create({
+      fontFamily: 'Times New Roman, serif',
+      csFontFamily: 'Times New Roman (Body CS), Times New Roman, serif',
+    });
+    const link = runFontSchema.marks.link.create({ href: 'https://example.com/one' });
+    const doc = runFontSchema.node('doc', null, [
+      runFontSchema.node('paragraph', null, [
+        runFontSchema.node('run', { runProperties: { fontFamily: { ascii: 'Times New Roman' } } }, [
+          runFontSchema.text('Before 6.5%', [timesWithBodyCs]),
+        ]),
+        runFontSchema.node(
+          'run',
+          { runProperties: { styleId: 'Hyperlink', fontFamily: { ascii: 'Times New Roman', cs: 'Times New Roman' } } },
+          [runFontSchema.text('[1]', [link, times])],
+        ),
+      ]),
+    ]);
+    const editorState = selectTextRange(runFontSchema, doc, 2, doc.content.size - 1);
+    const state = getFontFamilyToolbarState(editorState);
 
     expect(state).toEqual({
       active: true,

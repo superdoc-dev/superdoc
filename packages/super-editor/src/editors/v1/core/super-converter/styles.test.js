@@ -479,6 +479,30 @@ describe('decodeRPrFromMarks', () => {
     });
   });
 
+  it('ignores cleared per-script font attrs when decoding a user-applied fontFamily', () => {
+    const marks = [
+      {
+        type: 'textStyle',
+        attrs: {
+          fontFamily: 'Courier New, monospace',
+          eastAsiaFontFamily: null,
+          csFontFamily: null,
+        },
+      },
+    ];
+
+    const rPr = decodeRPrFromMarks(marks);
+
+    expect(rPr).toEqual({
+      fontFamily: {
+        ascii: 'Courier New',
+        cs: 'Courier New',
+        eastAsia: 'Courier New',
+        hAnsi: 'Courier New',
+      },
+    });
+  });
+
   it('should decode textStyle with textTransform', () => {
     const marks = [{ type: 'textStyle', attrs: { textTransform: 'uppercase' } }];
     const rPr = decodeRPrFromMarks(marks);

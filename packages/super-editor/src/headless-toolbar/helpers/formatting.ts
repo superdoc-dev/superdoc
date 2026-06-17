@@ -87,33 +87,13 @@ export const hasNegatedFormattingMark = (formatting: FormattingEntry[], markName
   return isNegatedMark(rawActiveMark.name, rawActiveMark.attrs);
 };
 
-const hasMixedRunProperty = (stateEditor: any, propertyName: string) => {
-  const selection = stateEditor?.state?.selection;
-  if (!selection || selection.empty !== false) return false;
+const getPrimaryFontFamily = (value: unknown) => {
+  if (typeof value === 'string') return value.split(',')[0].trim();
+  if (!value || typeof value !== 'object') return null;
 
-  const formattingState = getSelectionFormattingState(stateEditor.state, stateEditor);
-  return Boolean(formattingState.mixedRunProperties?.[propertyName]);
-};
-
-const hasMixedTextStyleAttr = (
-  stateEditor: any,
-  attrName: string,
-  normalize: (value: unknown) => unknown = (value) => value,
-) => {
-  const { doc, selection } = stateEditor?.state ?? {};
-  if (!doc || !selection || selection.empty !== false) return false;
-
-  const values: unknown[] = [];
-  doc.nodesBetween(selection.from, selection.to, (node: any) => {
-    if (!node?.isText || !node.text?.length) return;
-    const textStyle = node.marks?.find((mark: any) => mark?.type?.name === 'textStyle');
-    values.push(normalize(textStyle?.attrs?.[attrName] ?? null));
-  });
-
-  if (values.length <= 1) return false;
-
-  const first = JSON.stringify(values[0]);
-  return values.some((value) => JSON.stringify(value) !== first);
+  const fontFamily = value as Record<string, unknown>;
+  const primary = fontFamily.ascii ?? fontFamily.hAnsi ?? fontFamily.eastAsia ?? fontFamily.cs;
+  return typeof primary === 'string' ? primary.split(',')[0].trim() : null;
 };
 
 type FormatCommandsStorage = {
@@ -283,13 +263,18 @@ export const createFontFamilyStateDeriver =
     }
 
     const values = getFormattingAttr(formatting, 'fontFamily', 'fontFamily');
+    const selectionFormattingState =
+      stateEditor?.state?.selection?.empty === false
+        ? getSelectionFormattingState(stateEditor.state, stateEditor)
+        : null;
 
     const normalizedValues = values.map((value) => normalizeFontFamilyValue(value));
     const uniqueValues = [...new Set(normalizedValues)];
     const hasDirectValue = uniqueValues.length > 0;
-    const hasMixedFontFamily =
-      hasMixedRunProperty(stateEditor, 'fontFamily') ||
-      hasMixedTextStyleAttr(stateEditor, 'fontFamily', normalizeFontFamilyValue);
+    const hasMixedFontFamily = Boolean(selectionFormattingState?.mixedRunProperties?.fontFamily);
+    const directSelectionValue = normalizeFontFamilyValue(
+      getPrimaryFontFamily(selectionFormattingState?.directMarkRunProperties?.fontFamily),
+    );
 
     // Note (parity gap): legacy also has an empty-paragraph special-case:
     // const paragraphFontFamily = getParagraphFontFamilyFromProperties
@@ -304,10 +289,12 @@ export const createFontFamilyStateDeriver =
       ? documentEditor?.converter?.linkedStyles?.find((style: any) => style.id === paragraphProps?.styleId)
       : null;
     const linkedStyleValue = normalizeFontFamilyValue(linkedStyle?.definition?.styles?.['font-family']) ?? null;
-    const value = hasMixedFontFamily ? null : uniqueValues.length === 1 ? uniqueValues[0] : linkedStyleValue;
+    const value = hasMixedFontFamily
+      ? null
+      : directSelectionValue || (uniqueValues.length === 1 ? uniqueValues[0] : linkedStyleValue);
 
     return {
-      active: hasMixedFontFamily || uniqueValues.length > 0 || linkedStyleValue != null,
+      active: hasMixedFontFamily || uniqueValues.length > 0 || directSelectionValue != null || linkedStyleValue != null,
       disabled: false,
       value,
     };

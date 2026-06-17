@@ -92,7 +92,13 @@ export const FontFamily = Extension.create({
       setFontFamily:
         (fontFamily) =>
         ({ chain }) => {
-          return chain().setMark('textStyle', { fontFamily }).run();
+          return chain()
+            .setMark('textStyle', {
+              fontFamily,
+              eastAsiaFontFamily: null,
+              csFontFamily: null,
+            })
+            .run();
         },
 
       /**
@@ -105,7 +111,14 @@ export const FontFamily = Extension.create({
       unsetFontFamily:
         () =>
         ({ chain }) => {
-          return chain().setMark('textStyle', { fontFamily: null }).removeEmptyTextStyle().run();
+          return chain()
+            .setMark('textStyle', {
+              fontFamily: null,
+              eastAsiaFontFamily: null,
+              csFontFamily: null,
+            })
+            .removeEmptyTextStyle()
+            .run();
         },
     };
   },

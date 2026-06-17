@@ -32,6 +32,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const context = getParagraphRunContext($pos, editor);
   const currentRunProperties = context?.runProperties || null;
   const cursorMarks = $pos.marks();
+  const directMarkRunProperties = decodeRPrFromMarks(cursorMarks);
   const hasStoredMarks = storedMarks !== null;
   const hasExplicitEmptyStoredMarks = hasStoredMarks && storedMarks.length === 0;
   const resolvedMarks = [];
@@ -62,6 +63,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
       resolvedRunProperties: {},
       inlineRunProperties: {},
       styleRunProperties: {},
+      directMarkRunProperties: {},
       mixedRunProperties: null,
     };
   }
@@ -87,6 +89,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
+    directMarkRunProperties,
     mixedRunProperties: null,
   };
 }
@@ -114,9 +117,11 @@ function aggregateFormattingSegments(state, editor, segments) {
   const resolvedRunPropertiesList = segments.map((segment) => segment.resolvedRunProperties);
   const inlineRunPropertiesList = segments.map((segment) => segment.inlineRunProperties);
   const styleRunPropertiesList = segments.map((segment) => segment.styleRunProperties);
+  const directMarkRunPropertiesList = segments.map((segment) => segment.directMarkRunProperties);
   const resolvedRunProperties = intersectRunProperties(resolvedRunPropertiesList);
   const inlineRunProperties = intersectRunProperties(inlineRunPropertiesList);
   const styleRunProperties = intersectRunProperties(styleRunPropertiesList);
+  const directMarkRunProperties = intersectRunProperties(directMarkRunPropertiesList);
   const resolvedMarks = createMarksFromRunProperties(state, resolvedRunProperties, editor);
   const inlineMarks = createMarksFromRunProperties(state, inlineRunProperties, editor);
 
@@ -126,7 +131,8 @@ function aggregateFormattingSegments(state, editor, segments) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
-    mixedRunProperties: getMixedRunProperties(resolvedRunPropertiesList),
+    directMarkRunProperties,
+    mixedRunProperties: getMixedRunProperties(resolvedRunPropertiesList, directMarkRunPropertiesList),
   };
 }
 
@@ -156,13 +162,17 @@ function intersectRunProperties(runPropertiesList) {
   return Object.keys(intersection).length ? intersection : null;
 }
 
-function getMixedRunProperties(runPropertiesList) {
+function getMixedRunProperties(runPropertiesList, directRunPropertiesList = []) {
   const filtered = runPropertiesList.filter((props) => props && typeof props === 'object');
   if (filtered.length <= 1) return null;
 
   const keys = new Set(filtered.flatMap((props) => Object.keys(props)));
   const mixed = {};
   keys.forEach((key) => {
+    if (key === 'fontFamily' && hasUniformDirectRunProperty(directRunPropertiesList, key)) {
+      return;
+    }
+
     const values = filtered.map((props) => (Object.prototype.hasOwnProperty.call(props, key) ? props[key] : undefined));
     const first = JSON.stringify(values[0]);
     if (values.some((value) => JSON.stringify(value) !== first)) {
@@ -171,6 +181,25 @@ function getMixedRunProperties(runPropertiesList) {
   });
 
   return Object.keys(mixed).length ? mixed : null;
+}
+
+function hasUniformDirectRunProperty(runPropertiesList, propertyName) {
+  return getUniformDirectRunPropertyValue(runPropertiesList, propertyName) !== undefined;
+}
+
+function getUniformDirectRunPropertyValue(runPropertiesList, propertyName) {
+  if (runPropertiesList.length <= 1) return undefined;
+
+  const values = [];
+  for (const props of runPropertiesList) {
+    if (!props || typeof props !== 'object' || !Object.prototype.hasOwnProperty.call(props, propertyName)) {
+      return undefined;
+    }
+    values.push(props[propertyName]);
+  }
+
+  const first = JSON.stringify(values[0]);
+  return values.every((value) => JSON.stringify(value) === first) ? values[0] : undefined;
 }
 
 /**

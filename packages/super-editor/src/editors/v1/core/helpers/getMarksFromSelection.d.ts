@@ -11,6 +11,7 @@ export function getSelectionFormattingState(
   resolvedRunProperties: Record<string, unknown> | null;
   inlineRunProperties: Record<string, unknown> | null;
   styleRunProperties: Record<string, unknown> | null;
+  directMarkRunProperties: Record<string, unknown> | null;
   mixedRunProperties: Record<string, true> | null;
 };
 export function getFormattingStateAtPos(
@@ -28,6 +29,7 @@ export function getFormattingStateAtPos(
   resolvedRunProperties: Record<string, unknown> | null;
   inlineRunProperties: Record<string, unknown> | null;
   styleRunProperties: Record<string, unknown> | null;
+  directMarkRunProperties: Record<string, unknown> | null;
   mixedRunProperties: Record<string, true> | null;
 };
 export function getFormattingStateForRange(
@@ -41,6 +43,7 @@ export function getFormattingStateForRange(
   resolvedRunProperties: Record<string, unknown> | null;
   inlineRunProperties: Record<string, unknown> | null;
   styleRunProperties: Record<string, unknown> | null;
+  directMarkRunProperties: Record<string, unknown> | null;
   mixedRunProperties: Record<string, true> | null;
 };
 export function getInheritedRunProperties(

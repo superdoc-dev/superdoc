@@ -95,6 +95,27 @@ const hasMixedRunProperty = (stateEditor: any, propertyName: string) => {
   return Boolean(formattingState.mixedRunProperties?.[propertyName]);
 };
 
+const hasMixedTextStyleAttr = (
+  stateEditor: any,
+  attrName: string,
+  normalize: (value: unknown) => unknown = (value) => value,
+) => {
+  const { doc, selection } = stateEditor?.state ?? {};
+  if (!doc || !selection || selection.empty !== false) return false;
+
+  const values: unknown[] = [];
+  doc.nodesBetween(selection.from, selection.to, (node: any) => {
+    if (!node?.isText || !node.text?.length) return;
+    const textStyle = node.marks?.find((mark: any) => mark?.type?.name === 'textStyle');
+    values.push(normalize(textStyle?.attrs?.[attrName] ?? null));
+  });
+
+  if (values.length <= 1) return false;
+
+  const first = JSON.stringify(values[0]);
+  return values.some((value) => JSON.stringify(value) !== first);
+};
+
 type FormatCommandsStorage = {
   storedStyle?: unknown;
 };
@@ -266,7 +287,9 @@ export const createFontFamilyStateDeriver =
     const normalizedValues = values.map((value) => normalizeFontFamilyValue(value));
     const uniqueValues = [...new Set(normalizedValues)];
     const hasDirectValue = uniqueValues.length > 0;
-    const hasMixedFontFamily = hasMixedRunProperty(stateEditor, 'fontFamily');
+    const hasMixedFontFamily =
+      hasMixedRunProperty(stateEditor, 'fontFamily') ||
+      hasMixedTextStyleAttr(stateEditor, 'fontFamily', normalizeFontFamilyValue);
 
     // Note (parity gap): legacy also has an empty-paragraph special-case:
     // const paragraphFontFamily = getParagraphFontFamilyFromProperties
@@ -281,7 +304,7 @@ export const createFontFamilyStateDeriver =
       ? documentEditor?.converter?.linkedStyles?.find((style: any) => style.id === paragraphProps?.styleId)
       : null;
     const linkedStyleValue = normalizeFontFamilyValue(linkedStyle?.definition?.styles?.['font-family']) ?? null;
-    const value = uniqueValues.length === 1 ? uniqueValues[0] : hasMixedFontFamily ? null : linkedStyleValue;
+    const value = hasMixedFontFamily ? null : uniqueValues.length === 1 ? uniqueValues[0] : linkedStyleValue;
 
     return {
       active: hasMixedFontFamily || uniqueValues.length > 0 || linkedStyleValue != null,

@@ -415,6 +415,73 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('reports mixed textStyle font-family marks as active with no value', () => {
+    getActiveFormattingMock.mockReturnValueOnce([{ name: 'fontFamily', attrs: { fontFamily: 'Arial' } }]);
+
+    const registry = createToolbarRegistry();
+    const state = registry['font-family']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            selection: {
+              empty: false,
+              from: 1,
+              to: 12,
+            },
+            doc: {
+              nodesBetween: vi.fn((_from, _to, callback) => {
+                callback(
+                  {
+                    isText: true,
+                    text: 'Times',
+                    marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Times New Roman' } }],
+                  },
+                  1,
+                );
+                callback(
+                  {
+                    isText: true,
+                    text: 'Arial',
+                    marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'Arial' } }],
+                  },
+                  7,
+                );
+              }),
+              resolve: vi.fn(() => ({
+                depth: 1,
+                marks: vi.fn(() => []),
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {},
+                        content: { size: 11 },
+                      }
+                    : { type: { name: 'doc' }, attrs: {} },
+                ),
+              })),
+            },
+            schema: {
+              marks: {},
+            },
+          },
+          converter: {
+            convertedXml: {},
+          },
+          storage: {},
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: null,
+    });
+  });
+
   it('derives font-family value from linked style when no direct fontFamily mark is active', () => {
     getActiveFormattingMock.mockReturnValueOnce([]);
 

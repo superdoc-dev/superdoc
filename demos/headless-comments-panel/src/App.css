@@ -1,0 +1,102 @@
+/* Layout */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f1f5f9;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.toolbar {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  min-height: 42px;
+}
+
+/* Start Screen */
+.start-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.start-btn {
+  padding: 12px 24px;
+  background: #3b82f6;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.start-btn:hover {
+  background: #2563eb;
+}
+
+.start-btn.secondary {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.start-btn.secondary:hover {
+  background: #f8fafc;
+}
+
+/* Editor */
+.editor-area {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  scrollbar-width: none;
+}
+
+.editor-area::-webkit-scrollbar {
+  display: none;
+}
+
+.superdoc-container {
+  width: 100%;
+  max-width: 816px;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 480px;
+  background: #f1f5f9;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

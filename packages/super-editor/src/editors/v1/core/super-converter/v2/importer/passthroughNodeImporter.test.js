@@ -54,4 +54,22 @@ describe('passthrough node importer', () => {
     const { nodes } = handlePassthroughNode(createParams(node, { path: [{ name: 'w:p' }] }));
     expect(nodes[0].type).toBe('passthroughInline');
   });
+
+  it('does not attach content to inline passthrough with child text (w:instrText MERGEFIELD)', () => {
+    const node = {
+      name: 'w:instrText',
+      attributes: { 'xml:space': 'preserve' },
+      elements: [{ type: 'text', text: ' MERGEFIELD System_Date ' }],
+    };
+    const handler = vi.fn(() => [{ type: 'text', text: ' MERGEFIELD System_Date ' }]);
+    const params = createParams(node, {
+      path: [{ name: 'w:p' }, { name: 'w:r' }],
+      nodeListHandler: { handler, handlerEntities: [] },
+    });
+    const { nodes } = handlePassthroughNode(params);
+    expect(nodes[0].type).toBe('passthroughInline');
+    expect(nodes[0].attrs.originalName).toBe('w:instrText');
+    expect(nodes[0].attrs.originalXml.elements).toEqual(node.elements);
+    expect(nodes[0].content).toBeUndefined();
+  });
 });

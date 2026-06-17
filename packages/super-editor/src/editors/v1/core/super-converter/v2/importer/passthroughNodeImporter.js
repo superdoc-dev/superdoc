@@ -37,14 +37,18 @@ export const handlePassthroughNode = (params) => {
     originalXml.elements = originalElements;
   }
 
+  const inline = isInlineContext(params.path, node.name);
   const passthroughNode = {
-    type: isInlineContext(params.path, node.name) ? 'passthroughInline' : 'passthroughBlock',
+    type: inline ? 'passthroughInline' : 'passthroughBlock',
     attrs: {
       originalName: node.name,
       originalXml,
     },
     marks: [],
-    content: childContent,
+    // passthroughInline is atom: true with no content expression. Child text (e.g.
+    // w:instrText for MERGEFIELD) must live only in attrs.originalXml; attaching
+    // content makes y-prosemirror drop the node during collab hydration.
+    content: inline ? undefined : childContent,
   };
 
   return {

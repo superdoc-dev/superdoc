@@ -1229,6 +1229,71 @@ describe('date.setValue visual text sync', () => {
   });
 });
 
+describe('checkbox.setState visual glyph sync (block scope)', () => {
+  // Build a block-scope checkbox control (sdtContent wraps a paragraph carrying
+  // the glyph), as produced by stacked Yes/No checkboxes inside a table cell.
+  function makeBlockCheckboxEditor() {
+    return makeSdtEditor(
+      {
+        controlType: 'checkbox',
+        type: 'checkbox',
+        sdtPr: {
+          name: 'w:sdtPr',
+          elements: [
+            {
+              name: 'w14:checkbox',
+              type: 'element',
+              elements: [
+                { name: 'w14:checked', type: 'element', attributes: { 'w14:val': '0' } },
+                {
+                  name: 'w14:checkedState',
+                  type: 'element',
+                  attributes: { 'w14:val': '2612', 'w14:font': 'MS Gothic' },
+                },
+                {
+                  name: 'w14:uncheckedState',
+                  type: 'element',
+                  attributes: { 'w14:val': '2610', 'w14:font': 'MS Gothic' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      [createParagraphNode('☐')],
+    );
+  }
+
+  // setState must rewrite the SDT's visible glyph for block-scope checkboxes, not
+  // only w14:checked; otherwise the box never swaps ☐ -> ☒. The block path can't
+  // use updateStructuredContentById (it builds inline text JSON the block schema
+  // rejects), so the rewrite surfaces as a tr.replaceWith of the inner range.
+  it('rewrites the visible glyph for block-scope checkboxes, not just w14:checked', () => {
+    const editor = makeBlockCheckboxEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.checkbox.setState({ target: SDT_TARGET, checked: true }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
+  });
+
+  it('still writes w14:checked to the checkbox sdtPr child', () => {
+    const editor = makeBlockCheckboxEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.checkbox.setState({ target: SDT_TARGET, checked: true }, { changeMode: 'direct' });
+
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCall = setAttr.mock.calls.find((call: any[]) => call[1] === 'sdtPr');
+    expect(sdtPrCall).toBeDefined();
+    const writtenSdtPr = sdtPrCall?.[2] as { elements?: Array<{ name: string; elements?: any[] }> };
+    const checkboxEl = writtenSdtPr?.elements?.find((el) => el.name === 'w14:checkbox');
+    const checkedEl = checkboxEl?.elements?.find((el: any) => el.name === 'w14:checked');
+    expect(checkedEl?.attributes?.['w14:val']).toBe('1');
+  });
+});
+
 describe('create.contentControl default sdtPr seeding', () => {
   it('seeds checkbox controls with checked state + symbol pair defaults', () => {
     const editor = makeSdtEditor();

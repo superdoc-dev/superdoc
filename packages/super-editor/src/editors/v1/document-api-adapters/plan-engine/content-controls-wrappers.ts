@@ -1452,6 +1452,13 @@ function checkboxSetStateWrapper(
           Boolean(updateCmd(input.target.nodeId, { text: symbol.char, keepTextNodeStyles: true }));
         return visualUpdated || checkboxUpdated;
       }
+    } else if (sdt.kind === 'block') {
+      // Block-scope checkboxes can't reuse the inline branch above: it feeds
+      // updateStructuredContentById a bare text node, which a block SDT's schema
+      // rejects (block content must be wrapped in a paragraph).
+      // Instead use replaceSdtTextContent to swap the glyph.
+      const visualUpdated = replaceSdtTextContent(editor, input.target, symbol.char);
+      return visualUpdated || checkboxUpdated;
     }
 
     return checkboxUpdated;

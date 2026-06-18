@@ -44,12 +44,13 @@ describe('plan.execute failure classification', () => {
     const calls: string[] = [];
     const plan = planWith({}, calls);
     expectPlanValidationError(
-      () => plan.execute({
-        entries: [
-          { operationId: 'templates.apply', input: { source: { kind: 'path', path: '/tmp/goal.docx' } } },
-          { operationId: 'after', input: {} },
-        ],
-      }),
+      () =>
+        plan.execute({
+          entries: [
+            { operationId: 'templates.apply', input: { source: { kind: 'path', path: '/tmp/goal.docx' } } },
+            { operationId: 'after', input: {} },
+          ],
+        }),
       'CAPABILITY_UNAVAILABLE',
       'does not support batching "templates.apply"',
     );
@@ -60,12 +61,13 @@ describe('plan.execute failure classification', () => {
     const calls: string[] = [];
     const plan = planWith({}, calls);
     expectPlanValidationError(
-      () => plan.execute({
-        entries: [
-          { operationId: 'first', input: {} },
-          { operationId: 'plan.execute', input: { entries: [] } },
-        ],
-      }),
+      () =>
+        plan.execute({
+          entries: [
+            { operationId: 'first', input: {} },
+            { operationId: 'plan.execute', input: { entries: [] } },
+          ],
+        }),
       'CAPABILITY_UNAVAILABLE',
       'does not support batching "plan.execute"',
     );
@@ -76,10 +78,11 @@ describe('plan.execute failure classification', () => {
     const calls: string[] = [];
     const plan = planWith({}, calls);
     expectPlanValidationError(
-      () => plan.execute({
-        entries: [{ operationId: 'first', input: {}, captureAs: 'first' }],
-        captureReturns: { first: true } as never,
-      }),
+      () =>
+        plan.execute({
+          entries: [{ operationId: 'first', input: {}, captureAs: 'first' }],
+          captureReturns: { first: true } as never,
+        }),
       'INVALID_INPUT',
       'captureReturns must be "*" or an array of strings',
     );

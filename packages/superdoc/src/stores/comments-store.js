@@ -1843,10 +1843,12 @@ export const useCommentsStore = defineStore('comments', () => {
     const fileType = document?.type ?? null;
     const isBlankV2CommentText = (value) => {
       if (typeof value !== 'string') return true;
-      return value
-        .replace(/<[^>]*>/g, '')
-        .replace(/&nbsp;/gi, ' ')
-        .trim().length === 0;
+      return (
+        value
+          .replace(/<[^>]*>/g, '')
+          .replace(/&nbsp;/gi, ' ')
+          .trim().length === 0
+      );
     };
     const isV2TrackedChangeSidecarCommentInput = (input) => {
       if (!input || input.trackedChange === true) return false;
@@ -1859,7 +1861,7 @@ export const useCommentsStore = defineStore('comments', () => {
     // tracked-change row (TCS Phase 0 §5).
     const activeKey = activeComment.value != null ? String(activeComment.value) : null;
     const previousActiveRow = activeKey
-      ? commentsList.value.find((c) => String(c.commentId) === activeKey) ?? null
+      ? (commentsList.value.find((c) => String(c.commentId) === activeKey) ?? null)
       : null;
     const previousActivePendingMatch =
       previousActiveRow != null &&
@@ -1914,8 +1916,7 @@ export const useCommentsStore = defineStore('comments', () => {
     // Pinia/Vue can hand back distinct proxy wrappers for the same target
     // when an object is referenced from two refs, so identity (`===`) alone
     // is not sufficient — compare on commentId too.
-    const pendingCommentId =
-      pendingComment.value?.commentId != null ? String(pendingComment.value.commentId) : null;
+    const pendingCommentId = pendingComment.value?.commentId != null ? String(pendingComment.value.commentId) : null;
     const isPendingRow = (comment) => {
       if (!comment || !pendingComment.value) return false;
       if (comment === pendingComment.value) return true;
@@ -1990,11 +1991,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
     // Family-scoped active-row clearing: only clear when the active row was
     // a real-comment-family row in this document AND it's no longer present.
-    if (
-      activeWasRealCommentInThisDoc &&
-      activeKey &&
-      !nextList.some((c) => String(c.commentId) === activeKey)
-    ) {
+    if (activeWasRealCommentInThisDoc && activeKey && !nextList.some((c) => String(c.commentId) === activeKey)) {
       clearActiveCommentSelection();
     }
 
@@ -2579,8 +2576,7 @@ export const useCommentsStore = defineStore('comments', () => {
           : comment?.trackedChangeAnchorKey?.startsWith?.('tc::body::')
             ? comment.trackedChangeAnchorKey.slice('tc::body::'.length)
             : null;
-      const wasActiveBeforeDecide =
-        decidedId != null && String(activeComment.value ?? '') === decidedId;
+      const wasActiveBeforeDecide = decidedId != null && String(activeComment.value ?? '') === decidedId;
       const invocation = (async () => {
         try {
           return await (decision === 'accept' ? v2Adapter.accept(comment) : v2Adapter.reject(comment));
@@ -2630,8 +2626,7 @@ export const useCommentsStore = defineStore('comments', () => {
         // `commentsList` still contains the decided tracked-change row.
         resolveLinkedCommentsForTrackedChangeDecision({ superdoc, comment });
 
-        const effectiveDocumentId =
-          v2Adapter.documentId ?? superdoc?.activeEditor?.documentId ?? null;
+        const effectiveDocumentId = v2Adapter.documentId ?? superdoc?.activeEditor?.documentId ?? null;
         reconcileTrackedChangesFromV2({
           superdoc,
           adapter: v2Adapter,
@@ -2645,9 +2640,7 @@ export const useCommentsStore = defineStore('comments', () => {
         // target clears via the adapter helper, which is a no-op when the
         // host's active target was not the decided row.
         const liveIds = new Set(
-          (listResult.items ?? [])
-            .map((item) => (item && item.id != null ? String(item.id) : null))
-            .filter(Boolean),
+          (listResult.items ?? []).map((item) => (item && item.id != null ? String(item.id) : null)).filter(Boolean),
         );
         const decidedStillLive = decidedId != null && liveIds.has(decidedId);
         if (!decidedStillLive) {

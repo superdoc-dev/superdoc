@@ -9,7 +9,7 @@ import {
 import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { FragmentRenderContext } from '../renderer.js';
-import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
+import { BROWSER_DEFAULT_FONT_SIZE, CLASS_NAMES } from '../styles.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { applyLinkAttributes, applyLinkDataset, buildLinkRenderData, enhanceAccessibility } from './links.js';
@@ -98,7 +98,7 @@ export const applyRunStyles = (
     run.kind === 'fieldAnnotation' ||
     run.kind === 'math'
   ) {
-    // Tab, image, lineBreak, break, and fieldAnnotation runs don't have text styling properties
+    // Non-text visual runs don't have text styling properties.
     return;
   }
 
@@ -179,12 +179,13 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
   if (!runToken) {
     return run.text ?? '';
   }
+  const pageNumberFieldFormat = 'pageNumberFieldFormat' in run ? run.pageNumberFieldFormat : undefined;
   if (runToken === 'pageNumber') {
-    if (run.pageNumberFieldFormat) {
+    if (pageNumberFieldFormat) {
       return formatChapterPageNumberText({
         pageComponent: formatPageNumberFieldValue(
           context.displayPageNumber ?? context.pageNumber,
-          run.pageNumberFieldFormat,
+          pageNumberFieldFormat,
         ),
         chapterNumberText: context.pageNumberChapterText,
         chapterSeparator: context.pageNumberChapterSeparator,
@@ -201,8 +202,8 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     return context.pageNumberText ?? String(context.pageNumber);
   }
   if (runToken === 'totalPageCount') {
-    if (run.pageNumberFieldFormat) {
-      return formatPageNumberFieldValue(context.totalPages || 1, run.pageNumberFieldFormat);
+    if (pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(context.totalPages || 1, pageNumberFieldFormat);
     }
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
@@ -211,8 +212,8 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     if (sectionPageCount == null) {
       return run.text ?? '';
     }
-    if (run.pageNumberFieldFormat) {
-      return formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat);
+    if (pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(sectionPageCount, pageNumberFieldFormat);
     }
     return String(sectionPageCount);
   }
@@ -243,6 +244,7 @@ export const renderTextRun = (
   const linkData = extractLinkData(run);
   const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
   const elem = isActiveLink ? renderContext.doc.createElement('a') : renderContext.doc.createElement('span');
+  elem.classList.add(CLASS_NAMES.textRun);
   const text = resolveRunText(run, context);
   const effectiveText =
     run.bidi?.rtl === true && typeof text === 'string' ? normalizeRtlDateTokenForWordParity(text) : text;

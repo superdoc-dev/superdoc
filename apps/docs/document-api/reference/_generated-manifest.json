@@ -201,6 +201,7 @@
     "apps/docs/document-api/reference/format/paragraph/set-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-keep-options.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-mark-run-props.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-numbering.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-outline-level.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-shading.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-spacing.mdx",
@@ -703,7 +704,8 @@
         "format.paragraph.clearShading",
         "format.paragraph.setMarkRunProps",
         "format.paragraph.setDirection",
-        "format.paragraph.clearDirection"
+        "format.paragraph.clearDirection",
+        "format.paragraph.setNumbering"
       ],
       "pagePath": "apps/docs/document-api/reference/format/paragraph/index.mdx",
       "title": "Paragraph Formatting"
@@ -1112,5 +1114,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "b5a3d024ff91c51d662ed960193ad56e90f47a4d54f52ae52713555d53a04a07"
+  "sourceHash": "55ecabc04783201c2191d445b3b0e3545e98abbe620d4de588484a0956913944"
 }

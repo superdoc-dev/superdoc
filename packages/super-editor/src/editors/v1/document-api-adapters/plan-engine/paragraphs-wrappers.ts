@@ -37,6 +37,7 @@ import type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphAlignment,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
@@ -46,6 +47,9 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { mapDisplayAlignmentToStoredJustification } from '../../core/helpers/paragraph-alignment.js';
 import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
+import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
+import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { toFiniteNumber } from '../helpers/value-utils.js';
 
 // ---------------------------------------------------------------------------
 // Paragraph block types accepted by this adapter
@@ -576,6 +580,108 @@ export function paragraphsSetFlowOptionsWrapper(
     },
     options,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Numbering: attach w:numPr to a paragraph-shaped block (heading included)
+// ---------------------------------------------------------------------------
+
+/**
+ * Post-numbering doc-api subtype: a numbered non-heading resolves as `listItem`;
+ * a heading keeps its subtype (heading classification precedes list metadata).
+ * Mirrors mapBlockNodeType once a w:numPr is attached, so the subtype can be
+ * predicted without re-reading the node.
+ */
+function numberedSubtype(nodeType: ParagraphTarget['nodeType']): ParagraphTarget['nodeType'] {
+  return nodeType === 'heading' ? 'heading' : 'listItem';
+}
+
+/**
+ * Resolves the post-mutation target for a numbered block. When the subtype is
+ * unchanged (heading->heading, listItem->listItem) the node id is stable, so we
+ * reuse it without touching the index. When numbering reclassifies a paragraph
+ * to a listItem, a positional fallback id flips (it encodes the node type), so
+ * we re-resolve by position (stable across the attr-only mutation) to report the
+ * new canonical id instead of the now-stale input id.
+ */
+function buildNumberedTarget(editor: Editor, candidate: BlockCandidate, fallback: ParagraphTarget): ParagraphTarget {
+  const originalType = candidate.nodeType as ParagraphTarget['nodeType'];
+  const subtype = numberedSubtype(originalType);
+  const withStory = (nodeType: ParagraphTarget['nodeType'], nodeId: string): ParagraphTarget => ({
+    kind: 'block',
+    nodeType,
+    nodeId,
+    ...(fallback.story ? { story: fallback.story } : {}),
+  });
+  if (subtype === originalType) return withStory(subtype, candidate.nodeId);
+  const resolved = getBlockIndex(editor).candidates.find((c) => c.pos === candidate.pos);
+  if (resolved && PARAGRAPH_NODE_TYPES.has(resolved.nodeType)) {
+    return withStory(resolved.nodeType as ParagraphTarget['nodeType'], resolved.nodeId);
+  }
+  return fallback;
+}
+
+export function paragraphsSetNumberingWrapper(
+  editor: Editor,
+  input: ParagraphsSetNumberingInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  // Numbering is structural; mirror lists.* which reject tracked mode.
+  rejectTrackedMode('format.paragraph.setNumbering', options);
+  const candidate = resolveParagraphBlock(editor, input.target);
+
+  const numId = input.numId;
+  const level = input.level ?? 0;
+
+  // Reject numbering that does not resolve to a real definition + level.
+  // Otherwise the block would carry a dangling w:numPr that renders nothing
+  // and round-trips a reference to a missing numbering definition.
+  if (!ListHelpers.hasListDefinition(editor, numId, level)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `No numbering definition resolves for numId ${numId} at level ${level}.`,
+      { numId, level },
+    );
+  }
+
+  // A dryRun validates without mutating, so it cannot resolve the post-mutation
+  // canonical address (a paragraph->listItem flip changes a positional fallback
+  // id). Return the input target; the reclassified address is reported only by a
+  // real apply (see the op's expectedResult).
+  if (options?.dryRun) return successResult(input.target);
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const node = editor.state.doc.nodeAt(candidate.pos);
+      if (!node) return false;
+
+      const existing = (
+        node.attrs as {
+          paragraphProperties?: { numberingProperties?: { numId?: unknown; ilvl?: unknown } | null } | null;
+        }
+      ).paragraphProperties?.numberingProperties;
+      if (existing && toFiniteNumber(existing.numId) === numId && (toFiniteNumber(existing.ilvl) ?? 0) === level) {
+        return false; // already carries this exact numbering (absent ilvl means level 0)
+      }
+
+      const tr = editor.state.tr;
+      // updateNumberingProperties also clears direct indent so the numbering
+      // level's indentation controls the block (ECMA-376 §17.9.22: paragraph-
+      // local pPr overrides the level's pPr), matching list behavior.
+      updateNumberingProperties({ numId, ilvl: level }, node, candidate.pos, editor, tr);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return noOpResult('format.paragraph.setNumbering');
+  }
+
+  return successResult(buildNumberedTarget(editor, candidate, input.target));
 }
 
 export function paragraphsSetTabStopWrapper(

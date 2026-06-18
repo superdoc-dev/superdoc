@@ -479,9 +479,8 @@ describe('measureBlock', () => {
       expect(measure.lines[0].maxWidth).toBe(104);
     });
 
-    it('prefers shared resolved text start over top-level textStartPx when both exist', async () => {
+    it('uses rendered first-line tab stop over stale textStart targets when both exist', async () => {
       const maxWidth = 240;
-      const resolvedTextStart = 112;
       const topLevelTextStart = 160;
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -500,9 +499,11 @@ describe('measureBlock', () => {
             textStartPx: topLevelTextStart,
             marker: {
               markerText: '(a)',
+              glyphWidthPx: 20,
+              markerX: 48,
               markerBoxWidthPx: 24,
               gutterWidthPx: 8,
-              textStartX: resolvedTextStart,
+              textStartX: 112,
               run: {
                 fontFamily: 'Times New Roman',
                 fontSize: 16,
@@ -516,7 +517,49 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
-      expect(measure.lines[0].maxWidth).toBe(maxWidth - resolvedTextStart);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth - 96);
+    });
+
+    it('measures first-line list tabs from the rendered tab stop for justified text', async () => {
+      const maxWidth = 624;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sd-3426-first-line-list-tab',
+        runs: [
+          {
+            text: 'Commencement Date IF LANDLORD MANAGED BUILDOUT Tract D inline retail only The earlier of date',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+        attrs: {
+          alignment: 'justify',
+          indent: { left: 0, firstLine: 48 },
+          wordLayout: {
+            indentLeftPx: 0,
+            firstLineIndentMode: true,
+            marker: {
+              markerText: '(h)',
+              glyphWidthPx: 18.65625,
+              markerX: 48,
+              textStartX: 66,
+              gutterWidthPx: 8,
+              justification: 'left',
+              suffix: 'tab',
+              run: {
+                fontFamily: 'Arial',
+                fontSize: 12,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines[0].maxWidth).toBeCloseTo(maxWidth - 96, 5);
     });
 
     it('expands first-line width for hanging indents on non-list paragraphs', async () => {

@@ -56,7 +56,7 @@ const setColorVar = (elem: HTMLElement, name: string, value: string): void => {
  * Stamps the element-scoped CSS variable family for a single tracked-change
  * layer from its resolved `meta.color`. The painter reads only `meta.color`;
  * color resolution (overrides / resolver / fallback) happened upstream in
- * pm-adapter. Backgrounds are derived from the base color with alpha.
+ * layout-adapter. Backgrounds are derived from the base color with alpha.
  */
 const applyAuthorColorVariables = (elem: HTMLElement, layer: TrackedChangeMeta): void => {
   const color = layer.color;
@@ -254,6 +254,9 @@ export const applyTrackedChangeDecorations = (
   }
   if (meta.authorImage) {
     elem.dataset.trackChangeAuthorImage = meta.authorImage;
+  }
+  if (meta.color) {
+    elem.dataset.trackChangeAuthorColor = meta.color;
   }
   if (meta.date) {
     elem.dataset.trackChangeDate = meta.date;

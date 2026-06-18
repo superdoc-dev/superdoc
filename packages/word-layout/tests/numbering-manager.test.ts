@@ -72,6 +72,30 @@ describe('NumberingManager', () => {
     expect(leafValue).toBe(1);
     expect(path).toEqual([1, 1, 1]);
   });
+
+  it('round-trips checkpoint snapshots for prefix-warmed windows', () => {
+    const manager = createNumberingManager();
+    manager.enableCache();
+    manager.setStartSettings('num', 0, 1);
+
+    const first = manager.calculateCounter('num', 0, 10, 'abs');
+    manager.setCounter('num', 0, 10, first, 'abs');
+    const second = manager.calculateCounter('num', 0, 20, 'abs');
+    manager.setCounter('num', 0, 20, second, 'abs');
+
+    const snapshot = manager.exportSnapshot();
+    const resumed = createNumberingManager();
+    resumed.enableCache();
+    resumed.restoreSnapshot(snapshot);
+
+    const third = resumed.calculateCounter('num', 0, 30, 'abs');
+    resumed.setCounter('num', 0, 30, third, 'abs');
+
+    expect(first).toBe(1);
+    expect(second).toBe(2);
+    expect(third).toBe(3);
+    expect(resumed.calculatePath('num', 0, 30)).toEqual([3]);
+  });
 });
 
 describe('NumberingManager edge cases', () => {
@@ -535,7 +559,7 @@ describe('NumberingManager - super-editor parity scenarios (no abstractId)', () 
 });
 
 describe('NumberingManager - abstract ID mapping edge cases', () => {
-  it('handles changing abstractId for same numId', () => {
+  it('handles changing abstractId for same numId (v1 parity: counters are abstract-scoped)', () => {
     const manager = createNumberingManager();
     manager.setStartSettings('num', 0, 1);
     manager.setStartSettings('num', 1, 1);
@@ -547,39 +571,42 @@ describe('NumberingManager - abstract ID mapping edge cases', () => {
     const child1 = manager.calculateCounter('num', 1, 10, 'abstract1');
     manager.setCounter('num', 1, 10, child1, 'abstract1');
 
-    // Now switch to abstract2 for the same numId
-    // The counter continues because it's the same numId, just different abstract mapping
+    // Switch to abstract2: per v1 the counter restarts because counters live
+    // on the abstract scope, not the numId scope, and abstract2 has no prior
+    // entries.
     const value2 = manager.calculateCounter('num', 0, 15, 'abstract2');
     manager.setCounter('num', 0, 15, value2, 'abstract2');
 
-    // Child should restart because parent level (0) was used between positions 10 and 20
     const child2 = manager.calculateCounter('num', 1, 20, 'abstract2');
 
     expect(value1).toBe(1);
     expect(child1).toBe(1);
-    expect(value2).toBe(2); // Continues from value1 because same numId
-    expect(child2).toBe(1); // Should restart due to parent level usage
+    expect(value2).toBe(1); // abstract2 has no previous sibling at level 0
+    expect(child2).toBe(1); // abstract2 has no previous sibling at level 1
   });
 
-  it('handles mixed abstractId usage (some with, some without)', () => {
+  it('handles mixed abstractId usage (per-abstract scoping)', () => {
     const manager = createNumberingManager();
     manager.setStartSettings('num', 0, 1);
 
-    // First counter without abstractId
+    // First counter without abstractId — abstract scope falls back to the
+    // numId-as-key (toKey of `undefined` is the numId itself in v1 path).
     const value1 = manager.calculateCounter('num', 0, 5);
     manager.setCounter('num', 0, 5, value1);
 
-    // Second counter with abstractId
+    // Second counter with abstract1 — separate abstract scope, restarts.
     const value2 = manager.calculateCounter('num', 0, 10, 'abstract1');
     manager.setCounter('num', 0, 10, value2, 'abstract1');
 
-    // Third counter without abstractId again (but numId now has abstractId mapping)
+    // Third counter without abstractId — abstractIdMap['num'] has been
+    // overwritten to 'abstract1' by the prior call, so this continues the
+    // 'abstract1' sequence (v1 parity: abstractIdMap is sticky).
     const value3 = manager.calculateCounter('num', 0, 15);
     manager.setCounter('num', 0, 15, value3);
 
     expect(value1).toBe(1);
-    expect(value2).toBe(2);
-    expect(value3).toBe(3); // Should continue incrementing
+    expect(value2).toBe(1);
+    expect(value3).toBe(2);
   });
 
   it('maintains separate abstract counter maps per abstractId', () => {
@@ -656,12 +683,15 @@ describe('NumberingManager - cache correctness', () => {
     expect(val1_4).toBe(val2_4);
   });
 
-  it('handles out-of-order position operations correctly', () => {
+  it('handles out-of-order position operations in cache mode (v1 parity)', () => {
     const manager = createNumberingManager();
     manager.enableCache();
     manager.setStartSettings('num', 0, 1);
 
-    // Set counters out of order
+    // In cache mode v1 only checks the cached `lastSeen` entry; it does not
+    // fall back to scanning the per-position map, so out-of-order writes
+    // beat the cache and the later (smaller-pos) calculations return the
+    // start value.
     const val3 = manager.calculateCounter('num', 0, 30, 'abs');
     manager.setCounter('num', 0, 30, val3, 'abs');
 
@@ -673,10 +703,10 @@ describe('NumberingManager - cache correctness', () => {
 
     const val4 = manager.calculateCounter('num', 0, 40, 'abs');
 
-    expect(val3).toBe(1); // First one, no previous
-    expect(val1).toBe(1); // No previous at position 10
-    expect(val2).toBe(2); // Previous is at position 10
-    expect(val4).toBe(2); // Previous is at position 30 with value 1, so 1+1=2
+    expect(val3).toBe(1);
+    expect(val1).toBe(1);
+    expect(val2).toBe(1);
+    expect(val4).toBe(2); // lastSeen pos=30 count=1 → 2.
   });
 
   it('cache preserves ancestor path calculations', () => {

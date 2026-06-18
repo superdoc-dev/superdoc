@@ -93,10 +93,7 @@ export interface PlanApi {
 
 type DynamicInvoke = (operationId: string, input: unknown, options: unknown) => unknown;
 
-const PLAN_EXECUTE_UNSUPPORTED_OPERATION_IDS = new Set<string>([
-  'plan.execute',
-  'templates.apply',
-]);
+const PLAN_EXECUTE_UNSUPPORTED_OPERATION_IDS = new Set<string>(['plan.execute', 'templates.apply']);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -111,19 +108,21 @@ function isCaptureRef(value: unknown): value is PlanCaptureRefMarker {
 function isProjectedTextOffset(value: unknown): value is PlanProjectTextOffsetMarker {
   const record = asRecord(value);
   return (
-    !!record
-    && record.kind === 'project-text-offset'
-    && typeof record.rawText === 'string'
-    && typeof record.rawOffset === 'number'
-    && (typeof record.publicText === 'string' || isCaptureRef(record.publicText))
+    !!record &&
+    record.kind === 'project-text-offset' &&
+    typeof record.rawText === 'string' &&
+    typeof record.rawOffset === 'number' &&
+    (typeof record.publicText === 'string' || isCaptureRef(record.publicText))
   );
 }
 
 function isClientAssetMarker(value: unknown): boolean {
   const record = asRecord(value);
-  return !!record
-    && (record.kind === 'asset-ref' || record.kind === 'asset-path' || record.kind === 'asset-base64')
-    && typeof record.relativePath === 'string';
+  return (
+    !!record &&
+    (record.kind === 'asset-ref' || record.kind === 'asset-path' || record.kind === 'asset-base64') &&
+    typeof record.relativePath === 'string'
+  );
 }
 
 // -- capture selectors (ported verbatim from the replay client) --------------
@@ -242,14 +241,12 @@ function normalizeCapturedResult(value: unknown): unknown {
 function substitutePlanMarkers(value: unknown, captures: Record<string, unknown>): unknown {
   if (isClientAssetMarker(value)) {
     throw new Error(
-      'plan.execute entries must have asset markers resolved client-side before dispatch; '
-      + `received unresolved "${(value as { kind: string }).kind}" marker`,
+      'plan.execute entries must have asset markers resolved client-side before dispatch; ' +
+        `received unresolved "${(value as { kind: string }).kind}" marker`,
     );
   }
   if (isCaptureRef(value)) {
-    const resolvedWhere = typeof value.where === 'undefined'
-      ? undefined
-      : substitutePlanMarkers(value.where, captures);
+    const resolvedWhere = typeof value.where === 'undefined' ? undefined : substitutePlanMarkers(value.where, captures);
     const root = captures[value.captureKey];
     const marker: PlanCaptureRefMarker = { kind: 'capture-ref', captureKey: value.captureKey };
     if (typeof value.path !== 'undefined') marker.path = value.path;
@@ -258,9 +255,7 @@ function substitutePlanMarkers(value: unknown, captures: Record<string, unknown>
     if (typeof value.selectPath !== 'undefined') marker.selectPath = value.selectPath;
     const resolved = resolveCaptureReference(root, marker);
     if (typeof resolved === 'undefined') {
-      throw new Error(
-        `capture-ref "${value.captureKey}" path "${value.path ?? '<root>'}" resolved to undefined`,
-      );
+      throw new Error(`capture-ref "${value.captureKey}" path "${value.path ?? '<root>'}" resolved to undefined`);
     }
     return resolved;
   }
@@ -374,12 +369,9 @@ function validatePlanExecuteInput(input: PlanExecuteInput): void {
     throw new DocumentApiValidationError('INVALID_INPUT', 'plan.execute requires input.entries to be an array.');
   }
   if (
-    typeof input.captureReturns !== 'undefined'
-    && input.captureReturns !== '*'
-    && (
-      !Array.isArray(input.captureReturns)
-      || input.captureReturns.some((key) => typeof key !== 'string')
-    )
+    typeof input.captureReturns !== 'undefined' &&
+    input.captureReturns !== '*' &&
+    (!Array.isArray(input.captureReturns) || input.captureReturns.some((key) => typeof key !== 'string'))
   ) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
@@ -468,11 +460,10 @@ export function createPlanApi(invoke: DynamicInvoke): PlanApi {
           break;
         }
       }
-      const projectedCaptures = captureReturns === '*'
-        ? { ...captures }
-        : Object.fromEntries(
-          captureReturns.filter((key) => key in captures).map((key) => [key, captures[key]]),
-        );
+      const projectedCaptures =
+        captureReturns === '*'
+          ? { ...captures }
+          : Object.fromEntries(captureReturns.filter((key) => key in captures).map((key) => [key, captures[key]]));
       return { receipts, captures: projectedCaptures, ...(failure ? { failure } : {}) };
     },
   };

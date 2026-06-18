@@ -246,27 +246,32 @@ describe('operation-params deriveParamsFromInputSchema with $ref', () => {
 
 describe('operation-params production metadata', () => {
   test('trackChanges.decide exposes nested logical range targets used by v2 requirements', () => {
-    const targetParam = CLI_OPERATION_METADATA['doc.trackChanges.decide'].params.find((param) => param.name === 'target');
+    const targetParam = CLI_OPERATION_METADATA['doc.trackChanges.decide'].params.find(
+      (param) => param.name === 'target',
+    );
     expect(targetParam).toBeDefined();
 
     const variants = (targetParam!.schema as { oneOf: CliTypeSpec[] }).oneOf;
     const nestedLogicalRange = variants.find((variant) => {
       const properties = (variant as { properties?: Record<string, CliTypeSpec> }).properties;
-      const rangeProperties = (properties?.range as { properties?: Record<string, CliTypeSpec> } | undefined)?.properties;
+      const rangeProperties = (properties?.range as { properties?: Record<string, CliTypeSpec> } | undefined)
+        ?.properties;
       return (
-        (properties?.kind as { const?: unknown } | undefined)?.const === 'range'
-        && (rangeProperties?.anchor as { type?: unknown } | undefined)?.type === 'string'
-        && (rangeProperties?.relativeStart as { type?: unknown } | undefined)?.type === 'number'
-        && (rangeProperties?.relativeEnd as { type?: unknown } | undefined)?.type === 'number'
+        (properties?.kind as { const?: unknown } | undefined)?.const === 'range' &&
+        (rangeProperties?.anchor as { type?: unknown } | undefined)?.type === 'string' &&
+        (rangeProperties?.relativeStart as { type?: unknown } | undefined)?.type === 'number' &&
+        (rangeProperties?.relativeEnd as { type?: unknown } | undefined)?.type === 'number'
       );
     });
 
     expect(nestedLogicalRange).toBeDefined();
 
     const sideVariants =
-      ((nestedLogicalRange as { properties?: Record<string, CliTypeSpec> }).properties?.side as
-        | { oneOf?: { const?: unknown }[] }
-        | undefined)?.oneOf ?? [];
+      (
+        (nestedLogicalRange as { properties?: Record<string, CliTypeSpec> }).properties?.side as
+          | { oneOf?: { const?: unknown }[] }
+          | undefined
+      )?.oneOf ?? [];
     const sideValues = sideVariants.map((variant) => variant.const);
     expect(sideValues).toContain('insert');
     expect(sideValues).toContain('delete');

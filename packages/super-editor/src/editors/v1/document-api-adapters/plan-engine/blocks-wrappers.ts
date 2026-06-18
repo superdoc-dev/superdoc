@@ -20,6 +20,7 @@ import {
   type BlockListEntry,
   type DeletedBlockSummary,
   type MutationOptions,
+  type ParagraphNumbering,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import {
@@ -30,6 +31,7 @@ import {
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
 import { computeTextContentLength } from '../helpers/text-offset-resolver.js';
+import { toFiniteNumber } from '../helpers/value-utils.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
@@ -123,6 +125,34 @@ function resolveBlockFontSizePt(styleCtx: StyleContext | null, styleId: string |
   if (typeof styleCtx.docDefaultsFontSizeHp === 'number') return styleCtx.docDefaultsFontSizeHp / 2;
 
   return OOXML_DEFAULT_FONT_SIZE_PT;
+}
+
+/**
+ * Reads a block's direct paragraph numbering (`w:numPr`) and projects it to the
+ * public `{ numId, level }` shape. Returns undefined for non-numbered blocks.
+ *
+ * Sourced from `paragraphProperties.numberingProperties` (the same read getNode
+ * uses), so numbered headings expose their numbering even though they resolve as
+ * `heading`, not `listItem`. This is deliberately separate from the list-
+ * rendering marker/ordinal data, which the numbering plugin only attaches in a
+ * form the list projections surface for list items.
+ */
+function extractBlockNumbering(node: ProseMirrorNode): ParagraphNumbering | undefined {
+  const attrs = node.attrs as {
+    paragraphProperties?: { numberingProperties?: { numId?: unknown; ilvl?: unknown } | null } | null;
+    numberingProperties?: { numId?: unknown; ilvl?: unknown } | null;
+  };
+  const numbering = attrs?.paragraphProperties?.numberingProperties ?? attrs?.numberingProperties;
+  if (!numbering) return undefined;
+  const numId = toFiniteNumber(numbering.numId);
+  // numId 0 is the OOXML no-numbering sentinel (ECMA-376 17.9.18): it removes
+  // numbering rather than referencing a definition. Treat it as unnumbered so
+  // discovery does not surface fake sequences from explicitly un-numbered blocks.
+  if (numId === undefined || numId === 0) return undefined;
+  // Absent ilvl means level 0 in OOXML; normalize so every numbered block
+  // carries a level (matching the numbering plugin and setNumbering defaults).
+  const level = toFiniteNumber(numbering.ilvl) ?? 0;
+  return { numId, level };
 }
 
 /**
@@ -314,6 +344,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = computeTextContentLength(candidate.node);
     const fullText = input?.includeText ? extractBlockText(candidate.node) : undefined;
+    const numbering = extractBlockNumbering(candidate.node);
     const ref =
       textLength > 0
         ? encodeV4Ref({
@@ -335,6 +366,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       ...(fullText !== undefined ? { text: fullText } : {}),
       isEmpty: textLength === 0,
       ...extractBlockFormatting(candidate.node, styleCtx),
+      ...(numbering ? { paragraphNumbering: numbering } : {}),
       ...(ref ? { ref } : {}),
     };
   });

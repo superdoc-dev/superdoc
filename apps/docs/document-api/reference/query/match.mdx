@@ -256,14 +256,14 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               "type": "boolean"
             },
             "mode": {
-              "description": "Match mode: 'contains' (substring) or 'regex'.",
+              "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
               "enum": [
                 "contains",
                 "regex"
               ]
             },
             "pattern": {
-              "description": "Text or regex pattern to match.",
+              "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
               "type": "string"
             },
             "type": {

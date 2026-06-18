@@ -36,4 +36,32 @@ describe('validateUpgradePath', () => {
       statusCode: 400,
     });
   });
+
+  test('rejects document ids with line-feed control characters', () => {
+    expect(validateUpgradePath('/v1/collaboration/room%0Aevent%3Aevil')).toEqual({
+      ok: false,
+      statusCode: 400,
+    });
+  });
+
+  test('rejects document ids with carriage-return control characters', () => {
+    expect(validateUpgradePath('/v1/collaboration/room%0Dbad')).toEqual({
+      ok: false,
+      statusCode: 400,
+    });
+  });
+
+  test('rejects document ids with null control characters', () => {
+    expect(validateUpgradePath('/v1/collaboration/%00')).toEqual({
+      ok: false,
+      statusCode: 400,
+    });
+  });
+
+  test('rejects decoded document ids longer than 200 characters', () => {
+    expect(validateUpgradePath(`/v1/collaboration/${'a'.repeat(201)}`)).toEqual({
+      ok: false,
+      statusCode: 400,
+    });
+  });
 });

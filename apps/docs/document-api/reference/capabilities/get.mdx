@@ -1185,6 +1185,11 @@ _No fields._
 | `operations.format.paragraph.setMarkRunProps.dryRun` | boolean | yes |  |
 | `operations.format.paragraph.setMarkRunProps.reasons` | enum[] | no |  |
 | `operations.format.paragraph.setMarkRunProps.tracked` | boolean | yes |  |
+| `operations.format.paragraph.setNumbering` | object | yes |  |
+| `operations.format.paragraph.setNumbering.available` | boolean | yes |  |
+| `operations.format.paragraph.setNumbering.dryRun` | boolean | yes |  |
+| `operations.format.paragraph.setNumbering.reasons` | enum[] | no |  |
+| `operations.format.paragraph.setNumbering.tracked` | boolean | yes |  |
 | `operations.format.paragraph.setOutlineLevel` | object | yes |  |
 | `operations.format.paragraph.setOutlineLevel.available` | boolean | yes |  |
 | `operations.format.paragraph.setOutlineLevel.dryRun` | boolean | yes |  |
@@ -3570,6 +3575,11 @@ _No fields._
         "OPERATION_UNAVAILABLE",
         "DRY_RUN_UNAVAILABLE"
       ],
+      "tracked": false
+    },
+    "format.paragraph.setNumbering": {
+      "available": true,
+      "dryRun": true,
       "tracked": false
     },
     "format.paragraph.setOutlineLevel": {
@@ -12838,6 +12848,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "format.paragraph.setNumbering": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "format.paragraph.setOutlineLevel": {
           "additionalProperties": false,
           "properties": {
@@ -21105,6 +21150,7 @@ _No fields._
         "format.paragraph.setMarkRunProps",
         "format.paragraph.setDirection",
         "format.paragraph.clearDirection",
+        "format.paragraph.setNumbering",
         "lists.list",
         "lists.get",
         "lists.insert",
@@ -21419,8 +21465,10 @@ _No fields._
       "properties": {
         "regex": {
           "additionalProperties": false,
+          "description": "Regex selector limits enforced by the selector engine. Unsafe patterns are rejected.",
           "properties": {
             "maxPatternLength": {
+              "description": "Maximum allowed regex pattern length for text selectors.",
               "type": "integer"
             }
           },

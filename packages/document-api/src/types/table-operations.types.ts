@@ -278,26 +278,22 @@ export type TablesSetRowHeightInput =
 export type TablesDistributeRowsInput = TableLocator;
 
 export type TablesSetRowOptionsInput =
-  | (
-    TableScopedRowLocator & {
+  | (TableScopedRowLocator & {
       allowBreakAcrossPages?: boolean;
       repeatHeader?: boolean;
       gridBefore?: number;
       wBefore?: TableRowWidthSpec;
       gridAfter?: number;
       wAfter?: TableRowWidthSpec;
-    }
-  )
-  | (
-    DirectRowTargetLocator & {
+    })
+  | (DirectRowTargetLocator & {
       allowBreakAcrossPages?: boolean;
       repeatHeader?: boolean;
       gridBefore?: number;
       wBefore?: TableRowWidthSpec;
       gridAfter?: number;
       wAfter?: TableRowWidthSpec;
-    }
-  );
+    });
 
 // ---------------------------------------------------------------------------
 // Column operations

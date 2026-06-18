@@ -9,10 +9,7 @@ import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
-import {
-  normalizeFloatingAnchorTop,
-  shouldMountFloatingCommentDialog,
-} from './floating-comment-positioning.js';
+import { normalizeFloatingAnchorTop, shouldMountFloatingCommentDialog } from './floating-comment-positioning.js';
 
 const ESTIMATED_HEIGHT = 110;
 const OBSERVER_MARGIN = 600;

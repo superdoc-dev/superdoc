@@ -16,6 +16,7 @@ import type { EditorRuntimeCommand } from '../index.js';
 
 interface FakeEditorOptions {
   documentId?: string;
+  documentMode?: 'editing' | 'suggesting' | 'viewing';
   selectedText?: string;
   selectionFrom?: number;
   selectionTo?: number;
@@ -29,14 +30,16 @@ function createFakeEditor(opts: FakeEditorOptions = {}) {
   const to = opts.selectionTo ?? opts.selectedText?.length ?? 0;
   const focusSpy = vi.fn();
   const viewFocusSpy = vi.fn();
+  const setDocumentModeSpy = vi.fn();
 
   const editor: V1EditorLike & {
     emit(event: string, ...args: unknown[]): void;
     listenerCount(event: string): number;
     focusSpy: typeof focusSpy;
     viewFocusSpy: typeof viewFocusSpy;
+    setDocumentModeSpy: typeof setDocumentModeSpy;
   } = {
-    options: { documentId: opts.documentId ?? 'doc-1' },
+    options: { documentId: opts.documentId ?? 'doc-1', documentMode: opts.documentMode },
     editorVersion: 1,
     state: {
       doc: {
@@ -52,6 +55,7 @@ function createFakeEditor(opts: FakeEditorOptions = {}) {
     view: { focus: viewFocusSpy },
     commands: opts.commands ?? {},
     focus: focusSpy,
+    setDocumentMode: setDocumentModeSpy,
     async exportDocx() {
       return opts.exportResult ?? new ArrayBuffer(8);
     },
@@ -70,6 +74,7 @@ function createFakeEditor(opts: FakeEditorOptions = {}) {
     },
     focusSpy,
     viewFocusSpy,
+    setDocumentModeSpy,
   };
   return editor;
 }
@@ -79,6 +84,7 @@ function createFakePresentationEditor() {
   const focusSpy = vi.fn();
   const setZoomSpy = vi.fn();
   const scrollSpy = vi.fn(() => true);
+  const setDocumentModeSpy = vi.fn();
 
   const pe: V1PresentationEditorLike & {
     emit(event: string, ...args: unknown[]): void;
@@ -86,10 +92,12 @@ function createFakePresentationEditor() {
     focusSpy: typeof focusSpy;
     setZoomSpy: typeof setZoomSpy;
     scrollSpy: typeof scrollSpy;
+    setDocumentModeSpy: typeof setDocumentModeSpy;
   } = {
     focus: focusSpy,
     setZoom: setZoomSpy,
     scrollToPosition: scrollSpy,
+    setDocumentMode: setDocumentModeSpy,
     on(event, handler) {
       if (!handlers.has(event)) handlers.set(event, new Set());
       handlers.get(event)!.add(handler);
@@ -106,6 +114,7 @@ function createFakePresentationEditor() {
     focusSpy,
     setZoomSpy,
     scrollSpy,
+    setDocumentModeSpy,
   };
   return pe;
 }
@@ -131,6 +140,7 @@ describe('V1EditorRuntimeAdapter  -  lifecycle', () => {
     expect(runtime.kind).toBe('v1');
     expect(runtime.documentId).toBe('doc-A');
     expect(runtime.getSnapshot().state).toBe('opening');
+    expect(runtime.getSnapshot().documentMode).toBe('editing');
     // Pending: layout/navigation not yet supported, dispatch closed.
     const caps = runtime.getCapabilities();
     expect(caps.layout.supported).toBe(false);
@@ -163,6 +173,25 @@ describe('V1EditorRuntimeAdapter  -  lifecycle', () => {
     // Subscribed to PE layout signals.
     expect(pe.listenerCount('paginationUpdate')).toBe(1);
     expect(pe.listenerCount('zoomChange')).toBe(1);
+    expect(pe.setDocumentModeSpy).toHaveBeenCalledWith('editing');
+  });
+
+  it('maps viewing mode onto review-ready and closes command dispatch', () => {
+    const editor = createFakeEditor({ documentMode: 'viewing' });
+    const pe = createFakePresentationEditor();
+    const { runtime, attachPresentationEditor } = createV1EditorRuntimeAdapter({
+      id: 'rt-1',
+      documentId: 'doc-1',
+      root: makeRoot(),
+      editor,
+    });
+
+    attachPresentationEditor(pe);
+
+    expect(runtime.getSnapshot().state).toBe('review-ready');
+    expect(runtime.getSnapshot().documentMode).toBe('viewing');
+    expect(runtime.getCapabilities().commands.canDispatch).toBe(false);
+    expect(pe.setDocumentModeSpy).toHaveBeenCalledWith('viewing');
   });
 
   it('getLegacyEditorProjection returns the ORIGINAL v1 editor instance', () => {
@@ -224,6 +253,55 @@ describe('V1EditorRuntimeAdapter  -  teardown', () => {
 
     expect(onUnregister).toHaveBeenCalledTimes(1);
     expect(runtime.getSnapshot().state).toBe('disposed');
+  });
+});
+
+describe('V1EditorRuntimeAdapter  -  document mode', () => {
+  it('delegates explicit mode changes to the mounted presentation editor and updates readiness', () => {
+    const editor = createFakeEditor();
+    const pe = createFakePresentationEditor();
+    const { runtime, attachPresentationEditor } = createV1EditorRuntimeAdapter({
+      id: 'rt-1',
+      documentId: 'doc-1',
+      root: makeRoot(),
+      editor,
+    });
+    attachPresentationEditor(pe);
+
+    runtime.setDocumentMode('viewing');
+
+    expect(runtime.getDocumentMode()).toBe('viewing');
+    expect(runtime.getSnapshot().state).toBe('review-ready');
+    expect(runtime.getCapabilities().commands.canDispatch).toBe(false);
+    expect(editor.setDocumentModeSpy).toHaveBeenCalledWith('viewing');
+    expect(pe.setDocumentModeSpy).toHaveBeenLastCalledWith('viewing');
+
+    runtime.setDocumentMode('suggesting');
+
+    expect(runtime.getDocumentMode()).toBe('suggesting');
+    expect(runtime.getSnapshot().state).toBe('editing-ready');
+    expect(runtime.getCapabilities().commands.canDispatch).toBe(true);
+    expect(editor.setDocumentModeSpy).toHaveBeenLastCalledWith('suggesting');
+    expect(pe.setDocumentModeSpy).toHaveBeenLastCalledWith('suggesting');
+  });
+
+  it('tracks pre-ready mode changes through the editor before the presentation editor attaches', () => {
+    const editor = createFakeEditor();
+    const pe = createFakePresentationEditor();
+    const { runtime, attachPresentationEditor } = createV1EditorRuntimeAdapter({
+      id: 'rt-1',
+      documentId: 'doc-1',
+      root: makeRoot(),
+      editor,
+    });
+
+    runtime.setDocumentMode('viewing');
+    attachPresentationEditor(pe);
+
+    expect(runtime.getDocumentMode()).toBe('viewing');
+    expect(runtime.getSnapshot().state).toBe('review-ready');
+    expect(editor.setDocumentModeSpy).toHaveBeenCalledWith('viewing');
+    expect(pe.setDocumentModeSpy).toHaveBeenCalledWith('viewing');
   });
 });
 
@@ -378,6 +456,16 @@ describe('V1EditorRuntimeAdapter  -  command dispatch result mapping ', () => {
     });
     const result = await runtime.dispatch({ kind: 'text.insert', text: 'x' });
     expect(result).toEqual({ status: 'rejected', reason: 'runtime-not-ready' });
+  });
+
+  it('rejects text dispatch with document-readonly while viewing', async () => {
+    const { runtime } = ready({ insertContent: () => true });
+    runtime.setDocumentMode('viewing');
+
+    await expect(runtime.dispatch({ kind: 'text.insert', text: 'x' })).resolves.toEqual({
+      status: 'rejected',
+      reason: 'document-readonly',
+    });
   });
 });
 

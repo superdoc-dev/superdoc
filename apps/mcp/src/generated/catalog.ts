@@ -5208,14 +5208,14 @@ export const MCP_TOOL_CATALOG = {
                   },
                   "pattern": {
                     "type": "string",
-                    "description": "Text or regex pattern to match."
+                    "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                   },
                   "mode": {
                     "enum": [
                       "contains",
                       "regex"
                     ],
-                    "description": "Match mode: 'contains' (substring) or 'regex'."
+                    "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                   },
                   "caseSensitive": {
                     "type": "boolean",
@@ -5402,14 +5402,14 @@ export const MCP_TOOL_CATALOG = {
                                     },
                                     "pattern": {
                                       "type": "string",
-                                      "description": "Text or regex pattern to match."
+                                      "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                                     },
                                     "mode": {
                                       "enum": [
                                         "contains",
                                         "regex"
                                       ],
-                                      "description": "Match mode: 'contains' (substring) or 'regex'."
+                                      "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                                     },
                                     "caseSensitive": {
                                       "type": "boolean",
@@ -5742,14 +5742,14 @@ export const MCP_TOOL_CATALOG = {
                                     },
                                     "pattern": {
                                       "type": "string",
-                                      "description": "Text or regex pattern to match."
+                                      "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                                     },
                                     "mode": {
                                       "enum": [
                                         "contains",
                                         "regex"
                                       ],
-                                      "description": "Match mode: 'contains' (substring) or 'regex'."
+                                      "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                                     },
                                     "caseSensitive": {
                                       "type": "boolean",
@@ -6031,14 +6031,14 @@ export const MCP_TOOL_CATALOG = {
                                     },
                                     "pattern": {
                                       "type": "string",
-                                      "description": "Text or regex pattern to match."
+                                      "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                                     },
                                     "mode": {
                                       "enum": [
                                         "contains",
                                         "regex"
                                       ],
-                                      "description": "Match mode: 'contains' (substring) or 'regex'."
+                                      "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                                     },
                                     "caseSensitive": {
                                       "type": "boolean",
@@ -6242,14 +6242,14 @@ export const MCP_TOOL_CATALOG = {
                                     },
                                     "pattern": {
                                       "type": "string",
-                                      "description": "Text or regex pattern to match."
+                                      "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                                     },
                                     "mode": {
                                       "enum": [
                                         "contains",
                                         "regex"
                                       ],
-                                      "description": "Match mode: 'contains' (substring) or 'regex'."
+                                      "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                                     },
                                     "caseSensitive": {
                                       "type": "boolean",
@@ -7276,14 +7276,14 @@ export const MCP_TOOL_CATALOG = {
                                 },
                                 "pattern": {
                                   "type": "string",
-                                  "description": "Text or regex pattern to match."
+                                  "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution."
                                 },
                                 "mode": {
                                   "enum": [
                                     "contains",
                                     "regex"
                                   ],
-                                  "description": "Match mode: 'contains' (substring) or 'regex'."
+                                  "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression)."
                                 },
                                 "caseSensitive": {
                                   "type": "boolean",

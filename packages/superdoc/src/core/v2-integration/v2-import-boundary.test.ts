@@ -59,17 +59,13 @@ describe('public v2 import boundary', () => {
 
   it('self-test: scanner detects a forbidden V2 implementation specifier', () => {
     const synthetic = `import { x } from '@superdoc/v2-host';\nimport y from './ok.js';`;
-    const hits = importSpecifiers(synthetic).filter((spec) =>
-      FORBIDDEN_IMPORT_FRAGMENTS.some((f) => spec.includes(f)),
-    );
+    const hits = importSpecifiers(synthetic).filter((spec) => FORBIDDEN_IMPORT_FRAGMENTS.some((f) => spec.includes(f)));
     expect(hits).toEqual(['@superdoc/v2-host']);
   });
 
   it('self-test: scanner allows the local seam module specifier', () => {
     const synthetic = `import { resolveV2Integration } from './core/v2-integration/v2-integration.js';`;
-    const hits = importSpecifiers(synthetic).filter((spec) =>
-      FORBIDDEN_IMPORT_FRAGMENTS.some((f) => spec.includes(f)),
-    );
+    const hits = importSpecifiers(synthetic).filter((spec) => FORBIDDEN_IMPORT_FRAGMENTS.some((f) => spec.includes(f)));
     expect(hits).toEqual([]);
   });
 });

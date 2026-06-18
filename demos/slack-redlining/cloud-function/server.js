@@ -1,11 +1,11 @@
-import fs from "fs";
-import { readFile, unlink } from "fs/promises";
+import { readFile } from "fs/promises";
 import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
-import https from "https";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
+import { validateDownloadUrl } from "./security-utils.js";
+import { createDownloadFileService } from "./download-file.js";
 import {
   getAIResponse,
   generateUploadDownloadUrls,
@@ -33,6 +33,14 @@ const documentRateLimit = rateLimit({ windowMs: 60_000, limit: 20 });
 
 const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || "0.0.0.0";
+const TEMP_DIR = path.resolve(__dirname, "temp");
+const MAX_DOWNLOAD_BYTES = parsePositiveInteger(process.env.SLACK_REDLINING_MAX_DOWNLOAD_BYTES, 40 * 1024 * 1024);
+const DOWNLOAD_TIMEOUT_MS = parsePositiveInteger(process.env.SLACK_REDLINING_DOWNLOAD_TIMEOUT_MS, 15000);
+const { downloadFile, cleanupFile: cleanupDownloadedFile } = createDownloadFileService({
+  tempDir: TEMP_DIR,
+  maxDownloadBytes: MAX_DOWNLOAD_BYTES,
+  downloadTimeoutMs: DOWNLOAD_TIMEOUT_MS,
+});
 
 // Health check endpoint
 app.get("/", (req, res) => {
@@ -54,16 +62,10 @@ app.post("/", documentRateLimit, express.json(), async (req, res) => {
       });
     }
 
-    // Validate URL format
-    if (!isValidUrl(fileUrl)) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid fileUrl format",
-      });
-    }
+    const sourceFileUrl = validateDownloadUrl(fileUrl);
 
     // Download file
-    filePath = await downloadFile(fileUrl);
+    filePath = await downloadFile(sourceFileUrl);
     
     // Process document
     const documentData = await readFile(filePath);
@@ -118,7 +120,7 @@ app.post("/", documentRateLimit, express.json(), async (req, res) => {
   } finally {
     // Clean up temporary file
     if (filePath) {
-      await cleanupFile(filePath);
+      await cleanupDownloadedFile(filePath);
     }
   }
 });
@@ -139,54 +141,6 @@ app.use((req, res) => {
     error: "Endpoint not found",
   });
 });
-
-// Utility functions
-function isValidUrl(string) {
-  try {
-    new URL(string);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function downloadFile(fileUrl) {
-  const fileName = `${Date.now()}_${path.basename(fileUrl)}.docx`;
-  const filePath = path.join(__dirname, "temp", fileName);
-  
-  // Ensure temp directory exists
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-
-  return new Promise((resolve, reject) => {
-    const fileStream = fs.createWriteStream(filePath);
-    
-    const request = https.get(fileUrl, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`Download failed with status: ${response.statusCode}`));
-        return;
-      }
-      
-      response.pipe(fileStream);
-      
-      fileStream.on("finish", () => {
-        fileStream.close();
-        resolve(filePath);
-      });
-    });
-    
-    request.on("error", (err) => {
-      fs.unlink(filePath, () => {}); // Clean up on error
-      const networkError = new Error(`Network error: ${err.message}`);
-      networkError.name = 'NetworkError';
-      reject(networkError);
-    });
-    
-    fileStream.on("error", (err) => {
-      fs.unlink(filePath, () => {});
-      reject(err);
-    });
-  });
-}
 
 async function initializeEditor(documentData) {
   try {
@@ -241,12 +195,9 @@ async function exportDocument(editor) {
   }
 }
 
-async function cleanupFile(filePath) {
-  try {
-    await unlink(filePath);
-  } catch (error) {
-    console.warn(`Failed to cleanup temporary file: ${filePath}`, error);
-  }
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value ?? `${fallback}`, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 // Start server

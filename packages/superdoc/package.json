@@ -23,7 +23,6 @@
         "import": "./dist/superdoc/src/public/index.d.ts",
         "require": "./dist/superdoc/src/public/index.d.cts"
       },
-      "source": "./src/index.js",
       "import": "./dist/superdoc.es.js",
       "require": "./dist/superdoc.cjs"
     },
@@ -32,7 +31,6 @@
         "import": "./dist/superdoc/src/public/types.d.ts",
         "require": "./dist/superdoc/src/public/types.d.cts"
       },
-      "source": "./src/types.ts",
       "import": "./dist/types.es.js",
       "require": "./dist/types.cjs"
     },
@@ -49,33 +47,27 @@
         "import": "./dist/superdoc/src/super-editor.d.ts",
         "require": "./dist/superdoc/src/super-editor.d.cts"
       },
-      "source": "./src/super-editor.js",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
     },
     "./headless-toolbar": {
       "types": "./dist/superdoc/src/public/legacy/headless-toolbar.d.ts",
-      "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
     "./ui": {
       "types": "./dist/superdoc/src/public/ui.d.ts",
-      "source": "./src/ui.js",
       "import": "./dist/ui.es.js"
     },
     "./ui/react": {
       "types": "./dist/superdoc/src/public/ui-react.d.ts",
-      "source": "./src/ui-react.js",
       "import": "./dist/ui-react.es.js"
     },
     "./headless-toolbar/react": {
       "types": "./dist/superdoc/src/public/legacy/headless-toolbar-react.d.ts",
-      "source": "./src/headless-toolbar-react.js",
       "import": "./dist/headless-toolbar-react.es.js"
     },
     "./headless-toolbar/vue": {
       "types": "./dist/superdoc/src/public/legacy/headless-toolbar-vue.d.ts",
-      "source": "./src/headless-toolbar-vue.js",
       "import": "./dist/headless-toolbar-vue.es.js"
     },
     "./file-zipper": {
@@ -127,13 +119,13 @@
     "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "collab-server": "pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build && tsx src/dev/collab-server.ts",
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
-    "build": "vite build && pnpm run build:cdn",
+    "build": "vite build && pnpm run build:cdn && pnpm run postbuild",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs && node ./scripts/check-export-coverage.cjs && node ./scripts/verify-public-facade-emit.cjs && node ./scripts/report-declaration-reachability.cjs",
     "audit:declarations": "node ./scripts/audit-declarations.cjs",
     "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
     "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
-    "build:es": "vite build && pnpm run postbuild",
+    "build:es": "pnpm run build",
     "watch:es": "vite build --watch",
     "build:cdn": "vite build --config vite.config.cdn.js",
     "watch:cdn": "vite build --watch --config vite.config.cdn.js",
@@ -141,8 +133,8 @@
     "prepack": "node ./scripts/sanitize-pack-manifest.cjs prepare",
     "postpack": "node ./scripts/sanitize-pack-manifest.cjs restore",
     "pack:local": "pnpm run pack:es",
-    "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
-    "pack:es": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
+    "pack": "node ./scripts/pack-output.cjs clean && pnpm run build:es && pnpm pack && node ./scripts/pack-output.cjs finalize",
+    "pack:es": "node ./scripts/pack-output.cjs clean && pnpm run build:es && pnpm pack && node ./scripts/pack-output.cjs finalize",
     "test": "vitest"
   },
   "dependencies": {
@@ -192,9 +184,16 @@
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
-    "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
-    "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
+    "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
+    "@superdoc/layout-bridge": "workspace:*",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/style-engine": "workspace:*",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
@@ -208,6 +207,7 @@
     "prosemirror-state": "catalog:",
     "rollup-plugin-visualizer": "catalog:",
     "sirv": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-dts": "catalog:",

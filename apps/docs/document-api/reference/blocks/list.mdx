@@ -186,6 +186,19 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
           "ordinal": {
             "type": "number"
           },
+          "paragraphNumbering": {
+            "additionalProperties": false,
+            "description": "Numbering reference (numId + level) for numbered blocks, including numbered headings. Absent for non-numbered blocks.",
+            "properties": {
+              "level": {
+                "type": "number"
+              },
+              "numId": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
           "ref": {
             "description": "Ref handle for this block. Pass directly to superdoc_format or superdoc_edit ref param. Only present for non-empty blocks.",
             "type": "string"

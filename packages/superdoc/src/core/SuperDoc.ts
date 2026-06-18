@@ -1888,6 +1888,11 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   getV2FeatureMatrix() {
     return [
       {
+        feature: 'docx.open-render',
+        status: 'supported',
+        reason: 'editorVersion: 2 opens and renders DOCX documents through the injected private V2 integration seam',
+      },
+      {
         feature: 'docx.review-handles',
         status: 'supported',
         reason: 'Comment/tracked-change list + decide via v2 host handles',
@@ -1911,7 +1916,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       {
         feature: 'shell.comments-sidebar.reopen',
         status: 'not-shipped',
-        reason: 'comment-reopen-omitted: public v2 shell keeps resolved-state reopen disabled',
+        reason: 'comment-reopen-ui-omitted: public v2 shell keeps resolved-state reopen disabled',
       },
       {
         feature: 'shell.tracked-change-sidebar',
@@ -1927,7 +1932,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       {
         feature: 'shell.tracked-change-sidebar.non-body',
         status: 'not-shipped',
-        reason: 'story-review-omitted: public v2 shell only hydrates body-story tracked changes',
+        reason: 'story-target-not-shipped: public v2 shell only hydrates body-story tracked changes',
       },
       {
         feature: 'shell.comments-sidebar.persistence',
@@ -1949,12 +1954,12 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       },
       {
         feature: 'shell.find-replace',
-        status: 'not-shipped',
+        status: 'disabled',
         reason: 'find-replace-omitted: public v2 shell does not expose v2 find/replace yet',
       },
       {
-        feature: 'shell.ai',
-        status: 'not-shipped',
+        feature: 'shell.ai-writer',
+        status: 'disabled',
         reason: 'ai-omitted: public v2 shell hides AI chrome until a v2 command bridge exists',
       },
       {
@@ -2384,6 +2389,17 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * @param mode - The document mode ('editing', 'viewing', 'suggesting')
    */
   #applyDocumentMode(doc: RuntimeDocument, mode: DocumentMode) {
+    const documentId = typeof doc.id === 'string' && doc.id.length > 0 ? doc.id : null;
+    if (documentId) {
+      const runtimes = this.#editorRuntimeRegistry.getAllByDocumentId(documentId);
+      if (runtimes.length > 0) {
+        for (const runtime of runtimes) {
+          runtime.setDocumentMode(mode);
+        }
+        return;
+      }
+    }
+
     const presentationEditor = typeof doc.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
     if (presentationEditor) {
       presentationEditor.setDocumentMode(mode);

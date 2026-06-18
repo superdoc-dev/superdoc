@@ -5,6 +5,7 @@ import type {
   ParagraphsAdapter,
   ParagraphsClearTabStopInput,
   ParagraphsSetIndentationInput,
+  ParagraphsSetNumberingInput,
   ParagraphsSetTabStopInput,
 } from './paragraphs.js';
 import {
@@ -12,6 +13,7 @@ import {
   executeParagraphsSetFlowOptions,
   executeParagraphsSetIndentation,
   executeParagraphsSetMarkRunProps,
+  executeParagraphsSetNumbering,
   executeParagraphsSetTabStop,
 } from './paragraphs.js';
 
@@ -58,6 +60,7 @@ function makeAdapter(): ParagraphsAdapter & {
     setMarkRunProps: mock(() => success),
     setDirection: mock(() => success),
     clearDirection: mock(() => success),
+    setNumbering: mock(() => success),
   } as ParagraphsAdapter & {
     setIndentation: ReturnType<typeof mock>;
     setMarkRunProps: ReturnType<typeof mock>;
@@ -68,6 +71,50 @@ function makeLegacyAdapterWithoutMarkRunProps(): ParagraphsAdapter {
   const { setMarkRunProps: _omitted, ...adapter } = makeAdapter();
   return adapter;
 }
+
+describe('executeParagraphsSetNumbering', () => {
+  it('delegates to the adapter for valid input', () => {
+    const adapter = makeAdapter();
+    const result = executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 2, level: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an omitted level', () => {
+    const adapter = makeAdapter();
+    const result = executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 2 });
+    expect(result.success).toBe(true);
+  });
+
+  it('throws when numId is missing', () => {
+    const adapter = makeAdapter();
+    expect(() =>
+      executeParagraphsSetNumbering(adapter, { target: makeTarget() } as ParagraphsSetNumberingInput),
+    ).toThrow(DocumentApiValidationError);
+  });
+
+  it('throws when numId is not a positive integer (0 is the no-numbering sentinel)', () => {
+    const adapter = makeAdapter();
+    expect(() => executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 0 })).toThrow(
+      DocumentApiValidationError,
+    );
+    expect(() => executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: -1 })).toThrow(
+      DocumentApiValidationError,
+    );
+    expect(() => executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 1.5 })).toThrow(
+      DocumentApiValidationError,
+    );
+  });
+
+  it('throws when level is outside 0-8', () => {
+    const adapter = makeAdapter();
+    expect(() => executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 2, level: 9 })).toThrow(
+      DocumentApiValidationError,
+    );
+    expect(() => executeParagraphsSetNumbering(adapter, { target: makeTarget(), numId: 2, level: -1 })).toThrow(
+      DocumentApiValidationError,
+    );
+  });
+});
 
 describe('executeParagraphsSetIndentation', () => {
   it('accepts signed left and right indentation values', () => {

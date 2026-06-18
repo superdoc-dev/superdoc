@@ -171,6 +171,21 @@ export {
 } from './page-number-formatting.js';
 
 export { buildPageRefAnchorMap } from './page-ref-anchor.js';
+export {
+  DRAWING_DIAGNOSTIC_CODES,
+  DRAWING_DIAGNOSTIC_CODE_ALIASES,
+  DRAWING_SUPPORT_TAXONOMY,
+  DRAWING_FAMILIES,
+  canonicalDrawingDiagnosticCode,
+  getDrawingFamilySpec,
+  isSupportedDrawingFamily,
+  type DrawingContractTarget,
+  type DrawingDiagnosticCode,
+  type DrawingFamily,
+  type DrawingFamilySpec,
+  type DrawingSupportLevel,
+  type DrawingTaxonomyDrawingKind,
+} from './drawing-taxonomy.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -355,9 +370,6 @@ export type TrackedChangeMeta = {
   author?: string;
   authorEmail?: string;
   authorImage?: string;
-  date?: string;
-  before?: RunMark[];
-  after?: RunMark[];
   /**
    * Paint-ready per-author color, resolved upstream (in/around the
    * pm-adapter data-preparation pass) from the author identity. DomPainter
@@ -367,6 +379,9 @@ export type TrackedChangeMeta = {
    * case the static default tracked-change palette applies.
    */
   color?: string;
+  date?: string;
+  before?: RunMark[];
+  after?: RunMark[];
 };
 
 export type FlowRunLinkTarget = '_blank' | '_self' | '_parent' | '_top';

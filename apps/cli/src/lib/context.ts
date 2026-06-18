@@ -8,7 +8,13 @@ import { ENV_VAR_NAME_PATTERN, type CollaborationProfile } from './collaboration
 import { CliError } from './errors';
 import { asRecord, isRecord, pathExists } from './guards';
 import { validateSessionId } from './session';
-import { ACCEPTED_RUNTIME_VALUES, type CliIO, type DocumentRuntimeKind, type ExecutionMode, type UserIdentity } from './types';
+import {
+  ACCEPTED_RUNTIME_VALUES,
+  type CliIO,
+  type DocumentRuntimeKind,
+  type ExecutionMode,
+  type UserIdentity,
+} from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';

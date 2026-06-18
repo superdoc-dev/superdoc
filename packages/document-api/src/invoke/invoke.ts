@@ -101,6 +101,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.setMarkRunProps': (input, options) => api.format.paragraph.setMarkRunProps(input, options),
     'format.paragraph.setDirection': (input, options) => api.format.paragraph.setDirection(input, options),
     'format.paragraph.clearDirection': (input, options) => api.format.paragraph.clearDirection(input, options),
+    'format.paragraph.setNumbering': (input, options) => api.format.paragraph.setNumbering(input, options),
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
     // --- templates.* ---

@@ -1873,6 +1873,23 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'format/paragraph/clear-direction.mdx',
     referenceGroup: 'format.paragraph',
   },
+  'format.paragraph.setNumbering': {
+    memberPath: 'format.paragraph.setNumbering',
+    description:
+      'Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property; the node and its style are otherwise unchanged, though any direct paragraph indent is cleared so the numbering level controls indentation. Direct edits only; tracked mode is unsupported.',
+    expectedResult:
+      'Returns a ParagraphMutationResult; reports NO_OP if the block already carries this numbering. On a successful apply, resolution.target reflects the post-mutation address (a numbered plain paragraph re-resolves to listItem; a heading stays a heading); a dryRun returns the input target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-numbering.mdx',
+    referenceGroup: 'format.paragraph',
+  },
   'lists.list': {
     memberPath: 'lists.list',
     description: 'List all list nodes in the document, optionally filtered by scope.',
@@ -2847,8 +2864,8 @@ export const OPERATION_DEFINITIONS = {
   'plan.execute': {
     memberPath: 'plan.execute',
     description:
-      'Execute a compiled batch of plan-safe operation entries with per-entry transactions, '
-      + 'capture resolution between entries, and keep-prefix-and-continue failure semantics.',
+      'Execute a compiled batch of plan-safe operation entries with per-entry transactions, ' +
+      'capture resolution between entries, and keep-prefix-and-continue failure semantics.',
     expectedResult:
       'Returns a PlanExecuteResult with per-entry receipts, projected captures, and the first hard failure if any.',
     requiresDocumentContext: true,
@@ -2948,8 +2965,7 @@ export const OPERATION_DEFINITIONS = {
   },
   'tables.move': {
     memberPath: 'tables.move',
-    description:
-      'Move a table to a new position in the document.',
+    description: 'Move a table to a new position in the document.',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the table is already at the target position.',
     requiresDocumentContext: true,
@@ -5405,7 +5421,7 @@ export const OPERATION_DEFINITIONS = {
   },
   'footnotes.insert': {
     memberPath: 'footnotes.insert',
-    description: `Insert a new footnote or endnote at a target location.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
+    description: `Insert a new footnote or endnote at a target location or the current selection.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
     expectedResult: 'Returns a FootnoteMutationResult indicating success with the footnote address or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

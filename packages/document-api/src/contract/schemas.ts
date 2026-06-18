@@ -1138,8 +1138,16 @@ const unknownNodeDiagnosticSchema = objectSchema(
 const textSelectorSchema = objectSchema(
   {
     type: { const: 'text', description: "Must be 'text' for text pattern search." },
-    pattern: { type: 'string', description: 'Text or regex pattern to match.' },
-    mode: { enum: ['contains', 'regex'], description: "Match mode: 'contains' (substring) or 'regex'." },
+    pattern: {
+      type: 'string',
+      description:
+        'Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.',
+    },
+    mode: {
+      enum: ['contains', 'regex'],
+      description:
+        "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
+    },
     caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
     wholeWord: { type: 'boolean', description: 'Require word-boundary matches. Default: false.' },
   },
@@ -1983,13 +1991,18 @@ const planEngineCapabilitiesSchema = objectSchema(
     supportedSetMarks: arraySchema({ type: 'string' }),
     regex: objectSchema(
       {
-        maxPatternLength: { type: 'integer' },
+        maxPatternLength: {
+          type: 'integer',
+          description: 'Maximum allowed regex pattern length for text selectors.',
+        },
       },
       ['maxPatternLength'],
     ),
   },
   ['supportedStepOps', 'supportedNonUniformStrategies', 'supportedSetMarks', 'regex'],
 );
+((planEngineCapabilitiesSchema.properties as Record<string, JsonSchema>).regex as JsonSchema).description =
+  'Regex selector limits enforced by the selector engine. Unsafe patterns are rejected.';
 const capabilitiesOutputSchema = objectSchema(
   {
     global: objectSchema(
@@ -3578,6 +3591,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               color: { type: 'string', description: "Text color when explicitly set (e.g. '#000000')." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
               headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+              paragraphNumbering: {
+                type: 'object',
+                description:
+                  'Numbering reference (numId + level) for numbered blocks, including numbered headings. Absent for non-numbered blocks.',
+                properties: {
+                  numId: { type: 'number' },
+                  level: { type: 'number' },
+                },
+                additionalProperties: false,
+              },
               ref: {
                 type: 'string',
                 description:
@@ -4062,6 +4085,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: paragraphMutationResultSchemaFor('format.paragraph.clearDirection'),
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearDirection'),
+  },
+  'format.paragraph.setNumbering': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        numId: { type: 'integer', minimum: 1 },
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      ['target', 'numId'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setNumbering'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setNumbering'),
   },
   'styles.apply': (() => {
     // Derived from PROPERTY_REGISTRY: no hardcoded property lists
@@ -5545,9 +5581,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         commentId: { type: 'string' },
         text: { type: 'string', description: 'Updated comment text.' },
         target: {
-          oneOf: [textAddressSchema, selectionTargetSchema, commentTrackedChangeTargetSchema, textSearchCommentTargetSchema],
+          oneOf: [
+            textAddressSchema,
+            selectionTargetSchema,
+            commentTrackedChangeTargetSchema,
+            textSearchCommentTargetSchema,
+          ],
           description:
-            'New anchor for the comment. Accepts a plain TextAddress, a SelectionTarget {kind:\'selection\', start, end}, a TextSearchCommentTarget {text, story?}, or a TrackedChangeCommentTarget, with or without kind, that names a logical tracked-change id as a convenience re-anchor target .',
+            "New anchor for the comment. Accepts a plain TextAddress, a SelectionTarget {kind:'selection', start, end}, a TextSearchCommentTarget {text, story?}, or a TrackedChangeCommentTarget, with or without kind, that names a logical tracked-change id as a convenience re-anchor target .",
         },
         status: {
           enum: ['resolved', 'active'],
@@ -8040,17 +8081,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'footnotes.insert': {
     input: {
       oneOf: [
-        objectSchema(
-          { at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
-          ['at', 'type', 'content'],
-        ),
+        objectSchema({ at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } }, [
+          'type',
+          'content',
+        ]),
         objectSchema(
           {
             at: textTargetSchema,
             type: { enum: ['footnote', 'endnote'] },
             body: { ...sdFragmentSchema, description: 'Structured SDM/1 note body.' },
           },
-          ['at', 'type', 'body'],
+          ['type', 'body'],
         ),
       ],
     },

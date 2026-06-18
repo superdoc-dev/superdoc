@@ -2,24 +2,51 @@ name: CI Examples
 
 on:
   pull_request:
-    paths:
-      - '.github/workflows/ci-examples.yml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.nvmrc'
-      - 'examples/**'
-      - 'packages/superdoc/**'
-      - 'packages/react/**'
-      - 'packages/super-editor/**'
-      - 'packages/collaboration-yjs/**'
-      - 'packages/sdk/**'
-      - 'packages/layout-engine/**'
-      - 'shared/**'
+  merge_group:
   workflow_dispatch:
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      examples: ${{ steps.set.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            examples:
+              - '.github/workflows/ci-examples.yml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.nvmrc'
+              - 'examples/**'
+              - 'packages/superdoc/**'
+              - 'packages/react/**'
+              - 'packages/super-editor/**'
+              - 'packages/collaboration-yjs/**'
+              - 'packages/sdk/**'
+              - 'packages/layout-engine/**'
+              - 'shared/**'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "examples=${{ steps.filter.outputs.examples }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.examples == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -31,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -74,7 +101,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -149,7 +176,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -167,9 +194,22 @@ jobs:
 
       - name: Create .env for cloud providers
         working-directory: examples/editor/collaboration/providers/${{ matrix.example }}
+        env:
+          VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}
         run: |
           if [ "${{ matrix.example }}" = "liveblocks" ]; then
-            echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
+            case "$VITE_LIVEBLOCKS_PUBLIC_KEY" in
+              pk_*) ;;
+              sk_*)
+                echo "::error::VITE_LIVEBLOCKS_PUBLIC_KEY must be a Liveblocks public key (pk_...), not a secret key (sk_...)."
+                exit 1
+                ;;
+              *)
+                echo "::error::VITE_LIVEBLOCKS_PUBLIC_KEY must be a Liveblocks public key beginning with pk_."
+                exit 1
+                ;;
+            esac
+            printf 'VITE_LIVEBLOCKS_PUBLIC_KEY=%s\n' "$VITE_LIVEBLOCKS_PUBLIC_KEY" > .env
           fi
 
       - name: Resolve Playwright version
@@ -215,7 +255,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -274,7 +314,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -333,7 +373,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -392,7 +432,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -451,7 +491,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -506,7 +546,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -529,11 +569,19 @@ jobs:
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
+    needs: [detect, build, getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.examples }}" != "true" ]]; then
+            echo "Examples CI skipped: no relevant paths changed."
+            exit 0
+          fi
           if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
             echo "One or more required jobs did not succeed."
             exit 1

@@ -69,13 +69,15 @@ describe('normalizeTrackChangesConfig', () => {
       expect(config.modules.trackChanges.enabled).toBe(true);
     });
 
-    it('preserves authorColors by reference on the canonical path', () => {
-      const resolve = vi.fn();
-      const authorColors = { overrides: { Alice: '#123456' }, resolve };
-      const config = {
-        modules: { trackChanges: { authorColors } },
+    it('preserves canonical author color config for v2 tracked-change rendering', () => {
+      const authorColors = {
+        enabled: true,
+        overrides: { Ada: '#8250df' },
+        resolve: vi.fn(),
       };
-
+      const config = {
+        modules: { trackChanges: { visible: true, authorColors } },
+      };
       const result = normalizeTrackChangesConfig(config);
 
       expect(result.authorColors).toBe(authorColors);

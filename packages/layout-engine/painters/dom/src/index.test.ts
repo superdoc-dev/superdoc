@@ -432,6 +432,39 @@ describe('DomPainter', () => {
     expect(fragment.textContent).toContain('world');
   });
 
+  it('isolates unresolved document text from host foreground CSS', () => {
+    const hostStyle = document.createElement('style');
+    hostStyle.textContent = `
+      :root { color: #f2f4f8; }
+      body * { color: #f2f4f8; }
+      span { color: #f2f4f8; }
+    `;
+    document.head.appendChild(hostStyle);
+
+    try {
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const page = mount.querySelector('.superdoc-page') as HTMLElement;
+      const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      const textRun = Array.from(mount.querySelectorAll<HTMLElement>('.superdoc-text-run')).find((el) =>
+        el.textContent?.includes('Hello'),
+      );
+      const styleEl = document.querySelector('[data-superdoc-document-surface-styles="true"]');
+      const cssText = styleEl?.textContent ?? '';
+
+      expect(page.classList.contains('superdoc-page')).toBe(true);
+      expect(fragment.style.color).toBe('inherit');
+      expect(line.style.color).toBe('inherit');
+      expect(textRun).toBeTruthy();
+      expect(cssText).toContain('color: var(--sd-layout-page-color, #000000);');
+      expect(cssText).toContain('.superdoc-layout .superdoc-page .superdoc-text-run');
+    } finally {
+      hostStyle.remove();
+    }
+  });
+
   it('paints document-level page background from resolved layout', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint({ ...layout, documentBackground: { color: '#EEEEEE' } }, mount);
@@ -4402,7 +4435,7 @@ describe('DomPainter', () => {
     expect(textSpan?.style.left).toBe('48px');
   });
 
-  it('positions first-line list text from the resolved tab stop instead of stale wordLayout.textStartPx', () => {
+  it('keeps segment-positioned first-line list text at its measured segment offset', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: 'list-tab-stop-block',
@@ -4482,7 +4515,7 @@ describe('DomPainter', () => {
       | HTMLElement
       | undefined;
     expect(textSpan).toBeTruthy();
-    expect(textSpan?.style.left).toBe('144px');
+    expect(textSpan?.style.left).toBe('48px');
   });
 
   it('preserves measured justification width for inline list first lines without explicit segments', () => {
@@ -5191,6 +5224,47 @@ describe('DomPainter', () => {
     expect(headerEl?.textContent).toBe('Page 1 of 1');
   });
 
+  it('stamps a stable header/footer ref-id attribute on the decoration container', () => {
+    const headerBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-block',
+      runs: [{ text: 'HEADER_LINE_1', fontFamily: 'Arial', fontSize: 14 }],
+    };
+    const headerMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 1, toChar: 1, width: 120, ascent: 10, descent: 4, lineHeight: 16 }],
+      totalHeight: 16,
+    };
+    const headerFragment = {
+      kind: 'para' as const,
+      blockId: 'header-block',
+      fromLine: 0,
+      toLine: 1,
+      x: 0,
+      y: 0,
+      width: 200,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, headerBlock],
+      measures: [measure, headerMeasure],
+      headerProvider: () => ({
+        fragments: [headerFragment],
+        height: 16,
+        headerFooterRefId: 'rId101',
+        sectionType: 'first',
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    expect(headerEl).toBeTruthy();
+    expect(headerEl?.getAttribute('data-sd-headerfooter-ref-id')).toBe('rId101');
+    expect(headerEl?.getAttribute('data-sd-headerfooter-variant')).toBe('first');
+    expect(headerEl?.getAttribute('data-sd-headerfooter-kind')).toBe('header');
+  });
+
   it('renders behindDoc header images directly on page, not in header container', () => {
     // Per OOXML spec, behindDoc images should render behind body content.
     // This requires placing them directly on the page element (not in header container)
@@ -5586,7 +5660,7 @@ describe('DomPainter', () => {
             id: 'change-1',
             author: 'Reviewer 1',
             authorEmail: 'reviewer@example.com',
-            color: '#123456',
+            color: '#8250df',
           },
         },
       ],
@@ -5611,9 +5685,10 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeKind).toBe('insert');
     expect(span.dataset.trackChangeAuthor).toBe('Reviewer 1');
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#123456');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('#12345622');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#12345644');
+    expect(span.dataset.trackChangeAuthorColor).toBe('#8250df');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#8250df');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('#8250df22');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#8250df44');
   });
 
   it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {

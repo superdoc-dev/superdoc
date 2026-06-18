@@ -327,11 +327,16 @@ export async function openDocument(
 
   const editorWithDoc = bindCurrentDocumentApi(editor);
 
-  return buildV1OpenedDocument(editorWithDoc, meta, () => {
-    commentBridge?.dispose();
-    editor.destroy();
-    domEnv.dispose();
-  }, cloneBytes(source));
+  return buildV1OpenedDocument(
+    editorWithDoc,
+    meta,
+    () => {
+      commentBridge?.dispose();
+      editor.destroy();
+      domEnv.dispose();
+    },
+    cloneBytes(source),
+  );
 }
 
 /**

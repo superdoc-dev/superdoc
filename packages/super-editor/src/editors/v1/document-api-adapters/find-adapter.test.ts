@@ -556,6 +556,25 @@ describe('findLegacyAdapter — text selectors', () => {
     expect(result.diagnostics![0].message).toContain('Invalid text query regex');
   });
 
+  it('rejects unsafe regex without invoking search', () => {
+    let searchCalled = false;
+    const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
+    const search: SearchFn = () => {
+      searchCalled = true;
+      throw new Error('unsafe regex should not reach search');
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: '^(a+)+$', mode: 'regex' } };
+
+    const result = findLegacyAdapter(editor, query);
+
+    expect(searchCalled).toBe(false);
+    expect(result.items).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics![0].message).toContain('Unsafe text query regex');
+  });
+
   it('passes regex pattern to search for regex mode', () => {
     let capturedPattern: string | RegExp | undefined;
     const doc = buildDoc('a'.repeat(52), {
@@ -652,6 +671,38 @@ describe('findLegacyAdapter — text selectors', () => {
     expect(result.items[0].context).toBeDefined();
     const context = result.items[0].context!;
     expect(context.snippet.slice(context.highlightRange.start, context.highlightRange.end)).toBe('/foo/');
+  });
+
+  it('treats contains patterns with regex metacharacters as literal text', () => {
+    const text = 'literal (a+)+ beside aaaaa';
+    const doc = buildDoc(text, {
+      typeName: 'paragraph',
+      attrs: { sdBlockId: 'p1' },
+      nodeSize: text.length + 4,
+      offset: 0,
+    });
+    const search: SearchFn = (pattern) => {
+      if (!(pattern instanceof RegExp)) return [];
+      const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+      const effectivePattern = new RegExp(pattern.source, flags);
+      return Array.from(text.matchAll(effectivePattern)).map((match) => {
+        const from = match.index ?? 0;
+        return {
+          from,
+          to: from + match[0].length,
+          text: match[0],
+        };
+      });
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: '(a+)+' } };
+
+    const result = findLegacyAdapter(editor, query);
+
+    expect(result.total).toBe(1);
+    expect(result.items[0].context).toBeDefined();
+    const context = result.items[0].context!;
+    expect(context.snippet.slice(context.highlightRange.start, context.highlightRange.end)).toBe('(a+)+');
   });
 
   it('passes case-sensitive escaped RegExp for contains mode', () => {

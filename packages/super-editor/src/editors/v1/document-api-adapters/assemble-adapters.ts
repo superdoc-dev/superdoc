@@ -42,6 +42,7 @@ import {
   paragraphsClearShadingWrapper,
   paragraphsSetDirectionWrapper,
   paragraphsClearDirectionWrapper,
+  paragraphsSetNumberingWrapper,
 } from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
@@ -449,6 +450,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
         capabilityUnavailable('format.paragraph.setMarkRunProps is only available on v2-backed sessions.'),
       setDirection: (input, options) => paragraphsSetDirectionWrapper(editor, input, options),
       clearDirection: (input, options) => paragraphsClearDirectionWrapper(editor, input, options),
+      setNumbering: (input, options) => paragraphsSetNumberingWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),

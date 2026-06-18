@@ -3221,8 +3221,12 @@ describe('createDocumentApi', () => {
     it('accepts nodeId for table-locator operations', () => {
       const api = makeApi();
       expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
-      expect(() => api.tables.setLayout({ nodeId: 't1', autoFitMode: 'fixedWidth', preferredWidthType: 'auto' })).not.toThrow();
-      expect(() => api.tables.setLayout({ nodeId: 't1', preferredWidthType: 'pct', preferredWidth: 5000 })).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', autoFitMode: 'fixedWidth', preferredWidthType: 'auto' }),
+      ).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', preferredWidthType: 'pct', preferredWidth: 5000 }),
+      ).not.toThrow();
       expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
     });
 

@@ -5,7 +5,8 @@
   "scripts": {
     "deps:up": "docker compose up -d",
     "deps:down": "docker compose down -v",
-    "dev": "node server.mjs"
+    "dev": "node server.mjs",
+    "test": "node --test server-utils.test.mjs"
   },
   "dependencies": {
     "@y/y": "^14.0.0-rc.1",

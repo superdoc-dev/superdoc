@@ -4,6 +4,7 @@
   "license": "AGPL-3.0",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
+    "ci:local": "node scripts/oss-local-ci.mjs",
     "test": "node scripts/test.mjs",
     "test:bench": "VITEST_BENCH=true vitest run",
     "test:slow": "VITEST_SLOW=1 VITEST_DOM=node vitest run --root ./packages/super-editor --exclude '**/node_modules/**' src/editors/v1/tests/editor/node-import-timing.test.js",
@@ -135,6 +136,9 @@
       "@vue/server-renderer": "3.5.32",
       "@vue/shared": "3.5.32",
       "vite": "npm:rolldown-vite@7.3.1",
+      "axios": "1.18.0",
+      "protobufjs@7": "7.6.4",
+      "protobufjs@8": "8.6.4",
       "superdoc": "workspace:*",
       "@superdoc-dev/react": "workspace:*",
       "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",

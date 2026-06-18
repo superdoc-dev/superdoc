@@ -15,7 +15,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fontSystemSource = resolve(here, '../../../shared/font-system/src/font-offerings.ts');
 
 if (!existsSync(fontSystemSource)) {
-  console.log('[@superdoc-dev/fonts] font-system source not present (standalone install); skipping curation-drift check');
+  console.log(
+    '[@superdoc-dev/fonts] font-system source not present (standalone install); skipping curation-drift check',
+  );
   process.exit(0);
 }
 

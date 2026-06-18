@@ -112,3 +112,35 @@ superdoc-extension/
 2. Test different file types and edge cases
 3. Verify context menu functionality
 4. Test extension enable/disable functionality
+
+### XSS Sanitization Verification
+
+Run the automated checks:
+
+```bash
+pnpm --dir superdoc/public/demos/editor/integrations/chrome-extension/chrome-extension build
+pnpm --dir superdoc/public/demos/editor/integrations/chrome-extension/chrome-extension run check:xss-sinks
+```
+
+The extension manifest loads `dist/content.bundle.js`, so any change to `content.js`
+must be followed by a rebuild and the updated bundle plus
+`dist/content.bundle.js.LICENSE.txt` must be committed.
+
+Manual attack check:
+
+1. Load the extension as an unpacked extension from this directory.
+2. Download a `.md` file containing:
+
+   ```markdown
+   # XSS Test
+   <script>alert('script')</script>
+   <img src=x onerror=alert('img')>
+   <svg onload=alert('svg')></svg>
+   [bad link](javascript:alert('link'))
+   <iframe srcdoc="<script>alert('srcdoc')</script>"></iframe>
+   ```
+
+3. Select malicious HTML on a webpage and use "Open selected content in SuperDoc".
+4. Confirm no alerts execute.
+5. Inspect the modal/editor DOM and exported HTML for forbidden tags and attributes.
+6. Regression check: download a `.md` file with headings, bold/italic text, a list, a table, an `http(s)` link, and an `http(s)` image. Confirm formatting remains intact in the modal, normal selected webpage content still preserves links/images/tables, and "Download as HTML" opens with the same benign content.

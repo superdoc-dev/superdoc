@@ -2545,7 +2545,8 @@ describe('superdoc CLI', () => {
     ]);
     expect(explicitSave.code).toBe(0);
 
-    const explicitEnvelope = parseJsonOutput<SuccessEnvelope<{ mode?: string; output: { path: string } }>>(explicitSave);
+    const explicitEnvelope =
+      parseJsonOutput<SuccessEnvelope<{ mode?: string; output: { path: string } }>>(explicitSave);
     expect(explicitEnvelope.data.mode).toBe('review-preserving');
     expect(explicitEnvelope.data.output.path).toBe(explicitOut);
 

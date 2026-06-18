@@ -34,6 +34,7 @@ import type {
   ParagraphsSetMarkRunPropsInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
 } from './paragraphs.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
@@ -82,6 +83,7 @@ export type {
   ParagraphsSetMarkRunPropsInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphDirection,
   AlignmentPolicy,
 } from './paragraphs.types.js';
@@ -126,6 +128,7 @@ export interface ParagraphsAdapter {
   setMarkRunProps?(input: ParagraphsSetMarkRunPropsInput, options?: MutationOptions): ParagraphMutationResult;
   setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `format.paragraph.*`: direct paragraph formatting. */
@@ -153,6 +156,7 @@ export interface ParagraphFormatApi {
   setMarkRunProps(input: ParagraphsSetMarkRunPropsInput, options?: MutationOptions): ParagraphMutationResult;
   setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `styles.paragraph.*`: Word-like paragraph style application operations. */
@@ -394,6 +398,7 @@ const MARK_RUN_BORDER_KEYS = new Set(['style', 'width', 'space', 'color', 'frame
 const MARK_RUN_COLOR_MODE_VALUES = ['rgb', 'theme', 'auto'] as const;
 const MARK_RUN_VERTICAL_ALIGN_VALUES = ['baseline', 'superscript', 'subscript'] as const;
 const SET_DIRECTION_KEYS = new Set(['target', 'direction', 'alignmentPolicy']);
+const SET_NUMBERING_KEYS = new Set(['target', 'numId', 'level']);
 const CLEAR_DIRECTION_KEYS = new Set(['target']);
 
 // ---------------------------------------------------------------------------
@@ -837,6 +842,32 @@ function validateClearDirection(input: unknown): asserts input is ParagraphsClea
   assertNoUnknownFields(input as Record<string, unknown>, CLEAR_DIRECTION_KEYS, 'format.paragraph.clearDirection');
 }
 
+function validateSetNumbering(input: unknown): asserts input is ParagraphsSetNumberingInput {
+  const op = 'format.paragraph.setNumbering';
+  assertParagraphTarget(input, op);
+  assertNoUnknownFields(input as Record<string, unknown>, SET_NUMBERING_KEYS, op);
+  const rec = input as Record<string, unknown>;
+  if (rec.numId === undefined) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires a numId field.`);
+  }
+  if (typeof rec.numId !== 'number' || !Number.isInteger(rec.numId) || rec.numId < 1) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${op} numId must be a positive integer (numId 0 is the no-numbering sentinel). Got ${JSON.stringify(rec.numId)}.`,
+      { field: 'numId', value: rec.numId },
+    );
+  }
+  if (rec.level !== undefined) {
+    if (typeof rec.level !== 'number' || !Number.isInteger(rec.level) || rec.level < 0 || rec.level > 8) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${op} level must be an integer 0-8. Got ${JSON.stringify(rec.level)}.`,
+        { field: 'level', value: rec.level },
+      );
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Execute functions: validate then delegate
 // ---------------------------------------------------------------------------
@@ -1048,4 +1079,13 @@ export function executeParagraphsClearDirection(
 ): ParagraphMutationResult {
   validateClearDirection(input);
   return adapter.clearDirection(input, normalizeMutationOptions(options));
+}
+
+export function executeParagraphsSetNumbering(
+  adapter: ParagraphsAdapter,
+  input: ParagraphsSetNumberingInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  validateSetNumbering(input);
+  return adapter.setNumbering(input, normalizeMutationOptions(options));
 }

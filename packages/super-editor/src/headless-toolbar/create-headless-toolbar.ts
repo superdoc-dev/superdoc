@@ -112,13 +112,24 @@ export const createHeadlessToolbar = (options: CreateHeadlessToolbarOptions): He
     notifyListeners();
   };
 
-  // Current behavior: any relevant source event triggers a full refresh cycle
-  // (snapshot rebuild, event rebind, listener notification).
-  // This is intentionally conservative for now; later we may rebind only when
-  // the subscribed source identities actually change.
+  // Any relevant source event triggers a full refresh cycle (snapshot
+  // rebuild, event rebind, listener notification), COALESCED per microtask:
+  // a single keystroke fires both 'transaction' and 'selectionUpdate'
+  // synchronously from the same dispatch, and rebuilding the snapshot is the
+  // expensive part (~7ms on large documents, SD-3432) — running it twice per
+  // keystroke bought nothing. The microtask runs after the dispatch
+  // completes and before paint, so subscribers still observe a snapshot that
+  // reflects the full transaction; they are simply notified once per burst
+  // instead of once per event. `execute()` keeps its synchronous refresh.
+  let refreshQueued = false;
   const handleChange = () => {
-    if (destroyed) return;
-    refreshControllerState();
+    if (destroyed || refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+      refreshQueued = false;
+      if (destroyed) return;
+      refreshControllerState();
+    });
   };
 
   rebindEvents();

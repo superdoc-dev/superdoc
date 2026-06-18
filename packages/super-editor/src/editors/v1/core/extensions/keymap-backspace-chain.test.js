@@ -38,6 +38,8 @@ describe('handleBackspace chain ordering', () => {
       undoInputRule: make('undoInputRule'),
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtBeforeRunStart: make('selectInlineSdtBeforeRunStart'),
+      selectFootnoteMarkerBefore: make('selectFootnoteMarkerBefore'),
+      deleteSelectedNoteMarker: make('deleteSelectedNoteMarker'),
       selectBlockSdtBeforeTextBlockStart: make('selectBlockSdtBeforeTextBlockStart'),
       moveIntoBlockSdtBeforeTextBlockStart: make('moveIntoBlockSdtBeforeTextBlockStart'),
       backspaceEmptyRunParagraph: make('backspaceEmptyRunParagraph'),
@@ -77,6 +79,8 @@ describe('handleBackspace chain ordering', () => {
       // step 2 sets inputType meta and returns false (no command call)
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtBeforeRunStart',
+      'selectFootnoteMarkerBefore',
+      'deleteSelectedNoteMarker',
       'selectBlockSdtBeforeTextBlockStart',
       'moveIntoBlockSdtBeforeTextBlockStart',
       'backspaceEmptyRunParagraph',
@@ -109,8 +113,10 @@ describe('handleBackspace chain ordering', () => {
     expect(callLog[0]).toBe('undoInputRule');
     expect(callLog[1]).toBe('deleteBlockSdtAtTextBlockStart');
     expect(callLog[2]).toBe('selectInlineSdtBeforeRunStart');
-    expect(callLog[3]).toBe('selectBlockSdtBeforeTextBlockStart');
-    expect(callLog[4]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
+    expect(callLog[3]).toBe('selectFootnoteMarkerBefore');
+    expect(callLog[4]).toBe('deleteSelectedNoteMarker');
+    expect(callLog[5]).toBe('selectBlockSdtBeforeTextBlockStart');
+    expect(callLog[6]).toBe('moveIntoBlockSdtBeforeTextBlockStart');
   });
 
   it('places mixedBidiBackspace after backspaceAcrossRuns and before deleteSelection', () => {
@@ -182,6 +188,8 @@ describe('handleDelete chain ordering', () => {
     const commands = {
       deleteBlockSdtAtTextBlockStart: make('deleteBlockSdtAtTextBlockStart'),
       selectInlineSdtAfterRunEnd: make('selectInlineSdtAfterRunEnd'),
+      selectFootnoteMarkerAfter: make('selectFootnoteMarkerAfter'),
+      deleteSelectedNoteMarker: make('deleteSelectedNoteMarker'),
       selectBlockSdtAfterTextBlockEnd: make('selectBlockSdtAfterTextBlockEnd'),
       moveIntoBlockSdtAfterTextBlockEnd: make('moveIntoBlockSdtAfterTextBlockEnd'),
       deleteSkipEmptyRun: make('deleteSkipEmptyRun'),
@@ -216,6 +224,8 @@ describe('handleDelete chain ordering', () => {
     expect(callLog).toEqual([
       'deleteBlockSdtAtTextBlockStart',
       'selectInlineSdtAfterRunEnd',
+      'selectFootnoteMarkerAfter',
+      'deleteSelectedNoteMarker',
       'selectBlockSdtAfterTextBlockEnd',
       'moveIntoBlockSdtAfterTextBlockEnd',
       'deleteSkipEmptyRun',

@@ -55,16 +55,19 @@ export interface FootnoteGetInput {
  * Two mutually exclusive content forms:
  * - legacy `content: string` for plain-text note content
  * - structured `body: SDFragment` for SDM/1 content
+ *
+ * `at` is optional: when omitted, host runtimes insert at the current
+ * selection/caret position (the toolbar/default editor path).
  */
 export type FootnoteInsertInput =
   | {
-      at: TextTarget;
+      at?: TextTarget;
       type: 'footnote' | 'endnote';
       content: string;
       body?: never;
     }
   | {
-      at: TextTarget;
+      at?: TextTarget;
       type: 'footnote' | 'endnote';
       body: SDFragment;
       content?: never;

@@ -41,8 +41,9 @@ export interface PlanEngineCapabilities {
   supportedNonUniformStrategies: readonly string[];
   /** Mark names that `setMarks` can override (e.g., 'bold', 'italic'). */
   supportedSetMarks: readonly string[];
-  /** Regex safety limits enforced by the selector engine. */
+  /** Regex selector limits enforced by the selector engine. Unsafe patterns are rejected. */
   regex: {
+    /** Maximum allowed text-selector regex pattern length. */
     maxPatternLength: number;
     maxExecutionMs?: number;
   };

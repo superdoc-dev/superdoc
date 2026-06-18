@@ -172,7 +172,7 @@ export interface CreateTableOfContentsInput {
    * such as custom-style mappings (`\\t`) or omitted default switches.
    * When provided, the adapter parses this instruction as the base TOC config
    * before applying any config patch overrides.
-  */
+   */
   instruction?: string;
   config?: TocConfigurePatch;
 }

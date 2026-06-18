@@ -58,10 +58,10 @@ function validateTablesSetLayoutInput(input: TablesSetLayoutInput): void {
   validateTableLocator(input, 'tables.setLayout');
 
   if (
-    input.preferredWidthType !== undefined
-    && input.preferredWidthType !== 'dxa'
-    && input.preferredWidthType !== 'auto'
-    && input.preferredWidthType !== 'pct'
+    input.preferredWidthType !== undefined &&
+    input.preferredWidthType !== 'dxa' &&
+    input.preferredWidthType !== 'auto' &&
+    input.preferredWidthType !== 'pct'
   ) {
     throw new DocumentApiValidationError(
       'INVALID_ARGUMENT',

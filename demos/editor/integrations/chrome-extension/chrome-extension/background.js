@@ -4,6 +4,15 @@ let extensionEnabled = true;
 // Import the bundled docx validator
 importScripts('dist/docx-validator.bundle.js');
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 // Update extension icon based on enabled state
 function updateIcon(enabled) {
   const suffix = enabled ? '' : '-disabled';
@@ -218,7 +227,7 @@ async function processMarkdownFile(download) {
 
 // Simple markdown to HTML converter
 function markdownToHtml(markdown) {
-  let html = markdown;
+  let html = escapeHtml(markdown);
   
   // Headers
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');

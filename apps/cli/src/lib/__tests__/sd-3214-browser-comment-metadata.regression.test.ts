@@ -271,10 +271,12 @@ describeSharedYDoc('SD-3214: two-client end-to-end', () => {
       user: { name: 'Author', email: 'author@example.com' },
     });
     sessionA.editor.doc.create.paragraph({ at: { kind: 'documentEnd' }, text: 'A short clause.' });
-    const matchBlock = expectFirstMatchBlock(sessionA.editor.doc.query.match({
-      select: { type: 'text', pattern: 'clause' },
-      require: 'first',
-    }));
+    const matchBlock = expectFirstMatchBlock(
+      sessionA.editor.doc.query.match({
+        select: { type: 'text', pattern: 'clause' },
+        require: 'first',
+      }),
+    );
     sessionA.editor.doc.comments.create({
       target: { kind: 'text', blockId: matchBlock.blockId, range: matchBlock.range } as never,
       text: 'mine',
@@ -499,10 +501,12 @@ describeSharedYDoc('SD-3214: two-client end-to-end', () => {
       user: { name: 'Browser User', email: 'browser@example.com' },
     });
     sessionA.editor.doc.create.paragraph({ at: { kind: 'documentEnd' }, text: 'A late clause.' });
-    const matchBlock = expectFirstMatchBlock(sessionA.editor.doc.query.match({
-      select: { type: 'text', pattern: 'late clause' },
-      require: 'first',
-    }));
+    const matchBlock = expectFirstMatchBlock(
+      sessionA.editor.doc.query.match({
+        select: { type: 'text', pattern: 'late clause' },
+        require: 'first',
+      }),
+    );
     sessionA.editor.doc.comments.create({
       target: { kind: 'text', blockId: matchBlock.blockId, range: matchBlock.range } as never,
       text: 'Late comment.',

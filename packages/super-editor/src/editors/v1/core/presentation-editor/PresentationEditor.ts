@@ -112,7 +112,9 @@ import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelec
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
 import { shouldUseNativeCaretFallback } from './selection/native-caret-fallback.js';
 import {
+  computeCaretRectFromPmPosition as computeCaretRectFromPmPositionFromHelper,
   computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
+  computeSelectionRectsFromPmRange as computeSelectionRectsFromPmRangeFromHelper,
   computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
   measureVisibleTextOffset as measureVisibleTextOffsetFromHelper,
   measureVisibleTextOffsetInContainers as measureVisibleTextOffsetInContainersFromHelper,
@@ -141,6 +143,8 @@ import type {
 } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { parseRenderedNoteTarget, type RenderedNoteTarget } from './notes/note-target.js';
+import { NoteSessionCoordinator } from './notes/NoteSessionCoordinator.js';
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
@@ -177,6 +181,7 @@ import type {
   HeaderFooterType,
   PositionHit,
   TableHitResult,
+  FootnoteReserveSeed,
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
@@ -239,11 +244,6 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 
-type RenderedNoteTarget = {
-  storyType: 'footnote' | 'endnote';
-  noteId: string;
-};
-
 type UnifiedHistoryDebugGlobal = typeof globalThis & {
   __SD_DEBUG_UNIFIED_HISTORY__?: boolean;
 };
@@ -284,28 +284,6 @@ type RenderedNoteFragmentHit = {
   pageIndex: number;
 };
 
-function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
-  if (typeof blockId !== 'string' || blockId.length === 0) {
-    return null;
-  }
-
-  if (blockId.startsWith('footnote-')) {
-    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('__sd_semantic_footnote-')) {
-    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('endnote-')) {
-    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'endnote', noteId } : null;
-  }
-
-  return null;
-}
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import {
@@ -511,6 +489,8 @@ export class PresentationEditor extends EventEmitter {
   #painterHost: HTMLElement;
   #selectionOverlay: HTMLElement;
   #permissionOverlay: HTMLElement | null = null;
+  /** SD-3400: highlight + smart-scroll + emptied-note commit for the open note session. */
+  #noteSessionCoordinator: NoteSessionCoordinator | null = null;
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
@@ -523,6 +503,13 @@ export class PresentationEditor extends EventEmitter {
    * prior pass invalidates previous-measure reuse (that reuse fast path bypasses the cache key).
    */
   #layoutFontSignature = '';
+  /**
+   * SD-3432: the previous render's footnote reserve fixed point, used to
+   * warm-start the next render's convergence loop (validated, never trusted
+   * — see FootnoteReserveSeed). Private: deliberately NOT part of LayoutState
+   * (that payload is emitted publicly via onLayoutUpdated).
+   */
+  #footnoteReserveSeed: FootnoteReserveSeed | null = null;
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
@@ -3250,6 +3237,9 @@ export class PresentationEditor extends EventEmitter {
    */
   #requestFontReflow(): void {
     this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
+    // SD-3432: font metrics changed; the footnote fixed point is stale (the
+    // seed's fontSignature guard would reject it anyway).
+    this.#footnoteReserveSeed = null;
     this.#pendingDocChange = true;
     this.#scheduleRerender();
   }
@@ -5223,7 +5213,7 @@ export class PresentationEditor extends EventEmitter {
         this.#editorInputManager?.clearCellAnchor();
       }
     };
-    const handleSelection = () => {
+    const handleSelection = ({ transaction }: { transaction?: Transaction } = {}) => {
       // User-initiated selection change — scroll caret/head into view once, except during
       // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView.
       if (!this.#editorInputManager?.isDragging) {
@@ -5235,7 +5225,13 @@ export class PresentationEditor extends EventEmitter {
       // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
       // if layout is updating (due to a concurrent doc change), flushNow()
       // is a no-op and the render will be picked up after layout completes.
-      this.#scheduleSelectionUpdate({ immediate: true });
+      //
+      // SD-3400: NOT safe for doc-changing transactions. 'selectionUpdate'
+      // fires BEFORE 'update', so the epoch/layout gates are not armed yet
+      // and an immediate flush renders the caret against the PRE-change
+      // paint (visibly stale caret on every Enter/Backspace). Defer those to
+      // the post-paint flush.
+      this.#scheduleSelectionUpdate({ immediate: !transaction?.docChanged });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
@@ -5422,6 +5418,9 @@ export class PresentationEditor extends EventEmitter {
       // previous-measure reuse. Benign if left stale (it only over-invalidates reuse), but resetting
       // here states the intent and starts the swap from a clean signature.
       this.#layoutFontSignature = '';
+      // SD-3432: the prior document's footnote fixed point is meaningless for
+      // the new one (validation would discard it anyway; reset states intent).
+      this.#footnoteReserveSeed = null;
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
       // Register the NEW document's embedded fonts (the swap's `reset()` released the old ones), before
       // the rerender below runs the first font plan for this document.
@@ -7190,7 +7189,11 @@ export class PresentationEditor extends EventEmitter {
           // Same context object the measure callback uses, so the cache signature and the resolver
           // cannot drift (the two-channel split is retired here).
           { fontContext: fontMeasureContext, previousFontSignature },
+          // SD-3432: warm-start the footnote convergence with the previous
+          // render's fixed point; the layout run re-validates it in full.
+          { footnoteReserveSeed: this.#footnoteReserveSeed },
         );
+        this.#footnoteReserveSeed = result?.footnoteReserveSeed ?? null;
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
@@ -7359,6 +7362,10 @@ export class PresentationEditor extends EventEmitter {
       const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
+
+      // SD-3400: fragments are rebuilt on every paint — re-apply the active
+      // note highlight and complete any pending scroll-to-note.
+      this.#noteSessionCoordinator?.onPaint();
 
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
@@ -9034,7 +9041,7 @@ export class PresentationEditor extends EventEmitter {
 
   #activateRenderedNoteSession(
     target: RenderedNoteTarget,
-    options: { clientX: number; clientY: number; pageIndex?: number },
+    options: { clientX?: number; clientY?: number; pageIndex?: number },
   ): boolean {
     if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
       this.#headerFooterSession?.exitMode();
@@ -9070,22 +9077,52 @@ export class PresentationEditor extends EventEmitter {
       },
     );
 
-    const hit = this.hitTest(options.clientX, options.clientY);
     const doc = session.editor.state?.doc;
-    if (hit && doc) {
-      try {
-        const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
-        const tr = session.editor.state.tr.setSelection(selection);
-        session.editor.view?.dispatch(tr);
-      } catch {
-        // Ignore stale pointer hits during activation races.
+    // SD-3400: pointer activation places the caret at the click position;
+    // programmatic activation (no coords, e.g. insert-footnote focus) leaves the
+    // caret at the note's default start so the user can type from the beginning.
+    if (typeof options.clientX === 'number' && typeof options.clientY === 'number' && doc) {
+      const hit = this.hitTest(options.clientX, options.clientY);
+      if (hit) {
+        try {
+          const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
+          const tr = session.editor.state.tr.setSelection(selection);
+          session.editor.view?.dispatch(tr);
+        } catch {
+          // Ignore stale pointer hits during activation races.
+        }
       }
     }
 
     session.editor.view?.focus();
     this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate({ immediate: true });
+
+    // SD-3400: highlight the note, watch for the user emptying it, and bring
+    // it into view (see NoteSessionCoordinator for the full UX contract).
+    this.#ensureNoteSessionCoordinator().onActivated(target, session);
     return true;
+  }
+
+  #ensureNoteSessionCoordinator(): NoteSessionCoordinator {
+    if (!this.#noteSessionCoordinator) {
+      this.#noteSessionCoordinator = new NoteSessionCoordinator({
+        getHost: () => this.#painterHost ?? this.#visibleHost,
+        getScrollContainer: () => this.#scrollContainer,
+        hasActiveSession: () => Boolean(this.#getActiveStorySession()),
+        exitActiveSession: () => this.#exitActiveStorySession(),
+      });
+    }
+    return this.#noteSessionCoordinator;
+  }
+  /**
+   * SD-3400: programmatically open a footnote/endnote note session without a
+   * pointer. Focuses the note and scrolls it into view with the caret at the
+   * note's start. Used by insert-footnote (and any non-pointer navigation) so
+   * the user can immediately type in the new note.
+   */
+  activateNoteSession(target: RenderedNoteTarget): boolean {
+    return this.#activateRenderedNoteSession(target, {});
   }
 
   #exitActiveStorySession(): void {
@@ -9093,6 +9130,8 @@ export class PresentationEditor extends EventEmitter {
     if (!session) {
       return;
     }
+
+    this.#noteSessionCoordinator?.onExit();
 
     this.#storySessionManager?.exit();
     this.#pendingDocChange = true;
@@ -10293,14 +10332,36 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
-    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
-    if (startOffset == null || endOffset == null) {
+    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
+    if (!noteFragments.length) {
       return null;
     }
 
-    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
-    if (!noteFragments.length) {
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Same block-anchored pm-first strategy as #computeNoteDomCaretRect (SD-3400).
+    const pmRects = computeSelectionRectsFromPmRangeFromHelper(geometryOptions, from, to, {
+      from: this.#resolveNoteBlockAnchor(from),
+      to: this.#resolveNoteBlockAnchor(to),
+    });
+    if (pmRects != null) {
+      return pmRects;
+    }
+
+    // Same in-flight-rerender guard as #computeNoteDomCaretRect (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
+    }
+
+    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
+    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
+    if (startOffset == null || endOffset == null) {
       return null;
     }
 
@@ -10308,12 +10369,7 @@ export class PresentationEditor extends EventEmitter {
     const renderedEndOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, endOffset);
 
     return computeSelectionRectsFromVisibleTextOffsetsFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
+      geometryOptions,
       renderedStartOffset,
       renderedEndOffset,
     );
@@ -10334,6 +10390,46 @@ export class PresentationEditor extends EventEmitter {
     return selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined);
   }
 
+  /**
+   * Anchors a session position to its paragraph block for stale-tolerant
+   * caret resolution (SD-3400): painted pm ranges of unchanged note
+   * paragraphs drift after edits, but block identity (sdBlockId) plus the
+   * block's current first-leaf position let the geometry helper translate
+   * into the fragment's coordinate space.
+   */
+  #resolveNoteBlockAnchor(pos: number): { sdBlockId: string; currentStart: number } | null {
+    const doc = this.getActiveEditor()?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return null;
+    try {
+      const clamped = Math.max(0, Math.min(pos, doc.content.size));
+      const $pos = doc.resolve(clamped);
+      let blockDepth = 0;
+      for (let depth = $pos.depth; depth >= 1; depth -= 1) {
+        if ($pos.node(depth).isBlock) blockDepth = depth;
+      }
+      if (!blockDepth) return null;
+      const blockNode = $pos.node(blockDepth);
+      const sdBlockId = blockNode.attrs?.sdBlockId;
+      if (typeof sdBlockId !== 'string' || !sdBlockId) return null;
+      const blockPos = $pos.before(blockDepth);
+      let currentStart: number | null = null;
+      doc.nodesBetween(blockPos, blockPos + blockNode.nodeSize, (node, nodePos) => {
+        if (currentStart != null) return false;
+        if (node.isInline && (node.isLeaf || node.isText)) {
+          currentStart = nodePos;
+          return false;
+        }
+        return true;
+      });
+      // Empty paragraph: no inline leaf exists, its only caret position is
+      // the block's content start. The painted placeholder line anchors there.
+      if (currentStart == null) currentStart = blockPos + 1;
+      return { sdBlockId, currentStart };
+    } catch {
+      return null;
+    }
+  }
+
   #computeNoteDomCaretRect(context: NoteLayoutContext, pos: number): LayoutRect | null {
     const layout = this.#layoutState.layout;
     if (!layout) {
@@ -10345,27 +10441,48 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
-    if (textOffset == null) {
-      return null;
-    }
-
     const noteFragments = this.#getRenderedNoteFragmentElements(noteBlockIds);
     if (!noteFragments.length) {
       return null;
     }
 
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Resolve by block identity first (stale-tolerant), then by global pm
+    // ranges. Painted pm ranges of unchanged note paragraphs drift after
+    // edits, so absolute resolution alone picks wrong lines (SD-3400).
+    const anchor = this.#resolveNoteBlockAnchor(pos);
+    const anchoredRect = anchor ? computeCaretRectFromPmPositionFromHelper(geometryOptions, pos, anchor) : null;
+    if (anchoredRect) {
+      return anchoredRect;
+    }
+    const pmRect = computeCaretRectFromPmPositionFromHelper(geometryOptions, pos);
+    if (pmRect) {
+      return pmRect;
+    }
+
+    // Position not painted yet (fresh paragraph) while a rerender is in
+    // flight: bridging now would measure STALE paint and the wrong caret
+    // would stick until the next selection change. Defer to the post-paint
+    // flush instead (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
+    }
+
+    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
+    if (textOffset == null) {
+      return null;
+    }
+
     const renderedTextOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, textOffset);
 
-    return computeCaretRectFromVisibleTextOffsetFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
-      renderedTextOffset,
-    );
+    return computeCaretRectFromVisibleTextOffsetFromHelper(geometryOptions, renderedTextOffset);
   }
 
   #computeNoteCaretRect(pos: number): LayoutRect | null {
@@ -10973,6 +11090,8 @@ export class PresentationEditor extends EventEmitter {
   #handleLayoutError(phase: LayoutError['phase'], error: Error) {
     console.error('[PresentationEditor] Layout error', error);
     this.#layoutError = { phase, error, timestamp: Date.now() };
+    // SD-3432: a failed render leaves no trustworthy footnote fixed point.
+    this.#footnoteReserveSeed = null;
 
     // Update error state based on phase
     if (phase === 'initialization') {

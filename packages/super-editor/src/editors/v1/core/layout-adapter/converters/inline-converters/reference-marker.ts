@@ -60,6 +60,27 @@ const stripVerticalPositioningFromRunProperties = (
   return sanitizedRunProperties;
 };
 
+/**
+ * SD-3400: stamp the painted marker with interaction attributes so the DOM
+ * painter output can signal clickability (hover affordance) and so the active
+ * note can be visually matched. `data-note-reference` carries the story type,
+ * `data-note-id` the note id.
+ */
+const withReferenceDataAttrs = (run: TextRun, params: InlineConverterParams): TextRun => {
+  const rawType = (params.node as { type?: string | { name?: string } }).type;
+  const typeName = typeof rawType === 'string' ? rawType : rawType?.name;
+  const kind = typeName === 'endnoteReference' ? 'endnote' : 'footnote';
+  const id = (params.node.attrs as Record<string, unknown> | undefined)?.id;
+  return {
+    ...run,
+    dataAttrs: {
+      ...run.dataAttrs,
+      'data-note-reference': kind,
+      ...(id != null ? { 'data-note-id': String(id) } : {}),
+    },
+  };
+};
+
 const copyReferencePmPositions = (run: TextRun, params: InlineConverterParams): TextRun => {
   const refPos = params.positions.get(params.node);
   if (!refPos) {
@@ -119,19 +140,22 @@ export function buildReferenceMarkerRun(displayText: string, params: InlineConve
   const originalRun = buildOriginalReferenceRun(displayText, params);
 
   if (hasExplicitBaselineShift(originalRun.baselineShift)) {
-    return copyReferencePmPositions(originalRun, params);
+    return withReferenceDataAttrs(copyReferencePmPositions(originalRun, params), params);
   }
 
   const runWithoutVerticalPositioning = buildReferenceRunWithoutVerticalPositioning(displayText, params);
   const baseFontSize = resolveReferenceBaseFontSize(runWithoutVerticalPositioning, originalRun, params.defaultSize);
 
-  return copyReferencePmPositions(
-    {
-      ...originalRun,
-      vertAlign: 'superscript',
-      baselineShift: undefined,
-      fontSize: baseFontSize * SUBSCRIPT_SUPERSCRIPT_SCALE,
-    },
+  return withReferenceDataAttrs(
+    copyReferencePmPositions(
+      {
+        ...originalRun,
+        vertAlign: 'superscript',
+        baselineShift: undefined,
+        fontSize: baseFontSize * SUBSCRIPT_SUPERSCRIPT_SCALE,
+      },
+      params,
+    ),
     params,
   );
 }

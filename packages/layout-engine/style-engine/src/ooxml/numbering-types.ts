@@ -86,6 +86,12 @@ export interface NumberingLevel {
   numFmt?: NumberingFormat;
   /** Legacy numbering properties. */
   legacy?: NumberingLegacyProperties;
+  /**
+   * Level restart limit. When set, counters at higher levels restart only when
+   * an ancestor level at or below this index has been used between the
+   * previous sibling and the current paragraph. `0` forces increment-only.
+   */
+  lvlRestart?: number;
   /** Paragraph properties applied at this level. */
   paragraphProperties?: ParagraphProperties;
   /** Run properties applied at this level. */

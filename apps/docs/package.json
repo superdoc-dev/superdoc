@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "documentation": "^14.0.3",
-    "mintlify": "4.2.531",
+    "mintlify": "4.2.624",
     "remark-mdx": "^3.1.1",
     "remark-parse": "^11.0.0",
     "unified": "catalog:",

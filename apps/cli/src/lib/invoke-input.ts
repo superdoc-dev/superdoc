@@ -86,8 +86,8 @@ const INLINE_FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter(
     operationId.startsWith('format.') && !operationId.startsWith('format.paragraph.'),
 );
 const PARAGRAPH_FORMAT_TARGET_OPERATIONS = new Set<CliExposedOperationId>(
-  CLI_DOC_OPERATIONS.filter(
-    (operationId): operationId is CliExposedOperationId => operationId.startsWith('format.paragraph.'),
+  CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
+    operationId.startsWith('format.paragraph.'),
   ),
 );
 

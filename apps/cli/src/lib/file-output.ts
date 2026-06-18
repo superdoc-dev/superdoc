@@ -7,11 +7,7 @@ export interface FileOutputMeta {
   byteLength: number;
 }
 
-export async function writeBytesToPath(
-  bytes: Uint8Array,
-  outputPath: string,
-  force = false,
-): Promise<FileOutputMeta> {
+export async function writeBytesToPath(bytes: Uint8Array, outputPath: string, force = false): Promise<FileOutputMeta> {
   const exists = await pathExists(outputPath);
   if (exists && !force) {
     throw new CliError('OUTPUT_EXISTS', `Output path already exists: ${outputPath}`, {

@@ -14,6 +14,8 @@ const FOOTNOTES_CONFIG = {
   noteName: 'w:footnote',
   refName: 'w:footnoteRef',
   refStyle: 'FootnoteReference',
+  referenceName: 'w:footnoteReference',
+  sessionRegistryKey: 'footnotes',
   relationshipType: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes',
   relationshipTarget: 'footnotes.xml',
   // Footnotes own the settings.xml export side-effects (footnoteProperties +
@@ -28,6 +30,8 @@ const ENDNOTES_CONFIG = {
   noteName: 'w:endnote',
   refName: 'w:endnoteRef',
   refStyle: 'EndnoteReference',
+  referenceName: 'w:endnoteReference',
+  sessionRegistryKey: 'endnotes',
   relationshipType: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes',
   relationshipTarget: 'endnotes.xml',
   applySettingsSideEffects: false,
@@ -213,6 +217,60 @@ const createNotesXmlDefinition = (config) => {
     base.elements[0].name = config.rootName;
   }
   return base;
+};
+
+/** Collect note ids referenced by `w:footnoteReference`/`w:endnoteReference` in a part tree. */
+const collectReferencedNoteIds = (xmlNode, referenceName, found = new Set()) => {
+  if (!xmlNode || typeof xmlNode !== 'object') return found;
+  if (xmlNode.name === referenceName && xmlNode.attributes?.['w:id'] != null) {
+    found.add(String(xmlNode.attributes['w:id']));
+  }
+  if (Array.isArray(xmlNode.elements)) {
+    xmlNode.elements.forEach((child) => collectReferencedNoteIds(child, referenceName, found));
+  }
+  return found;
+};
+
+/**
+ * SD-3400 tombstones: interactive deletes keep the note element in the part
+ * (so undo restores the text) and register the id as session-managed. The
+ * exported FILE must not carry notes that are BOTH session-managed AND
+ * unreferenced in the exported body, but the live part store must keep them
+ * for the lifetime of the undo history.
+ *
+ * Pure zip-time transform: returns a pruned COPY of the notes part (or the
+ * input untouched when nothing prunes). Never mutates `convertedXml` — the
+ * store keeps the tombstones. Separators (w:type / ids <= 0) and pre-existing
+ * orphans from the imported file (never registered) always survive
+ * (Round-Trip Principle).
+ *
+ * @param {Object} partXml - The notes part from convertedXml.
+ * @param {Object} options
+ * @param {Object} options.converter - Carries sessionManagedNoteIds.
+ * @param {Object} options.documentXml - The synced document part (reference scan).
+ * @param {('footnote'|'endnote')} options.type
+ */
+export const pruneSessionDeletedNotesPart = (partXml, { converter, documentXml, type }) => {
+  const config = type === 'endnote' ? ENDNOTES_CONFIG : FOOTNOTES_CONFIG;
+  const registry = converter?.sessionManagedNoteIds?.[config.sessionRegistryKey];
+  const root = partXml?.elements?.[0];
+  if (!root?.elements || !registry || registry.size === 0) return partXml;
+
+  const referenced = collectReferencedNoteIds(documentXml, config.referenceName);
+  const keep = (el) => {
+    if (el?.name !== config.noteName) return true;
+    const noteType = el.attributes?.['w:type'];
+    if (noteType === 'separator' || noteType === 'continuationSeparator') return true;
+    const id = String(el.attributes?.['w:id']);
+    const numericId = Number(id);
+    if (Number.isFinite(numericId) && numericId <= 0) return true;
+    return !registry.has(id) || referenced.has(id);
+  };
+
+  if (root.elements.every(keep)) return partXml;
+  const copy = carbonCopy(partXml);
+  copy.elements[0].elements = copy.elements[0].elements.filter(keep);
+  return copy;
 };
 
 const prepareNotesXmlForExport = ({ notes, editor, converter, convertedXml, config }) => {

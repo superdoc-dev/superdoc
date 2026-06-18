@@ -1,6 +1,14 @@
 import type { BlockNodeType, BlockNodeAddress, DeletableBlockNodeAddress } from './base.js';
-import type { AffectedRef, AffectedRefRemapping, Receipt, ReceiptFailure, ReceiptInsert, TextRangeShift } from './receipt.js';
+import type {
+  AffectedRef,
+  AffectedRefRemapping,
+  Receipt,
+  ReceiptFailure,
+  ReceiptInsert,
+  TextRangeShift,
+} from './receipt.js';
 import type { StoryLocator } from './story.types.js';
+import type { ParagraphNumbering } from './paragraph.types.js';
 // ---------------------------------------------------------------------------
 // blocks.list
 // ---------------------------------------------------------------------------
@@ -28,6 +36,15 @@ export interface BlockListEntry {
   alignment?: string;
   /** Heading level (1-6). Only for headings. */
   headingLevel?: number;
+  /**
+   * Numbering reference (`numId` + `level`) for numbered blocks, sourced from the
+   * block's direct numbering properties (`w:numPr`). Present for numbered
+   * headings and numbered paragraphs alike, so a numbered-heading sequence can be
+   * discovered here even though those blocks resolve as `heading`, not `listItem`.
+   * Absent for non-numbered blocks. Distinct from the list-rendering
+   * marker/ordinal exposed on list items.
+   */
+  paragraphNumbering?: ParagraphNumbering;
   /** Ref handle targeting the block's full text. Pass to superdoc_format or superdoc_edit. */
   ref?: string;
 }

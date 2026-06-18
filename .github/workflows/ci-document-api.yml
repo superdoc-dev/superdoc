@@ -5,11 +5,7 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'packages/document-api/**'
-      - 'apps/docs/document-api/**'
-      - 'package.json'
-      - '.github/workflows/ci-document-api.yml'
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -17,8 +13,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: CI Document API / validate
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      document_api: ${{ steps.set.outputs.document_api }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            document_api:
+              - 'packages/document-api/**'
+              - 'apps/docs/document-api/**'
+              - 'scripts/check-public-docapi.mjs'
+              - '.nvmrc'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-document-api.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "document_api=${{ steps.filter.outputs.document_api }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "document_api=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  check:
+    needs: detect
+    if: needs.detect.outputs.document_api == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,11 +63,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate contract outputs
-        run: pnpm run docapi:sync
-
-      - name: Check overview.mdx freshness
-        run: git diff --exit-code apps/docs/document-api/overview.mdx
-
       - name: Check contract parity and generated outputs
         run: pnpm run docapi:check
+
+  validate:
+    name: CI Document API / validate
+    if: always()
+    needs: [detect, check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.document_api }}" != "true" ]]; then
+            echo "Document API CI skipped: no relevant paths changed."
+            exit 0
+          fi
+          if [[ "${{ needs.check.result }}" != "success" ]]; then
+            echo "Check job did not succeed (result: ${{ needs.check.result }})."
+            exit 1
+          fi

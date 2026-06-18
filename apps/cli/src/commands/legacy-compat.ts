@@ -374,11 +374,10 @@ export async function tryRunLegacyCompatCommand(
 
 function assertV1Opened(opened: OpenedRuntimeDocument, label: string): OpenedDocument {
   if (opened.runtime !== 'v1') {
-    throw new CliError(
-      'RUNTIME_V2_UNAVAILABLE',
-      `${label}: this command is not available in the v2 runtime.`,
-      { runtime: opened.runtime, command: label },
-    );
+    throw new CliError('RUNTIME_V2_UNAVAILABLE', `${label}: this command is not available in the v2 runtime.`, {
+      runtime: opened.runtime,
+      command: label,
+    });
   }
   return opened as OpenedDocument;
 }
@@ -426,7 +425,12 @@ function isInlineSpecialRecord(value: unknown): value is Record<string, unknown>
 }
 
 function isSelectionTarget(value: unknown): value is SelectionTarget {
-  return isInlineSpecialRecord(value) && value.kind === 'selection' && isInlineSpecialRecord(value.start) && isInlineSpecialRecord(value.end);
+  return (
+    isInlineSpecialRecord(value) &&
+    value.kind === 'selection' &&
+    isInlineSpecialRecord(value.start) &&
+    isInlineSpecialRecord(value.end)
+  );
 }
 
 function isCollapsedTextSelectionTarget(target: SelectionTarget): target is SelectionTarget & {

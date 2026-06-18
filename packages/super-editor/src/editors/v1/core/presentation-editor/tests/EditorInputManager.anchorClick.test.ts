@@ -42,6 +42,7 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
   let viewportHost: HTMLElement;
   let visibleHost: HTMLElement;
   let goToAnchor: Mock;
+  let exitActiveStorySession: Mock;
   let mockEditor: {
     isEditable: boolean;
     state: { doc: { content: { size: number } }; selection: { $anchor: null } };
@@ -88,7 +89,9 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
     };
 
     goToAnchor = vi.fn();
+    exitActiveStorySession = vi.fn();
     const callbacks: EditorInputCallbacks = {
+      exitActiveStorySession,
       // Return a finite pageIndex so pointerdown enters the selection/drag setup branch
       // instead of bailing as "off any page" — required for the drag-threshold guard
       // path to be exercised.
@@ -241,5 +244,68 @@ describe('EditorInputManager — anchor-href click routing (SD-2537)', () => {
     const a = makeAnchor('#');
     firePointerDown(a);
     expect(goToAnchor).not.toHaveBeenCalled();
+  });
+
+  // ── SD-3400 stage 1: note-aware link dispatch ──────────────────────────────
+
+  const makeNoteAnchor = (href: string, blockId = 'footnote-3-p0'): HTMLAnchorElement => {
+    const fragment = document.createElement('div');
+    fragment.setAttribute('data-block-id', blockId);
+    const a = document.createElement('a');
+    a.className = 'superdoc-link';
+    a.setAttribute('href', href);
+    a.setAttribute('data-pm-start', '4');
+    fragment.appendChild(a);
+    viewportHost.appendChild(fragment);
+    return a;
+  };
+
+  const captureLinkClickDetail = (a: HTMLAnchorElement): Record<string, unknown>[] => {
+    const details: Record<string, unknown>[] = [];
+    viewportHost.addEventListener('superdoc-link-click', (e) => {
+      details.push((e as CustomEvent).detail);
+    });
+    firePointerDown(a);
+    return details;
+  };
+
+  it('flags links inside painted note fragments with their note target (SD-3400)', () => {
+    const a = makeNoteAnchor('https://example.com/source');
+    const details = captureLinkClickDetail(a);
+
+    expect(details).toHaveLength(1);
+    expect(details[0].noteTarget).toEqual({ storyType: 'footnote', noteId: '3' });
+  });
+
+  it('dispatches body links with a null note target and exits any active story session', () => {
+    const a = makeAnchor('https://example.com/page');
+    const details = captureLinkClickDetail(a);
+
+    expect(details).toHaveLength(1);
+    expect(details[0].noteTarget).toBeNull();
+    expect(exitActiveStorySession).toHaveBeenCalled();
+  });
+
+  it('keeps the session for note links (no exit on note-fragment link click)', () => {
+    const a = makeNoteAnchor('https://example.com/source');
+    captureLinkClickDetail(a);
+
+    expect(exitActiveStorySession).not.toHaveBeenCalled();
+  });
+
+  it('flags links inside painted ENDNOTE fragments too (symmetry)', () => {
+    const a = makeNoteAnchor('https://example.com/source', 'endnote-2-p0');
+    const details = captureLinkClickDetail(a);
+
+    expect(details).toHaveLength(1);
+    expect(details[0].noteTarget).toEqual({ storyType: 'endnote', noteId: '2' });
+  });
+
+  it('exits the active story session before bookmark-anchor navigation', () => {
+    const a = makeAnchor('#_Ref99');
+    firePointerDown(a);
+
+    expect(exitActiveStorySession).toHaveBeenCalled();
+    expect(goToAnchor).toHaveBeenCalledWith('#_Ref99');
   });
 });

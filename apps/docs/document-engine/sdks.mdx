@@ -665,7 +665,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
 | `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
 | `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
-| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
 | `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
 | `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
 | `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
@@ -819,6 +819,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.setMarkRunProps` | `format paragraph set-mark-run-props` | Set the paragraph mark's run properties (w:pPr/w:rPr), e.g. the font size or specVanish carried by the paragraph-end mark. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`. |
 | `doc.format.paragraph.setDirection` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
 | `doc.format.paragraph.clearDirection` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
+| `doc.format.paragraph.setNumbering` | `format paragraph set-numbering` | Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property, so the underlying node and its style are unchanged, though the doc-api block subtype may re-resolve afterward (a numbered plain paragraph becomes a listItem; a heading stays a heading). Direct edits only; tracked mode is unsupported. |
 
 #### Create
 
@@ -1156,7 +1157,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
 | `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
 | `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
-| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
 | `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes. |
 | `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
 | `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
@@ -1310,6 +1311,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.set_mark_run_props` | `format paragraph set-mark-run-props` | Set the paragraph mark's run properties (w:pPr/w:rPr), e.g. the font size or specVanish carried by the paragraph-end mark. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`. |
 | `doc.format.paragraph.set_direction` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
 | `doc.format.paragraph.clear_direction` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
+| `doc.format.paragraph.set_numbering` | `format paragraph set-numbering` | Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property, so the underlying node and its style are unchanged, though the doc-api block subtype may re-resolve afterward (a numbered plain paragraph becomes a listItem; a heading stays a heading). Direct edits only; tracked mode is unsupported. |
 
 #### Create
 

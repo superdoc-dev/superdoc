@@ -40,9 +40,6 @@ pnpm dev
 - `POST /api/word-baseline`
   - JSON body: `{ "fileName": "document.docx", "docxBase64": "..." }`
   - Response: `{ "jobId": "...", "pageCount": 2, "pages": ["http://.../api/word-baseline/jobs/<id>/pages/page_0001.png", ...] }`
-- `POST /api/word-baseline/from-path`
-  - JSON body: `{ "localPath": "/absolute/path/to/document.docx", "fileName": "optional-name.docx" }`
-  - Response: same shape as `POST /api/word-baseline`
 - `GET /api/word-baseline/jobs/:jobId/pages/:pageName`
 
 ## Security

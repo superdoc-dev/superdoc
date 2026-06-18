@@ -16,6 +16,7 @@ import type {
   EditorRuntimeCapabilities,
   EditorRuntimeCommand,
   EditorRuntimeCommandResult,
+  EditorRuntimeDocumentMode,
   EditorRuntimeEvent,
   EditorRuntimePositionToken,
   EditorRuntimeSelectionSnapshot,
@@ -29,6 +30,7 @@ const EXPECTED_TYPE_NAMES = [
   // identity + lifecycle
   'EditorRuntimeKind',
   'EditorRuntimeId',
+  'EditorRuntimeDocumentMode',
   'EditorRuntimeState',
   // the runtime
   'EditorRuntime',
@@ -114,9 +116,16 @@ describe('editor-runtime contract  -  compile-time shape', () => {
     expectTypeOf<EditorRuntime['dispatch']>().returns.resolves.toEqualTypeOf<EditorRuntimeCommandResult>();
     expectTypeOf<EditorRuntime['save']>().returns.resolves.toEqualTypeOf<ArrayBuffer>();
     expectTypeOf<EditorRuntime['getSelectedText']>().returns.toEqualTypeOf<string>();
+    expectTypeOf<EditorRuntime['setDocumentMode']>().parameters.toEqualTypeOf<[EditorRuntimeDocumentMode]>();
+    expectTypeOf<EditorRuntime['getDocumentMode']>().returns.toEqualTypeOf<EditorRuntimeDocumentMode>();
     expectTypeOf<
       EditorRuntime['getSelectionSnapshot']
     >().returns.toEqualTypeOf<EditorRuntimeSelectionSnapshot | null>();
+  });
+
+  it('EditorRuntimeSnapshot carries the current document mode', () => {
+    expectTypeOf<ReturnType<EditorRuntime['getSnapshot']>>().toHaveProperty('documentMode');
+    expectTypeOf<ReturnType<EditorRuntime['getSnapshot']>['documentMode']>().toEqualTypeOf<EditorRuntimeDocumentMode>();
   });
 
   it('EditorRuntimeCommand is capability-grouped, not the full v1 catalog', () => {

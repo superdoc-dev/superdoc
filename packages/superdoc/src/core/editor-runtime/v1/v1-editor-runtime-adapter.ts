@@ -29,6 +29,7 @@ import type {
   EditorRuntimeCommand,
   EditorRuntimeCommandKind,
   EditorRuntimeCommandResult,
+  EditorRuntimeDocumentMode,
   EditorRuntimeEvent,
   EditorRuntimeExportOptions,
   EditorRuntimeFocusOptions,
@@ -67,12 +68,13 @@ export interface V1EditorStateLike {
 
 /** The subset of the v1 `Editor` the adapter delegates to. */
 export interface V1EditorLike extends V1EventTargetLike {
-  options?: { documentId?: string };
+  options?: { documentId?: string; documentMode?: string };
   state?: V1EditorStateLike;
   view?: { focus(): void };
   commands?: Record<string, (...args: unknown[]) => unknown>;
   focus?(): void;
   exportDocx?(params?: unknown): Promise<unknown>;
+  setDocumentMode?(mode: EditorRuntimeDocumentMode): void;
   /** Present on the v2 facade as `2`; absent/`1` for the real v1 editor. */
   editorVersion?: 1 | 2;
 }
@@ -82,6 +84,7 @@ export interface V1PresentationEditorLike extends V1EventTargetLike {
   focus?(): void;
   setZoom?(zoom: number): void;
   scrollToPosition?(pos: number, options?: Record<string, unknown>): boolean;
+  setDocumentMode?(mode: EditorRuntimeDocumentMode): void;
 }
 
 export interface V1EditorRuntimeAdapterOptions {
@@ -142,6 +145,16 @@ function isHistoryKind(kind: EditorRuntimeCommandKind): boolean {
   return kind === 'history.undo' || kind === 'history.redo';
 }
 
+function normalizeDocumentMode(mode: unknown): EditorRuntimeDocumentMode {
+  return mode === 'suggesting' || mode === 'viewing' ? mode : 'editing';
+}
+
+function readyStateForMode(
+  mode: EditorRuntimeDocumentMode,
+): Extract<EditorRuntimeState, 'review-ready' | 'editing-ready'> {
+  return mode === 'viewing' ? 'review-ready' : 'editing-ready';
+}
+
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
@@ -162,6 +175,7 @@ export function createV1EditorRuntimeAdapter(options: V1EditorRuntimeAdapterOpti
 
   let presentationEditor: V1PresentationEditorLike | null = null;
   let state: EditorRuntimeState = 'opening';
+  let documentMode = normalizeDocumentMode(editor.options?.documentMode);
   let disposed = false;
   let unregistered = false;
 
@@ -267,7 +281,24 @@ export function createV1EditorRuntimeAdapter(options: V1EditorRuntimeAdapterOpti
   }
 
   function snapshot(): EditorRuntimeSnapshot {
-    return { id, kind: 'v1', documentId, state, capabilities: capabilities() };
+    return { id, kind: 'v1', documentId, state, documentMode, capabilities: capabilities() };
+  }
+
+  function setDocumentMode(mode: EditorRuntimeDocumentMode): void {
+    if (disposed) return;
+    const nextMode = normalizeDocumentMode(mode);
+    if (nextMode === documentMode) return;
+    documentMode = nextMode;
+    presentationEditor?.setDocumentMode?.(documentMode);
+    editor.setDocumentMode?.(documentMode);
+    if (state === 'editing-ready' || state === 'review-ready') {
+      const nextState = readyStateForMode(documentMode);
+      if (nextState !== state) {
+        state = nextState;
+        emit({ type: 'state-change', state });
+      }
+      emit({ type: 'capabilities-change', capabilities: capabilities() });
+    }
   }
 
   // --- command dispatch -----------------------------------------------------
@@ -288,6 +319,7 @@ export function createV1EditorRuntimeAdapter(options: V1EditorRuntimeAdapterOpti
   async function dispatch(command: EditorRuntimeCommand): Promise<EditorRuntimeCommandResult> {
     if (disposed || state === 'disposed') return { status: 'rejected', reason: 'runtime-not-ready' };
     if (state === 'saving') return { status: 'rejected', reason: 'host-saving' };
+    if (documentMode === 'viewing') return { status: 'rejected', reason: 'document-readonly' };
     if (state !== 'editing-ready') return { status: 'rejected', reason: 'runtime-not-ready' };
 
     // Opaque-token round-trip + staleness for positioned commands.
@@ -564,8 +596,10 @@ export function createV1EditorRuntimeAdapter(options: V1EditorRuntimeAdapterOpti
     }
 
     // Pending → ready: the visible bridge is now available.
-    const wasReady = state === 'editing-ready';
-    state = 'editing-ready';
+    const nextReadyState = readyStateForMode(documentMode);
+    const wasReady = state === nextReadyState;
+    state = nextReadyState;
+    pe.setDocumentMode?.(documentMode);
     if (!wasReady) emit({ type: 'state-change', state });
     emit({ type: 'capabilities-change', capabilities: capabilities() });
   }
@@ -586,6 +620,8 @@ export function createV1EditorRuntimeAdapter(options: V1EditorRuntimeAdapterOpti
 
     getCapabilities: capabilities,
     getSnapshot: snapshot,
+    setDocumentMode,
+    getDocumentMode: () => documentMode,
     // The compatibility projection backing `SuperDoc.activeEditor`,
     // `doc.getEditor()`, and existing v1 callers. Returns the SAME v1
     // editor instance, carrying `commands` / `state` / `view` / `on` / `off`.

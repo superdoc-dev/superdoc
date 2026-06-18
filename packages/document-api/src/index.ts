@@ -436,6 +436,7 @@ import type {
   ParagraphsSetMarkRunPropsInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphMutationResult,
 } from './paragraphs/paragraphs.js';
 import {
@@ -461,6 +462,7 @@ import {
   executeParagraphsSetMarkRunProps,
   executeParagraphsSetDirection,
   executeParagraphsClearDirection,
+  executeParagraphsSetNumbering,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
@@ -1392,6 +1394,7 @@ export type {
   ParagraphsSetMarkRunPropsInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphDirection,
   AlignmentPolicy,
 } from './paragraphs/paragraphs.js';
@@ -2285,6 +2288,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         },
         clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearDirection(adapters.paragraphs, input, options);
+        },
+        setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetNumbering(adapters.paragraphs, input, options);
         },
       },
     },

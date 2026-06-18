@@ -411,8 +411,9 @@ describe('blocksDeleteWrapper', () => {
 
     it('still validates tracked capability during dry run', () => {
       const { editor } = makeBlockDeleteEditor({ insertTrackedChange: null });
-      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked', dryRun: true }))
-        .toThrow(DocumentApiAdapterError);
+      expect(() =>
+        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked', dryRun: true }),
+      ).toThrow(DocumentApiAdapterError);
     });
   });
 
@@ -616,6 +617,62 @@ describe('blocksListWrapper', () => {
 
     expect(blocksListWrapper(editor).blocks[0]!.text).toBeUndefined();
     expect(blocksListWrapper(editor, { includeText: false }).blocks[0]!.text).toBeUndefined();
+  });
+
+  it('exposes paragraphNumbering for numbered blocks (headings included) and omits it otherwise', () => {
+    // A Heading3 paragraph carrying a direct w:numPr resolves as `heading`, not
+    // `listItem`, yet must still surface its numbering for sequence discovery.
+    const numberedHeading = createNode('paragraph', [createNode('text', [], { text: 'Numbered clause' })], {
+      attrs: {
+        paraId: 'h1',
+        sdBlockId: 'h1',
+        paragraphProperties: { styleId: 'Heading3', numberingProperties: { numId: 2, ilvl: 1 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const plain = createNode('paragraph', [createNode('text', [], { text: 'Plain body' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2', paragraphProperties: { styleId: 'Normal' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // numPr with numId but no ilvl: OOXML treats absent ilvl as level 0.
+    const numberedNoLevel = createNode('paragraph', [createNode('text', [], { text: 'Implicit level' })], {
+      attrs: { paraId: 'p3', sdBlockId: 'p3', paragraphProperties: { numberingProperties: { numId: 3 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // numId 0 is the OOXML no-numbering sentinel; it must not surface as numbering.
+    const sentinelZero = createNode('paragraph', [createNode('text', [], { text: 'Explicitly unnumbered' })], {
+      attrs: {
+        paraId: 'p4',
+        sdBlockId: 'p4',
+        paragraphProperties: { styleId: 'Heading3', numberingProperties: { numId: 0, ilvl: 0 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // A plain paragraph carrying numId 0 (the no-numbering sentinel) must
+    // classify as `paragraph`, not `listItem` - isListItem stays aligned with
+    // the extractBlockNumbering reader.
+    const plainNumIdZero = createNode('paragraph', [createNode('text', [], { text: 'Cancelled numbering' })], {
+      attrs: { paraId: 'p5', sdBlockId: 'p5', paragraphProperties: { numberingProperties: { numId: 0, ilvl: 0 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [numberedHeading, plain, numberedNoLevel, sentinelZero, plainNumIdZero], {
+      isBlock: false,
+    });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect(result.blocks[0]!.nodeType).toBe('heading');
+    expect(result.blocks[0]!.paragraphNumbering).toEqual({ numId: 2, level: 1 });
+    expect(result.blocks[1]!.paragraphNumbering).toBeUndefined();
+    expect(result.blocks[2]!.paragraphNumbering).toEqual({ numId: 3, level: 0 });
+    expect(result.blocks[3]!.paragraphNumbering).toBeUndefined();
+    expect(result.blocks[4]!.nodeType).toBe('paragraph');
+    expect(result.blocks[4]!.paragraphNumbering).toBeUndefined();
   });
 
   it('returns null full text for non-text blocks when includeText is true', () => {

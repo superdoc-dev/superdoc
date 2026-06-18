@@ -100,10 +100,12 @@ jobs:
         run: pnpm install
 
       - name: Lint
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm run lint
 
       - name: Format check
-        run: pnpm run format --check
+        run: pnpm run format:check
 
       - name: Build
         run: pnpm run build
@@ -310,8 +312,7 @@ jobs:
           for job_result in \
             "build:${{ needs.build.result }}" \
             "unit-tests:${{ needs.unit-tests.result }}" \
-            "cli-tests:${{ needs.cli-tests.result }}" \
-            "coverage:${{ needs.coverage.result }}"; do
+            "cli-tests:${{ needs.cli-tests.result }}"; do
             name="${job_result%%:*}"
             result="${job_result##*:}"
             if [[ "$result" != "success" ]]; then

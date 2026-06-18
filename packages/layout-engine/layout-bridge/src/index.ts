@@ -80,7 +80,7 @@ export type {
   SectionAwareHeaderFooterMeasurementGroup,
 } from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
-export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
+export type { HeaderFooterLayoutResult, IncrementalLayoutResult, FootnoteReserveSeed } from './incrementalLayout';
 export {
   collectFootnoteLedgers,
   getPreferredReserveCandidates,

@@ -1057,11 +1057,10 @@ export function executeListsSetLevelLayout(
 const VALID_V2_LIST_BLOCK_NODE_TYPES: ReadonlySet<string> = new Set(['paragraph', 'listItem']);
 function validateV2BlockTarget(value: unknown, field: string, operationName: string): void {
   if (!isRecord(value)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${operationName} ${field} must be an object.`,
-      { field, value },
-    );
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} ${field} must be an object.`, {
+      field,
+      value,
+    });
   }
   const v = value as Record<string, unknown>;
   if (v.kind !== 'block') {
@@ -1086,7 +1085,9 @@ function validateV2BlockTarget(value: unknown, field: string, operationName: str
     );
   }
 }
-function unavailableListsResult<TResult extends ListsGetStateResult | ListsMutateItemResult>(operationName: string): TResult {
+function unavailableListsResult<TResult extends ListsGetStateResult | ListsMutateItemResult>(
+  operationName: string,
+): TResult {
   return {
     success: false,
     failure: {
@@ -1096,10 +1097,7 @@ function unavailableListsResult<TResult extends ListsGetStateResult | ListsMutat
     },
   } as TResult;
 }
-export function executeListsGetState(
-  adapter: ListsAdapter,
-  input: ListsGetStateInput,
-): ListsGetStateResult {
+export function executeListsGetState(adapter: ListsAdapter, input: ListsGetStateInput): ListsGetStateResult {
   validateListInput(input, 'lists.getState');
   validateV2BlockTarget(input.target, 'target', 'lists.getState');
   if (!adapter.getState) return unavailableListsResult<ListsGetStateResult>('lists.getState');
@@ -1114,11 +1112,10 @@ export function executeListsApply(
   validateV2BlockTarget(input.target, 'target', 'lists.apply');
   requireEnum(input.seed, 'seed', VALID_LIST_KINDS, 'lists.apply');
   if (input.reuseNumId !== undefined && typeof input.reuseNumId !== 'string') {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      'lists.apply reuseNumId must be a string when provided.',
-      { field: 'reuseNumId', value: input.reuseNumId },
-    );
+    throw new DocumentApiValidationError('INVALID_INPUT', 'lists.apply reuseNumId must be a string when provided.', {
+      field: 'reuseNumId',
+      value: input.reuseNumId,
+    });
   }
   optionalInteger(input.ilvl, 'ilvl', 'lists.apply');
   if (!adapter.apply) return unavailableListsResult<ListsMutateItemResult>('lists.apply');

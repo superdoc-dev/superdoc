@@ -778,9 +778,10 @@ function runV1CompatibilityStubMutation(operationId: OperationId, options?: any)
 function runV1CompatibilityStubThrowCase(operationId: OperationId) {
   switch (operationId) {
     case 'blocks.split':
-      return makeDocumentApiForEditor(makeTextEditor().editor).blocks.split(
-        { target: V1_STUB_PARAGRAPH_TARGET, offset: -1 } as any,
-      );
+      return makeDocumentApiForEditor(makeTextEditor().editor).blocks.split({
+        target: V1_STUB_PARAGRAPH_TARGET,
+        offset: -1,
+      } as any);
     case 'blocks.merge':
       return makeDocumentApiForEditor(makeTextEditor().editor).blocks.merge({
         first: V1_STUB_PARAGRAPH_TARGET,
@@ -2049,9 +2050,11 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
 const V1_COMPATIBILITY_STUB_OPS: ReadonlySet<OperationId> = new Set(
   Object.keys(V1_COMPATIBILITY_STUB_MUTATION_VECTORS) as OperationId[],
 );
-const V1_COMPATIBILITY_STUB_BLOCK_OPS: ReadonlySet<OperationId> = new Set(
-  ['blocks.split', 'blocks.merge', 'blocks.move'] as OperationId[],
-);
+const V1_COMPATIBILITY_STUB_BLOCK_OPS: ReadonlySet<OperationId> = new Set([
+  'blocks.split',
+  'blocks.merge',
+  'blocks.move',
+] as OperationId[]);
 const V1_COMPATIBILITY_STUB_DRY_RUN_OPS: ReadonlySet<OperationId> = new Set(
   Object.keys(V1_COMPATIBILITY_STUB_DRY_RUN_VECTORS) as OperationId[],
 );

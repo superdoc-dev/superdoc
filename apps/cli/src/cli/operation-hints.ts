@@ -46,6 +46,7 @@ const PARAGRAPH_OPERATION_IDS = [
   'format.paragraph.setShading',
   'format.paragraph.clearShading',
   'format.paragraph.setMarkRunProps',
+  'format.paragraph.setNumbering',
 ] as const satisfies readonly CliExposedOperationId[];
 
 type ParagraphOperationId = (typeof PARAGRAPH_OPERATION_IDS)[number];

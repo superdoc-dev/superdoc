@@ -59,6 +59,7 @@ import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeTy
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
+import { compileSafeTextRegex } from '../helpers/safe-regex.js';
 import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
 import {
   TrackDeleteMarkName,
@@ -1962,15 +1963,14 @@ function resolveSegmentMarks(
 
 function countTextMatches(text: string, pattern: string, mode: string, caseSensitive: boolean): number {
   if (mode === 'regex') {
-    if (pattern.length > 1024) return 0;
-    const flags = caseSensitive ? 'g' : 'gi';
-    try {
-      const regex = new RegExp(pattern, flags);
-      const matches = text.match(regex);
-      return matches ? matches.length : 0;
-    } catch {
+    // Invalid or unsafe (ReDoS-prone) patterns preserve the existing assert behavior:
+    // they count as zero matches and fail unless the expected count is zero.
+    const result = compileSafeTextRegex(pattern, { caseSensitive });
+    if (!result.ok) {
       return 0;
     }
+    const matches = text.match(result.regex);
+    return matches ? matches.length : 0;
   }
 
   const searchText = caseSensitive ? text : text.toLowerCase();

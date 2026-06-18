@@ -3,7 +3,7 @@
 import 'superdoc/style.css'
 import { useState, useEffect, useRef, use  } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronLeft, Save, Send, Download, Printer, Menu, Bell, Search } from "lucide-react"
+import { ChevronLeft, Save, Send, Download, Menu, Bell, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
@@ -12,8 +12,13 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { SuperDoc } from "superdoc"
 import { docMap } from './_doc-links';
+
+type SuperDocInstance = {
+  export: (options?: { commentsType?: string }) => void | Promise<void>;
+};
+
+type SuperDocConstructor = new (config: Record<string, unknown>) => SuperDocInstance;
 
 export default function GradingPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
@@ -92,7 +97,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string }
   }
 
   const handleDownload = () => {
-   superDocRef.current.export({ commentsType: 'internal' });
+   superDocRef.current?.export({ commentsType: 'internal' });
    console.debug('SuperDoc export complete');
   };
 
@@ -111,19 +116,21 @@ export default function GradingPage({ params }: { params: Promise<{ id: string }
     router.push("/")
   }
 
-  const superDocRef = useRef(null)
+  const superDocRef = useRef<SuperDocInstance | null>(null)
 
   const onReady = () => {
     console.debug('SuperDoc is ready!');
   };
 
-  const initSuperDoc = async (fileToLoad = null) => {
+  const initSuperDoc = async () => {
     const { SuperDoc } = await import('superdoc');
+    const SuperDocConstructor = SuperDoc as unknown as SuperDocConstructor;
+    const doc = docMap[asyncParams.id as keyof typeof docMap];
   
-    superDocRef.current = new SuperDoc({
+    superDocRef.current = new SuperDocConstructor({
       selector: '#superdoc',
       pagination: true,
-      document: docMap[asyncParams.id],
+      document: doc,
       user: {
         name: 'Grading user',
         email: 'grader@school.com'

@@ -82,8 +82,7 @@ const StubV2EditorComponent = defineComponent({
     onMounted(() => {
       emit('v2-editor-failed', {
         reason: 'v2-integration-missing',
-        detail:
-          'SuperDoc: editorVersion: 2 requires a V2 integration. Pass `v2Integration` in the SuperDoc config.',
+        detail: 'SuperDoc: editorVersion: 2 requires a V2 integration. Pass `v2Integration` in the SuperDoc config.',
       });
     });
     return () => h('div', { class: 'superdoc-v2-integration-missing' });
@@ -127,8 +126,7 @@ export function resolveV2Integration(config) {
       integration.createReviewHydrationController ?? stub.createReviewHydrationController,
     isSyntheticTrackedChangeCommentLaneItem:
       integration.isSyntheticTrackedChangeCommentLaneItem ?? stub.isSyntheticTrackedChangeCommentLaneItem,
-    isV2SyntheticTrackedChangeRow:
-      integration.isV2SyntheticTrackedChangeRow ?? stub.isV2SyntheticTrackedChangeRow,
+    isV2SyntheticTrackedChangeRow: integration.isV2SyntheticTrackedChangeRow ?? stub.isV2SyntheticTrackedChangeRow,
   };
 }
 

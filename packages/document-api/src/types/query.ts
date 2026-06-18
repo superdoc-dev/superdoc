@@ -6,11 +6,12 @@ import type { StoryLocator } from './story.types.js';
 
 export interface TextSelector {
   type: 'text';
+  /** Text to match. In regex mode, patterns are validated for syntax, length, and safety before execution. */
   pattern: string;
   /**
    * Controls text matching strategy.
-   * - `contains`: literal substring matching (default)
-   * - `regex`: regular expression matching
+   * - `contains`: literal substring matching (default). Use this for literal text.
+   * - `regex`: regular expression matching. Patterns are validated for syntax, maximum length, and safety.
    */
   mode?: 'contains' | 'regex';
   /**

@@ -15,7 +15,13 @@ import {
   withContextLock,
   writeContextMetadata,
 } from '../lib/context';
-import { loadV2Runtime, openCollaborativeDocument, openDocument, type OpenedRuntimeDocument, EditorPassThroughOptions  } from '../lib/document';
+import {
+  loadV2Runtime,
+  openCollaborativeDocument,
+  openDocument,
+  type OpenedRuntimeDocument,
+  EditorPassThroughOptions,
+} from '../lib/document';
 import { CliError } from '../lib/errors';
 import { resolvePassword } from '../lib/open-password';
 import { parseOperationArgs } from '../lib/operation-args';

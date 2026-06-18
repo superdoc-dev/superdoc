@@ -1,4 +1,5 @@
 import { liftTarget } from 'prosemirror-transform';
+import { isNoteStorySession } from './linkedStyleSplitHelpers.js';
 
 /**
  * Normalize nodes to the default node (paragraph by default).
@@ -8,7 +9,7 @@ import { liftTarget } from 'prosemirror-transform';
  * it has the highest priority (priority: 1000) and it's loaded first.
  */
 // prettier-ignore
-export const clearNodes = () => ({ state, tr, dispatch }) => {
+export const clearNodes = () => ({ state, tr, dispatch, editor }) => {
   const { selection } = tr;
   const { ranges } = selection;
 
@@ -28,7 +29,12 @@ export const clearNodes = () => ({ state, tr, dispatch }) => {
 
       if (node.type.isTextblock) {
         const { defaultType } = $mappedFrom.parent.contentMatchAt($mappedFrom.index());
-        tr.setNodeMarkup(nodeRange.start, defaultType);
+        // SD-3400: note paragraphs keep their note style (FootnoteText) even
+        // when normalized — clearing it makes them render at the body size.
+        const preservedAttrs = isNoteStorySession(editor)
+          ? { paragraphProperties: node.attrs?.paragraphProperties }
+          : undefined;
+        tr.setNodeMarkup(nodeRange.start, defaultType, preservedAttrs);
       }
 
       if (targetLiftDepth || targetLiftDepth === 0) {

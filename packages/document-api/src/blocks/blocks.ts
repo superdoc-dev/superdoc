@@ -254,14 +254,12 @@ function validateBlockNodeAddressParagraph(address: unknown, operationLabel: str
 }
 function validateBlocksSplitInput(input: BlocksSplitInput): void {
   if (!input || typeof input !== 'object') {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.split requires an input object.', { fields: ['input'] });
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.split requires an input object.', {
+      fields: ['input'],
+    });
   }
   validateBlockNodeAddressParagraph(input.target, 'blocks.split', 'target');
-  if (
-    typeof input.offset !== 'number'
-    || !Number.isInteger(input.offset)
-    || input.offset < 0
-  ) {
+  if (typeof input.offset !== 'number' || !Number.isInteger(input.offset) || input.offset < 0) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
       `blocks.split offset must be a non-negative integer, got ${JSON.stringify(input.offset)}.`,
@@ -271,23 +269,25 @@ function validateBlocksSplitInput(input: BlocksSplitInput): void {
 }
 function validateBlocksMergeInput(input: BlocksMergeInput): void {
   if (!input || typeof input !== 'object') {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.merge requires an input object.', { fields: ['input'] });
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.merge requires an input object.', {
+      fields: ['input'],
+    });
   }
   validateBlockNodeAddressParagraph(input.first, 'blocks.merge', 'first');
   validateBlockNodeAddressParagraph(input.second, 'blocks.merge', 'second');
 }
 function validateBlocksMoveInput(input: BlocksMoveInput): void {
   if (!input || typeof input !== 'object') {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.move requires an input object.', { fields: ['input'] });
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.move requires an input object.', {
+      fields: ['input'],
+    });
   }
   validateBlockNodeAddressParagraph(input.source, 'blocks.move', 'source');
   validateBlockNodeAddressParagraph(input.destination, 'blocks.move', 'destination');
   if (input.placement !== 'before' && input.placement !== 'after') {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      'blocks.move placement must be "before" or "after".',
-      { fields: ['placement'] },
-    );
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.move placement must be "before" or "after".', {
+      fields: ['placement'],
+    });
   }
 }
 function unavailableBlocksResult<TResult extends BlocksSplitResult | BlocksMergeResult | BlocksMoveResult>(

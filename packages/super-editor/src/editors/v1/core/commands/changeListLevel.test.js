@@ -301,6 +301,44 @@ describe('updateNumberingProperties', () => {
     expect(newAttrs.paragraphProperties.numberingProperties).toEqual({ numId: 2, ilvl: 0 });
   });
 
+  // ECMA-376 §17.9.22: a numbered paragraph inherits indentation from the
+  // numbering level's pPr, and paragraph-local indent overrides it. Stripping
+  // direct indent lets the level's indentation control the block, matching the
+  // Word-compatible behavior the list operations rely on.
+  it('strips direct indent on a numbered heading so the level controls indentation', () => {
+    const node = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          styleId: 'Heading3',
+          indent: { left: 720, hanging: 360 },
+        },
+      },
+    };
+
+    updateNumberingProperties({ numId: 2, ilvl: 0 }, node, 12, /* editor */ {}, tr);
+
+    const [, , newAttrs] = tr.setNodeMarkup.mock.calls[0];
+    expect(newAttrs.paragraphProperties.indent).toBeUndefined();
+    expect(newAttrs.paragraphProperties.numberingProperties).toEqual({ numId: 2, ilvl: 0 });
+    // The heading style is preserved (only ListParagraph is stripped, on clear).
+    expect(newAttrs.paragraphProperties.styleId).toBe('Heading3');
+  });
+
+  it('strips direct indent on a plain numbered paragraph', () => {
+    const node = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: { indent: { left: 480 } },
+      },
+    };
+
+    updateNumberingProperties({ numId: 2, ilvl: 0 }, node, 12, /* editor */ {}, tr);
+
+    const [, , newAttrs] = tr.setNodeMarkup.mock.calls[0];
+    expect(newAttrs.paragraphProperties.indent).toBeUndefined();
+  });
+
   it('strips the ListParagraph styleId when removing list formatting', () => {
     const node = {
       type: { name: 'paragraph' },

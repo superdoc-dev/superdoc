@@ -4,14 +4,16 @@ import { ensureNoUnknownFlags, isDirectExecution, repoRoot, runCommand } from '.
 const allowedFlags = new Set(['--types']);
 const superdocRoot = path.join(repoRoot, 'packages/superdoc');
 const documentApiRoot = path.join(repoRoot, 'packages/document-api');
+const documentApiProject = path.relative(repoRoot, documentApiRoot);
 
 /**
  * Ensures the dist-backed document-api package exists for CLI/runtime consumers.
  *
  * @returns {void}
  */
-export function ensureDocumentApiBuild() {
-  runCommand('pnpm', ['--prefix', documentApiRoot, 'run', 'build:clean'], 'Build document-api dist for CLI runtime');
+export function ensureDocumentApiBuild(run = runCommand) {
+  run('pnpm', ['exec', 'tsc', '-b', '--clean', documentApiProject], 'Clean document-api dist for CLI runtime');
+  run('pnpm', ['exec', 'tsc', '-b', documentApiProject], 'Build document-api dist for CLI runtime');
 }
 
 /**
@@ -25,13 +27,13 @@ export function ensureDocumentApiBuild() {
  * @param {{ includeTypes?: boolean }} [options]
  * @returns {void}
  */
-export function ensureSuperdocBuild(options = {}) {
+export function ensureSuperdocBuild(options = {}, run = runCommand) {
   const includeTypes = options.includeTypes === true;
   const scriptName = includeTypes ? 'build:es' : 'build:dev';
   const label = includeTypes ? 'Build packaged SuperDoc runtime and types' : 'Build packaged SuperDoc runtime';
 
-  ensureDocumentApiBuild();
-  runCommand('pnpm', ['--prefix', superdocRoot, 'run', scriptName], label);
+  ensureDocumentApiBuild(run);
+  run('pnpm', ['--prefix', superdocRoot, 'run', scriptName], label);
 }
 
 /**

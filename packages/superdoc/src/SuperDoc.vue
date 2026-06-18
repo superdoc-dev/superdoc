@@ -852,11 +852,7 @@ const onV2SelectionChanged = ({ hasRangeSelection, snapshot } = {}) => {
 };
 
 const getActiveV2MountContainer = () => {
-  return (
-    v2GeometryRender.value?.mountContainer ??
-    proxy.$superdoc?.activeEditor?.mount?.container ??
-    null
-  );
+  return v2GeometryRender.value?.mountContainer ?? proxy.$superdoc?.activeEditor?.mount?.container ?? null;
 };
 
 const escapeCssIdent = (value) => {

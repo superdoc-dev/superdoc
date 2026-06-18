@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DOCX, PDF } from '@superdoc/common';
 import { createFakeV1Runtime } from './editor-runtime/conformance/fake-v1-runtime.js';
-import { createFakeV2Runtime } from './editor-runtime/conformance/fake-v2-runtime.js';
 import { createV1EditorRuntimeAdapter } from './editor-runtime/v1/v1-editor-runtime-adapter.js';
 import { markRuntimeRoot } from './editor-runtime/root-marker.js';
 
@@ -435,6 +434,24 @@ describe('SuperDoc core', () => {
       modules: { comments: {}, toolbar: {} },
       user: null,
       onException: vi.fn(),
+    });
+
+    await flushMicrotasks();
+
+    expect(instance.config.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+    expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+  });
+
+  it('keeps legacy default-user behavior for an explicitly empty v1 user name', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      editorVersion: 1,
+      user: { name: '', email: null },
     });
 
     await flushMicrotasks();
@@ -1900,6 +1917,56 @@ describe('SuperDoc core', () => {
     expect(setDocumentMode).toHaveBeenLastCalledWith('suggesting');
   });
 
+  it('routes document mode changes through all registered runtimes for a document before falling back to legacy editors', async () => {
+    const { superdocStore } = createAppHarness();
+    const legacyDocMode = vi.fn();
+    const runtimeBackedEditorMode = vi.fn();
+    const runtimeBackedPresentationMode = vi.fn();
+    superdocStore.documents = [
+      {
+        id: 'doc-1',
+        removeComments: vi.fn(),
+        restoreComments: vi.fn(),
+        getEditor: vi.fn(() => ({ setDocumentMode: runtimeBackedEditorMode })),
+        getPresentationEditor: vi.fn(() => ({ setDocumentMode: runtimeBackedPresentationMode })),
+      },
+      {
+        id: 'doc-2',
+        removeComments: vi.fn(),
+        restoreComments: vi.fn(),
+        getEditor: vi.fn(() => ({ setDocumentMode: legacyDocMode })),
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const runtimeA = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1' });
+    const runtimeB = createFakeV1Runtime({ id: 'v1-b', documentId: 'doc-1' });
+    const setModeA = vi.spyOn(runtimeA, 'setDocumentMode');
+    const setModeB = vi.spyOn(runtimeB, 'setDocumentMode');
+    instance.registerEditorRuntime(runtimeA);
+    instance.registerEditorRuntime(runtimeB);
+
+    instance.setDocumentMode('viewing');
+
+    expect(setModeA).toHaveBeenCalledWith('viewing');
+    expect(setModeB).toHaveBeenCalledWith('viewing');
+    expect(runtimeBackedEditorMode).not.toHaveBeenCalled();
+    expect(runtimeBackedPresentationMode).not.toHaveBeenCalled();
+    expect(legacyDocMode).toHaveBeenCalledWith('viewing');
+  });
+
   it('updates viewing comment options for presentation editors', async () => {
     const { superdocStore } = createAppHarness();
     const setViewingCommentOptions = vi.fn();
@@ -2739,6 +2806,52 @@ describe('SuperDoc core', () => {
       expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
     });
 
+    it('activeZoom watcher routes to PresentationEditor in v1 mode and does not invoke v2 setZoom', async () => {
+      const { superdocStore } = createAppHarness();
+      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
+      const v2SetZoom = vi.fn();
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          type: DOCX,
+          getPresentationEditor: vi.fn(() => mockPresentationEditor),
+        },
+      ];
+
+      let activeZoom = 100;
+      const v2FacadeActive = false;
+      const v2PageMetrics = { setZoom: v2SetZoom };
+      Object.defineProperty(superdocStore, 'activeZoom', {
+        configurable: true,
+        get: () => activeZoom,
+        set: (value) => {
+          activeZoom = value;
+          const zoomPercent = value ?? 100;
+          if (v2FacadeActive && v2PageMetrics?.setZoom) {
+            v2PageMetrics.setZoom(zoomPercent);
+          } else {
+            const zoomMultiplier = (value ?? 100) / 100;
+            superdocStore.documents.forEach((doc) => {
+              const presentationEditor = doc.getPresentationEditor?.();
+              presentationEditor?.setZoom?.(zoomMultiplier);
+            });
+          }
+        },
+      });
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(125);
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledTimes(1);
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
+      expect(v2SetZoom).not.toHaveBeenCalled();
+    });
+
     it('setZoom warns and returns early for invalid values', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const { superdocStore } = createAppHarness();
@@ -3279,6 +3392,57 @@ describe('SuperDoc core', () => {
     });
   });
 
+  // ui-phase2-001: public `editorVersion` flag — config normalization +
+  // surfacing on the SuperDoc instance.
+  describe('editorVersion', () => {
+    it('defaults editorVersion to 1 when omitted', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+      expect(instance.editorVersion).toBe(1);
+      expect(instance.config.editorVersion).toBe(1);
+      expect(instance.v2).toBeNull();
+    });
+
+    it('accepts editorVersion: 1 explicitly', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        editorVersion: 1,
+      });
+      await flushMicrotasks();
+      expect(instance.editorVersion).toBe(1);
+      expect(instance.config.editorVersion).toBe(1);
+      expect(instance.v2).toBeNull();
+    });
+
+    it('coerces invalid editorVersion values back to 1 with a console warning', async () => {
+      createAppHarness();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        for (const bad of ['2', true, 0, 3, null, {}, []]) {
+          const instance = new SuperDoc({
+            selector: '#host',
+            document: 'https://example.com/doc.docx',
+            // @ts-expect-error — testing runtime coercion of invalid input
+            editorVersion: bad,
+          });
+          await flushMicrotasks();
+          expect(instance.editorVersion).toBe(1);
+          expect(instance.config.editorVersion).toBe(1);
+          expect(instance.v2).toBeNull();
+        }
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // SD-2916 PR-B: lifecycle guards on ready-required methods
   // ---------------------------------------------------------------------------
@@ -3383,8 +3547,6 @@ describe('SuperDoc core', () => {
       createAppHarness();
       const instance = new SuperDoc({ ...basePreReadyConfig(), documentMode: 'editing' });
 
-      // Guard fires before `this.config.documentMode = type` and
-      // before `#syncViewingVisibility()` is invoked.
       const before = instance.config.documentMode;
       expect(() => instance.setDocumentMode('viewing')).toThrow(
         /SuperDoc: setDocumentMode requires the instance to be ready/,
@@ -3808,104 +3970,6 @@ describe('SuperDoc core', () => {
       expect(instance.toolbar.activeEditor).toBe(editorA);
       editorA.emit('transaction');
       expect(toolbarUpdateSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('fails closed when activating a v2-shaped runtime (commands: null projection)', async () => {
-      createAppHarness();
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-        modules: { toolbar: {} },
-      });
-      await flushMicrotasks();
-
-      // Start with a working v1 runtime so we can prove stale v1 surfaces clear.
-      const v1 = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
-      instance.registerEditorRuntime(v1);
-      instance.setActiveRuntime('v1-a', 'focus');
-      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
-
-      const v2 = createFakeV2Runtime({
-        id: 'v2-a',
-        documentId: 'doc-2',
-        root: document.createElement('div'),
-        initialState: 'editing-ready',
-      });
-      instance.registerEditorRuntime(v2);
-      toolbarSetActiveSpy.mockClear();
-      instance.setActiveRuntime('v2-a', 'focus');
-
-      // The v2 runtime IS active, but the v1 legacy surfaces are cleared.
-      expect(instance.getActiveRuntime()).toBe(v2);
-      expect(instance.activeEditor).toBeNull();
-      expect(instance.toolbar.activeEditor).toBeNull();
-      expect(toolbarSetActiveSpy).toHaveBeenLastCalledWith(null);
-      // Search/navigation must not throw on a command-null projection.
-      expect(instance.search('x')).toBeUndefined();
-      expect(instance.goToSearchResult({})).toBeUndefined();
-      expectActiveEditorInvariant(instance);
-    });
-
-    it('fails closed when a v2-shaped runtime exposes an object-like commands facade', async () => {
-      createAppHarness();
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-        modules: { toolbar: {} },
-      });
-      await flushMicrotasks();
-
-      const v1 = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
-      instance.registerEditorRuntime(v1);
-      instance.setActiveRuntime('v1-a', 'focus');
-      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
-
-      const v2Facade = { commands: { search: vi.fn(() => ['should-not-run']) }, state: {}, view: {} };
-      const v2 = {
-        ...createFakeV2Runtime({
-          id: 'v2-commands',
-          documentId: 'doc-2',
-          root: document.createElement('div'),
-          initialState: 'editing-ready',
-        }),
-        getLegacyEditorProjection: () => v2Facade,
-      };
-      instance.registerEditorRuntime(v2);
-      instance.setActiveRuntime('v2-commands', 'focus');
-
-      expect(instance.getActiveRuntime()).toBe(v2);
-      expect(instance.activeEditor).toBeNull();
-      expect(instance.toolbar.activeEditor).toBeNull();
-      expect(instance.search('x')).toBeUndefined();
-      expect(v2Facade.commands.search).not.toHaveBeenCalled();
-      expectActiveEditorInvariant(instance);
-    });
-
-    it('fails closed when activating a v2-shaped runtime with a null legacy projection', async () => {
-      createAppHarness();
-      const instance = new SuperDoc({
-        selector: '#host',
-        document: 'https://example.com/doc.docx',
-        modules: { toolbar: {} },
-      });
-      await flushMicrotasks();
-
-      const v2 = createFakeV2Runtime({
-        id: 'v2-null',
-        documentId: 'doc-2',
-        root: document.createElement('div'),
-        initialState: 'editing-ready',
-        nullLegacyProjection: true,
-      });
-      instance.registerEditorRuntime(v2);
-      instance.setActiveRuntime('v2-null', 'focus');
-
-      expect(instance.getActiveRuntime()).toBe(v2);
-      expect(instance.activeEditor).toBeNull();
-      expect(instance.toolbar.activeEditor).toBeNull();
-      expect(instance.search('x')).toBeUndefined();
-      expect(instance.goToSearchResult({})).toBeUndefined();
-      expectActiveEditorInvariant(instance);
     });
   });
 

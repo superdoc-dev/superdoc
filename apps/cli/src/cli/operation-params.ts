@@ -571,8 +571,12 @@ const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
 const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
   operationId.startsWith('format.'),
 );
-const PARAGRAPH_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter((operationId) => operationId.startsWith('format.paragraph.'));
-const INLINE_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter((operationId) => !operationId.startsWith('format.paragraph.'));
+const PARAGRAPH_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter((operationId) =>
+  operationId.startsWith('format.paragraph.'),
+);
+const INLINE_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter(
+  (operationId) => !operationId.startsWith('format.paragraph.'),
+);
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   // Flat flags are CLI convenience alternatives to --select-json. Marked
@@ -1001,12 +1005,12 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             {
               type: 'object',
               description:
-                'WebSocket-based collaboration. `runtime: \"v2\"` supports only `y-websocket`; `hocuspocus` is legacy v1-only.',
+                'WebSocket-based collaboration. `runtime: "v2"` supports only `y-websocket`; `hocuspocus` is legacy v1-only.',
               properties: {
                 providerType: {
                   type: 'string',
                   enum: ['y-websocket', 'hocuspocus'],
-                  description: 'Collaboration provider. For `runtime: \"v2\"`, only `y-websocket` is supported.',
+                  description: 'Collaboration provider. For `runtime: "v2"`, only `y-websocket` is supported.',
                 },
                 url: { type: 'string', description: 'WebSocket server URL.' },
                 documentId: {
@@ -1036,12 +1040,12 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             {
               type: 'object',
               description:
-                'Liveblocks collaboration with a public API key. Legacy v1-only; `runtime: \"v2\"` single-socket collaboration does not support Liveblocks.',
+                'Liveblocks collaboration with a public API key. Legacy v1-only; `runtime: "v2"` single-socket collaboration does not support Liveblocks.',
               properties: {
                 providerType: {
                   type: 'string',
                   enum: ['liveblocks'],
-                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: \"v2\"`.',
+                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: "v2"`.',
                 },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
@@ -1061,12 +1065,12 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             {
               type: 'object',
               description:
-                'Liveblocks collaboration with a custom auth endpoint. Legacy v1-only; `runtime: \"v2\"` single-socket collaboration does not support Liveblocks.',
+                'Liveblocks collaboration with a custom auth endpoint. Legacy v1-only; `runtime: "v2"` single-socket collaboration does not support Liveblocks.',
               properties: {
                 providerType: {
                   type: 'string',
                   enum: ['liveblocks'],
-                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: \"v2\"`.',
+                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: "v2"`.',
                 },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },

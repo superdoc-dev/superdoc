@@ -1,6 +1,7 @@
 // Copy the bundled metric-compatible font substitutes into public/fonts/ so they are served at
 // /fonts/ (the asset base set on the editor). Without this, the bundled .woff2 404 and SuperDoc
-// paginates against a browser fallback. Runs as `predev`/`prebuild`.
+// paginates against a browser fallback. Runs inside `dev` and `build` so CI still copies fonts
+// when lifecycle scripts are disabled.
 //
 // A real Next.js consumer would copy from `node_modules/@superdoc-dev/fonts/assets/` (or set
 // `fonts.assetBaseUrl` to wherever they serve them); this example copies from the workspace package

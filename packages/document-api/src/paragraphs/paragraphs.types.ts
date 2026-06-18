@@ -230,3 +230,29 @@ export interface ParagraphsSetDirectionInput {
 export interface ParagraphsClearDirectionInput {
   target: ParagraphTarget;
 }
+
+// ---------------------------------------------------------------------------
+// Numbering
+// ---------------------------------------------------------------------------
+
+/**
+ * format.paragraph.setNumbering
+ *
+ * Attaches numbering (`w:numPr`) to an existing paragraph-shaped block so a
+ * heading or paragraph can join an existing numbered sequence (the numbered-
+ * heading legal-clause pattern). The underlying paragraph node and its style are
+ * unchanged, though the doc-api block subtype may re-resolve afterward (a
+ * numbered plain paragraph becomes a listItem; a heading stays a heading).
+ * Numbering is a paragraph property (ECMA-376 §17.3.1.19), so this lives under
+ * `format.paragraph.*` rather than `lists.*`.
+ */
+export interface ParagraphsSetNumberingInput {
+  target: ParagraphTarget;
+  /**
+   * Numbering definition instance id (`w:numId`), 1 or greater. Must reference an
+   * existing definition. numId 0 is the OOXML no-numbering sentinel and is rejected.
+   */
+  numId: number;
+  /** Numbering level (`w:ilvl`), 0-8. Defaults to 0 when omitted. */
+  level?: number;
+}

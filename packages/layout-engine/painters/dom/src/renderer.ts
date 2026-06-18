@@ -44,6 +44,7 @@ import type {
   ListBlock,
 } from '@superdoc/contracts';
 import {
+  computeLinePmRange,
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
@@ -64,7 +65,9 @@ import {
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
+  ensureDocumentSurfaceStyles,
   ensureFieldAnnotationStyles,
+  ensureFootnoteStyles,
   ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
@@ -1294,6 +1297,7 @@ export class DomPainter {
     }
 
     ensurePrintStyles(doc);
+    ensureDocumentSurfaceStyles(doc);
     ensureLinkStyles(doc);
     ensureTrackChangeStyles(doc);
     ensureFormattingMarksStyles(doc);
@@ -1301,6 +1305,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureMathMencloseStyles(doc);
+    ensureFootnoteStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -1505,6 +1510,28 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
+  }
+
+  private releaseVirtualizationHandlers(): void {
+    if (this.mount && this.onScrollHandler) {
+      try {
+        this.mount.removeEventListener('scroll', this.onScrollHandler);
+      } catch {}
+    }
+    const win = this.doc?.defaultView;
+    if (win && this.onWindowScrollHandler) {
+      try {
+        win.removeEventListener('scroll', this.onWindowScrollHandler);
+      } catch {}
+    }
+    if (win && this.onResizeHandler) {
+      try {
+        win.removeEventListener('resize', this.onResizeHandler);
+      } catch {}
+    }
+    this.onScrollHandler = null;
+    this.onWindowScrollHandler = null;
+    this.onResizeHandler = null;
   }
 
   private computeVirtualMetrics(): void {
@@ -2107,6 +2134,22 @@ export class DomPainter {
     const container = (existing as HTMLElement) ?? this.doc.createElement('div');
     container.className = className;
     container.innerHTML = '';
+    // Stamp a stable header/footer STORY REF ID
+    // (and resolved variant) on the decoration container so host-visible DOM
+    // readback can associate the painted region with its header/footer story.
+    // The payload already carries `headerFooterRefId` — no upstream import is
+    // introduced and the painter boundary is preserved.
+    if (typeof data.headerFooterRefId === 'string' && data.headerFooterRefId.length > 0) {
+      container.setAttribute('data-sd-headerfooter-ref-id', data.headerFooterRefId);
+    } else {
+      container.removeAttribute('data-sd-headerfooter-ref-id');
+    }
+    if (typeof data.sectionType === 'string' && data.sectionType.length > 0) {
+      container.setAttribute('data-sd-headerfooter-variant', data.sectionType);
+    } else {
+      container.removeAttribute('data-sd-headerfooter-variant');
+    }
+    container.setAttribute('data-sd-headerfooter-kind', kind);
     const baseOffset = data.offset;
     const marginLeft = data.marginLeft ?? 0;
     const pageMargins = page.margins;
@@ -2291,21 +2334,7 @@ export class DomPainter {
 
   private resetState(): void {
     if (this.mount) {
-      if (this.onScrollHandler) {
-        try {
-          this.mount.removeEventListener('scroll', this.onScrollHandler);
-        } catch {}
-      }
-      if (this.onWindowScrollHandler && this.doc?.defaultView) {
-        try {
-          this.doc.defaultView.removeEventListener('scroll', this.onWindowScrollHandler);
-        } catch {}
-      }
-      if (this.onResizeHandler && this.doc?.defaultView) {
-        try {
-          this.doc.defaultView.removeEventListener('resize', this.onResizeHandler);
-        } catch {}
-      }
+      this.releaseVirtualizationHandlers();
       this.mount.innerHTML = '';
     }
     this.pageStates = [];
@@ -2314,15 +2343,48 @@ export class DomPainter {
     this.topSpacerEl = null;
     this.bottomSpacerEl = null;
     this.virtualPagesEl = null;
-    this.onScrollHandler = null;
-    this.onWindowScrollHandler = null;
-    this.onResizeHandler = null;
     this.scrollContainerMountOffset = null;
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
     this.lastPaintSnapshot = null;
     this.mountedPageIndices = [];
+  }
+
+  public dispose(): void {
+    this.releaseVirtualizationHandlers();
+    if (this.mount) {
+      this.mount.innerHTML = '';
+    }
+    this.pageStates = [];
+    this.currentLayout = null;
+    this.changedBlocks.clear();
+    this.sectionPageCounts.clear();
+    this.sdtLabelsRendered.clear();
+    this.clearGapSpacers();
+    this.topSpacerEl = null;
+    this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
+    this.virtualPinnedPages = [];
+    this.virtualMountedKey = '';
+    this.pageIndexToState.clear();
+    this.virtualHeights = [];
+    this.virtualOffsets = [];
+    this.virtualStart = 0;
+    this.virtualEnd = -1;
+    this.scrollContainer = null;
+    this.scrollContainerMountOffset = null;
+    this.layoutVersion = 0;
+    this.layoutEpoch = 0;
+    this.processedLayoutVersion = -1;
+    this.currentMapping = null;
+    this.paintSnapshotBuilder = null;
+    this.lastPaintSnapshot = null;
+    this.mountedPageIndices = [];
+    this.resolvedLayout = null;
+    this.totalPages = 0;
+    this.mount = null;
+    this.doc = null;
   }
 
   private getSectionPageCount(page: ResolvedPage): number {
@@ -2440,6 +2502,14 @@ export class DomPainter {
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = resolvedSig;
+        } else if (isNonBodyStoryBlockId(fragment.blockId)) {
+          // Story fragments (notes, headers/footers) use story-local positions:
+          // the body transaction mapping does not apply, but the resolved item
+          // carries FRESH story positions every paint. Shift the painted
+          // attributes by the fresh-vs-painted delta so reused fragments never
+          // serve stale positions (SD-3400: stale note ranges broke caret,
+          // selection, and arrow navigation downstream).
+          this.updateStoryPositionAttributes(current.element, resolvedItem);
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2487,6 +2557,64 @@ export class DomPainter {
    * using the transaction's mapping. Skips header/footer content (separate PM coordinate space).
    * Also skips fragments that end before the edit point (their positions don't change).
    */
+  /**
+   * Refreshes data-pm-start/data-pm-end on a REUSED story fragment from the
+   * fresh resolved item. Story positions are local to their story document,
+   * so the body transaction mapping cannot update them; instead the uniform
+   * shift between the fresh first position and the painted one is applied.
+   * Exact for unchanged blocks (positions inside one block shift uniformly).
+   */
+  private updateStoryPositionAttributes(fragmentEl: HTMLElement, resolvedItem: ResolvedPaintItem | undefined): void {
+    if (!resolvedItem || resolvedItem.kind !== 'fragment') return;
+
+    // Fragment-scoped fresh landmark: the pm start of THIS fragment's first
+    // line (matches what render-line stamps as the first painted attribute,
+    // including continuation fragments that start mid-block).
+    let freshStart: number | undefined;
+    const block = 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const firstLine = 'content' in resolvedItem ? resolvedItem.content?.lines?.[0]?.line : undefined;
+    if (block && firstLine) {
+      const range = computeLinePmRange(block, firstLine);
+      if (typeof range.pmStart === 'number' && Number.isFinite(range.pmStart)) {
+        freshStart = range.pmStart;
+      }
+    }
+    if (freshStart == null && block) {
+      const runs = (block as { runs?: Array<{ pmStart?: number | null }> }).runs;
+      if (Array.isArray(runs)) {
+        for (const run of runs) {
+          if (typeof run?.pmStart === 'number' && Number.isFinite(run.pmStart)) {
+            freshStart = run.pmStart;
+            break;
+          }
+        }
+      }
+    }
+    if (freshStart == null || !Number.isFinite(freshStart)) return;
+
+    const elements = [fragmentEl, ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]'))];
+    let paintedStart = Infinity;
+    for (const el of elements) {
+      const start = Number(el.dataset.pmStart);
+      if (Number.isFinite(start)) paintedStart = Math.min(paintedStart, start);
+    }
+    if (!Number.isFinite(paintedStart)) return;
+
+    const delta = freshStart - paintedStart;
+    if (delta === 0) return;
+
+    for (const el of elements) {
+      const start = Number(el.dataset.pmStart);
+      if (el.dataset.pmStart !== undefined && el.dataset.pmStart !== '' && Number.isFinite(start)) {
+        el.dataset.pmStart = String(start + delta);
+      }
+      const end = Number(el.dataset.pmEnd);
+      if (el.dataset.pmEnd !== undefined && el.dataset.pmEnd !== '' && Number.isFinite(end)) {
+        el.dataset.pmEnd = String(end + delta);
+      }
+    }
+  }
+
   private updatePositionAttributes(fragmentEl: HTMLElement, mapping: PositionMapping): void {
     // Skip header/footer elements (they use a separate PM coordinate space)
     if (fragmentEl.closest('.superdoc-page-header, .superdoc-page-footer')) {

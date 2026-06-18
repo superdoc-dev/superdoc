@@ -1,8 +1,49 @@
+import DOMPurify from 'dompurify';
+
 let superdoc = null;
 let currentFileData = null;
 let modalContainer = null;
 
 const ID_PREFIX = 'superdoc-anywhere-extension__';
+const SAFE_HTML_CONFIG = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option', 'svg', 'math'],
+  FORBID_ATTR: ['srcdoc'],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+};
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeHtml(value) {
+  return DOMPurify.sanitize(String(value ?? ''), SAFE_HTML_CONFIG);
+}
+
+function sanitizeDocumentTitle(value) {
+  return escapeHtml(String(value ?? 'Untitled Document'));
+}
+
+function clearElement(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
+
+function appendTextElement(parent, tagName, text, attrs = {}) {
+  const element = document.createElement(tagName);
+  Object.entries(attrs).forEach(([key, value]) => {
+    element.setAttribute(key, String(value));
+  });
+  element.textContent = String(text ?? '');
+  parent.appendChild(element);
+  return element;
+}
 
 // Load modal HTML from file
 async function loadModalHTML() {
@@ -74,6 +115,7 @@ async function createModal() {
   }
   
   const div = document.createElement('div');
+  // Packaged extension markup, not page or file input.
   div.innerHTML = modalHTML;
   modalContainer = div.firstElementChild;
   
@@ -273,14 +315,15 @@ function showFallback(data) {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   const formattedSize = bytes === 0 ? '0 B' : Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  
-  container.innerHTML = `
-    <div style="padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
-      <h2 style="margin: 0 0 10px 0;">File: ${data.filename}</h2>
-      <p style="margin: 0 0 10px 0;">Size: ${formattedSize}</p>
-      <p style="margin: 0;">SuperDoc unavailable - cannot display document.</p>
-    </div>
-  `;
+
+  clearElement(container);
+  const wrapper = document.createElement('div');
+  wrapper.style.padding = '20px';
+  wrapper.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+  appendTextElement(wrapper, 'h2', 'File: ' + data.filename, { style: 'margin: 0 0 10px 0;' });
+  appendTextElement(wrapper, 'p', `Size: ${formattedSize}`, { style: 'margin: 0 0 10px 0;' });
+  appendTextElement(wrapper, 'p', 'SuperDoc unavailable - cannot display document.', { style: 'margin: 0;' });
+  container.appendChild(wrapper);
 }
 
 // Initialize SuperDoc with HTML content for markdown files
@@ -294,13 +337,16 @@ async function initSuperdocWithHTML(data) {
       return;
     }
     
+    const safeHtmlContent = sanitizeHtml(data.htmlContent);
+    const safeTitle = sanitizeDocumentTitle(data.filename);
+
     // Create a simple HTML document structure
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>${data.filename}</title>
+        <title>${safeTitle}</title>
         <style>
           body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; line-height: 1.6; }
           h1, h2, h3 { color: #333; }
@@ -310,7 +356,7 @@ async function initSuperdocWithHTML(data) {
         </style>
       </head>
       <body>
-        ${data.htmlContent}
+        ${safeHtmlContent}
       </body>
       </html>
     `;
@@ -348,16 +394,34 @@ async function initSuperdocWithHTML(data) {
 // Show fallback content for markdown files
 function showMarkdownFallback(data) {
   const container = modalContainer.querySelector(`#${ID_PREFIX}viewer`);
-  
-  container.innerHTML = `
-    <div style="padding: 20px; font-family: system-ui, -apple-system, sans-serif; max-height: 500px; overflow-y: auto;">
-      <h2 style="margin: 0 0 20px 0; color: #333;">Markdown File: ${data.filename}</h2>
-      <div style="border: 1px solid #ddd; border-radius: 5px; padding: 20px; background: #f9f9f9;">
-        ${data.htmlContent}
-      </div>
-      <p style="margin: 20px 0 0 0; color: #666; font-size: 14px;">SuperDoc unavailable - showing converted HTML content.</p>
-    </div>
-  `;
+
+  clearElement(container);
+
+  const wrapper = document.createElement('div');
+  wrapper.style.padding = '20px';
+  wrapper.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+  wrapper.style.maxHeight = '500px';
+  wrapper.style.overflowY = 'auto';
+
+  const title = appendTextElement(wrapper, 'h2', 'Markdown File: ' + data.filename);
+  title.style.margin = '0 0 20px 0';
+  title.style.color = '#333';
+
+  const contentBox = document.createElement('div');
+  contentBox.style.border = '1px solid #ddd';
+  contentBox.style.borderRadius = '5px';
+  contentBox.style.padding = '20px';
+  contentBox.style.background = '#f9f9f9';
+  const fallbackHtmlContent = sanitizeHtml(data.htmlContent);
+  contentBox.innerHTML = fallbackHtmlContent;
+  wrapper.appendChild(contentBox);
+
+  const footer = appendTextElement(wrapper, 'p', 'SuperDoc unavailable - showing converted HTML content.');
+  footer.style.margin = '20px 0 0 0';
+  footer.style.color = '#666';
+  footer.style.fontSize = '14px';
+
+  container.appendChild(wrapper);
 }
 
 // Handle selected HTML capture
@@ -380,7 +444,7 @@ async function handleCaptureSelectedHTML(request, sendResponse) {
     // Extract the HTML content of the selection
     const tempDiv = document.createElement('div');
     tempDiv.appendChild(range.cloneContents());
-    const htmlContent = tempDiv.innerHTML;
+    const htmlContent = sanitizeHtml(tempDiv.innerHTML);
     
     // Create data object similar to markdown processing
     const currentDomain = window.location.hostname;
@@ -435,7 +499,11 @@ async function handledisplayDOCX(request, sendResponse) {
     array[i] = bytes.charCodeAt(i);
   }
   const blob = new Blob([array], { type: request.data.mimeType });
-  const data = { ...request.data, blob };
+  const data = {
+    ...request.data,
+    filename: String(request.data.filename ?? 'document.docx'),
+    blob,
+  };
   currentFileData = data;
   
   // Load SuperDoc library
@@ -467,7 +535,12 @@ async function handleDisplayMarkdown(request, sendResponse) {
   
   console.log('Received markdown file data from background, displaying in modal');
   
-  currentFileData = request.data;
+  const data = {
+    ...request.data,
+    filename: String(request.data.filename ?? 'document.md'),
+    htmlContent: sanitizeHtml(request.data.htmlContent),
+  };
+  currentFileData = data;
   
   // Load SuperDoc library
   await loadSuperDoc();
@@ -477,7 +550,7 @@ async function handleDisplayMarkdown(request, sendResponse) {
   showModal();
   
   // Initialize SuperDoc with HTML content
-  await initSuperdocWithHTML(request.data);
+  await initSuperdocWithHTML(data);
   
   sendResponse({ success: true });
   return true;
@@ -616,11 +689,12 @@ async function exportHTML() {
     return;
   }
   
-  let htmlContent = viewerElement.innerHTML;
-  if (!htmlContent) {
+  const safeHtmlContent = sanitizeHtml(viewerElement.innerHTML);
+  if (!safeHtmlContent) {
     console.error('No HTML content found in markdown viewer');
     return;
   }
+  const safeTitle = sanitizeDocumentTitle(currentFileData?.filename || 'Document');
   
   // Create a complete HTML document
   const completeHTML = `<!DOCTYPE html>
@@ -628,7 +702,7 @@ async function exportHTML() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${currentFileData?.filename || 'Document'}</title>
+  <title>${safeTitle}</title>
   <style>
     body { 
       font-family: system-ui, -apple-system, sans-serif; 
@@ -670,7 +744,7 @@ async function exportHTML() {
   </style>
 </head>
 <body>
-  ${htmlContent}
+  ${safeHtmlContent}
 </body>
 </html>`;
   

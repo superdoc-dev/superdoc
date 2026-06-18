@@ -1,38 +1,51 @@
 # SuperDoc Documentation
 
-A unified documentation site for both the SuperDoc JavaScript SDK and REST API, built with Mintlify.
+Unified documentation site for both the SuperDoc JavaScript SDK and REST API, built with Mintlify.
 
-## Quick Start
+Admin console: https://app.mintlify.com/superdoc/superdoc
+
+## Quick start
 
 ```bash
+# Install Mintlify CLI
+# Ref: https://www.mintlify.com/docs/cli/install
+# Note: mint login enables search capabilities locally (and more)
+npm i -g mint
+mint login
+
+# Go to docs directory
+cd  superdoc/public/apps/docs
+
 # Install dependencies
 pnpm install
 
 # Start development server
-pnpm dev
+mint dev
 
-# Visit http://localhost:3000
+# Visit localhost
+open http://localhost:3000
 ```
 
-## Project Structure
+## Project structure
 
-```
-├── introduction.mdx          # Landing page
-├── quickstart.mdx           # Quick start guide
-├── setup/                   # Installation and configuration
-├── extensions/              # Extension docs [auto-generated]
-│   ├── field-annotation.mdx
-│   ├── track-changes.mdx
-│   ├── comments.mdx
-│   └── document-section.mdx
-├── collaboration/           # Collaboration features
-├── customization/          # Customization guides
-├── framework/              # Framework integrations
-├── advanced/               # Advanced topics
-├── api-reference/          # API documentation [auto-generated]
-└── scripts/                # Sync scripts
-    ├── sync-api-docs.js
-    └── sync-sdk-docs.js
+`docs.json` is the source of truth for navigation. File paths should mirror the nav structure.
+
+```text
+├── docs.json                         # Mintlify config, navigation, redirects
+├── getting-started/                  # Installation, quickstart, frameworks
+├── editor/                           # SuperDoc, React, custom UI, modules, collaboration
+├── document-engine/                  # Engine, SDK, CLI, diffing
+├── document-api/                     # Manual docs plus generated reference pages
+│   ├── reference/                    # Generated and committed
+│   └── available-operations.mdx      # Manual except generated operations block
+├── ai/                               # MCP, agents, skills, evals
+├── solutions/                        # eSign and template builder docs
+├── api-reference/                    # Backend services docs from OpenAPI
+├── extensions/                       # Extension docs generated from JSDoc
+├── snippets/                         # Reusable MDX snippets
+├── public/                           # Images and icons
+├── scripts/                          # Generation and validation scripts
+└── __tests__/                        # Docs example tests
 ```
 
 ## Development

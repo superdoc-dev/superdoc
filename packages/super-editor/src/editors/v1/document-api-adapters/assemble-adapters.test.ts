@@ -156,7 +156,9 @@ describe('assembleDocumentApiAdapters', () => {
   it('returns CAPABILITY_UNAVAILABLE receipts for v2-only compatibility stubs', () => {
     const adapters = assembleDocumentApiAdapters(makeEditor());
 
-    expect(adapters.blocks.split({ target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, offset: 1 })).toEqual({
+    expect(
+      adapters.blocks.split({ target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, offset: 1 }),
+    ).toEqual({
       success: false,
       failure: {
         code: 'CAPABILITY_UNAVAILABLE',

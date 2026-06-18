@@ -29,5 +29,10 @@ src/tests/data/**
 tests/data
 tests/data/**
 
+# Generated artifacts
+apps/mcp/src/generated/**
+packages/sdk/langs/browser/src/intent-dispatch.ts
+tests/consumer-typecheck/tsconfig.matrix.json
+
 # Markdown files
 *.md

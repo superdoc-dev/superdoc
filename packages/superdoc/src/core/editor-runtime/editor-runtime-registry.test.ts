@@ -1,15 +1,15 @@
 // Editor runtime registry + active routing unit tests.
 //
-// Uses the fake v1-like and v2-like runtimes from the editor runtime boundary conformance
-// fixtures so the registry is exercised against real contract shapes WITHOUT
-// importing any concrete v1/v2 editor. Real adapter wiring is owned by the editor runtime boundary.
+// Uses fake v1 runtimes from the editor runtime boundary conformance fixtures so
+// the registry is exercised against real contract shapes WITHOUT importing any
+// concrete editor implementation. Real adapter wiring is owned by the editor
+// runtime boundary.
 
 import { describe, expect, it, vi } from 'vitest';
 import { EditorRuntimeRegistry } from './editor-runtime-registry.js';
 import type { EditorRuntimeRegistryActiveChange } from './editor-runtime-registry.js';
 import { markRuntimeRoot } from './root-marker.js';
 import { createFakeV1Runtime } from './conformance/fake-v1-runtime.js';
-import { createFakeV2Runtime } from './conformance/fake-v2-runtime.js';
 
 describe('EditorRuntimeRegistry  -  register / unregister', () => {
   it('registers and retrieves a runtime by id', () => {
@@ -23,7 +23,7 @@ describe('EditorRuntimeRegistry  -  register / unregister', () => {
   it('tracks more than one mounted runtime at the same time', () => {
     const registry = new EditorRuntimeRegistry();
     const a = createFakeV1Runtime({ id: 'a', root: document.createElement('div') });
-    const b = createFakeV2Runtime({ id: 'b', root: document.createElement('div') });
+    const b = createFakeV1Runtime({ id: 'b', root: document.createElement('div') });
     registry.register(a);
     registry.register(b);
     expect(registry.getAll()).toEqual([a, b]);
@@ -41,7 +41,7 @@ describe('EditorRuntimeRegistry  -  register / unregister', () => {
     const registry = new EditorRuntimeRegistry();
     const root = document.createElement('div');
     registry.register(createFakeV1Runtime({ id: 'a', root }));
-    expect(() => registry.register(createFakeV2Runtime({ id: 'b', root }))).toThrow(/root element already registered/);
+    expect(() => registry.register(createFakeV1Runtime({ id: 'b', root }))).toThrow(/root element already registered/);
   });
 
   it('unregister returns false for an unknown runtime', () => {
@@ -215,16 +215,6 @@ describe('EditorRuntimeRegistry  -  legacy editor projection on active change', 
     // The fake v1 runtime returns an inert legacy projection marker.
     expect(change!.legacyEditorProjection).toEqual(a.getLegacyEditorProjection!());
     expect(change!.legacyEditorProjection).not.toBeNull();
-  });
-
-  it('surfaces the v2-like facade projection (commands/state/view: null) on the change event', () => {
-    const registry = new EditorRuntimeRegistry();
-    const v2 = createFakeV2Runtime({ id: 'v2' });
-    registry.register(v2);
-    let change: EditorRuntimeRegistryActiveChange | null = null;
-    registry.subscribe((c) => (change = c));
-    registry.setActive('v2', 'focus');
-    expect(change!.legacyEditorProjection).toEqual({ commands: null, state: null, view: null, editorVersion: 2 });
   });
 });
 

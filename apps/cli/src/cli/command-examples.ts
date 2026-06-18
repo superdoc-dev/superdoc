@@ -142,7 +142,7 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
   'create.tableOfContents': [
     'superdoc create table-of-contents',
     'superdoc create table-of-contents --at-json \'{"kind":"documentStart"}\'',
-    "superdoc create table-of-contents --instruction 'TOC \\h \\z \\u' --at-json '{\"kind\":\"documentStart\"}'",
+    'superdoc create table-of-contents --instruction \'TOC \\h \\z \\u\' --at-json \'{"kind":"documentStart"}\'',
   ],
 
   // ── Capabilities ────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
 
   // ── Fields / Notes ──────────────────────────────────────────────────
   'fields.insert': [
-    "superdoc fields insert --mode-json '\"raw\"' --instruction 'PAGE' --update-policy rebuild --at-json '{\"kind\":\"text\",\"segments\":[{\"blockId\":\"abc123\",\"range\":{\"start\":0,\"end\":0}}]}'",
+    'superdoc fields insert --mode-json \'"raw"\' --instruction \'PAGE\' --update-policy rebuild --at-json \'{"kind":"text","segments":[{"blockId":"abc123","range":{"start":0,"end":0}}]}\'',
   ],
   'footnotes.insert': [
     'superdoc footnotes insert --type footnote --at-json \'{"kind":"text","segments":[{"blockId":"abc123","range":{"start":0,"end":0}}]}\' --content "Example footnote content."',

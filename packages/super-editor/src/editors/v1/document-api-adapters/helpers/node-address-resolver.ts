@@ -3,7 +3,7 @@ import type { Editor } from '../../core/Editor.js';
 import type { BlockNodeAttributes } from '../../core/types/NodeCategories.js';
 import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@superdoc/document-api';
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
-import { toId } from './value-utils.js';
+import { toId, toFiniteNumber } from './value-utils.js';
 import { resolvePublicTocNodeId } from './toc-node-id.js';
 import { buildFallbackBlockNodeId, isVolatileRuntimeBlockId } from './deterministic-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
@@ -101,7 +101,14 @@ export function isSupportedNodeType(nodeType: NodeType | 'text'): nodeType is Bl
 
 function isListItem(attrs: ParagraphAttrs | null | undefined): boolean {
   const numbering = attrs?.paragraphProperties?.numberingProperties;
-  if (numbering && (numbering.numId != null || numbering.ilvl != null)) return true;
+  if (numbering) {
+    const numId = toFiniteNumber(numbering.numId);
+    // numId 0 is the OOXML no-numbering sentinel (ECMA-376 17.9.18): it cancels
+    // numbering, so it does not make the paragraph a list item. Keep this in
+    // lockstep with blocks.list's extractBlockNumbering.
+    if (numId != null && numId !== 0) return true;
+    if (numId == null && numbering.ilvl != null) return true;
+  }
   const listRendering = attrs?.listRendering;
   if (listRendering?.markerText) return true;
   if (Array.isArray(listRendering?.path) && listRendering.path.length > 0) return true;

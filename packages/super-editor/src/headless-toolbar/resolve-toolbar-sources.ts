@@ -1,11 +1,6 @@
 import type { Editor } from '../editors/v1/core/Editor.js';
 import type { PresentationEditor } from '../editors/v1/core/presentation-editor/index.js';
-import type {
-  HeadlessToolbarActiveEditor,
-  HeadlessToolbarSurface,
-  ToolbarContext,
-  ToolbarTarget,
-} from './types.js';
+import type { HeadlessToolbarActiveEditor, HeadlessToolbarSurface, ToolbarContext, ToolbarTarget } from './types.js';
 import type { ResolvedToolbarSources } from './internal-types.js';
 
 // Normalize raw Editor and PresentationEditor into one toolbar-facing shape.

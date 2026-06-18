@@ -8,7 +8,8 @@
  * the consumer-callable surface but escaped the `private` modifier
  * for legitimate reasons (e.g. called by extensions or composables
  * that live in the workspace but aren't exposed through the public
- * facade).
+ * facade). This file also carries explicit carve-outs for V2-only
+ * assertions that now live in the private `superdoc/tests` lane.
  *
  * Each entry MUST carry a one-line reason. The key is the SuperDoc
  * member name (no path needed since it scopes to one class). The
@@ -27,4 +28,8 @@ module.exports = {
   broadcastSidebarToggle: 'Internal lifecycle relay; called by editor/Vue glue, not by consumers.',
   setActiveEditor: 'Internal setter; called by editor lifecycle, not by consumers.',
   onContentError: 'Internal handler bound to editor `content-error`; consumers use Config.onContentError.',
+  getV2FeatureMatrix:
+    'V2-only metadata assertion moved to superdoc/tests/consumer-typecheck-private; no longer covered by the public consumer fixture lane.',
+  v2:
+    'V2-only metadata assertion moved to superdoc/tests/consumer-typecheck-private; no longer covered by the public consumer fixture lane.',
 };

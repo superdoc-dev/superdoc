@@ -95,15 +95,13 @@ async function pathExists(path: string): Promise<boolean> {
  *   content equality, and "extras on disk that should not be there."
  *   Use for outputs that live in the repo (e.g. `apps/docs/.../reference/`).
  * - `inMemoryRoots`: directories whose contents are gitignored. Files
- *   under these roots are NOT checked for existence or extras on disk,
- *   because a clean checkout has none. The in-memory build is still
- *   exercised (any error thrown by the builder still propagates),
- *   confirming the artifacts CAN be produced. Use for outputs that the
- *   developer regenerates locally with the matching `generate:*` command.
- *
- * The "content matches when the file is present" check still runs for
- * `inMemoryRoots` files — if a developer has a previously-generated
- * stale copy on disk, surface it; but a missing file is not an issue.
+ *   under these roots are NOT checked for existence, content, or extras
+ *   on disk. A clean checkout has none, and a developer who ran
+ *   `generate:*` earlier may have a stale copy on disk. The in-memory
+ *   build is still exercised (any error thrown by the builder still
+ *   propagates), confirming the artifacts CAN be produced. The verdict is
+ *   therefore deterministic regardless of disk state: stale optional
+ *   generated outputs can never make the authoritative check false-fail.
  */
 export async function checkGeneratedFiles(
   expectedFiles: GeneratedFile[],
@@ -121,11 +119,15 @@ export async function checkGeneratedFiles(
 
   for (const [path, file] of expected.entries()) {
     const onDiskOptional = isUnderInMemoryRoot(path);
+    if (onDiskOptional) {
+      // In-memory roots are gitignored. Building the GeneratedFile entry above
+      // already proved the artifact can be produced; the on-disk state (absent
+      // or stale) must never affect the verdict. Skip existence and content
+      // checks entirely so the authoritative check stays deterministic.
+      continue;
+    }
     if (!(await pathExists(path))) {
-      // Missing is only an issue when the file is expected to be tracked
-      // on disk. For in-memory roots, the build succeeded (it produced
-      // the GeneratedFile entry), which is what we needed to verify.
-      if (!onDiskOptional) issues.push({ kind: 'missing', path });
+      issues.push({ kind: 'missing', path });
       continue;
     }
 

@@ -117,7 +117,10 @@ function publicTrackChangeIdForRawId(rawId: string, signatureCounts: Map<string,
  * keying both forms off the raw logical id so in-place edits do not remint
  * the public id.
  */
-function buildStableIdMappings(rawListResult: unknown, scopeState: TrackChangeScopeState | null = null): {
+function buildStableIdMappings(
+  rawListResult: unknown,
+  scopeState: TrackChangeScopeState | null = null,
+): {
   normalizedResult: unknown;
   stableToRawId: Map<string, string>;
   rawToStableId: Map<string, string>;

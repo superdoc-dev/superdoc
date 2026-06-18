@@ -18,8 +18,6 @@
 // Out of scope for the scan:
 //   - `core/editor-runtime/**`: the v1 adapter legitimately delegates to v1
 //     surfaces and is already covered by `import-boundary.test.ts`.
-//   - `components/V2SuperEditor/**`: v2-owned host internals may use
-//     `V2EditorHost` internals.
 //   - test/spec files: they assert against forbidden names.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -32,7 +30,7 @@ const SRC_ROOT = join(__dirname, '..', '..');
 const SCAN_EXTENSIONS = ['.js', '.ts', '.vue'];
 
 // Directories (relative to SRC_ROOT, posix-style) excluded from the scan.
-const EXCLUDED_DIR_PREFIXES = ['core/editor-runtime/', 'components/V2SuperEditor/'];
+const EXCLUDED_DIR_PREFIXES = ['core/editor-runtime/'];
 
 /**
  * Dated allowlist for Gate 1. Each entry stays until its capability group lands

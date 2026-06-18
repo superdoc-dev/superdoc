@@ -109,6 +109,13 @@ const {
             size: 10,
           },
           textBetween: vi.fn(() => 'Lazy note session'),
+          // Mirror the real PM doc contract: this stub doc reports text via
+          // textBetween, so descendants must walk a matching text node (the
+          // note-session empty watch inspects it via isNoteContentEmpty).
+          descendants: vi.fn((cb: (node: unknown) => boolean | void) => {
+            cb({ isText: false, isAtom: false, type: { name: 'paragraph' } });
+            cb({ isText: true, isAtom: true, text: 'Lazy note session', type: { name: 'text' } });
+          }),
         },
       },
       options: {},
@@ -4737,6 +4744,48 @@ describe('PresentationEditor', () => {
         handleSelection();
 
         // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
+
+        rafSpy.mockRestore();
+      });
+
+      it('defers the selection overlay render for doc-changing transactions (SD-3400)', async () => {
+        // Editor emits 'selectionUpdate' BEFORE 'update', so for a transaction
+        // that changed the doc the epoch/layout gates are not armed yet: an
+        // immediate flush renders the caret against the PRE-change paint
+        // (stale caret on every Enter/Backspace). Doc-changing transactions
+        // must defer to the post-paint flush; selection-only changes keep the
+        // immediate path (collab-cancellation rationale).
+        const layoutResult = {
+          layout: { pages: [] },
+          measures: [],
+        };
+        mockIncrementalLayout.mockResolvedValue(layoutResult);
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-doc',
+        });
+
+        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+          (Editor as unknown as MockedEditor).mock.results.length - 1
+        ].value;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+        const onCalls = mockEditorInstance.on as unknown as Mock;
+        const selectionUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'selectionUpdate');
+        const handleSelection = selectionUpdateCall![1] as (payload?: {
+          transaction?: { docChanged?: boolean };
+        }) => void;
+
+        // Doc-changing transaction: must NOT render synchronously (RAF-deferred).
+        handleSelection({ transaction: { docChanged: true } });
+        expect(rafSpy).toHaveBeenCalled();
+
+        // Selection-only transaction: immediate path, no RAF needed.
+        rafSpy.mockClear();
+        handleSelection({ transaction: { docChanged: false } });
         expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();

@@ -153,6 +153,7 @@
     "remark-gfm": "catalog:",
     "remark-parse": "catalog:",
     "remark-stringify": "catalog:",
+    "safe-regex2": "^5.1.0",
     "unified": "catalog:",
     "utif2": "catalog:",
     "uuid": "catalog:",

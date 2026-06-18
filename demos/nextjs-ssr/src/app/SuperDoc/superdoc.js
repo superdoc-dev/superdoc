@@ -51,14 +51,14 @@ export default function SuperDocEditor() {
   }, []);
 
   const handleChange = (event) => {
-    const file = event.target.files[0];
-    initSuperDoc(file);
+    const file = event.target.files?.[0];
+    if (file) initSuperDoc(file);
   }
 
   const handleExport = useCallback(async () => {
     console.debug('Exporting document', superdoc.current);
-    superdoc.current.export();
-  });
+    superdoc.current?.export();
+  }, []);
 
   return (
     <div className="example-container">

@@ -39,6 +39,8 @@ export const handleBackspace = (editor) => {
     },
     () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.selectInlineSdtBeforeRunStart(),
+    () => commands.selectFootnoteMarkerBefore?.() ?? false,
+    () => commands.deleteSelectedNoteMarker?.() ?? false,
     () => commands.selectBlockSdtBeforeTextBlockStart(),
     () => commands.moveIntoBlockSdtBeforeTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
@@ -62,6 +64,8 @@ export const handleDelete = (editor) => {
   return editor.commands.first(({ commands }) => [
     () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.selectInlineSdtAfterRunEnd(),
+    () => commands.selectFootnoteMarkerAfter?.() ?? false,
+    () => commands.deleteSelectedNoteMarker?.() ?? false,
     () => commands.selectBlockSdtAfterTextBlockEnd(),
     () => commands.moveIntoBlockSdtAfterTextBlockEnd(),
     () => commands.deleteSkipEmptyRun(),

@@ -17,6 +17,9 @@
     "build": "tsc --project tsconfig.json",
     "test": "bun test"
   },
+  "dependencies": {
+    "@superdoc/common": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "catalog:"
   }

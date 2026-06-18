@@ -18,6 +18,7 @@ import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
 import { Attribute } from './Attribute.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
+import { pruneSessionDeletedNotesPart } from '@core/super-converter/v2/exporter/footnotesExporter.js';
 import type {
   ConvertedXmlPart,
   EditorConverterSurface,
@@ -3867,13 +3868,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
         : null;
 
       const rels = this.converter.schemaToXml(this.converter.convertedXml['word/_rels/document.xml.rels'].elements[0]);
-      const footnotesData = this.converter.convertedXml['word/footnotes.xml'];
+      // SD-3400 tombstones: session-deleted notes stay in the live part store
+      // (undo restores them) but must not reach the exported file. Pruning is
+      // a pure zip-time transform on a COPY; convertedXml keeps the elements.
+      const footnotesData = pruneSessionDeletedNotesPart(this.converter.convertedXml['word/footnotes.xml'], {
+        converter: this.converter,
+        documentXml: this.converter.convertedXml['word/document.xml'],
+        type: 'footnote',
+      });
       const footnotesXml = footnotesData?.elements?.[0] ? this.converter.schemaToXml(footnotesData.elements[0]) : null;
       const footnotesRelsData = this.converter.convertedXml['word/_rels/footnotes.xml.rels'];
       const footnotesRelsXml = footnotesRelsData?.elements?.[0]
         ? this.converter.schemaToXml(footnotesRelsData.elements[0])
         : null;
-      const endnotesData = this.converter.convertedXml['word/endnotes.xml'];
+      const endnotesData = pruneSessionDeletedNotesPart(this.converter.convertedXml['word/endnotes.xml'], {
+        converter: this.converter,
+        documentXml: this.converter.convertedXml['word/document.xml'],
+        type: 'endnote',
+      });
       const endnotesXml = endnotesData?.elements?.[0] ? this.converter.schemaToXml(endnotesData.elements[0]) : null;
       const endnotesRelsData = this.converter.convertedXml['word/_rels/endnotes.xml.rels'];
       const endnotesRelsXml = endnotesRelsData?.elements?.[0]

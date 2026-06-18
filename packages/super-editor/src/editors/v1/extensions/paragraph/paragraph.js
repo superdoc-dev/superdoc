@@ -12,6 +12,7 @@ import { restartNumbering } from '@core/commands/restartNumbering.js';
 import { continueNumbering } from '@core/commands/continueNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
+import { createNoteStyleGuardPlugin } from './noteStyleGuardPlugin.js';
 import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
 import { createDropcapPlugin } from './dropcapPlugin.js';
 import { createListBoundaryNavigationPlugin } from './listBoundaryNavigationPlugin.js';
@@ -431,6 +432,7 @@ export const Paragraph = OxmlNode.create({
       listInputFallbackPlugin,
       createLeadingCaretPlugin(),
       createListBoundaryNavigationPlugin(),
+      createNoteStyleGuardPlugin(this.editor),
     ];
   },
 });

@@ -63,12 +63,8 @@ describe('synthetic tracked-change predicates', () => {
   });
 
   it('detects synthesized V2 body tracked-change rows', () => {
-    expect(
-      isV2SyntheticTrackedChangeRow({ trackedChange: true, trackedChangeAnchorKey: 'tc::body::1' }),
-    ).toBe(true);
-    expect(
-      isV2SyntheticTrackedChangeRow({ trackedChange: true, trackedChangeAnchorKey: 'other::1' }),
-    ).toBe(false);
+    expect(isV2SyntheticTrackedChangeRow({ trackedChange: true, trackedChangeAnchorKey: 'tc::body::1' })).toBe(true);
+    expect(isV2SyntheticTrackedChangeRow({ trackedChange: true, trackedChangeAnchorKey: 'other::1' })).toBe(false);
     expect(isV2SyntheticTrackedChangeRow({ trackedChange: false })).toBe(false);
   });
 });

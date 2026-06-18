@@ -173,6 +173,7 @@ import type {
   ParagraphsSetMarkRunPropsInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -698,6 +699,11 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   };
   'format.paragraph.clearDirection': {
     input: ParagraphsClearDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setNumbering': {
+    input: ParagraphsSetNumberingInput;
     options: MutationOptions;
     output: ParagraphMutationResult;
   };

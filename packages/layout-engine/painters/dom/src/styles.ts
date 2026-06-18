@@ -662,6 +662,51 @@ const SDT_CONTAINER_STYLES = `
   pointer-events: none;
 }
 
+/*
+ * Ancestor overlay layers for nested block content controls (#3752).
+ * The fragment's own (nearest) control is drawn by .superdoc-structured-content-block
+ * above; each enclosing control is drawn as a non-interactive overlay covering the
+ * same region. Edges are shared with the inner box by default (offset 0), matching
+ * Word, which separates nested controls by label and boundary rather than deep insets.
+ * --sd-sdt-layer-offset can nudge edges outward per-depth if QA shows overlap.
+ */
+.superdoc-sdt-ancestor-layer {
+  position: absolute;
+  left: calc(0px - var(--sd-sdt-layer-offset, 0px));
+  right: calc(0px - var(--sd-sdt-layer-offset, 0px));
+  top: 0;
+  bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));
+  border: 0 solid var(--sd-content-controls-block-border, #629be7);
+  border-left-width: 1px;
+  border-right-width: 1px;
+  border-radius: 4px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.superdoc-sdt-ancestor-layer[data-sdt-container-start='true'] {
+  border-top-width: 1px;
+}
+
+.superdoc-sdt-ancestor-layer[data-sdt-container-end='true'] {
+  border-bottom-width: 1px;
+}
+
+.superdoc-sdt-ancestor-layer:not([data-sdt-container-start='true']) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.superdoc-sdt-ancestor-layer:not([data-sdt-container-end='true']) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.superdoc-cc-chrome-none .superdoc-sdt-ancestor-layer {
+  border-color: transparent;
+}
+
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::before {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }

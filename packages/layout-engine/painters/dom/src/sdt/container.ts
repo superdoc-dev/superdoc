@@ -1,4 +1,5 @@
 import type { SdtMetadata, StructuredContentMetadata } from '@superdoc/contracts';
+import type { SdtBoundaryLayer } from './boundaries.js';
 export {
   getSdtContainerKey,
   getSdtContainerKeyForBlock,
@@ -156,6 +157,69 @@ export function applySdtContainerChrome(
   }
 
   return true;
+}
+
+/**
+ * Render ancestor content-control chrome as overlay layers on a fragment host
+ * element, for nested block SDTs. The fragment's own (nearest) control is still
+ * drawn by the existing `applySdtContainerChrome` border path; this adds one
+ * absolutely-positioned, non-interactive overlay per ANCESTOR control above it,
+ * so an outer control keeps a continuous outline around inner controls.
+ *
+ * Edges are shared with the inner box by default (offset 0), matching Word,
+ * which distinguishes nested controls by label and boundary rather than by
+ * deeply inset rectangles. Each overlay carries `data-sdt-depth` and
+ * start/end attributes so CSS can draw the correct edges and a per-depth
+ * offset can be tuned without touching this code.
+ *
+ * @param doc - Owning document
+ * @param hostEl - The fragment's positioned element (overlays fill it)
+ * @param layers - This fragment's boundary layers from computeSdtBoundaryLayers
+ * @param containerChain - Ordered ancestor metadata (block.attrs.sdtContainers)
+ * @param chrome - 'none' suppresses labels (matches the nearest-box behavior)
+ */
+export function renderSdtAncestorLayers(
+  doc: Document,
+  hostEl: HTMLElement,
+  layers: readonly SdtBoundaryLayer[] | undefined,
+  containerChain: readonly SdtMetadata[] | undefined,
+  chrome?: 'default' | 'none',
+): void {
+  if (!layers || layers.length === 0) return;
+  // The deepest layer is the fragment's nearest control, already drawn by the
+  // border path; overlays cover only the ancestors above it.
+  const maxDepth = layers.reduce((max, layer) => Math.max(max, layer.depth), 0);
+  for (const layer of layers) {
+    if (layer.depth >= maxDepth) continue;
+    const metadata = containerChain?.[layer.depth];
+    if (isStructuredContentMetadata(metadata) && metadata.appearance === 'hidden') continue;
+    const config = getSdtContainerConfig(metadata);
+
+    const overlay = doc.createElement('div');
+    overlay.className = 'superdoc-sdt-ancestor-layer';
+    if (config) overlay.classList.add(config.className);
+    overlay.dataset.sdtDepth = String(layer.depth);
+    overlay.dataset.sdtContainerStart = String(layer.isStart ?? true);
+    overlay.dataset.sdtContainerEnd = String(layer.isEnd ?? true);
+    overlay.style.setProperty('--sd-sdt-layer-depth', String(layer.depth));
+    if (isStructuredContentMetadata(metadata)) {
+      overlay.dataset.lockMode = metadata.lockMode || 'unlocked';
+    }
+    if (layer.paddingBottomOverride != null && layer.paddingBottomOverride > 0) {
+      overlay.style.setProperty('--sd-sdt-chrome-bottom-extension', `${layer.paddingBottomOverride}px`);
+    }
+
+    if (layer.showLabel && chrome !== 'none' && config) {
+      const labelEl = doc.createElement('div');
+      labelEl.className = `superdoc-sdt-ancestor-layer__label ${config.labelClassName}`;
+      const labelText = doc.createElement('span');
+      labelText.textContent = config.labelText;
+      labelEl.appendChild(labelText);
+      overlay.appendChild(labelEl);
+    }
+
+    hostEl.appendChild(overlay);
+  }
 }
 
 export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean {

@@ -41,7 +41,7 @@ import type {
   ResolvedDrawingItem,
   LayoutSourceIdentity,
   LayoutStoryLocator,
-  ListBlock,
+  ListBlock, SdtMetadata 
 } from '@superdoc/contracts';
 import {
   computeLinePmRange,
@@ -82,8 +82,8 @@ import {
 } from './styles.js';
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
-import { computeSdtBoundaries } from './sdt/boundaries.js';
-import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
+import { computeSdtBoundaries, computeSdtBoundaryLayers, type SdtBoundaryLayer } from './sdt/boundaries.js';
+import { shouldRebuildForSdtBoundary, renderSdtAncestorLayers, type SdtBoundaryOptions } from './sdt/container.js';
 import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
 import {
   createInlineSdtWrapper,
@@ -1870,6 +1870,10 @@ export class DomPainter {
 
     const resolvedItems = page.items;
     const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    // Ancestor overlay layers for nested block content controls. Computed after
+    // computeSdtBoundaries so it shares this.sdtLabelsRendered: the nearest
+    // control's label is already claimed, so only ancestor labels are emitted here.
+    const sdtBoundaryLayers = computeSdtBoundaryLayers(resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
     resolvedItems.forEach((resolvedItem, index) => {
@@ -1877,7 +1881,14 @@ export class DomPainter {
       const fragment = resolvedItem.fragment;
       const sdtBoundary = sdtBoundaries.get(index);
       el.appendChild(
-        this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
+        this.renderFragment(
+          fragment,
+          contextBase,
+          sdtBoundary,
+          betweenBorderFlags.get(index),
+          resolvedItem,
+          sdtBoundaryLayers.get(index),
+        ),
       );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
@@ -2592,7 +2603,10 @@ export class DomPainter {
     }
     if (freshStart == null || !Number.isFinite(freshStart)) return;
 
-    const elements = [fragmentEl, ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]'))];
+    const elements = [
+      fragmentEl,
+      ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]')),
+    ];
     let paintedStart = Infinity;
     for (const el of elements) {
       const start = Number(el.dataset.pmStart);
@@ -2757,6 +2771,26 @@ export class DomPainter {
   }
 
   private renderFragment(
+    fragment: Fragment,
+    context: FragmentRenderContext,
+    sdtBoundary?: SdtBoundaryOptions,
+    betweenInfo?: BetweenBorderInfo,
+    resolvedItem?: ResolvedPaintItem,
+    sdtLayers?: SdtBoundaryLayer[],
+  ): HTMLElement {
+    const element = this.renderFragmentByKind(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
+    // Draw ancestor content-control chrome (nested block SDTs) as overlays. The
+    // fragment's own nearest control is already drawn by the kind renderer; this
+    // adds the enclosing controls above it. No-op for non-nested fragments.
+    if (this.doc && sdtLayers && sdtLayers.length > 1) {
+      const containerChain = (resolvedItem as { block?: { attrs?: { sdtContainers?: SdtMetadata[] } } } | undefined)
+        ?.block?.attrs?.sdtContainers;
+      renderSdtAncestorLayers(this.doc, element, sdtLayers, containerChain, this.contentControlsChrome);
+    }
+    return element;
+  }
+
+  private renderFragmentByKind(
     fragment: Fragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
@@ -2959,6 +2993,13 @@ export class DomPainter {
       }
       fragmentEl.style.position = 'absolute';
       fragmentEl.style.overflow = 'hidden';
+
+      // Stamp SDT dataset so a drawing inside a content control carries the
+      // control identity (the drawing path previously set neither dataset nor
+      // chrome). Ancestor chrome is layered on by renderFragment.
+      const drawingAttrs = block.attrs as { sdt?: SdtMetadata | null; containerSdt?: SdtMetadata | null } | undefined;
+      applySdtDataset(fragmentEl, drawingAttrs?.sdt);
+      applyContainerSdtDataset(fragmentEl, drawingAttrs?.containerSdt);
 
       const innerWrapper = this.doc.createElement('div');
       innerWrapper.classList.add('superdoc-drawing-inner');

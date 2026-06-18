@@ -162,6 +162,8 @@ export type ResolvedFragmentItem = {
   content?: ResolvedParagraphContent;
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
+  /** Pre-computed ordered SDT container key chain (outermost first) for nested-control grouping. */
+  sdtContainerKeys?: (string | null)[];
   /** Pre-computed hash of paragraph borders for between-border grouping. */
   paragraphBorderHash?: string;
   /** Pre-extracted paragraph borders for between-border rendering. */
@@ -309,6 +311,8 @@ export type ResolvedTableItem = {
   effectiveColumnWidths: number[];
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
+  /** Pre-computed ordered SDT container key chain (outermost first) for nested-control grouping. */
+  sdtContainerKeys?: (string | null)[];
   /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
   /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
@@ -368,8 +372,10 @@ export type ResolvedImageItem = {
   block: ImageBlock;
   /** Image metadata for interactive resizing (original dimensions, aspect ratio). */
   metadata?: ImageFragmentMetadata;
-  /** Pre-computed SDT container key for boundary grouping (typically null for images). */
+  /** Pre-computed SDT container key for boundary grouping (set when the image is inside a content control). */
   sdtContainerKey?: string | null;
+  /** Pre-computed ordered SDT container key chain (outermost first) for nested-control grouping. */
+  sdtContainerKeys?: (string | null)[];
   /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
   /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
@@ -427,8 +433,10 @@ export type ResolvedDrawingItem = {
   pmEnd?: number;
   /** Pre-extracted DrawingBlock (replaces blockLookup.get()). */
   block: DrawingBlock;
-  /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
+  /** Pre-computed SDT container key for boundary grouping (set when the drawing is inside a content control). */
   sdtContainerKey?: string | null;
+  /** Pre-computed ordered SDT container key chain (outermost first) for nested-control grouping. */
+  sdtContainerKeys?: (string | null)[];
   /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
   /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */

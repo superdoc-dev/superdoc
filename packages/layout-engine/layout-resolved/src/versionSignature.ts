@@ -57,6 +57,14 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+// Version contribution of the ordered block-container chain (outer to inner) so
+// that changing a block's content-control nesting invalidates paint reuse even
+// when its nearest `sdt` is unchanged. Empty when there is no chain.
+const getSdtContainersVersion = (containers: readonly (SdtMetadata | null | undefined)[] | undefined): string => {
+  if (!containers || containers.length === 0) return '';
+  return containers.map(getSdtMetadataVersion).join(',');
+};
+
 const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
   if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
     return run.trackedChanges;
@@ -313,7 +321,7 @@ export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: Layout
  * Kept in layout-resolved so the resolved layout stage can pre-compute block
  * versions without depending on painter-dom.
  */
-export const deriveBlockVersion = (block: FlowBlock): string => {
+const deriveBlockVersionCore = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {
     const markerVersion = hasListMarkerProperties(block.attrs)
       ? `marker:${block.attrs.numberingProperties.numId ?? ''}:${block.attrs.numberingProperties.ilvl ?? 0}:${block.attrs.wordLayout?.marker?.markerText ?? ''}`
@@ -635,6 +643,20 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   return block.id;
+};
+
+/**
+ * Public block version: the core signature plus the ordered SDT container chain
+ * (outermost first), so a block's paint reuse invalidates when its content-
+ * control nesting changes even if its nearest `sdt` is unchanged. Blocks with no
+ * chain keep their previous version unchanged.
+ */
+export const deriveBlockVersion = (block: FlowBlock): string => {
+  const core = deriveBlockVersionCore(block);
+  const containersVersion = getSdtContainersVersion(
+    (block as { attrs?: { sdtContainers?: SdtMetadata[] } }).attrs?.sdtContainers,
+  );
+  return containersVersion ? `${core}|sdtc:${containersVersion}` : core;
 };
 
 // ---------------------------------------------------------------------------

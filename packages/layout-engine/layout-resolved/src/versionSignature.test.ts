@@ -9,6 +9,7 @@ import type {
   TableBlock,
   TabRun,
   TextRun,
+  SdtMetadata,
 } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
@@ -73,6 +74,27 @@ describe('deriveBlockVersion - bidi', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
     expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - sdt container chain', () => {
+  const outer = { type: 'structuredContent', scope: 'block', id: 'outer' } as unknown as SdtMetadata;
+  const inner = { type: 'structuredContent', scope: 'block', id: 'inner' } as unknown as SdtMetadata;
+  const makeParagraph = (sdtContainers?: SdtMetadata[]): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: { ...(sdtContainers ? { sdtContainers } : {}) },
+    runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 2 } as TextRun],
+  });
+
+  // Nesting must bust paint reuse even when the nearest sdt is unchanged:
+  // [inner] and [outer, inner] share the same nearest control but differ in ancestry.
+  it('differs when the container chain gains an outer level', () => {
+    expect(deriveBlockVersion(makeParagraph([inner]))).not.toBe(deriveBlockVersion(makeParagraph([outer, inner])));
+  });
+
+  it('is stable for an identical chain', () => {
+    expect(deriveBlockVersion(makeParagraph([outer, inner]))).toBe(deriveBlockVersion(makeParagraph([outer, inner])));
   });
 });
 

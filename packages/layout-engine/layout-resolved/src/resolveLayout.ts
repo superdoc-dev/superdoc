@@ -27,6 +27,7 @@ import type {
   Run,
   TableBlock,
   TextRun,
+  SdtMetadata,
 } from '@superdoc/contracts';
 import { buildPageRefAnchorMap, getSdtContainerKey } from '@superdoc/contracts';
 import { resolveParagraphContent } from './resolveParagraph.js';
@@ -460,8 +461,46 @@ function resolveFragmentSdtContainerKey(fragment: Fragment, blockMap: Map<string
     return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   }
 
-  // image, drawing — no SDT container keys
+  if (fragment.kind === 'image' && block.kind === 'image') {
+    return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  }
+
+  if (fragment.kind === 'drawing' && block.kind === 'drawing') {
+    const attrs = block.attrs as { sdt?: SdtMetadata | null; containerSdt?: SdtMetadata | null } | undefined;
+    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
+  }
+
   return null;
+}
+
+/**
+ * The full ordered SDT container key chain (outermost first) for a fragment,
+ * derived from `attrs.sdtContainers`. Falls back to the single nearest key for
+ * blocks that carry no chain (document sections, TOC paragraphs, etc.). Used by
+ * the painter to draw nested content-control chrome.
+ */
+function resolveFragmentSdtContainerKeys(
+  fragment: Fragment,
+  blockMap: Map<string, BlockMapEntry>,
+): (string | null)[] | undefined {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return undefined;
+  const block = entry.block;
+
+  let attrs: { sdtContainers?: SdtMetadata[] } | undefined;
+  if (fragment.kind === 'list-item' && block.kind === 'list') {
+    attrs = (block as ListBlock).items.find((listItem) => listItem.id === fragment.itemId)?.paragraph.attrs;
+  } else {
+    attrs = (block as { attrs?: { sdtContainers?: SdtMetadata[] } }).attrs;
+  }
+
+  const containers = attrs?.sdtContainers;
+  if (containers && containers.length > 0) {
+    return containers.map((metadata) => getSdtContainerKey(metadata));
+  }
+
+  const single = resolveFragmentSdtContainerKey(fragment, blockMap);
+  return single != null ? [single] : undefined;
 }
 
 function computeBlockVersion(
@@ -512,6 +551,7 @@ export function resolveFragmentItem(
   pageRefContext?: PageRefResolutionContext,
 ): ResolvedPaintItem {
   const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
+  const sdtContainerKeys = resolveFragmentSdtContainerKeys(fragment, blockMap);
   const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache, fontSignature);
   const version = fragmentSignature(fragment, blockVer);
   const layoutSourceIdentity = resolveFragmentLayoutIdentity(fragment, story);
@@ -526,6 +566,7 @@ export function resolveFragmentItem(
         if (tablePageRefs.measure) item.measure = tablePageRefs.measure;
       }
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (sdtContainerKeys) item.sdtContainerKeys = sdtContainerKeys;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(
@@ -539,6 +580,7 @@ export function resolveFragmentItem(
     case 'image': {
       const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (sdtContainerKeys) item.sdtContainerKeys = sdtContainerKeys;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(item, version);
@@ -547,6 +589,7 @@ export function resolveFragmentItem(
     case 'drawing': {
       const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (sdtContainerKeys) item.sdtContainerKeys = sdtContainerKeys;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.layoutSourceIdentity = layoutSourceIdentity;
       applyPaintVersions(item, version);
@@ -604,6 +647,7 @@ export function resolveFragmentItem(
         layoutSourceIdentity,
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (sdtContainerKeys) item.sdtContainerKeys = sdtContainerKeys;
       if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
 
       // Pre-extract block/measure for para and list-item fragments so the painter

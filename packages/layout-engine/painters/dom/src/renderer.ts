@@ -2780,13 +2780,25 @@ export class DomPainter {
     sdtLayers?: SdtBoundaryLayer[],
   ): HTMLElement {
     const element = this.renderFragmentByKind(fragment, context, sdtBoundary, betweenInfo, resolvedItem);
-    // Draw ancestor content-control chrome (nested block SDTs) as overlays. The
-    // fragment's own nearest control is already drawn by the kind renderer; this
-    // adds the enclosing controls above it. No-op for non-nested fragments.
-    if (this.doc && sdtLayers && sdtLayers.length > 1) {
-      const containerChain = (resolvedItem as { block?: { attrs?: { sdtContainers?: SdtMetadata[] } } } | undefined)
-        ?.block?.attrs?.sdtContainers;
-      renderSdtAncestorLayers(this.doc, element, sdtLayers, containerChain, this.contentControlsChrome);
+    // Draw content-control chrome for nested block SDTs as overlays. Paragraph and
+    // table draw their own nearest control via the border path, so overlays add
+    // only the enclosing (ancestor) controls. Image and drawing have no border
+    // path, so every control in their chain is drawn as an overlay here.
+    if (this.doc && sdtLayers && sdtLayers.length > 0) {
+      const nearestDrawnByHost = fragment.kind === 'para' || fragment.kind === 'table';
+      const hasOverlayWork = nearestDrawnByHost ? sdtLayers.length > 1 : sdtLayers.length >= 1;
+      if (hasOverlayWork) {
+        const containerChain = (resolvedItem as { block?: { attrs?: { sdtContainers?: SdtMetadata[] } } } | undefined)
+          ?.block?.attrs?.sdtContainers;
+        renderSdtAncestorLayers(
+          this.doc,
+          element,
+          sdtLayers,
+          containerChain,
+          this.contentControlsChrome,
+          nearestDrawnByHost,
+        );
+      }
     }
     return element;
   }
@@ -2993,7 +3005,10 @@ export class DomPainter {
         this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
       fragmentEl.style.position = 'absolute';
-      fragmentEl.style.overflow = 'hidden';
+      // Chrome host stays overflow:visible so an ancestor SDT label drawn above
+      // the box is not clipped; content clipping moves to an inner wrapper sized
+      // to the fragment box (clips identically to the old overflow:hidden here).
+      fragmentEl.style.overflow = 'visible';
 
       // Stamp SDT dataset so a drawing inside a content control carries the
       // control identity (the drawing path previously set neither dataset nor
@@ -3001,6 +3016,12 @@ export class DomPainter {
       const drawingAttrs = block.attrs as { sdt?: SdtMetadata | null; containerSdt?: SdtMetadata | null } | undefined;
       applySdtDataset(fragmentEl, drawingAttrs?.sdt);
       applyContainerSdtDataset(fragmentEl, drawingAttrs?.containerSdt);
+
+      const clipWrapper = this.doc.createElement('div');
+      clipWrapper.classList.add('superdoc-drawing-clip');
+      clipWrapper.style.position = 'absolute';
+      clipWrapper.style.inset = '0';
+      clipWrapper.style.overflow = 'hidden';
 
       const innerWrapper = this.doc.createElement('div');
       innerWrapper.classList.add('superdoc-drawing-inner');
@@ -3020,7 +3041,8 @@ export class DomPainter {
       innerWrapper.style.transform = transforms.join(' ');
 
       innerWrapper.appendChild(this.renderDrawingContent(block, fragment, context));
-      fragmentEl.appendChild(innerWrapper);
+      clipWrapper.appendChild(innerWrapper);
+      fragmentEl.appendChild(clipWrapper);
 
       return fragmentEl;
     } catch (error) {

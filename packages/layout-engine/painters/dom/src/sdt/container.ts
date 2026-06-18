@@ -177,6 +177,10 @@ export function applySdtContainerChrome(
  * @param layers - This fragment's boundary layers from computeSdtBoundaryLayers
  * @param containerChain - Ordered ancestor metadata (block.attrs.sdtContainers)
  * @param chrome - 'none' suppresses labels (matches the nearest-box behavior)
+ * @param nearestDrawnByHost - When true (paragraph/table, which draw their own
+ *   nearest border), the deepest layer is skipped because the host already drew
+ *   it. When false (image/drawing, which have no border path), every layer is
+ *   drawn as an overlay so the nearest control still gets a box.
  */
 export function renderSdtAncestorLayers(
   doc: Document,
@@ -184,13 +188,15 @@ export function renderSdtAncestorLayers(
   layers: readonly SdtBoundaryLayer[] | undefined,
   containerChain: readonly SdtMetadata[] | undefined,
   chrome?: 'default' | 'none',
+  nearestDrawnByHost = true,
 ): void {
   if (!layers || layers.length === 0) return;
-  // The deepest layer is the fragment's nearest control, already drawn by the
-  // border path; overlays cover only the ancestors above it.
+  // The deepest layer is the fragment's nearest control. Paragraph/table draw it
+  // via the border path, so overlays cover only the ancestors above it; media
+  // has no border path, so it is drawn as an overlay too.
   const maxDepth = layers.reduce((max, layer) => Math.max(max, layer.depth), 0);
   for (const layer of layers) {
-    if (layer.depth >= maxDepth) continue;
+    if (nearestDrawnByHost && layer.depth >= maxDepth) continue;
     const metadata = containerChain?.[layer.depth];
     if (isStructuredContentMetadata(metadata) && metadata.appearance === 'hidden') continue;
     const config = getSdtContainerConfig(metadata);
@@ -205,13 +211,20 @@ export function renderSdtAncestorLayers(
     if (isStructuredContentMetadata(metadata)) {
       overlay.dataset.lockMode = metadata.lockMode || 'unlocked';
     }
+    // Match the existing chrome's run width for multi-fragment continuation.
+    if (layer.widthOverride != null) {
+      overlay.style.setProperty('--sd-sdt-ancestor-width', `${layer.widthOverride}px`);
+    }
     if (layer.paddingBottomOverride != null && layer.paddingBottomOverride > 0) {
       overlay.style.setProperty('--sd-sdt-chrome-bottom-extension', `${layer.paddingBottomOverride}px`);
     }
 
     if (layer.showLabel && chrome !== 'none' && config) {
+      // Use only the self-contained ancestor-label class. The nearest control's
+      // label class gates visibility on editor selection/hover state the overlay
+      // never has, which would keep the ancestor label hidden.
       const labelEl = doc.createElement('div');
-      labelEl.className = `superdoc-sdt-ancestor-layer__label ${config.labelClassName}`;
+      labelEl.className = 'superdoc-sdt-ancestor-layer__label';
       const labelText = doc.createElement('span');
       labelText.textContent = config.labelText;
       labelEl.appendChild(labelText);

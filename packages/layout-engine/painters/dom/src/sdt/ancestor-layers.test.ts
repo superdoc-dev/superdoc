@@ -68,4 +68,29 @@ describe('renderSdtAncestorLayers', () => {
     renderSdtAncestorLayers(document, host, layers, [hiddenOuter, inner], 'default');
     expect(host.querySelectorAll('.superdoc-sdt-ancestor-layer').length).toBe(0);
   });
+
+  it('draws the nearest control as an overlay for media (nearestDrawnByHost=false)', () => {
+    // Image/drawing have no border path, so even a single (nearest) control must
+    // be drawn as an overlay or the media gets no chrome at all.
+    const single: SdtBoundaryLayer[] = [
+      { key: 'structuredContent:only', depth: 0, isStart: true, isEnd: true, showLabel: true },
+    ];
+    renderSdtAncestorLayers(document, host, single, [outer], 'default', false);
+    expect(host.querySelectorAll('.superdoc-sdt-ancestor-layer').length).toBe(1);
+  });
+
+  it('draws both nearest and ancestor for media inside nested controls', () => {
+    renderSdtAncestorLayers(document, host, layers, [outer, inner], 'default', false);
+    expect(host.querySelectorAll('.superdoc-sdt-ancestor-layer').length).toBe(2);
+  });
+
+  it('applies widthOverride as the ancestor run width', () => {
+    const withWidth: SdtBoundaryLayer[] = [
+      { key: 'structuredContent:outer', depth: 0, isStart: true, isEnd: false, showLabel: true, widthOverride: 480 },
+      { key: 'structuredContent:inner', depth: 1, isStart: true, isEnd: true, showLabel: true },
+    ];
+    renderSdtAncestorLayers(document, host, withWidth, [outer, inner], 'default');
+    const overlay = host.querySelector('.superdoc-sdt-ancestor-layer') as HTMLElement;
+    expect(overlay.style.getPropertyValue('--sd-sdt-ancestor-width')).toBe('480px');
+  });
 });

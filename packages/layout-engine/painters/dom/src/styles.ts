@@ -673,9 +673,9 @@ const SDT_CONTAINER_STYLES = `
 .superdoc-sdt-ancestor-layer {
   position: absolute;
   left: calc(0px - var(--sd-sdt-layer-offset, 0px));
-  right: calc(0px - var(--sd-sdt-layer-offset, 0px));
   top: 0;
   bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));
+  width: var(--sd-sdt-ancestor-width, 100%);
   border: 0 solid var(--sd-content-controls-block-border, #629be7);
   border-left-width: 1px;
   border-right-width: 1px;
@@ -705,6 +705,44 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-cc-chrome-none .superdoc-sdt-ancestor-layer {
   border-color: transparent;
+}
+
+/*
+ * Ancestor label. Self-contained and always displayable: unlike the nearest
+ * control's label (shown only on .ProseMirror-selectednode / .sdt-group-hover),
+ * an ancestor's label must show whenever the ancestor box is drawn, since the
+ * overlay never carries editor selection/hover state.
+ */
+.superdoc-sdt-ancestor-layer__label {
+  display: inline-flex;
+  align-items: center;
+  position: absolute;
+  left: var(--sd-sdt-chrome-left, 0px);
+  top: -18px;
+  max-width: 130px;
+  height: 16px;
+  padding: 0 6px;
+  border: 1px solid var(--sd-content-controls-label-border, #629be7);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background-color: var(--sd-content-controls-label-bg, #629be7);
+  color: var(--sd-content-controls-label-text, #ffffff);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.superdoc-sdt-ancestor-layer__label span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.superdoc-cc-chrome-none .superdoc-sdt-ancestor-layer__label {
+  display: none;
 }
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover::before {

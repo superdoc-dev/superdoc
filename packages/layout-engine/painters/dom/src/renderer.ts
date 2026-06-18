@@ -41,7 +41,8 @@ import type {
   ResolvedDrawingItem,
   LayoutSourceIdentity,
   LayoutStoryLocator,
-  ListBlock, SdtMetadata 
+  ListBlock,
+  SdtMetadata,
 } from '@superdoc/contracts';
 import {
   computeLinePmRange,

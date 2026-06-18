@@ -1081,7 +1081,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
-      const zIndex = getFragmentZIndex(anchoredBlock);
+      const zIndex = behindDoc ? 0 : getFragmentZIndex(anchoredBlock);
 
       const wrap = anchoredBlock.wrap;
       if (!behindDoc && wrap?.type === 'Square') {

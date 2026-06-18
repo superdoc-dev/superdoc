@@ -397,6 +397,43 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.top).toBe('5px');
   });
 
+  it('keeps wrap-only behindDoc anchored image blocks behind table-cell content', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-behind',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap-behind',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None', behindDoc: true },
+      attrs: { anchorParagraphId: 'para-wrap-behind' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: {
+        id: 'cell-wrap-behind',
+        blocks: [para, anchoredImage],
+        attrs: {},
+      },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.parentElement?.style.zIndex).toBe('0');
+  });
+
   it('applies top-level clipPath to anchored image blocks inside table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

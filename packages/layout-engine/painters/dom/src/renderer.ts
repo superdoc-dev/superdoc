@@ -2592,7 +2592,10 @@ export class DomPainter {
     }
     if (freshStart == null || !Number.isFinite(freshStart)) return;
 
-    const elements = [fragmentEl, ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]'))];
+    const elements = [
+      fragmentEl,
+      ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]')),
+    ];
     let paintedStart = Infinity;
     for (const el of elements) {
       const start = Number(el.dataset.pmStart);

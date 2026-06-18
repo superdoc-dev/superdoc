@@ -97,7 +97,11 @@ export function enumerateRevisionCapableStories(editor: Editor): StoryLocator[] 
  * surface as revision-capable stories. Pre-existing orphan notes are never
  * registered, so their enumeration behavior is unchanged.
  */
-function collectTombstonedNoteIds(editor: Editor, converter: ConverterShape, type: 'footnote' | 'endnote'): Set<string> {
+function collectTombstonedNoteIds(
+  editor: Editor,
+  converter: ConverterShape,
+  type: 'footnote' | 'endnote',
+): Set<string> {
   const registry = converter.sessionManagedNoteIds?.[type === 'endnote' ? 'endnotes' : 'footnotes'];
   if (!registry || registry.size === 0) return new Set();
 

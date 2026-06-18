@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import { enumerateRevisionCapableStories } from './enumerate-stories.js';
 
-function makeEditor(converter?: Record<string, unknown>, refIds: { footnotes?: string[]; endnotes?: string[] } = {}): Editor {
+function makeEditor(
+  converter?: Record<string, unknown>,
+  refIds: { footnotes?: string[]; endnotes?: string[] } = {},
+): Editor {
   const doc = {
     descendants: (cb: (node: unknown) => boolean | void) => {
       (refIds.footnotes ?? []).forEach((id) => cb({ type: { name: 'footnoteReference' }, attrs: { id } }));

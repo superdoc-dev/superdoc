@@ -110,9 +110,12 @@ describe('seedPartsFromEditor', () => {
     metaMap.set('noteTombstone:footnote:7', true);
     metaMap.set('bodySectPr', { pgSz: { w: 12240, h: 15840 } });
 
-    const editor = createMockEditor({
-      'word/styles.xml': { type: 'element', name: 'fresh' },
-    }, { footnotes: new Set(['9']), endnotes: new Set(['3']) });
+    const editor = createMockEditor(
+      {
+        'word/styles.xml': { type: 'element', name: 'fresh' },
+      },
+      { footnotes: new Set(['9']), endnotes: new Set(['3']) },
+    );
 
     seedPartsFromEditor(editor, ydoc, { replaceExisting: true });
 

@@ -225,8 +225,10 @@ describe('footnote convergence warm-start (SD-3432)', () => {
     let settled = false;
     for (let i = 0; i < 3; i += 1) {
       const next = await run(bodyBlocks, options, measureBlock, prev.footnoteReserveSeed ?? null);
-      if (JSON.stringify(layoutJson(next)) === JSON.stringify(layoutJson(prev)) &&
-          JSON.stringify(next.footnoteReserveSeed) === JSON.stringify(prev.footnoteReserveSeed)) {
+      if (
+        JSON.stringify(layoutJson(next)) === JSON.stringify(layoutJson(prev)) &&
+        JSON.stringify(next.footnoteReserveSeed) === JSON.stringify(prev.footnoteReserveSeed)
+      ) {
         settled = true;
         prev = next;
         break;

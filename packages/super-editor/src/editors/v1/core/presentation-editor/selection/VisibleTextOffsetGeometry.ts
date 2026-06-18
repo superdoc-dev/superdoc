@@ -334,8 +334,10 @@ function resolvePmPoint(
     if (blockContainers.length) {
       const blockLines = collectRenderedLineElements(blockContainers)
         .map((line) => ({ line, pmStart: getPmStart(line), pmEnd: getPmEnd(line) }))
-        .filter((entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
-          entry.pmStart != null && entry.pmEnd != null)
+        .filter(
+          (entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
+            entry.pmStart != null && entry.pmEnd != null,
+        )
         .sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
       if (blockLines.length) {
         const delta = anchor.currentStart - blockLines[0].pmStart;
@@ -357,8 +359,10 @@ function resolvePmPoint(
   // forward-affinity scan and the gap snap pick the right line (SD-3400).
   const lines = collectRenderedLineElements(containers)
     .map((line) => ({ line, pmStart: getPmStart(line), pmEnd: getPmEnd(line) }))
-    .filter((entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
-      entry.pmStart != null && entry.pmEnd != null)
+    .filter(
+      (entry): entry is { line: HTMLElement; pmStart: number; pmEnd: number } =>
+        entry.pmStart != null && entry.pmEnd != null,
+    )
     .sort((a, b) => a.pmStart - b.pmStart || a.pmEnd - b.pmEnd);
   let lineElement: HTMLElement | null = null;
   let resolvedPos = pos;

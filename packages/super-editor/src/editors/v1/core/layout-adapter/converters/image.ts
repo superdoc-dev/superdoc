@@ -11,13 +11,11 @@ import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracke
 import {
   isFiniteNumber,
   pickNumber,
-  normalizeZIndex,
-  resolveFloatingZIndex,
   readImageHyperlink,
   mergeWrapDistancesFromPadding,
   toBoolean,
 } from '../utilities.js';
-import { normalizeGraphicAnchor } from '../graphic-placement.js';
+import { normalizeGraphicPlacement } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -180,17 +178,13 @@ export function imageNodeToBlock(
   if (normalizedWrap) {
     mergeWrapDistancesFromPadding(normalizedWrap, toBoxSpacing(attrs.padding as Record<string, unknown> | undefined));
   }
-  let anchor = normalizeGraphicAnchor({
+  const placement = normalizeGraphicPlacement({
     anchorData: attrs.anchorData,
     attrs,
     wrapBehindDoc: normalizedWrap?.behindDoc,
+    forceAnchor: Boolean(normalizedWrap),
   });
-  if (!anchor && normalizedWrap) {
-    anchor = { isAnchored: true };
-    if (normalizedWrap.behindDoc != null) {
-      anchor.behindDoc = normalizedWrap.behindDoc;
-    }
-  }
+  const anchor = placement.anchor;
   const isInline = normalizedWrap?.type === 'Inline' || (typeof attrs.inline === 'boolean' && attrs.inline);
   const display: 'inline' | 'block' =
     explicitDisplay === 'inline' || explicitDisplay === 'block' ? explicitDisplay : isInline ? 'inline' : 'block';
@@ -214,9 +208,7 @@ export function imageNodeToBlock(
           ? 'contain'
           : 'contain';
 
-  // Same z-index as editor: from OOXML relativeHeight (Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE))
-  const zIndexFromRelativeHeight = normalizeZIndex(attrs.originalAttributes as Record<string, unknown> | undefined);
-  const zIndex = resolveFloatingZIndex(anchor?.behindDoc === true, zIndexFromRelativeHeight);
+  const zIndex = placement.zIndex;
 
   // Extract rotation/flip transforms from transformData
   const transformData = isPlainObject(attrs.transformData) ? attrs.transformData : undefined;

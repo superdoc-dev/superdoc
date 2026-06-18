@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGraphicAnchor } from './graphic-placement.js';
+import { normalizeGraphicAnchor, normalizeGraphicPlacement } from './graphic-placement.js';
 
 describe('normalizeGraphicAnchor', () => {
   it('returns undefined when there is no authored placement data', () => {
@@ -113,5 +113,54 @@ describe('normalizeGraphicAnchor', () => {
       isAnchored: true,
       offsetH: 4,
     });
+  });
+});
+
+describe('normalizeGraphicPlacement', () => {
+  const OOXML_Z_INDEX_BASE = 251658240;
+
+  it('centralizes relativeHeight z-index normalization', () => {
+    const placement = normalizeGraphicPlacement({
+      anchorData: { isAnchored: true },
+      attrs: {
+        originalAttributes: {
+          relativeHeight: OOXML_Z_INDEX_BASE + 25,
+        },
+      },
+      fallbackZIndex: 1,
+    });
+
+    expect(placement.anchor).toEqual({ isAnchored: true });
+    expect(placement.behindDoc).toBe(false);
+    expect(placement.zIndex).toBe(25);
+  });
+
+  it('forces behind-doc graphics to z-index zero through typed placement data', () => {
+    const placement = normalizeGraphicPlacement({
+      anchorData: { isAnchored: true, behindDoc: true },
+      attrs: {
+        originalAttributes: {
+          relativeHeight: OOXML_Z_INDEX_BASE + 25,
+        },
+      },
+      fallbackZIndex: 1,
+    });
+
+    expect(placement.anchor).toEqual({ isAnchored: true, behindDoc: true });
+    expect(placement.behindDoc).toBe(true);
+    expect(placement.zIndex).toBe(0);
+  });
+
+  it('can force anchored placement for wrap-only graphics', () => {
+    const placement = normalizeGraphicPlacement({
+      anchorData: undefined,
+      attrs: {},
+      wrapBehindDoc: true,
+      forceAnchor: true,
+    });
+
+    expect(placement.anchor).toEqual({ isAnchored: true, behindDoc: true });
+    expect(placement.behindDoc).toBe(true);
+    expect(placement.zIndex).toBe(0);
   });
 });

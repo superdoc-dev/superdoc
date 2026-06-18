@@ -13,10 +13,8 @@ import {
   toBoolean,
   toBoxSpacing,
   toDrawingContentSnapshot,
-  normalizeZIndex,
-  resolveFloatingZIndex,
 } from '../utilities.js';
-import { normalizeGraphicAnchor } from '../graphic-placement.js';
+import { normalizeGraphicPlacement } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -103,11 +101,13 @@ export function chartNodeToDrawingBlock(
 
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
   const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
-  const anchor = normalizeGraphicAnchor({
+  const placement = normalizeGraphicPlacement({
     anchorData: rawAttrs.anchorData,
     attrs: rawAttrs,
     wrapBehindDoc: normalizedWrap?.behindDoc,
+    fallbackZIndex: 1,
   });
+  const anchor = placement.anchor;
 
   const pos = positions.get(node);
   const attrsWithPm: Record<string, unknown> = { ...rawAttrs };
@@ -115,10 +115,6 @@ export function chartNodeToDrawingBlock(
     attrsWithPm.pmStart = pos.start;
     attrsWithPm.pmEnd = pos.end;
   }
-
-  const behindDoc = anchor?.behindDoc === true || normalizedWrap?.behindDoc === true;
-  const zIndexFromRelativeHeight = normalizeZIndex(rawAttrs.originalAttributes);
-  const resolvedZIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, 1);
 
   return {
     kind: 'drawing',
@@ -132,7 +128,7 @@ export function chartNodeToDrawingBlock(
     margin: toBoxSpacing(rawAttrs.marginOffset as Record<string, unknown> | undefined),
     anchor,
     wrap: normalizedWrap,
-    zIndex: resolvedZIndex,
+    zIndex: placement.zIndex,
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,

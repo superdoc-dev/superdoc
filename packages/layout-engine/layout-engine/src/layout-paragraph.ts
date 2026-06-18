@@ -27,9 +27,9 @@ import {
   computeParagraphLayoutStartY,
 } from './layout-utils.js';
 import { layoutTextboxContent } from './layout-textbox.js';
-import { resolveAnchoredGraphicY, resolveAnchoredGraphicX, getFragmentZIndex } from '@superdoc/contracts';
 import { createAnchoredTableFragment, isAnchoredTableFullWidth } from './layout-table.js';
 import type { AnchoredTable } from './anchors.js';
+import { resolveDrawingPlacement, resolveTablePlacement } from './graphic-placement.js';
 
 /** Points → CSS pixels (96 dpi / 72 pt-per-inch). */
 const PX_PER_PT = 96 / 72;
@@ -59,25 +59,6 @@ function anchorForLineScopedFormField(
   if (anchor.alignV || firstLineHeight <= 0 || tableHeight <= firstLineHeight) return anchor;
   if (!isLineScopedTblpY(firstLineHeight, offsetV)) return anchor;
   return { ...anchor, vRelativeFrom: 'paragraph', alignV: 'center', offsetV: 0 };
-}
-
-type GraphicPlacementAnchorY = Parameters<typeof resolveAnchoredGraphicY>[0]['anchor'];
-
-function graphicAnchorY(anchor: TableAnchor | undefined): GraphicPlacementAnchorY {
-  if (!anchor) return undefined;
-  const alignV = anchor.alignV;
-  const mappedAlignV = alignV === 'top' || alignV === 'center' || alignV === 'bottom' ? alignV : undefined;
-  return { vRelativeFrom: anchor.vRelativeFrom, alignV: mappedAlignV, offsetV: anchor.offsetV };
-}
-
-function graphicAnchorH(anchor: TableAnchor): Parameters<typeof resolveAnchoredGraphicX>[0] {
-  const alignH = anchor.alignH;
-  const mappedAlignH = alignH === 'left' || alignH === 'center' || alignH === 'right' ? alignH : undefined;
-  return {
-    hRelativeFrom: anchor.hRelativeFrom,
-    alignH: mappedAlignH,
-    offsetH: anchor.offsetH,
-  };
 }
 
 /**
@@ -524,30 +505,20 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       if (anchors.placedAnchoredIds.has(entry.block.id)) continue;
       const state = ensurePage();
 
-      const contentTop = state.topMargin;
-      const contentBottom = state.contentBottom;
-      const anchorY = resolveAnchoredGraphicY({
-        anchor: entry.block.anchor,
-        objectHeight: entry.measure.height,
-        contentTop,
-        contentBottom,
+      const placement = resolveDrawingPlacement(entry.block, entry.measure, {
+        columnIndex: state.columnIndex,
+        columns: anchors.columns,
+        pageMargins: anchors.pageMargins,
+        pageWidth: anchors.pageWidth,
+        contentTop: state.topMargin,
+        contentBottom: state.contentBottom,
         pageBottomMargin: anchors.pageMargins.bottom ?? 0,
         anchorParagraphY: paragraphContentStartY,
         firstLineHeight: measure.lines?.[0]?.lineHeight ?? 0,
+        fallbackX: columnX(state),
       });
 
-      floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
-
-      const anchorX = entry.block.anchor
-        ? resolveAnchoredGraphicX(
-            entry.block.anchor,
-            state.columnIndex,
-            anchors.columns,
-            entry.measure.width,
-            { left: anchors.pageMargins.left, right: anchors.pageMargins.right },
-            anchors.pageWidth,
-          )
-        : columnX(state);
+      floatManager.registerDrawing(entry.block, entry.measure, placement, state.columnIndex, state.page.number);
 
       const pmRange = extractBlockPmRange(entry.block);
       if (entry.block.kind === 'image' && entry.measure.kind === 'image') {
@@ -582,13 +553,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         const fragment: ImageFragment = {
           kind: 'image',
           blockId: entry.block.id,
-          x: anchorX,
-          y: anchorY,
+          x: placement.paint.x,
+          y: placement.paint.y,
           width: entry.measure.width,
           height: entry.measure.height,
           isAnchored: true,
-          behindDoc: entry.block.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(entry.block),
+          behindDoc: placement.layer.behindDoc,
+          zIndex: placement.layer.zIndex,
           metadata,
           sourceAnchor: entry.block.sourceAnchor,
         };
@@ -604,15 +575,15 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           kind: 'drawing',
           blockId: entry.block.id,
           drawingKind: entry.block.drawingKind,
-          x: anchorX,
-          y: anchorY,
+          x: placement.paint.x,
+          y: placement.paint.y,
           width: entry.measure.width,
           height: entry.measure.height,
           geometry: entry.measure.geometry,
           scale: entry.measure.scale,
           isAnchored: true,
-          behindDoc: entry.block.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(entry.block),
+          behindDoc: placement.layer.behindDoc,
+          zIndex: placement.layer.zIndex,
           drawingContentId: entry.block.drawingContentId,
           sourceAnchor: entry.block.sourceAnchor,
         };
@@ -636,14 +607,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     let nextStackY = paragraphContentStartY;
     for (const entry of entries) {
       if (anchors!.placedAnchoredIds.has(entry.block.id)) continue;
-      const totalWidth = entry.measure.totalWidth ?? 0;
       if (isAnchoredTableFullWidth(entry.block, entry.measure, columnWidthForTable)) {
         continue;
       }
 
       const state = ensurePage();
-      const contentTop = state.topMargin;
-      const contentBottom = state.contentBottom;
       const layoutOffsetV = entry.layoutOffsetV;
       const firstLineHeight = measure.lines?.[0]?.lineHeight ?? 0;
       const wrapType = entry.block.wrap?.type ?? 'None';
@@ -657,34 +625,29 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         entry.lineScopedOnAnchor === true,
         wrapType,
       );
-      const anchorY = resolveAnchoredGraphicY({
-        anchor: graphicAnchorY(anchorForY),
-        objectHeight: entry.measure.totalHeight ?? 0,
-        contentTop,
-        contentBottom,
+
+      const placement = resolveTablePlacement(anchorForY, entry.measure, entry.block.wrap, {
+        columnIndex: state.columnIndex,
+        columns: anchors!.columns,
+        pageMargins: anchors!.pageMargins,
+        pageWidth: anchors!.pageWidth,
+        contentTop: state.topMargin,
+        contentBottom: state.contentBottom,
         pageBottomMargin: anchors!.pageMargins.bottom ?? 0,
         anchorParagraphY: nextStackY,
         firstLineHeight: measure.lines?.[0]?.lineHeight ?? 0,
+        fallbackX: columnX(state),
       });
 
-      floatManager.registerTable(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
+      floatManager.registerTable(entry.block, entry.measure, placement, state.columnIndex, state.page.number);
 
-      const anchorX = entry.block.anchor
-        ? resolveAnchoredGraphicX(
-            graphicAnchorH(entry.block.anchor),
-            state.columnIndex,
-            anchors!.columns,
-            totalWidth,
-            { left: anchors!.pageMargins.left, right: anchors!.pageMargins.right },
-            anchors!.pageWidth,
-          )
-        : columnX(state);
-
-      state.page.fragments.push(createAnchoredTableFragment(entry.block, entry.measure, anchorX, anchorY));
+      state.page.fragments.push(
+        createAnchoredTableFragment(entry.block, entry.measure, placement.paint.x, placement.paint.y),
+      );
       anchors!.placedAnchoredIds.add(entry.block.id);
 
       if (wrapType !== 'None') {
-        const bottom = anchorY + (entry.measure.totalHeight ?? 0);
+        const bottom = placement.paint.y + (entry.measure.totalHeight ?? 0);
         const distBottom = entry.block.wrap?.distBottom ?? 0;
         nextStackY = Math.max(nextStackY, bottom + distBottom);
       }

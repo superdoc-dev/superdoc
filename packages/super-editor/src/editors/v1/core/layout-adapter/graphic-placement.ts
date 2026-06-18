@@ -1,5 +1,5 @@
 import type { GraphicPlacement } from '@superdoc/contracts';
-import { isPlainObject, pickNumber, toBoolean } from './utilities.js';
+import { isPlainObject, normalizeZIndex, pickNumber, resolveFloatingZIndex, toBoolean } from './utilities.js';
 
 const H_RELATIVE_VALUES = new Set(['column', 'page', 'margin']);
 const V_RELATIVE_VALUES = new Set(['paragraph', 'page', 'margin']);
@@ -20,6 +20,17 @@ export type NormalizeGraphicAnchorInput = {
   anchorData: unknown;
   attrs: Record<string, unknown>;
   wrapBehindDoc?: boolean;
+};
+
+export type NormalizeGraphicPlacementInput = NormalizeGraphicAnchorInput & {
+  forceAnchor?: boolean;
+  fallbackZIndex?: number;
+};
+
+export type NormalizedGraphicPlacement = {
+  anchor?: GraphicPlacement;
+  behindDoc: boolean;
+  zIndex?: number;
 };
 
 export const normalizeGraphicAnchor = ({
@@ -70,4 +81,31 @@ export const normalizeGraphicAnchor = ({
     anchor.behindDoc != null;
 
   return hasData ? anchor : undefined;
+};
+
+export const normalizeGraphicPlacement = ({
+  anchorData,
+  attrs,
+  wrapBehindDoc,
+  forceAnchor = false,
+  fallbackZIndex,
+}: NormalizeGraphicPlacementInput): NormalizedGraphicPlacement => {
+  let anchor = normalizeGraphicAnchor({ anchorData, attrs, wrapBehindDoc });
+
+  if (!anchor && forceAnchor) {
+    anchor = { isAnchored: true };
+  } else if (anchor && forceAnchor) {
+    anchor.isAnchored = true;
+  }
+
+  if (anchor && anchor.behindDoc == null && wrapBehindDoc != null) {
+    anchor.behindDoc = wrapBehindDoc;
+  }
+
+  const behindDoc = anchor?.behindDoc === true || wrapBehindDoc === true;
+  const originalAttrs = isPlainObject(attrs.originalAttributes) ? attrs.originalAttributes : undefined;
+  const zIndexFromRelativeHeight = normalizeZIndex(originalAttrs);
+  const zIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, fallbackZIndex);
+
+  return { anchor, behindDoc, zIndex };
 };

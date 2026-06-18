@@ -36,18 +36,16 @@ import type {
 import {
   buildLayoutSourceIdentityForFragment,
   normalizeColumnLayout,
-  getFragmentZIndex,
   getColumnGeometry,
   getColumnWidth,
   getColumnX,
   columnRenderLayoutsEqual,
   resolveColumnCount,
   resolveColumnLayout,
-  resolveAnchoredGraphicY,
   resolveEffectiveHeaderFooterRef,
   selectHeaderFooterVariantForPage,
 } from '@superdoc/contracts';
-import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
+import { createFloatingObjectManager } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
   scheduleSectionBreak as scheduleSectionBreakExport,
@@ -77,6 +75,7 @@ import {
   type SectionColumnLayout,
 } from './column-balancing.js';
 import { cloneColumnLayout } from './column-utils.js';
+import { resolveDrawingPlacement, resolveTablePlacement, type ResolvedGraphicPlacement } from './graphic-placement.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -2045,88 +2044,56 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+  const preRegisteredPositions = new Map<string, ResolvedGraphicPlacement>();
 
-  const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
-    const contentTop = state.topMargin;
-    const contentBottom = state.contentBottom;
-    const tableHeight = measure.totalHeight ?? 0;
-
-    return resolveAnchoredGraphicY({
-      anchor: block.anchor as Parameters<typeof resolveAnchoredGraphicY>[0]['anchor'],
-      objectHeight: tableHeight,
-      contentTop,
-      contentBottom,
-      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
-      preRegisteredFallbackToContentTop: true,
-    });
-  };
-
-  const resolveParagraphlessAnchoredDrawingY = (
-    block: ImageBlock | DrawingBlock,
-    measure: ImageMeasure | DrawingMeasure,
+  const resolveParagraphlessAnchoredTablePlacement = (
+    block: TableBlock,
+    measure: TableMeasure,
     state: PageState,
-  ): number =>
-    resolveAnchoredGraphicY({
-      anchor: block.anchor,
-      objectHeight: measure.height ?? 0,
+  ): ResolvedGraphicPlacement =>
+    resolveTablePlacement(block.anchor, measure, block.wrap, {
+      columnIndex: state.columnIndex,
+      columns: normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
+      pageMargins: { left: activeLeftMargin, right: activeRightMargin, bottom: activeBottomMargin },
+      pageWidth: activePageSize.w,
       contentTop: state.topMargin,
       contentBottom: state.contentBottom,
       pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
       preRegisteredFallbackToContentTop: true,
+      fallbackX: columnX(state),
     });
 
-  const resolveParagraphlessAnchoredDrawingX = (
+  const resolveParagraphlessAnchoredDrawingPlacement = (
     block: ImageBlock | DrawingBlock,
     measure: ImageMeasure | DrawingMeasure,
     state: PageState,
-  ): number =>
-    block.anchor
-      ? computeAnchorX(
-          block.anchor,
-          state.columnIndex,
-          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
-          measure.width,
-          { left: activeLeftMargin, right: activeRightMargin },
-          activePageSize.w,
-        )
-      : columnX(state);
+  ): ResolvedGraphicPlacement =>
+    resolveDrawingPlacement(block, measure, {
+      columnIndex: state.columnIndex,
+      columns: normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
+      pageMargins: { left: activeLeftMargin, right: activeRightMargin, bottom: activeBottomMargin },
+      pageWidth: activePageSize.w,
+      contentTop: state.topMargin,
+      contentBottom: state.contentBottom,
+      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
+      preRegisteredFallbackToContentTop: true,
+      fallbackX: columnX(state),
+    });
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
     const state = paginator.ensurePage();
 
-    const contentTop = state.topMargin;
-    const contentBottom = state.contentBottom;
-    const anchorY = resolveAnchoredGraphicY({
-      anchor: entry.block.anchor,
-      objectHeight: entry.measure.height ?? 0,
-      contentTop,
-      contentBottom,
-      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
-      preRegisteredFallbackToContentTop: true,
-    });
-
-    // Compute anchor X position
-    const anchorX = entry.block.anchor
-      ? computeAnchorX(
-          entry.block.anchor,
-          state.columnIndex,
-          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
-          entry.measure.width,
-          { left: activeLeftMargin, right: activeRightMargin },
-          activePageSize.w,
-        )
-      : activeLeftMargin;
+    const placement = resolveParagraphlessAnchoredDrawingPlacement(entry.block, entry.measure, state);
 
     // Register with float manager so all paragraphs see this exclusion
     // NOTE: We only register exclusion zones here, NOT fragments.
     // Fragments will be created when the image block is encountered in the layout loop.
     // This prevents the section break logic from seeing "content" on the page and creating a new page.
-    floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
+    floatManager.registerDrawing(entry.block, entry.measure, placement, state.columnIndex, state.page.number);
 
     // Store pre-computed position for later use when creating the fragment.
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
+    preRegisteredPositions.set(entry.block.id, placement);
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -2709,8 +2676,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+      const preRegPlacement = preRegisteredPositions.get(block.id);
+      if (preRegPlacement && Number.isFinite(preRegPlacement.paint.x) && Number.isFinite(preRegPlacement.paint.y)) {
         // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
         const state = paginator.ensurePage();
         const imgBlock = block as ImageBlock;
@@ -2745,13 +2712,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const fragment: ImageFragment = {
           kind: 'image',
           blockId: imgBlock.id,
-          x: preRegPos.anchorX,
-          y: preRegPos.anchorY,
+          x: preRegPlacement.paint.x,
+          y: preRegPlacement.paint.y,
           width: imgMeasure.width,
           height: imgMeasure.height,
           isAnchored: true,
-          behindDoc: imgBlock.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(imgBlock),
+          behindDoc: preRegPlacement.layer.behindDoc,
+          zIndex: preRegPlacement.layer.zIndex,
           metadata,
           sourceAnchor: imgBlock.sourceAnchor,
         };
@@ -2781,8 +2748,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+      const preRegPlacement = preRegisteredPositions.get(block.id);
+      if (preRegPlacement && Number.isFinite(preRegPlacement.paint.x) && Number.isFinite(preRegPlacement.paint.y)) {
         // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
         const state = paginator.ensurePage();
         const drawBlock = block as DrawingBlock;
@@ -2796,15 +2763,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           kind: 'drawing',
           blockId: drawBlock.id,
           drawingKind: drawBlock.drawingKind,
-          x: preRegPos.anchorX,
-          y: preRegPos.anchorY,
+          x: preRegPlacement.paint.x,
+          y: preRegPlacement.paint.y,
           width: drawMeasure.width,
           height: drawMeasure.height,
           geometry: drawMeasure.geometry,
           scale: drawMeasure.scale,
           isAnchored: true,
-          behindDoc: drawBlock.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(drawBlock),
+          behindDoc: preRegPlacement.layer.behindDoc,
+          zIndex: preRegPlacement.layer.zIndex,
           drawingContentId: drawBlock.drawingContentId,
           sourceAnchor: drawBlock.sourceAnchor,
         };
@@ -2924,8 +2891,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     for (const { block, measure } of paragraphlessAnchoredDrawings) {
       if (placedAnchoredIds.has(block.id)) continue;
 
-      const anchorX = resolveParagraphlessAnchoredDrawingX(block, measure, state);
-      const anchorY = resolveParagraphlessAnchoredDrawingY(block, measure, state);
+      const placement = resolveParagraphlessAnchoredDrawingPlacement(block, measure, state);
 
       if (block.kind === 'image' && measure.kind === 'image') {
         const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
@@ -2935,13 +2901,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const fragment: ImageFragment = {
           kind: 'image',
           blockId: block.id,
-          x: anchorX,
-          y: anchorY,
+          x: placement.paint.x,
+          y: placement.paint.y,
           width: measure.width,
           height: measure.height,
           isAnchored: true,
-          behindDoc: block.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(block),
+          behindDoc: placement.layer.behindDoc,
+          zIndex: placement.layer.zIndex,
           metadata: {
             originalWidth: measure.width,
             originalHeight: measure.height,
@@ -2970,15 +2936,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           kind: 'drawing',
           blockId: block.id,
           drawingKind: block.drawingKind,
-          x: anchorX,
-          y: anchorY,
+          x: placement.paint.x,
+          y: placement.paint.y,
           width: measure.width,
           height: measure.height,
           geometry: measure.geometry,
           scale: measure.scale,
           isAnchored: true,
-          behindDoc: block.anchor?.behindDoc === true,
-          zIndex: getFragmentZIndex(block),
+          behindDoc: placement.layer.behindDoc,
+          zIndex: placement.layer.zIndex,
           drawingContentId: block.drawingContentId,
           sourceAnchor: block.sourceAnchor,
         };
@@ -3006,11 +2972,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         continue;
       }
 
-      const anchorY = resolveParagraphlessAnchoredTableY(tableBlock, tableMeasure, state);
-      const anchorX = tableBlock.anchor?.offsetH ?? columnX(state);
+      const placement = resolveParagraphlessAnchoredTablePlacement(tableBlock, tableMeasure, state);
 
-      floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
-      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      floatManager.registerTable(tableBlock, tableMeasure, placement, state.columnIndex, state.page.number);
+      state.page.fragments.push(
+        createAnchoredTableFragment(tableBlock, tableMeasure, placement.paint.x, placement.paint.y),
+      );
     }
   }
 
@@ -3847,5 +3814,12 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 export { layoutTextboxContent } from './layout-textbox.js';
+export {
+  resolveGraphicPlacement,
+  resolveDrawingPlacement,
+  resolveTablePlacement,
+  type ResolvedGraphicPlacement,
+  type ResolveGraphicPlacementInput,
+} from './graphic-placement.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

@@ -2,16 +2,23 @@ import { describe, expect, it } from 'vitest';
 import type { ResolvedPaintItem } from '@superdoc/contracts';
 import { computeSdtBoundaryLayers } from './boundaries.js';
 
-const makeItem = (y: number, sdtContainerKeys: (string | null)[]): ResolvedPaintItem =>
+const makeItem = (
+  y: number,
+  sdtContainerKeys: (string | null)[],
+  fragmentKind: 'para' | 'image' | 'drawing' = 'para',
+): ResolvedPaintItem =>
   ({
     kind: 'fragment',
     id: `f-${y}`,
     pageIndex: 0,
-    fragmentKind: 'para',
+    fragmentKind,
     blockId: `b-${y}`,
     fragmentIndex: y,
     height: 20,
-    fragment: { kind: 'para', blockId: `b-${y}`, x: 0, y, width: 100 },
+    // Image/drawing resolved items are kind: 'fragment' with a fragment
+    // back-pointer of the matching kind (see ResolvedImageItem/ResolvedDrawingItem),
+    // so the boundary pass reads their geometry the same way as paragraphs.
+    fragment: { kind: fragmentKind, blockId: `b-${y}`, x: 0, y, width: 100 },
     sdtContainerKey: sdtContainerKeys.length ? sdtContainerKeys[sdtContainerKeys.length - 1] : null,
     sdtContainerKeys,
   }) as unknown as ResolvedPaintItem;
@@ -39,19 +46,26 @@ describe('computeSdtBoundaryLayers', () => {
     expect(layerAtDepth(layers, 2, 1)).toBeUndefined();
   });
 
-  it('keeps an image/drawing item inside the run instead of splitting it', () => {
-    // The middle item (e.g. a drawing fragment) now carries the same outer chain
-    // via FU2, so it stays in the outer run rather than breaking it.
+  it('keeps real image and drawing items inside the run instead of splitting it', () => {
+    // Image and drawing resolved items are kind: 'fragment' (fragmentKind
+    // 'image'/'drawing') and, via FU2, carry the same container chain. They must
+    // stay inside the outer run rather than break it into separate boxes.
     const items = [
-      makeItem(0, ['structuredContent:outer']),
-      makeItem(20, ['structuredContent:outer']),
-      makeItem(40, ['structuredContent:outer']),
+      makeItem(0, ['structuredContent:outer'], 'para'),
+      makeItem(20, ['structuredContent:outer'], 'image'),
+      makeItem(40, ['structuredContent:outer'], 'drawing'),
+      makeItem(60, ['structuredContent:outer'], 'para'),
     ];
     const layers = computeSdtBoundaryLayers(items, new Set());
 
+    // One continuous outer run across para, image, drawing, para.
     expect(layerAtDepth(layers, 0, 0)).toMatchObject({ isStart: true, isEnd: false });
     expect(layerAtDepth(layers, 1, 0)).toMatchObject({ isStart: false, isEnd: false });
-    expect(layerAtDepth(layers, 2, 0)).toMatchObject({ isStart: false, isEnd: true });
+    expect(layerAtDepth(layers, 2, 0)).toMatchObject({ isStart: false, isEnd: false });
+    expect(layerAtDepth(layers, 3, 0)).toMatchObject({ isStart: false, isEnd: true });
+    // The image and drawing items are part of the run, not skipped.
+    expect(layerAtDepth(layers, 1, 0)?.key).toBe('structuredContent:outer');
+    expect(layerAtDepth(layers, 2, 0)?.key).toBe('structuredContent:outer');
   });
 
   it('dedupes labels by key and renders each container label once', () => {

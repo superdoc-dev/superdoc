@@ -845,6 +845,8 @@ export type TableAttrs = {
   tableDirectionContext?: TableDirectionContext;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
+  /** Ordered chain of enclosing block-container SDTs (outer to inner). See #3752. */
+  sdtContainers?: SdtMetadata[];
   [key: string]: unknown;
 };
 
@@ -937,6 +939,8 @@ export type DocumentBackground = {
 export type ImageBlockAttrs = {
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
+  /** Ordered chain of enclosing block-container SDTs (outer to inner). See #3752. */
+  sdtContainers?: SdtMetadata[];
   [key: string]: unknown;
 };
 
@@ -1823,6 +1827,13 @@ export type ParagraphAttrs = {
   sdt?: SdtMetadata;
   /** Container SDT for blocks with both primary and container metadata. */
   containerSdt?: SdtMetadata;
+  /**
+   * Ordered chain of enclosing block-container SDTs (outermost first, innermost
+   * last) for nested content controls. `sdt` stays this block's nearest primary
+   * metadata; this records the full ancestry so resolved layout and the painter
+   * can group and draw nested control chrome. See #3752.
+   */
+  sdtContainers?: SdtMetadata[];
 };
 
 export type ParagraphFrame = {

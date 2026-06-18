@@ -147,6 +147,41 @@ export function applySdtMetadataToTableBlock(tableBlock: FlowBlock | undefined, 
 }
 
 /**
+ * Record the ordered block-container chain (outermost first) on every emitted
+ * block, and fill in `attrs.sdt` for block kinds the metadata helpers skip
+ * (drawings, images) so a non-paragraph child of a content control no longer
+ * breaks that control's grouping run. Recurses table cells.
+ *
+ * @param blocks - Flow blocks to stamp
+ * @param nearest - This control's metadata (each block's nearest container)
+ * @param chain - Full container ancestry, outermost first
+ */
+export function applySdtContainerChain(
+  blocks: FlowBlock[],
+  nearest: SdtMetadata | undefined,
+  chain: readonly SdtMetadata[],
+): void {
+  if (!nearest && chain.length === 0) return;
+  for (const block of blocks) applyChainToBlock(block, nearest, chain);
+}
+
+function applyChainToBlock(block: FlowBlock, nearest: SdtMetadata | undefined, chain: readonly SdtMetadata[]): void {
+  const target = block as { kind: FlowBlock['kind']; attrs?: Record<string, unknown> };
+  if (!target.attrs) target.attrs = {};
+  if (nearest && target.attrs.sdt == null) target.attrs.sdt = nearest;
+  if (chain.length > 0) target.attrs.sdtContainers = chain as SdtMetadata[];
+  if (block.kind === 'table') {
+    const table = block as TableBlock;
+    table.rows?.forEach((row) => {
+      row.cells?.forEach((cell) => {
+        const cellBlocks = cell.blocks && cell.blocks.length > 0 ? cell.blocks : cell.paragraph ? [cell.paragraph] : [];
+        cellBlocks.forEach((cellBlock) => applyChainToBlock(cellBlock, nearest, chain));
+      });
+    });
+  }
+}
+
+/**
  * Applies SDT metadata to all list items within a ListBlock.
  *
  * List items contain embedded paragraph blocks (ListItem.paragraph), and this function

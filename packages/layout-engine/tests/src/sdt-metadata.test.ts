@@ -176,6 +176,42 @@ describe('SDT metadata integration', () => {
     });
   });
 
+  it('records the full outer-to-inner container chain on nested block SDTs', () => {
+    const nestedBlockDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'structuredContentBlock',
+          attrs: { id: 'outer-block-sdt', tag: 'outer_block', alias: 'Outer Block' },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Outer paragraph' }] },
+            {
+              type: 'structuredContentBlock',
+              attrs: { id: 'inner-block-sdt', tag: 'inner_block', alias: 'Inner Block' },
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner paragraph' }] }],
+            },
+          ],
+        },
+      ],
+    };
+    const { blocks } = toFlowBlocks(nestedBlockDoc);
+    const outerParagraph = blocks.find(
+      (block) => block.kind === 'paragraph' && block.runs?.some((run) => run.text === 'Outer paragraph'),
+    );
+    const innerParagraph = blocks.find(
+      (block) => block.kind === 'paragraph' && block.runs?.some((run) => run.text === 'Inner paragraph'),
+    );
+
+    // Outer block: outer identity is its nearest sdt and its sole container.
+    expect(outerParagraph?.attrs?.sdt).toMatchObject({ id: 'outer-block-sdt', scope: 'block' });
+    expect(outerParagraph?.attrs?.sdtContainers?.map((s) => s.id)).toEqual(['outer-block-sdt']);
+
+    // Inner block: inner identity stays the nearest sdt, but the container chain
+    // records the full outer-to-inner ancestry so the outer control is not lost.
+    expect(innerParagraph?.attrs?.sdt).toMatchObject({ id: 'inner-block-sdt', scope: 'block' });
+    expect(innerParagraph?.attrs?.sdtContainers?.map((s) => s.id)).toEqual(['outer-block-sdt', 'inner-block-sdt']);
+  });
+
   it('handles nested structuredContent (inline within inline)', () => {
     const nestedBlock = summary.find((b) => b.blockId === '2-paragraph');
     const outerRun = nestedBlock?.runMetadata.find((r) => r.metadata?.id === 'nested-outer');

@@ -7,7 +7,12 @@
 
 import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext } from '../types.js';
-import { resolveNodeSdtMetadata, applySdtMetadataToParagraphBlocks, applySdtMetadataToTableBlock } from './metadata.js';
+import {
+  resolveNodeSdtMetadata,
+  applySdtMetadataToParagraphBlocks,
+  applySdtMetadataToTableBlock,
+  applySdtContainerChain,
+} from './metadata.js';
 
 const NON_RENDERED_STRUCTURAL_INLINE_TYPES = new Set([
   'bookmarkEnd',
@@ -103,6 +108,15 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
   const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
 
+  // Ordered block-container ancestry for this node's content: the parent chain
+  // threaded via context plus this control (when it has resolvable metadata).
+  // `structuredContentMetadata` stays each block's nearest `sdt`; `chain`
+  // records the full outer-to-inner ancestry for nested content controls so the
+  // outer control's identity survives on inner blocks.
+  const parentChain = context.sdtContainerChain ?? [];
+  const chain = structuredContentMetadata ? [...parentChain, structuredContentMetadata] : parentChain;
+  const childContext: NodeHandlerContext = chain.length ? { ...context, sdtContainerChain: chain } : context;
+
   const emitPlaceholderBlock = (contentPos?: number): void => {
     if (!structuredContentMetadata) return;
     const placeholderRun: TextRun = {
@@ -118,7 +132,9 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
       kind: 'paragraph',
       id: nextBlockId('paragraph'),
       runs: [placeholderRun],
-      attrs: { sdt: structuredContentMetadata },
+      attrs: chain.length
+        ? { sdt: structuredContentMetadata, sdtContainers: chain }
+        : { sdt: structuredContentMetadata },
     };
     blocks.push(placeholderBlock);
     recordBlockKind?.(placeholderBlock.kind);
@@ -154,6 +170,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
         structuredContentMetadata,
       );
+      applySdtContainerChain(paragraphBlocks, structuredContentMetadata, chain);
       if (applyPlaceholderToEmptyParagraphBlocks(paragraphBlocks, structuredContentMetadata, contentPos)) {
         paragraphBlocks.forEach((block) => {
           blocks.push(block);
@@ -199,6 +216,7 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
         structuredContentMetadata,
       );
+      applySdtContainerChain(paragraphBlocks, structuredContentMetadata, chain);
       paragraphBlocks.forEach((block) => {
         blocks.push(block);
         recordBlockKind?.(block.kind);
@@ -221,21 +239,26 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         });
         if (tableBlock) {
           applySdtMetadataToTableBlock(tableBlock as TableBlock, structuredContentMetadata);
+          applySdtContainerChain([tableBlock], structuredContentMetadata, chain);
           blocks.push(tableBlock);
           recordBlockKind?.(tableBlock.kind);
         }
       }
       return;
     }
+    // A nested block content control. Recurse with the extended container chain
+    // so its inner blocks carry the full outer-to-inner ancestry while this
+    // control's metadata stays their nearest `sdt`. findParagraphsWithSectPr
+    // does not recurse structuredContentBlock, so no currentParagraphIndex
+    // bookkeeping is needed here.
+    if (child.type === 'structuredContentBlock') {
+      handleStructuredContentBlockNode(child, childContext);
+      return;
+    }
     // SD-1333: documentPartObject is a transparent wrapper - recurse its content.
     // SD-3005: a block field (bibliography / index / table of authorities) generated
     // inside this content control is likewise transparent here; render its entry
-    // paragraphs without advancing currentParagraphIndex, since
-    // findParagraphsWithSectPr does not recurse structuredContentBlock.
-    if (child.type === 'structuredContentBlock') {
-      handleStructuredContentBlockNode(child, context);
-      return;
-    }
+    // paragraphs without advancing currentParagraphIndex.
     if (
       Array.isArray(child.content) &&
       (child.type === 'documentPartObject' ||

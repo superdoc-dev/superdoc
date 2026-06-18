@@ -2,7 +2,13 @@
  * Type definitions for ProseMirror to FlowBlock adapter
  */
 
-import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
+import type {
+  TrackedChangesMode,
+  SectionMetadata,
+  FlowBlock,
+  TrackedChangeMeta,
+  SdtMetadata,
+} from '@superdoc/contracts';
 import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
@@ -336,6 +342,11 @@ export interface NodeHandlerContext {
 
   // Converters for nested content
   converters: NestedConverters;
+  // Ordered chain of enclosing block-container SDT metadata (outermost first)
+  // for the node currently being processed. Threaded by the SDT handlers so
+  // nested content controls record their full container ancestry on emitted
+  // blocks. Absent/empty at the top level.
+  sdtContainerChain?: SdtMetadata[];
   themeColors?: ThemeColorPalette;
   // FlowBlock cache for incremental conversion (optional)
   flowBlockCache?: import('./cache.js').FlowBlockCache;

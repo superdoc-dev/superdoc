@@ -3387,7 +3387,7 @@ describe('resolveLayout', () => {
       expect(item.sdtContainerKey).toBe('documentSection:tbl-sec-1');
     });
 
-    it('omits sdtContainerKey for image and drawing fragments', () => {
+    it('omits sdtContainerKey for image and drawing fragments without sdt', () => {
       const imageFragment: ImageFragment = {
         kind: 'image',
         blockId: 'img1',
@@ -3432,6 +3432,70 @@ describe('resolveLayout', () => {
       const drItem = result.pages[0].items[1] as import('@superdoc/contracts').ResolvedDrawingItem;
       expect(imgItem.sdtContainerKey).toBeUndefined();
       expect(drItem.sdtContainerKey).toBeUndefined();
+    });
+
+    it('sets sdtContainerKey and chain for image and drawing fragments inside a content control', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img1',
+        x: 100,
+        y: 200,
+        width: 300,
+        height: 250,
+      };
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        blockId: 'dr1',
+        x: 50,
+        y: 60,
+        width: 200,
+        height: 150,
+        geometry: { width: 200, height: 150 },
+        scale: 1,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment, drawingFragment] }],
+      };
+      const outer = { type: 'structuredContent', scope: 'block', id: 'outer' };
+      const imageBlock = {
+        kind: 'image' as const,
+        id: 'img1',
+        src: 'test.png',
+        width: 300,
+        height: 250,
+        attrs: {
+          sdt: { type: 'structuredContent', scope: 'block', id: 'img-sdt' },
+          sdtContainers: [outer, { type: 'structuredContent', scope: 'block', id: 'img-sdt' }],
+        },
+      };
+      const drawingBlock = {
+        kind: 'drawing' as const,
+        id: 'dr1',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 200, height: 150 },
+        attrs: {
+          sdt: { type: 'structuredContent', scope: 'block', id: 'dr-sdt' },
+          sdtContainers: [outer, { type: 'structuredContent', scope: 'block', id: 'dr-sdt' }],
+        },
+      };
+
+      const result = resolveLayout({
+        layout,
+        flowMode: 'paginated',
+        blocks: [imageBlock as any, drawingBlock as any],
+        measures: [
+          { kind: 'image', width: 300, height: 250 },
+          { kind: 'drawing', width: 200, height: 150 },
+        ],
+      });
+      const imgItem = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedImageItem;
+      const drItem = result.pages[0].items[1] as import('@superdoc/contracts').ResolvedDrawingItem;
+      expect(imgItem.sdtContainerKey).toBe('structuredContent:img-sdt');
+      expect(imgItem.sdtContainerKeys).toEqual(['structuredContent:outer', 'structuredContent:img-sdt']);
+      expect(drItem.sdtContainerKey).toBe('structuredContent:dr-sdt');
+      expect(drItem.sdtContainerKeys).toEqual(['structuredContent:outer', 'structuredContent:dr-sdt']);
     });
 
     it('sets an object-stable key for structuredContent block scope with no id', () => {

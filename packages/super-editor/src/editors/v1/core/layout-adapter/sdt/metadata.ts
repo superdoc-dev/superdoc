@@ -149,8 +149,10 @@ export function applySdtMetadataToTableBlock(tableBlock: FlowBlock | undefined, 
 /**
  * Record the ordered block-container chain (outermost first) on every emitted
  * block, and fill in `attrs.sdt` for block kinds the metadata helpers skip
- * (drawings, images) so a non-paragraph child of a content control no longer
- * breaks that control's grouping run. Recurses table cells.
+ * (drawings, images) so every block in a control carries that control's
+ * identity and chain. (Resolved layout ignores image/drawing keys today; once
+ * it consumes them in a follow-up, this is what keeps a drawing or image from
+ * splitting the control's grouping run.) Recurses table cells.
  *
  * @param blocks - Flow blocks to stamp
  * @param nearest - This control's metadata (each block's nearest container)

@@ -323,7 +323,12 @@ describe('SD-3400: clearing a note in the area removes the footnote on both side
   const makeHost = () =>
     ({
       converter: { footnotes: [{ id: '1', content: [{ type: 'paragraph' }] }], endnotes: [] },
-      state: { doc: { descendants: (cb: (n: unknown, p: number) => void) => cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' } }, 5) } },
+      state: {
+        doc: {
+          descendants: (cb: (n: unknown, p: number) => void) =>
+            cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' } }, 5),
+        },
+      },
       on: vi.fn(),
     }) as any;
 

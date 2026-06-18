@@ -130,7 +130,9 @@ export const VerticalNavigation = Extension.create({
             goalX = coords?.x;
             goalClientX = coords?.clientX;
             if (!Number.isFinite(goalX) || !Number.isFinite(goalClientX)) return false;
-            view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX, goalClientX }));
+            view.dispatch(
+              view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX, goalClientX }),
+            );
           }
 
           // 2. Find adjacent line

@@ -458,7 +458,9 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         pos === 38 ? { type: { name: 'footnoteReference' }, attrs: { id: '3' } } : null;
       const refEl = makeRefSpan(38, '3');
 
-      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }));
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }),
+      );
 
       expect(activateRenderedNoteSession).toHaveBeenCalledWith(
         { storyType: 'footnote', noteId: '3' },
@@ -471,7 +473,9 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         pos === 50 ? { type: { name: 'endnoteReference' }, attrs: { id: '2' } } : null;
       const refEl = makeRefSpan(50, 'ii');
 
-      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 7, clientY: 9 }));
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 7, clientY: 9 }),
+      );
 
       expect(activateRenderedNoteSession).toHaveBeenCalledWith(
         { storyType: 'endnote', noteId: '2' },
@@ -519,7 +523,9 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
         pos === 12 ? { type: { name: 'text' }, attrs: {} } : null;
       const refEl = makeRefSpan(12, 'word');
 
-      refEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }));
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }),
+      );
 
       expect(activateRenderedNoteSession).not.toHaveBeenCalled();
     });

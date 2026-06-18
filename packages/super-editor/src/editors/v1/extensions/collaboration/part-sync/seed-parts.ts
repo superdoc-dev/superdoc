@@ -40,9 +40,11 @@ export function seedPartsFromEditor(editor: Editor, ydoc: Y.Doc, options?: SeedO
   const convertedXml = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter
     ?.convertedXml;
   if (!convertedXml) return;
-  const sessionManagedNoteIds = (editor as unknown as {
-    converter?: { sessionManagedNoteIds?: SessionManagedNoteIds };
-  }).converter?.sessionManagedNoteIds;
+  const sessionManagedNoteIds = (
+    editor as unknown as {
+      converter?: { sessionManagedNoteIds?: SessionManagedNoteIds };
+    }
+  ).converter?.sessionManagedNoteIds;
 
   const partsMap = ydoc.getMap(PARTS_MAP_KEY) as Y.Map<unknown>;
   const metaMap = ydoc.getMap(META_MAP_KEY);

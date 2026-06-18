@@ -2,8 +2,7 @@ import { TextSelection } from 'prosemirror-state';
 
 export const SELECT_FOOTNOTE_MARKER_META = 'selectFootnoteMarker';
 
-const isNoteReference = (node) =>
-  node?.type.name === 'footnoteReference' || node?.type.name === 'endnoteReference';
+const isNoteReference = (node) => node?.type.name === 'footnoteReference' || node?.type.name === 'endnoteReference';
 
 /**
  * Resolves the note marker ending at `boundaryPos` (the position right after it).

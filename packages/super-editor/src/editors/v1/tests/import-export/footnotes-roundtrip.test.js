@@ -200,9 +200,7 @@ describe('footnotes import/export roundtrip', () => {
 
       const originalZipper = new DocxZipper();
       const originalFiles = await originalZipper.getDocxData(docxBuffer, true);
-      const originalFootnotesJson = parseXmlToJson(
-        originalFiles.find((f) => f.name === 'word/footnotes.xml').content,
-      );
+      const originalFootnotesJson = parseXmlToJson(originalFiles.find((f) => f.name === 'word/footnotes.xml').content);
       const originalRoot = findFootnotesRoot(originalFootnotesJson);
       const regularIds = collectFootnoteIds(originalRoot).filter((id) => {
         const type = findFootnoteById(originalRoot, id)?.attributes?.['w:type'];
@@ -691,11 +689,7 @@ describe('footnotesExporter unit tests', () => {
     });
 
     it('never prunes separator/continuationSeparator entries even when registered', () => {
-      const part = makePart([
-        { id: '-1', type: 'separator' },
-        { id: '0', type: 'continuationSeparator' },
-        { id: '1' },
-      ]);
+      const part = makePart([{ id: '-1', type: 'separator' }, { id: '0', type: 'continuationSeparator' }, { id: '1' }]);
       const pruned = pruneSessionDeletedNotesPart(part, {
         converter: makeConverter(['-1', '0', '1']),
         documentXml: makeDocumentXml([]),
@@ -752,7 +746,6 @@ describe('footnotesExporter unit tests', () => {
 
       expect(prunedIds(pruned, 'w:endnote')).toEqual(['2']);
     });
-
   });
 });
 

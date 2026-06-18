@@ -999,8 +999,7 @@ function computeNoteBodyHeights(
       if (measure.kind === 'paragraph') {
         const measureH = (measure as { totalHeight?: number }).totalHeight;
         if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
-        const spacing = (block as { attrs?: { spacing?: { after?: number; lineSpaceAfter?: number } } }).attrs
-          ?.spacing;
+        const spacing = (block as { attrs?: { spacing?: { after?: number; lineSpaceAfter?: number } } }).attrs?.spacing;
         const after = spacing?.after ?? spacing?.lineSpaceAfter;
         if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
         // SD-2656: first paragraph's first line is the first valid run.

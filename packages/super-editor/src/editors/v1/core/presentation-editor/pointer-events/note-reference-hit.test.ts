@@ -56,7 +56,10 @@ const schema = new Schema({
  *   p1: "See" + bookmarkStart(_Ref1)[ run[ <noteRef id=8> ] ] + "below"
  *   p2: "as noted in" + crossReference(target=_Ref1, "footnote 8")
  */
-function makeDoc(noteRefType: 'footnoteReference' | 'endnoteReference' = 'footnoteReference', bookmarkContent?: ProseMirrorNode[]) {
+function makeDoc(
+  noteRefType: 'footnoteReference' | 'endnoteReference' = 'footnoteReference',
+  bookmarkContent?: ProseMirrorNode[],
+) {
   const noteRef = schema.nodes[noteRefType].create({ id: '8' });
   const bookmark = schema.nodes.bookmarkStart.create(
     { name: '_Ref1', id: '1' },

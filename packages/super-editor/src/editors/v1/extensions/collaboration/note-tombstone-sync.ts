@@ -31,10 +31,7 @@ import {
   onCollaborationProviderSynced,
 } from '../../core/helpers/collaboration-provider-sync.js';
 import type { CollaborationProvider } from '../../core/types/EditorConfig.js';
-import {
-  NOTE_TOMBSTONE_EVENT,
-  type SessionManagedNoteIds,
-} from '../../core/parts/adapters/notes-part-descriptor.js';
+import { NOTE_TOMBSTONE_EVENT, type SessionManagedNoteIds } from '../../core/parts/adapters/notes-part-descriptor.js';
 
 export { NOTE_TOMBSTONE_EVENT };
 
@@ -104,10 +101,7 @@ export function clearNoteTombstonesFromMeta(ydoc: Y.Doc): void {
 }
 
 /** Publish every locally tracked session-managed note id into the shared meta map. */
-export function publishSessionManagedNoteIds(
-  ydoc: Y.Doc,
-  registry: SessionManagedNoteIds | null | undefined,
-): void {
+export function publishSessionManagedNoteIds(ydoc: Y.Doc, registry: SessionManagedNoteIds | null | undefined): void {
   if (!registry) return;
   for (const noteId of registry.footnotes) {
     publishNoteTombstone(ydoc, 'footnote', noteId);

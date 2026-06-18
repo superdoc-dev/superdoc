@@ -18,7 +18,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import { rescaleColumnWidths, getCellSpacingPx, getFragmentZIndex } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
@@ -1081,10 +1081,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
-      const zIndex =
-        typeof anchoredBlock.zIndex === 'number'
-          ? anchoredBlock.zIndex
-          : (normalizeZIndex(anchoredBlock.attrs?.originalAttributes) ?? (behindDoc ? -1 : 1));
+      const zIndex = behindDoc ? 0 : getFragmentZIndex(anchoredBlock);
 
       const wrap = anchoredBlock.wrap;
       if (!behindDoc && wrap?.type === 'Square') {

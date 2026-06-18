@@ -39,13 +39,11 @@ import {
   normalizeTextContent,
   normalizeTextVerticalAlign,
   normalizeTextInsets,
-  normalizeZIndex,
-  resolveFloatingZIndex,
   mergeWrapDistancesFromPadding,
   ptToPx,
 } from '../utilities.js';
 import { getLastParagraphFont } from './paragraph.js';
-import { normalizeGraphicAnchor } from '../graphic-placement.js';
+import { normalizeGraphicPlacement } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -494,22 +492,19 @@ export const buildDrawingBlock = (
     );
   }
   const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
-  const baseAnchor = normalizeGraphicAnchor({
+  const placement = normalizeGraphicPlacement({
     anchorData: rawAttrs.anchorData,
     attrs: rawAttrs,
     wrapBehindDoc: normalizedWrap?.behindDoc,
+    fallbackZIndex: coerceNumber(rawAttrs.zIndex) ?? 1,
   });
+  const baseAnchor = placement.anchor;
   const pos = positions.get(node);
   const attrsWithPm: Record<string, unknown> = { ...rawAttrs };
   if (pos) {
     attrsWithPm.pmStart = pos.start;
     attrsWithPm.pmEnd = pos.end;
   }
-
-  const behindDoc = baseAnchor?.behindDoc === true || normalizedWrap?.behindDoc === true;
-  // Try to get zIndex from relativeHeight first, fallback to direct zIndex attribute
-  const zIndexFromRelativeHeight = normalizeZIndex(rawAttrs.originalAttributes);
-  const resolvedZIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, coerceNumber(rawAttrs.zIndex) ?? 1);
 
   return {
     kind: 'drawing',
@@ -521,7 +516,7 @@ export const buildDrawingBlock = (
       toBoxSpacing(rawAttrs.margin as Record<string, unknown> | undefined),
     anchor: baseAnchor,
     wrap: normalizedWrap,
-    zIndex: resolvedZIndex,
+    zIndex: placement.zIndex,
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,

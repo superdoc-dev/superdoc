@@ -3816,9 +3816,8 @@ describe('layoutHeaderFooter', () => {
     expect(layout.pages).toHaveLength(1);
     const imageFragment = layout.pages[0].fragments.find((f) => f.kind === 'image');
     expect(imageFragment).toBeDefined();
-    // offsetH is passed through to inner layout's computeAnchorX; the result
-    // includes the offset plus margin-left added by computeAnchorX for page-relative.
-    // Inner layout has margins=0, so computeAnchorX returns offsetH + 0 = 545.
+    // offsetH is passed through to the inner layout's shared graphic placement resolver.
+    // Inner layout has margins=0, so page-relative x resolves to offsetH + 0 = 545.
     expect(imageFragment!.x).toBe(545);
   });
 

@@ -20,11 +20,11 @@ import type {
   DrawingMeasure,
   TableBlock,
   TableMeasure,
-  TableAnchor,
   TableWrap,
   ColumnLayoutForAnchor,
 } from '@superdoc/contracts';
-import { resolveAnchoredGraphicX, getColumnGeometry, getColumnX } from '@superdoc/contracts';
+import { getColumnGeometry, getColumnX } from '@superdoc/contracts';
+import { resolveGraphicPlacement, resolveTablePlacement, type ResolvedGraphicPlacement } from './graphic-placement.js';
 
 type FloatBlock = ImageBlock | DrawingBlock;
 type FloatMeasure = ImageMeasure | DrawingMeasure;
@@ -34,13 +34,13 @@ export type FloatingObjectManager = {
    * Register an anchored drawing as an exclusion zone.
    * Should be called before laying out paragraphs.
    *
-   * @param resolvedAnchorY — Fully resolved paint Y from {@link resolveAnchoredGraphicY}
-   *   (already includes `offsetV`). Must not add vertical offset again.
+   * @param placement — Fully resolved paint/exclusion placement. Legacy numeric Y is accepted
+   *   for older tests only; layout code should pass a ResolvedGraphicPlacement.
    */
   registerDrawing(
     drawingBlock: FloatBlock,
     measure: FloatMeasure,
-    resolvedAnchorY: number,
+    placement: ResolvedGraphicPlacement | number,
     columnIndex: number,
     pageNumber: number,
   ): void;
@@ -50,12 +50,13 @@ export type FloatingObjectManager = {
    * Should be called during Layout Pass 1 before laying out paragraphs.
    */
   /**
-   * @param resolvedAnchorY — Fully resolved paint Y (already includes `offsetV`).
+   * @param placement — Fully resolved paint/exclusion placement. Legacy numeric Y is accepted
+   *   for older tests only; layout code should pass a ResolvedGraphicPlacement.
    */
   registerTable(
     tableBlock: TableBlock,
     measure: TableMeasure,
-    resolvedAnchorY: number,
+    placement: ResolvedGraphicPlacement | number,
     columnIndex: number,
     pageNumber: number,
   ): void;
@@ -107,8 +108,64 @@ export function createFloatingObjectManager(
   let currentPageWidth = pageWidth;
   let marginLeft = Math.max(0, currentMargins?.left ?? 0);
 
+  const coerceDrawingPlacement = (
+    block: FloatBlock,
+    measure: FloatMeasure,
+    placement: ResolvedGraphicPlacement | number,
+    columnIndex: number,
+  ): ResolvedGraphicPlacement => {
+    if (typeof placement !== 'number') {
+      return placement;
+    }
+    const objectHeight = measure.height ?? 0;
+    const anchor = block.anchor
+      ? { ...block.anchor, vRelativeFrom: 'paragraph' as const, alignV: 'top' as const, offsetV: 0 }
+      : undefined;
+    return resolveGraphicPlacement({
+      anchor,
+      objectWidth: measure.width ?? 0,
+      objectHeight: measure.height ?? 0,
+      columnIndex,
+      columns: currentColumns,
+      pageMargins: currentMargins,
+      pageWidth: currentPageWidth,
+      contentTop: placement,
+      contentBottom: placement + objectHeight,
+      anchorParagraphY: placement,
+      firstLineHeight: objectHeight,
+      fallbackX: marginLeft,
+      wrapType: block.wrap?.type,
+    });
+  };
+
+  const coerceTablePlacement = (
+    block: TableBlock,
+    measure: TableMeasure,
+    placement: ResolvedGraphicPlacement | number,
+    columnIndex: number,
+  ): ResolvedGraphicPlacement => {
+    if (typeof placement !== 'number') {
+      return placement;
+    }
+    const objectHeight = measure.totalHeight ?? 0;
+    const anchor = block.anchor
+      ? { ...block.anchor, vRelativeFrom: 'paragraph' as const, alignV: 'top' as const, offsetV: 0 }
+      : undefined;
+    return resolveTablePlacement(anchor, measure, block.wrap, {
+      columnIndex,
+      columns: currentColumns,
+      pageMargins: currentMargins,
+      pageWidth: currentPageWidth,
+      contentTop: placement,
+      contentBottom: placement + objectHeight,
+      anchorParagraphY: placement,
+      firstLineHeight: objectHeight,
+      fallbackX: marginLeft,
+    });
+  };
+
   return {
-    registerDrawing(drawingBlock, measure, resolvedAnchorY, columnIndex, pageNumber) {
+    registerDrawing(drawingBlock, measure, placementOrY, columnIndex, pageNumber) {
       if (!drawingBlock.anchor?.isAnchored) {
         return; // Not anchored, no exclusion
       }
@@ -122,21 +179,20 @@ export function createFloatingObjectManager(
         return;
       }
 
-      // Compute image X position based on anchor alignment, respecting margins
-      const objectWidth = measure.width ?? 0;
-      const objectHeight = measure.height ?? 0;
-
-      const x = computeAnchorX(anchor, columnIndex, currentColumns, objectWidth, currentMargins, currentPageWidth);
+      const placement = coerceDrawingPlacement(drawingBlock, measure, placementOrY, columnIndex);
+      if (!placement.exclusion) {
+        return;
+      }
 
       const zone: ExclusionZone = {
         imageBlockId: drawingBlock.id,
         pageNumber,
         columnIndex,
         bounds: {
-          x,
-          y: resolvedAnchorY,
-          width: objectWidth,
-          height: objectHeight,
+          x: placement.exclusion.x,
+          y: placement.exclusion.y,
+          width: placement.exclusion.width,
+          height: placement.exclusion.height,
         },
         distances: {
           top: wrap?.distTop ?? 0,
@@ -151,7 +207,7 @@ export function createFloatingObjectManager(
       zones.push(zone);
     },
 
-    registerTable(tableBlock, measure, resolvedAnchorY, columnIndex, pageNumber) {
+    registerTable(tableBlock, measure, placementOrY, columnIndex, pageNumber) {
       if (!tableBlock.anchor?.isAnchored) {
         return; // Not anchored, no exclusion
       }
@@ -165,22 +221,20 @@ export function createFloatingObjectManager(
         return;
       }
 
-      // Compute table dimensions from measure
-      const tableWidth = measure.totalWidth ?? 0;
-      const tableHeight = measure.totalHeight ?? 0;
-
-      // Compute table X position based on anchor alignment
-      const x = computeTableAnchorX(anchor, columnIndex, currentColumns, tableWidth, currentMargins, currentPageWidth);
+      const placement = coerceTablePlacement(tableBlock, measure, placementOrY, columnIndex);
+      if (!placement.exclusion) {
+        return;
+      }
 
       const zone: ExclusionZone = {
         imageBlockId: tableBlock.id, // Reusing imageBlockId field for table id
         pageNumber,
         columnIndex,
         bounds: {
-          x,
-          y: resolvedAnchorY,
-          width: tableWidth,
-          height: tableHeight,
+          x: placement.exclusion.x,
+          y: placement.exclusion.y,
+          width: placement.exclusion.width,
+          height: placement.exclusion.height,
         },
         distances: {
           top: wrap?.distTop ?? 0,
@@ -319,18 +373,6 @@ export function createFloatingObjectManager(
   };
 }
 
-/** @deprecated Use {@link resolveAnchoredGraphicX} from `@superdoc/contracts`. */
-export function computeAnchorX(
-  anchor: NonNullable<ImageBlock['anchor']>,
-  columnIndex: number,
-  columns: ColumnLayout,
-  imageWidth: number,
-  margins?: { left?: number; right?: number },
-  pageWidth?: number,
-): number {
-  return resolveAnchoredGraphicX(anchor, columnIndex, columns, imageWidth, margins, pageWidth);
-}
-
 /**
  * Map ImageWrap.wrapText to ExclusionZone.wrapMode.
  * Determines which side of the image text should wrap.
@@ -353,71 +395,6 @@ function computeWrapMode(wrap: ImageBlock['wrap'], _anchor: ImageBlock['anchor']
 
   // Default: both sides
   return 'both';
-}
-
-/**
- * Compute horizontal position of anchored table based on alignment and offsets.
- * Similar to computeAnchorX but uses TableAnchor type.
- */
-function computeTableAnchorX(
-  anchor: TableAnchor,
-  columnIndex: number,
-  columns: ColumnLayout,
-  tableWidth: number,
-  margins?: { left?: number; right?: number },
-  pageWidth?: number,
-): number {
-  const alignH = anchor.alignH ?? 'left';
-  const offsetH = anchor.offsetH ?? 0;
-
-  const marginLeft = Math.max(0, margins?.left ?? 0);
-  const marginRight = Math.max(0, margins?.right ?? 0);
-  const contentWidth = pageWidth != null ? Math.max(1, pageWidth - (marginLeft + marginRight)) : columns.width;
-
-  const contentLeft = marginLeft;
-  const geometry = getColumnGeometry(columns);
-  const columnLeft = getColumnX(geometry, columnIndex, contentLeft);
-
-  const relativeFrom = anchor.hRelativeFrom ?? 'column';
-
-  // Base origin and available width based on relativeFrom
-  let baseX: number;
-  let availableWidth: number;
-  if (relativeFrom === 'page') {
-    if (columns.count === 1) {
-      baseX = contentLeft;
-      availableWidth = contentWidth;
-    } else {
-      baseX = 0;
-      availableWidth = pageWidth != null ? pageWidth : contentWidth;
-    }
-  } else if (relativeFrom === 'margin') {
-    baseX = contentLeft;
-    availableWidth = contentWidth;
-  } else {
-    // 'column' (default)
-    baseX = columnLeft;
-    // Scalar (max) column width, matching anchored-object measurement (clamped to columns.width).
-    // Per-column origin above is honored; per-column available width waits on per-column measurement
-    // so a max-sized object is not centered/right-aligned into the margin or gap. (SD-2629)
-    availableWidth = columns.width;
-  }
-
-  // Handle table-specific alignment values (inside/outside map to left/right for now)
-  let effectiveAlignH = alignH;
-  if (alignH === 'inside') effectiveAlignH = 'left';
-  if (alignH === 'outside') effectiveAlignH = 'right';
-
-  const result =
-    effectiveAlignH === 'left'
-      ? baseX + offsetH
-      : effectiveAlignH === 'right'
-        ? baseX + availableWidth - tableWidth - offsetH
-        : effectiveAlignH === 'center'
-          ? baseX + (availableWidth - tableWidth) / 2 + offsetH
-          : baseX;
-
-  return result;
 }
 
 /**

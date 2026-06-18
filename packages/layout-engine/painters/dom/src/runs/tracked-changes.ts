@@ -203,6 +203,62 @@ export const applyRowTrackedChangeToCell = (
   }
 };
 
+/**
+ * Block-context marker for a whole-paragraph structural tracked change. Pairs
+ * with the same base/modifier classes the inline + row paths use; the block
+ * CSS targets it without colliding with the inline `.track-*-dec` span rules.
+ */
+const TRACK_CHANGE_BLOCK_CLASS = 'track-block-dec';
+
+/**
+ * Applies a structural block-level tracked change (inserted/deleted whole
+ * paragraph) to its paragraph fragment element. The paragraph analogue of
+ * {@link applyRowTrackedChangeToCell}: same `TrackedChangeMeta`, base classes
+ * (`track-insert-dec` / `track-delete-dec`), mode modifier map, and per-author
+ * color variables. `hidden` mode collapses the paragraph (insert in 'original',
+ * delete in 'final') via the shared `.track-*-dec.hidden { display: none }`
+ * rule, matching inline + row behavior.
+ */
+export const applyBlockTrackedChangeToParagraph = (
+  elem: HTMLElement,
+  meta: TrackedChangeMeta,
+  config: TrackedChangesRenderConfig,
+): void => {
+  if (!config.enabled || config.mode === 'off') {
+    return;
+  }
+  if (meta.kind !== 'insert' && meta.kind !== 'delete') {
+    return;
+  }
+
+  const baseClass = TRACK_CHANGE_BASE_CLASS[meta.kind];
+  if (baseClass) {
+    elem.classList.add(baseClass);
+  }
+  elem.classList.add(TRACK_CHANGE_BLOCK_CLASS);
+
+  const modifier = TRACK_CHANGE_MODIFIER_CLASS[meta.kind]?.[config.mode];
+  if (modifier) {
+    elem.classList.add(modifier);
+  }
+
+  applyAuthorColorVariables(elem, meta);
+
+  elem.dataset.trackChangeId = meta.id;
+  elem.dataset.trackChangeKind = meta.kind;
+  elem.dataset.trackChangeStructural = 'block';
+  elem.dataset.storyKey = meta.storyKey ?? 'body';
+  if (meta.author) {
+    elem.dataset.trackChangeAuthor = meta.author;
+  }
+  if (meta.authorEmail) {
+    elem.dataset.trackChangeAuthorEmail = meta.authorEmail;
+  }
+  if (meta.date) {
+    elem.dataset.trackChangeDate = meta.date;
+  }
+};
+
 export const applyTrackedChangeDecorations = (
   elem: HTMLElement,
   run: Run,

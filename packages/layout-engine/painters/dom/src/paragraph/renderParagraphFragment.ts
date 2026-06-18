@@ -5,6 +5,7 @@ import type {
   ParagraphMeasure,
   ResolvedFragmentItem,
   SdtMetadata,
+  TrackedChangeMeta,
 } from '@superdoc/contracts';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -13,6 +14,7 @@ import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
 import { allowFontSynthesis } from '../runs/font-synthesis.js';
+import { applyBlockTrackedChangeToParagraph, resolveTrackedChangesConfig } from '../runs/tracked-changes.js';
 import type { BetweenBorderInfo } from './borders/index.js';
 import { renderParagraphContent, type ParagraphRenderLineInput } from './renderParagraphContent.js';
 
@@ -151,6 +153,16 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
       sourceAnchor: resolvedItem?.sourceAnchor,
       contentControlsChrome,
     });
+
+    // Whole-paragraph structural tracked change (insert/delete). The adapter
+    // stamped paint-ready meta onto block.attrs.trackedChange; decorate the
+    // fragment so a deleted paragraph strikes through (and collapses in 'final'
+    // mode) instead of leaving an empty bullet — the paragraph analogue of the
+    // row-cell decoration.
+    const blockTrackedChange = (block.attrs as { trackedChange?: TrackedChangeMeta } | undefined)?.trackedChange;
+    if (blockTrackedChange) {
+      applyBlockTrackedChangeToParagraph(fragmentEl, blockTrackedChange, resolveTrackedChangesConfig(block));
+    }
 
     return fragmentEl;
   } catch (error) {

@@ -88,6 +88,35 @@ describe('applyRowTrackedChangeResolution', () => {
     expect(result.notFound).toEqual(['missing']);
   });
 
+  const makePara = (text, kind, id, operationId) =>
+    schema.nodes.paragraph.create({ trackChange: { kind, id, operationId } }, schema.text(text));
+
+  it('accept on a deleted top-level paragraph removes the whole node (no $pos.before crash)', () => {
+    // Regression: a top-level block resolves at depth 0, so the row code's
+    // `$pos.before($pos.depth)` threw "no position before the top-level node".
+    const state = stateWith([
+      schema.nodes.paragraph.create(null, schema.text('keep')),
+      makePara('bullet item', 'delete', 'p1', 'opP'),
+      schema.nodes.paragraph.create(null, schema.text('tail')),
+    ]);
+    const tr = state.tr;
+    const result = applyRowTrackedChangeResolution({ tr, state, ids: ['p1'], decision: 'accept' });
+    expect(result.applied).toBe(1);
+    expect(state.apply(tr).doc.textContent).toBe('keeptail');
+  });
+
+  it('reject on a deleted paragraph strips the attr; paragraph + text stay', () => {
+    const state = stateWith([
+      makePara('bullet item', 'delete', 'p1', 'opP'),
+      schema.nodes.paragraph.create(null, schema.text('x')),
+    ]);
+    const tr = state.tr;
+    applyRowTrackedChangeResolution({ tr, state, ids: ['p1'], decision: 'reject' });
+    const para = state.apply(tr).doc.firstChild;
+    expect(para.attrs.trackChange).toBeFalsy();
+    expect(para.textContent).toBe('bullet item');
+  });
+
   it('processes multiple deletes back-to-front so positions stay valid', () => {
     const state = stateWith([
       tableWith([makeRow('delete', 'r1', 'op1'), makeRow('delete', 'r2', 'op1'), makeRow('delete', 'r3', 'op1')]),

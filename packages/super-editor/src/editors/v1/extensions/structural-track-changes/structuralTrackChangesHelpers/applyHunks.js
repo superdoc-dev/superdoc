@@ -33,7 +33,7 @@ import { v4 as uuidv4 } from 'uuid';
  * }} args
  * @returns {{ applied: number, warnings: string[] }}
  */
- 
+
 export const applyHunks = ({ tr, state, hunks }) => {
   const warnings = [];
   let applied = 0;
@@ -49,21 +49,33 @@ export const applyHunks = ({ tr, state, hunks }) => {
         continue;
       }
       const livePos = tr.mapping.map(hunk.basePos);
-      const tableNode = tr.doc.nodeAt(livePos);
-      if (!tableNode || tableNode.type.name !== 'table') {
-        warnings.push(`No table at pos ${hunk.basePos} for remove hunk ${hunk.changeId}`);
+      const node = tr.doc.nodeAt(livePos);
+      if (!node) {
+        warnings.push(`No node at pos ${hunk.basePos} for remove hunk ${hunk.changeId}`);
         continue;
       }
-      let rowPos = livePos + 1;
-      for (let i = 0; i < tableNode.childCount; i += 1) {
-        const row = tableNode.child(i);
-        if (row.type.name === 'tableRow') {
-          tr.setNodeMarkup(rowPos, null, {
-            ...row.attrs,
-            trackChange: { type: 'rowDelete', id: uuidv4(), operationId },
-          });
+      if (node.type.name === 'table') {
+        // Tables delete per-row: PM's `tableRow+` content schema can't carry a
+        // table-level trackChange, so every row gets the shared operationId.
+        let rowPos = livePos + 1;
+        for (let i = 0; i < node.childCount; i += 1) {
+          const row = node.child(i);
+          if (row.type.name === 'tableRow') {
+            tr.setNodeMarkup(rowPos, null, {
+              ...row.attrs,
+              trackChange: { type: 'rowDelete', id: uuidv4(), operationId },
+            });
+          }
+          rowPos += row.nodeSize;
         }
-        rowPos += row.nodeSize;
+      } else {
+        // Non-table block (paragraph, heading, …): stamp the block node itself
+        // with the canonical `{ kind }` shape. Accept removes the whole node;
+        // reject strips the attr (see acceptRejectRowTrackedChange).
+        tr.setNodeMarkup(livePos, null, {
+          ...node.attrs,
+          trackChange: { kind: 'delete', id: uuidv4(), operationId },
+        });
       }
       applied += 1;
       continue;
@@ -79,22 +91,33 @@ export const applyHunks = ({ tr, state, hunks }) => {
         warnings.push(`Missing anchorBasePos for insert hunk ${hunk.changeId}`);
         continue;
       }
-      const trackedRows = [];
-      proposal.content.forEach((row) => {
-        if (row.type.name !== 'tableRow') {
-          trackedRows.push(row);
-          return;
-        }
-        trackedRows.push(
-          row.type.create(
-            { ...row.attrs, trackChange: { type: 'rowInsert', id: uuidv4(), operationId } },
-            row.content,
-            row.marks,
-          ),
+      let trackedNode;
+      if (proposal.type.name === 'table') {
+        // Tables premark every row (no table-level trackChange slot).
+        const trackedRows = [];
+        proposal.content.forEach((row) => {
+          if (row.type.name !== 'tableRow') {
+            trackedRows.push(row);
+            return;
+          }
+          trackedRows.push(
+            row.type.create(
+              { ...row.attrs, trackChange: { type: 'rowInsert', id: uuidv4(), operationId } },
+              row.content,
+              row.marks,
+            ),
+          );
+        });
+        trackedNode = proposal.type.create(proposal.attrs, Fragment.fromArray(trackedRows), proposal.marks);
+      } else {
+        // Non-table block: stamp the block node itself.
+        trackedNode = proposal.type.create(
+          { ...proposal.attrs, trackChange: { kind: 'insert', id: uuidv4(), operationId } },
+          proposal.content,
+          proposal.marks,
         );
-      });
-      const trackedTable = proposal.type.create(proposal.attrs, Fragment.fromArray(trackedRows), proposal.marks);
-      tr.insert(tr.mapping.map(hunk.anchorBasePos), trackedTable);
+      }
+      tr.insert(tr.mapping.map(hunk.anchorBasePos), trackedNode);
       applied += 1;
       continue;
     }

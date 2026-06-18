@@ -33,7 +33,11 @@ import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
 import { trackedChangesCompatible, applyMarksToRun, collectTrackedChangeFromMarks } from '../marks/index.js';
-import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
+import {
+  applyTrackedChangesModeToRuns,
+  annotateBlockWithTrackedChange,
+  buildBlockTrackedChangeMetaFromAttr,
+} from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs, hasExplicitParagraphRunProperties } from '../attributes/paragraph.js';
@@ -606,6 +610,14 @@ export function paragraphToFlowBlocks({
   const defaultSize =
     usePreviousFont && previousParagraphFont.fontSize ? previousParagraphFont.fontSize : extracted.defaultSize;
 
+  // Whole-paragraph structural tracked change (insert/delete) stamped on the
+  // PM node's `trackChange` attr by applyHunks. Surfaced only when tracked
+  // changes are enabled and not 'off', matching the row + inline-mark paths.
+  const blockTrackedChange =
+    trackedChangesConfig?.enabled && trackedChangesConfig.mode !== 'off'
+      ? buildBlockTrackedChangeMetaFromAttr(para.attrs as Record<string, unknown> | undefined, storyKey)
+      : undefined;
+
   const finalizeParagraphBlocks = (outputBlocks: FlowBlock[]): FlowBlock[] => {
     outputBlocks.forEach((block) => {
       if (block.kind === 'paragraph') {
@@ -614,6 +626,7 @@ export function paragraphToFlowBlocks({
           converterContext,
           para,
         });
+        annotateBlockWithTrackedChange(block, blockTrackedChange, trackedChangesConfig);
       }
     });
     return outputBlocks;

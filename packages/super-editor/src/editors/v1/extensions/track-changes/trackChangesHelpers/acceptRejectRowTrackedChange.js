@@ -50,15 +50,18 @@ export const applyRowTrackedChangeResolution = ({ tr, state, ids, decision }) =>
       continue;
     }
 
-    // Delete the row. If it's the only row in its parent table, delete the
-    // table too (PM's tableRow+ content schema would otherwise reject an
-    // empty table).
+    // Delete the node. For a table row, if it's the only row in its parent
+    // table, delete the table too (PM's tableRow+ content schema would
+    // otherwise reject an empty table). A top-level block (e.g. a paragraph)
+    // resolves at depth 0 — `$pos.before(0)` throws ("no position before the
+    // top-level node"), so only consult the parent when the node is nested.
     const $pos = tr.doc.resolve(livePos);
-    const parent = $pos.node($pos.depth);
-    const parentPos = $pos.before($pos.depth);
-    const isLastRowInTable = parent.type.name === 'table' && parent.childCount === 1;
+    const depth = $pos.depth;
+    const parent = depth > 0 ? $pos.node(depth) : null;
+    const isLastRowInTable = parent?.type.name === 'table' && parent.childCount === 1;
 
     if (isLastRowInTable) {
+      const parentPos = $pos.before(depth);
       tr.delete(parentPos, parentPos + parent.nodeSize);
     } else {
       tr.delete(livePos, livePos + liveNode.nodeSize);

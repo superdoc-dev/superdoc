@@ -125,6 +125,62 @@ describe('chartNodeToDrawingBlock', () => {
     expect(result.anchor!.offsetV).toBe(36);
   });
 
+  it('keeps offset-only chart anchors offset-only', () => {
+    const node = makeNode({
+      chartData: { chartType: 'barChart', series: [] },
+      isAnchor: true,
+      anchorData: {
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 24,
+        offsetV: 36,
+      },
+    });
+
+    const result = chartNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap);
+
+    expect(result.anchor).toEqual({
+      isAnchored: true,
+      hRelativeFrom: 'column',
+      vRelativeFrom: 'paragraph',
+      offsetH: 24,
+      offsetV: 36,
+    });
+  });
+
+  it('preserves authored chart alignment and behindDoc fallback', () => {
+    const node = makeNode({
+      chartData: { chartType: 'barChart', series: [] },
+      isAnchor: true,
+      anchorData: {
+        hRelativeFrom: 'margin',
+        vRelativeFrom: 'page',
+        alignH: 'center',
+        alignV: 'bottom',
+        offsetH: 12,
+        offsetV: 18,
+      },
+      originalAttributes: {
+        behindDoc: '1',
+        relativeHeight: 251660288,
+      },
+    });
+
+    const result = chartNodeToDrawingBlock(node, mockBlockIdGenerator, mockPositionMap);
+
+    expect(result.anchor).toEqual({
+      isAnchored: true,
+      hRelativeFrom: 'margin',
+      vRelativeFrom: 'page',
+      alignH: 'center',
+      alignV: 'bottom',
+      offsetH: 12,
+      offsetV: 18,
+      behindDoc: true,
+    });
+    expect(result.zIndex).toBe(0);
+  });
+
   it('produces no anchor when anchorData is absent and isAnchor is false', () => {
     const node = makeNode({ chartData: { chartType: 'barChart', series: [] } });
 

@@ -3,10 +3,14 @@ import type { Editor } from '../../core/Editor.js';
 import type { BlockNodeAttributes } from '../../core/types/NodeCategories.js';
 import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@superdoc/document-api';
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
-import { toId } from './value-utils.js';
+import { toId, toFiniteNumber } from './value-utils.js';
 import { resolvePublicTocNodeId } from './toc-node-id.js';
 import { buildFallbackBlockNodeId, isVolatileRuntimeBlockId } from './deterministic-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import {
+  toIdentityValue,
+  getBlockIdentityAttrsForType,
+} from '../../core/super-converter/v2/importer/block-identity-renaming.js';
 
 /** Superset of all possible ID attributes across block node types. */
 type BlockIdAttrs = BlockNodeAttributes & {
@@ -26,15 +30,48 @@ export type BlockCandidate = {
 };
 
 /**
+ * One observation of an explicit block-identity attribute value on a node.
+ *
+ * Collected during {@link buildBlockIndex}'s descendants pass as a side channel
+ * so the runtime identity-repair planner (`repair-block-identities.ts`) does
+ * not need to walk the document a second time.
+ */
+export type ExplicitIdentityObservation = {
+  /** PM document position of the node carrying the identity attr. */
+  pos: number;
+  /** The identity attr names that contributed this value on this node (e.g. `paraId`, `sdBlockId`). */
+  attrs: string[];
+};
+
+/**
+ * Side-channel map of explicit block-identity values observed during
+ * {@link buildBlockIndex}'s descendants pass.
+ *
+ * Keyed by the identity *value* (e.g. a `paraId` string). Each entry records
+ * every node that exposes that value plus the specific identity attrs that
+ * carried it. When the array length is 1, the value is unique in the doc;
+ * length > 1 indicates a duplicate to be repaired.
+ *
+ * Consumed by `repair-block-identities.ts` to short-circuit the clean-doc
+ * early-exit in O(map size) rather than walking the whole doc again.
+ */
+export type ExplicitIdentityMap = Map<string, ExplicitIdentityObservation[]>;
+
+/**
  * Positional index of all block-level nodes in the document.
  *
  * Built by {@link buildBlockIndex}. The index is a snapshot — it must be
  * rebuilt after any document mutation.
+ *
+ * `explicitIdentities` is a side channel populated during the same descendants
+ * pass for the runtime identity-repair planner; it is `undefined` only on
+ * mock/test BlockIndex instances that construct the type by hand.
  */
 export type BlockIndex = {
   candidates: BlockCandidate[];
   byId: Map<string, BlockCandidate>;
   ambiguous: ReadonlySet<string>;
+  explicitIdentities?: ExplicitIdentityMap;
 };
 
 type TraversalPath = readonly number[];
@@ -64,7 +101,14 @@ export function isSupportedNodeType(nodeType: NodeType | 'text'): nodeType is Bl
 
 function isListItem(attrs: ParagraphAttrs | null | undefined): boolean {
   const numbering = attrs?.paragraphProperties?.numberingProperties;
-  if (numbering && (numbering.numId != null || numbering.ilvl != null)) return true;
+  if (numbering) {
+    const numId = toFiniteNumber(numbering.numId);
+    // numId 0 is the OOXML no-numbering sentinel (ECMA-376 17.9.18): it cancels
+    // numbering, so it does not make the paragraph a list item. Keep this in
+    // lockstep with blocks.list's extractBlockNumbering.
+    if (numId != null && numId !== 0) return true;
+    if (numId == null && numbering.ilvl != null) return true;
+  }
   const listRendering = attrs?.listRendering;
   if (listRendering?.markerText) return true;
   if (Array.isArray(listRendering?.path) && listRendering.path.length > 0) return true;
@@ -266,6 +310,12 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   const byId = new Map<string, BlockCandidate>();
   const ambiguous = new Set<string>();
   const pathByNode = new WeakMap<ProseMirrorNode, TraversalPath>();
+  // Side channel for the runtime identity-repair planner.
+  // Populated inline with the existing block walk so a clean 1000-page doc
+  // pays one cheap Map lookup per block instead of a second full descendants
+  // traversal in `repair-block-identities.ts`. Keyed by identity-attr value;
+  // the array length acts as the "duplicates present?" signal.
+  const explicitIdentities: ExplicitIdentityMap = new Map();
 
   pathByNode.set(editor.state.doc, []);
 
@@ -275,6 +325,39 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
       byId.delete(key);
     } else if (!ambiguous.has(key)) {
       byId.set(key, candidate);
+    }
+  }
+
+  function recordExplicitIdentities(node: ProseMirrorNode, pos: number): void {
+    const attrPriority = getBlockIdentityAttrsForType(node.type?.name);
+    if (attrPriority.length === 0) return;
+    const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+
+    // Group identity attrs by value at the node level so `paraId === sdBlockId`
+    // contributes a single observation listing both attr names — matching the
+    // grouping the renaming pass needs to rewrite both fields together.
+    let nodeGroups: Map<string, string[]> | undefined;
+    for (const attr of attrPriority) {
+      const value = toIdentityValue(attrs[attr]);
+      if (!value) continue;
+      if (!nodeGroups) nodeGroups = new Map();
+      const existing = nodeGroups.get(value);
+      if (existing) {
+        existing.push(attr);
+      } else {
+        nodeGroups.set(value, [attr]);
+      }
+    }
+    if (!nodeGroups) return;
+
+    for (const [value, attrsForValue] of nodeGroups) {
+      const observations = explicitIdentities.get(value);
+      const observation: ExplicitIdentityObservation = { pos, attrs: attrsForValue };
+      if (observations) {
+        observations.push(observation);
+      } else {
+        explicitIdentities.set(value, [observation]);
+      }
     }
   }
 
@@ -289,6 +372,12 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     if (path) {
       pathByNode.set(node, path);
     }
+
+    // Collect identity observations BEFORE the block-type gate so that the
+    // repair planner sees every PM type with identity attrs — even those
+    // `mapBlockNodeType` filters out (e.g., a `structuredContentBlock` is
+    // mapped to `sdt`, but the identity attrs live on the raw PM node).
+    recordExplicitIdentities(node, pos);
 
     const nodeType = mapBlockNodeType(node);
     if (!nodeType) return;
@@ -316,7 +405,7 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     }
   });
 
-  return { candidates, byId, ambiguous };
+  return { candidates, byId, ambiguous, explicitIdentities };
 }
 
 /**

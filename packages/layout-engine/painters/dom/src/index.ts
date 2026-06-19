@@ -14,6 +14,13 @@ import type {
 export { DOM_CLASS_NAMES } from './constants.js';
 export type { DomClassName } from './constants.js';
 
+// Re-export the document-surface CSS injector so hosts can
+// pre-stamp the page color/foreground isolation reset at mount time, before
+// the first paint runs. The painter still calls this on every paint, but
+// pre-injection guarantees the reset is present even if a host renders a
+// custom shell before the first paint completes.
+export { ensureDocumentSurfaceStyles } from './styles.js';
+
 // Re-export ruler utilities
 export {
   generateRulerDefinition,
@@ -104,6 +111,13 @@ export type DomPainterOptions = {
   showFormattingMarks?: boolean;
   /** Built-in SDT chrome rendering mode. */
   contentControlsChrome?: 'default' | 'none';
+  /**
+   * Per-document logical->physical font resolver (a CSS-stack resolver). The painter paints each
+   * run in the family this returns - e.g. Carlito for Calibri - the SAME family measurement used,
+   * so glyph advances match the laid-out positions. Set per painter instance (per document) so two
+   * editors can map one logical family differently. Defaults to the global bundled resolver.
+   */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 export type DomPainterHandle = {
@@ -115,6 +129,7 @@ export type DomPainterHandle = {
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
   setShowFormattingMarks(showFormattingMarks: boolean): void;
+  dispose(): void;
 };
 
 /**
@@ -151,6 +166,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setShowFormattingMarks(showFormattingMarks: boolean) {
       painter.setShowFormattingMarks(showFormattingMarks);
+    },
+    dispose() {
+      painter.dispose();
     },
   };
 };

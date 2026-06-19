@@ -31,5 +31,8 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@docfonts/fallbacks": "0.16.0"
   }
 }

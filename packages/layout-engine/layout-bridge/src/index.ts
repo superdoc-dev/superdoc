@@ -80,7 +80,7 @@ export type {
   SectionAwareHeaderFooterMeasurementGroup,
 } from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
-export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
+export type { HeaderFooterLayoutResult, IncrementalLayoutResult, FootnoteReserveSeed } from './incrementalLayout';
 export {
   collectFootnoteLedgers,
   getPreferredReserveCandidates,
@@ -106,6 +106,8 @@ export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionLogger } from './instrumentation';
+export { hitTestTextboxFragment, resolveTextboxContentHit } from './position-hit.js';
+export type { TextboxHitResult } from './position-hit.js';
 
 // Font Metrics Cache
 export { FontMetricsCache } from './font-metrics-cache';
@@ -572,6 +574,38 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
 // calculatePageTopFallback is now in position-hit.ts and re-exported above.
 
 /**
+ * SD-3328: an empty paragraph / blank line that the selection passes through is a
+ * zero-width slice (`pmStart === pmEnd`). `findLinesIntersectingRange` only yields
+ * such a line when `from < pos < to`, so it is genuinely spanned and must be
+ * highlighted. Emit a content-width band so the selection highlight stays
+ * continuous across the blank line — the same as selecting any text. Without this
+ * the band shows a gap and the highlight appears to "disappear" while a drag
+ * crosses a blank line (reported in body paragraphs and inside table cells).
+ */
+function pushEmptyLineSelectionBand(
+  rects: Rect[],
+  opts: {
+    x: number;
+    yBase: number;
+    width: number;
+    lineHeight: number;
+    pageIndex: number;
+    measure: ParagraphMeasure;
+    lineIndex: number;
+    startLineIndex: number;
+  },
+): void {
+  const lineOffset = sumLineHeights(opts.measure, opts.startLineIndex, opts.lineIndex);
+  rects.push({
+    x: opts.x,
+    y: opts.yBase + lineOffset,
+    width: Math.max(1, opts.width),
+    height: opts.lineHeight,
+    pageIndex: opts.pageIndex,
+  });
+}
+
+/**
  * Given a PM range [from, to), return selection rectangles for highlighting.
  *
  * @param layout - The layout containing page and fragment data
@@ -623,7 +657,20 @@ export function selectionToRects(
           if (range.pmStart == null || range.pmEnd == null) return;
           const sliceFrom = Math.max(range.pmStart, from);
           const sliceTo = Math.min(range.pmEnd, to);
-          if (sliceFrom >= sliceTo) return;
+          if (sliceFrom >= sliceTo) {
+            // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
+            pushEmptyLineSelectionBand(rects, {
+              x: fragment.x,
+              yBase: fragment.y + pageTopY,
+              width: fragment.width,
+              lineHeight: line.lineHeight,
+              pageIndex,
+              measure,
+              lineIndex: index,
+              startLineIndex: fragment.fromLine,
+            });
+            return;
+          }
 
           // Convert PM positions to character offsets properly
           // (accounts for gaps in PM positions between runs)
@@ -963,7 +1010,21 @@ export function selectionToRects(
                 if (range.pmStart == null || range.pmEnd == null) return;
                 const sliceFrom = Math.max(range.pmStart, from);
                 const sliceTo = Math.min(range.pmEnd, to);
-                if (sliceFrom >= sliceTo) return;
+                if (sliceFrom >= sliceTo) {
+                  // SD-3328: blank line spanned by the selection — see pushEmptyLineSelectionBand.
+                  pushEmptyLineSelectionBand(rects, {
+                    x: fragment.x + contentOffsetX + cellX + padding.left,
+                    yBase:
+                      fragment.y + contentOffsetY + rowOffset + blockTopCursor + effectiveSpacingBeforePx + pageTopY,
+                    width: cellMeasure.width - padding.left - padding.right,
+                    lineHeight: line.lineHeight,
+                    pageIndex,
+                    measure: info.measure,
+                    lineIndex: index,
+                    startLineIndex: info.startLine,
+                  });
+                  return;
+                }
 
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);

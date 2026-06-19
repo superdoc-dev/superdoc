@@ -2,14 +2,19 @@ import {
   getFontRegistryFor,
   bumpFontConfigVersion,
   buildFontReport,
+  buildFaceReport,
+  buildDocumentFontOptions,
   DEFAULT_FONT_LOAD_TIMEOUT_MS,
   type FontRegistry,
   type FontLoadResult,
   type FontFaceRequest,
   type FontFaceLoadResult,
   type FontLoadSummary,
+  type UsedFace,
+  type DocumentFontOption,
   type FontLoadStatus,
   type FontResolutionRecord,
+  type FontResolver,
 } from '@superdoc/font-system';
 
 export type { FontLoadSummary } from '@superdoc/font-system';
@@ -40,6 +45,11 @@ export interface FontReadinessGateOptions {
    * path when omitted (tests / non-layout callers).
    */
   getRequiredFaces?: () => FontFaceRequest[];
+  /**
+   * The logical faces (family + weight + style) the document RENDERS, for the face-level report.
+   * From the same stored render plan as {@link getRequiredFaces}, so report and load agree.
+   */
+  getUsedFaces?: () => UsedFace[];
   /** Trigger a re-measure + re-layout + repaint (PresentationEditor's immediate render). */
   requestReflow: () => void;
   /**
@@ -55,6 +65,13 @@ export interface FontReadinessGateOptions {
    * Defaults to identity when not provided; the editor wires `resolvePhysicalFamilies`.
    */
   resolveFamilies?: (families: string[]) => string[];
+  /**
+   * The document's font resolver. When provided, `resolveFamilies` defaults to it and the
+   * report resolves through it, so the gate honors a per-document `fonts.map`. Measure and paint
+   * (text runs and field-annotation pills) resolve through the same instance, so load, measure,
+   * paint, and diagnostics all agree.
+   */
+  fontResolver?: FontResolver;
   /** Per-font load budget before a face is treated as timed out. */
   timeoutMs?: number;
   /** Explicit registry override (tests). Normally derived from the font environment. */
@@ -96,7 +113,9 @@ export interface FontReadinessGateOptions {
 export class FontReadinessGate {
   readonly #getDocumentFonts: () => string[];
   readonly #getRequiredFaces: (() => FontFaceRequest[]) | null;
+  readonly #getUsedFaces: (() => UsedFace[]) | null;
   readonly #resolveFamilies: (families: string[]) => string[];
+  readonly #fontResolver: FontResolver | null;
   readonly #requestReflow: () => void;
   readonly #getFontEnvironment: () => FontEnvironment | null;
   readonly #registryOverride: FontRegistry | null;
@@ -106,6 +125,8 @@ export class FontReadinessGate {
 
   /** Resolved once a real font set is available: the watched set + its registry, paired. */
   #context: { fontSet: FontFaceSet | null; registry: FontRegistry } | null = null;
+  /** The registry instance the bundled pack was installed into, so it installs once per registry. */
+  #packInstalledFor: FontRegistry | null = null;
 
   #fontConfigVersion = 0;
   #requiredSignature = '';
@@ -116,6 +137,9 @@ export class FontReadinessGate {
   readonly #seenAvailable = new Set<string>();
   /** Face keys observed available, so the face-path late-load handler fires once per face. */
   readonly #seenAvailableFaces = new Set<string>();
+  /** Face keys observed terminally FAILED, so the failure-demotion replan fires at most once per face
+   *  (and cannot loop when the bundled clone it steps down to also fails). */
+  readonly #seenFailedFaces = new Set<string>();
   #lastSummary: FontLoadSummary | null = null;
   #loadingDoneHandler: ((event: FontFaceSetLoadEvent) => void) | null = null;
   /** Batches late-load reflows so many font arrivals coalesce into bounded re-measures. */
@@ -124,7 +148,12 @@ export class FontReadinessGate {
   constructor(options: FontReadinessGateOptions) {
     this.#getDocumentFonts = options.getDocumentFonts;
     this.#getRequiredFaces = options.getRequiredFaces ?? null;
-    this.#resolveFamilies = options.resolveFamilies ?? ((families) => families);
+    this.#getUsedFaces = options.getUsedFaces ?? null;
+    this.#fontResolver = options.fontResolver ?? null;
+    const resolver = this.#fontResolver;
+    this.#resolveFamilies =
+      options.resolveFamilies ??
+      (resolver ? (families) => resolver.resolvePhysicalFamilies(families) : (families) => families);
     this.#requestReflow = options.requestReflow;
     this.#getFontEnvironment = options.getFontEnvironment ?? defaultFontEnvironment;
     this.#registryOverride = options.registry ?? null;
@@ -161,13 +190,43 @@ export class FontReadinessGate {
    * exactly what was measured and painted - not an independent computation.
    */
   getReport(): FontResolutionRecord[] {
-    let logical: string[] = [];
+    let declared: string[] = [];
     try {
-      logical = this.#getDocumentFonts();
+      declared = this.#getDocumentFonts();
     } catch {
       return [];
     }
-    return buildFontReport(logical, this.#resolveContext().registry);
+    const registry = this.#resolveContext().registry;
+    const resolver = this.#fontResolver ?? undefined;
+    // Face-level rows for the faces the document actually RENDERS, so a substitute that lacks a face
+    // is reported `fallback_face_absent` per face (e.g. Baskerville Bold), from the stored plan's
+    // usedFaces - the same plan the load gate awaited.
+    const usedFaces = this.#getUsedFaces?.() ?? [];
+    const faceRows = buildFaceReport(usedFaces, registry, resolver);
+    // Preserve the DECLARED-font contract: a family declared but never rendered must still appear.
+    // Add a family-level row (face undefined) for each declared family absent from the used faces -
+    // NOT a synthetic Regular row (that would imply a Regular run rendered).
+    const usedFamilies = new Set(usedFaces.map((u) => u.logicalFamily.toLowerCase()));
+    const declaredOnly = declared.filter((family) => family && !usedFamilies.has(family.toLowerCase()));
+    const declaredRows = buildFontReport(declaredOnly, registry, resolver);
+    return [...faceRows, ...declaredRows];
+  }
+
+  /**
+   * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
+   * the document RENDERS, each with the family to preview it in. These are DOCUMENT fonts only - the
+   * toolbar composes them with its defaults. Built through the same registry + resolver + used faces as
+   * {@link getReport}. Never throws (font UI must not break layout): returns [] before the plan exists.
+   */
+  getDocumentFontOptions(): DocumentFontOption[] {
+    try {
+      const usedFaces = this.#getUsedFaces?.() ?? [];
+      if (!usedFaces.length) return [];
+      const { registry } = this.#resolveContext();
+      return buildDocumentFontOptions(usedFaces, registry, this.#fontResolver ?? undefined);
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -219,11 +278,22 @@ export class FontReadinessGate {
       results = [];
     }
 
+    const failedKeys: string[] = [];
     for (const result of results) {
+      const key = faceKeyOf(result.request.family, result.request.weight, result.request.style);
       if (result.status === 'loaded') {
-        this.#seenAvailableFaces.add(faceKeyOf(result.request.family, result.request.weight, result.request.style));
+        this.#seenAvailableFaces.add(key);
+      } else if (result.status === 'failed' && !this.#seenFailedFaces.has(key)) {
+        // A registered provider face whose asset terminally FAILED to load. `registry.hasFace` now
+        // demotes it, so a replan re-resolves these runs to the bundled metric clone instead of leaving
+        // the document on a broken registered face for the session. Fire once per face (seenFailed) so
+        // it cannot loop if the clone it steps down to also fails. NOT done for `timed_out` - a slow
+        // face is recovered by the late-load reflow, and demoting it would strand the real font.
+        this.#seenFailedFaces.add(key);
+        failedKeys.push(key);
       }
     }
+    if (failedKeys.length > 0) this.#scheduleAvailabilityReflow(failedKeys);
     this.#lastSummary = summarizeFaces(results);
     return this.#lastSummary;
   }
@@ -266,19 +336,59 @@ export class FontReadinessGate {
   }
 
   /**
-   * Signal that the font configuration changed at runtime (customer add/map, T7). Bumps
-   * the epoch, invalidates measurement caches, and reflows so the new mapping takes effect.
+   * Signal that this document's font CONFIG changed at runtime (`fonts.map`/`unmap`/`add`). Always
+   * bumps the gate's LOCAL version (so `fonts-changed` re-emits), re-plans the required set, cancels
+   * any pending late-load reflow, and reflows THIS document.
+   *
+   * A MAPPING change (`map`/`unmap`) is document-local: it moves the per-document resolver signature,
+   * which already busts this document's measure/paint cache keys, so no global work is needed and
+   * other editors are untouched. A REGISTRATION (`fonts.add`, signalled by `availabilityChanged`)
+   * changes which faces are AVAILABLE without moving the signature, and the measurement caches are
+   * availability-blind (the block cache keys on the unchanged signature; the metric cache keys on
+   * `family|size|bold|italic`). It is therefore handled like a late load - bump the GLOBAL epoch and
+   * clear the shared caches (see the body) - otherwise the reflow re-measures a now-loadable family
+   * against its stale fallback widths. The controller coalesces a same-tick `add` + `map` into one
+   * call with `availabilityChanged: true`.
    */
-  notifyFontConfigChanged(): void {
+  notifyDocumentFontConfigChanged(options?: { availabilityChanged?: boolean }): void {
     this.#fontConfigVersion += 1;
-    bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
     // Reset the required + seen sets so an in-flight `loadingdone` can't re-arm a reflow for a
     // face this immediate reflow already corrects; the next pass re-plans from scratch.
     this.#resetRequiredAndSeen();
     // Drop any pending batched late-load reflow: this immediate reflow supersedes it.
     this.#lateLoadScheduler.cancel();
-    this.#invalidateCaches();
+    if (options?.availabilityChanged) {
+      // A registration changed font availability without moving the resolver signature, so the
+      // signature cannot bust the caches. Mirror the late-load correction: bump the global epoch
+      // (so paint reuse busts here and in any other editor already showing that family) and clear
+      // the shared measurement caches before the reflow re-measures against the now-loadable font.
+      bumpFontConfigVersion();
+      this.#invalidateCaches();
+    }
     this.#requestReflow();
+  }
+
+  /**
+   * Clear the shared measurement caches for a CONFIG-TIME font registration (applied before the
+   * first layout). Like a runtime `fonts.add`, a registration changes which faces are available
+   * without moving the resolver signature, so the signature cannot bust the caches; but unlike the
+   * runtime path this runs before first paint, so it must NOT reflow, emit, or bump any epoch. It
+   * only clears stale entries so this document's first measure can't reuse a fallback width that
+   * another editor instance with identical block content left in the global cache. Other editors are
+   * corrected when the face actually loads (`#onLoadingDone`); this document measures fresh next.
+   */
+  invalidateCachesForConfigRegistration(): void {
+    this.#invalidateCaches();
+  }
+
+  /**
+   * This document's FontRegistry, resolving the font environment on first call (and installing
+   * the bundled pack via `onRegistryResolved`). The document font controller uses it to register
+   * customer faces (`fonts.add`) and to load families (`fonts.preload`). The registry is scoped to
+   * this document's FontFaceSet, so registrations are shared per browser document, not per editor.
+   */
+  resolveRegistry(): FontRegistry {
+    return this.#resolveContext().registry;
   }
 
   /**
@@ -300,6 +410,7 @@ export class FontReadinessGate {
     this.#requiredFamilies = new Set();
     this.#seenAvailable.clear();
     this.#seenAvailableFaces.clear();
+    this.#seenFailedFaces.clear();
     this.#lastSummary = null;
   }
 
@@ -326,9 +437,16 @@ export class FontReadinessGate {
         (env?.FontFaceCtor ?? null) as unknown as FontFaceCtorArg,
       );
     this.#context = { fontSet, registry };
-    // Let the editor install the bundled substitute pack into the registry once a real
-    // font set exists. Kept out of the gate so the gate never imports the font assets.
-    if (fontSet && this.#onRegistryResolved) {
+    // Invoke the registry-resolved callback whenever a registry resolves - even WITHOUT a real font
+    // set. The injected callback (the editor) decides whether to install the bundled pack; when it
+    // does, the pack registers face METADATA (family + weight + style), which is what `hasFace` reads
+    // to decide whether a substitute provides a face. LOADING needs a font set, but face AVAILABILITY
+    // must not - so a configured pack resolves substitutes for measure even where `document.fonts` is
+    // absent (SSR/jsdom, some iframe/embedded timings). Guarded per registry instance so it fires once
+    // (the domless registry is a singleton; a real font set's registry is cached). Kept out of the
+    // gate's imports - the editor injects the installer so the gate never imports the font assets.
+    if (this.#onRegistryResolved && registry !== this.#packInstalledFor) {
+      this.#packInstalledFor = registry;
       try {
         this.#onRegistryResolved(registry);
       } catch {
@@ -385,11 +503,18 @@ export class FontReadinessGate {
     }
 
     if (changedKeys.length === 0) return;
-    // The available-font picture changed NOW, so bump the epoch and clear the measurement
-    // caches immediately - measure caches are keyed without the epoch (fontMetricsCache is
-    // `family|size|bold|italic`), so this explicit clear is the only thing that busts them,
-    // and any re-measure/paint before the batched reflow must already see the loaded font.
-    // Only the expensive full reflow is deferred to the scheduler so arrival waves coalesce.
+    this.#scheduleAvailabilityReflow(changedKeys);
+  }
+
+  /**
+   * The available-font picture changed (a required face loaded LATE, or a registered face terminally
+   * FAILED so it must demote to the bundled clone). Bump the epoch and clear the measurement caches
+   * immediately - measure caches are keyed without the epoch (`family|size|bold|italic`), so this
+   * explicit clear is the only thing that busts them, and any re-measure/paint before the batched
+   * reflow must already see the corrected resolution. Only the expensive full reflow is deferred to the
+   * scheduler so arrival/failure waves coalesce.
+   */
+  #scheduleAvailabilityReflow(changedKeys: string[]): void {
     this.#fontConfigVersion += 1;
     bumpFontConfigVersion(); // bump the global epoch so paint reuse signatures bust
     this.#invalidateCaches();

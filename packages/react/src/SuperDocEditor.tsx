@@ -20,6 +20,8 @@ import type {
   SuperDocTransactionEvent,
   SuperDocContentErrorEvent,
   SuperDocExceptionEvent,
+  SuperDocZoomChangeEvent,
+  SuperDocViewportChangeEvent,
 } from './types';
 
 /**
@@ -50,11 +52,15 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onTransaction,
     onContentError,
     onException,
+    onZoomChange,
+    onViewportChange,
     // Key props that trigger rebuild when changed
     document: documentProp,
     user: userProp,
     users: usersProp,
     modules,
+    editorVersion,
+    editorIntegration,
     // All other props passed through
     ...restProps
   } = props;
@@ -90,6 +96,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     onTransaction,
     onContentError,
     onException,
+    onZoomChange,
+    onViewportChange,
   });
 
   // Update callback refs when props change
@@ -102,8 +110,20 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       onTransaction,
       onContentError,
       onException,
+      onZoomChange,
+      onViewportChange,
     };
-  }, [onReady, onEditorCreate, onEditorDestroy, onEditorUpdate, onTransaction, onContentError, onException]);
+  }, [
+    onReady,
+    onEditorCreate,
+    onEditorDestroy,
+    onEditorUpdate,
+    onTransaction,
+    onContentError,
+    onException,
+    onZoomChange,
+    onViewportChange,
+  ]);
 
   // Queue mode changes that happen during init
   const pendingModeRef = useRef<DocumentMode | null>(null);
@@ -166,6 +186,8 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
           ...(user ? { user } : {}),
           ...(users ? { users } : {}),
           ...(modules ? { modules } : {}),
+          ...(editorVersion != null ? { editorVersion } : {}),
+          ...(editorIntegration != null ? { editorIntegration } : {}),
           // Wire up callbacks with lifecycle guards
           onReady: (event: SuperDocReadyEvent) => {
             if (!destroyed) {
@@ -211,6 +233,16 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
               callbacksRef.current.onException?.(event);
             }
           },
+          onZoomChange: (event: SuperDocZoomChangeEvent) => {
+            if (!destroyed) {
+              callbacksRef.current.onZoomChange?.(event);
+            }
+          },
+          onViewportChange: (event: SuperDocViewportChangeEvent) => {
+            if (!destroyed) {
+              callbacksRef.current.onViewportChange?.(event);
+            }
+          },
         };
 
         instance = new SuperDoc(superdocConfig) as SuperDocInstance;
@@ -242,7 +274,19 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     // initial values — use getInstance() methods to change them at runtime.
     // restProps is intentionally excluded to avoid rebuilds on every render.
     // documentMode is handled separately via setDocumentMode() for efficiency.
-  }, [documentProp, user, users, modules, role, hideToolbar, contained, containerId, toolbarId]);
+  }, [
+    documentProp,
+    user,
+    users,
+    modules,
+    role,
+    hideToolbar,
+    contained,
+    editorVersion,
+    editorIntegration,
+    containerId,
+    toolbarId,
+  ]);
 
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
   const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;

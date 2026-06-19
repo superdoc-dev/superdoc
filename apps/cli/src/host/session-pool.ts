@@ -1,7 +1,16 @@
 import { createHash } from 'node:crypto';
 import type { CollaborationProfile } from '../lib/collaboration';
-import { exportToPath, openCollaborativeDocument, openDocument, type OpenedDocument } from '../lib/document';
-import type { CliIO, UserIdentity } from '../lib/types';
+import {
+  loadV2Runtime,
+  openCollaborativeDocument,
+  openDocument,
+  type EditorPassThroughOptions,
+  type FileOutputMeta,
+  type OpenedRuntimeDocument,
+} from '../lib/document';
+import { CliError } from '../lib/errors';
+import type { TrackChangesOpenOptions } from '../lib/context';
+import type { CliIO, DocumentRuntimeKind, UserIdentity } from '../lib/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -16,19 +25,23 @@ const AUTOSAVE_DEBOUNCE_MS = 3_000;
 export type SessionType = 'local' | 'collab';
 
 export interface AcquireMetadata {
+  runtime: DocumentRuntimeKind;
   sessionType: SessionType;
   workingDocPath: string;
   metadataRevision: number;
   user?: UserIdentity;
+  trackChanges?: TrackChangesOpenOptions;
   /** Required for collab sessions. */
   collaboration?: CollaborationProfile;
 }
 
 export interface AdoptMetadata {
+  runtime: DocumentRuntimeKind;
   sessionType: SessionType;
   workingDocPath: string;
   metadataRevision: number;
   collaboration?: CollaborationProfile;
+  trackChanges?: TrackChangesOpenOptions;
 }
 
 export interface DisposeOptions {
@@ -38,18 +51,34 @@ export interface DisposeOptions {
 
 /** Dependencies injectable for testing. */
 export interface SessionPoolDeps {
-  openLocal?: (docPath: string, io: CliIO, options?: { user?: UserIdentity }) => Promise<OpenedDocument>;
+  openLocal?: (
+    docPath: string,
+    io: CliIO,
+    options?: { user?: UserIdentity; editorOpenOptions?: EditorPassThroughOptions },
+  ) => Promise<OpenedRuntimeDocument>;
   openCollaborative?: (
     docPath: string | undefined,
     io: CliIO,
     profile: CollaborationProfile,
-    options?: { user?: UserIdentity },
-  ) => Promise<OpenedDocument>;
-  exportToPath?: (
-    editor: OpenedDocument['editor'],
+    options?: { user?: UserIdentity; editorOpenOptions?: EditorPassThroughOptions },
+  ) => Promise<OpenedRuntimeDocument>;
+  openV2?: (
     docPath: string,
-    overwrite: boolean,
-  ) => Promise<{ path: string; byteLength: number }>;
+    io: CliIO,
+    options?: { user?: UserIdentity; editorOpenOptions?: EditorPassThroughOptions },
+  ) => Promise<OpenedRuntimeDocument>;
+  openV2Collaborative?: (
+    docPath: string | undefined,
+    io: CliIO,
+    profile: CollaborationProfile,
+    options?: { user?: UserIdentity; editorOpenOptions?: EditorPassThroughOptions },
+  ) => Promise<OpenedRuntimeDocument>;
+  /**
+   * Optional override for checkpointing. Receives the runtime-neutral opened
+   * document so v1 and v2 paths can share the contract. The default
+   * implementation calls {@link OpenedRuntimeDocument.exportToPath}.
+   */
+  exportToPath?: (opened: OpenedRuntimeDocument, docPath: string, overwrite: boolean) => Promise<FileOutputMeta>;
   now?: () => number;
   createTimer?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
@@ -60,8 +89,8 @@ export interface SessionPoolDeps {
 // ---------------------------------------------------------------------------
 
 export interface SessionPool {
-  acquire(sessionId: string, metadata: AcquireMetadata, io: CliIO): Promise<OpenedDocument>;
-  adoptFromOpen(sessionId: string, opened: OpenedDocument, metadata: AdoptMetadata): void;
+  acquire(sessionId: string, metadata: AcquireMetadata, io: CliIO): Promise<OpenedRuntimeDocument>;
+  adoptFromOpen(sessionId: string, opened: OpenedRuntimeDocument, metadata: AdoptMetadata): void;
   checkpoint(sessionId: string): Promise<void>;
   checkpointAll(): Promise<void>;
   markDirty(sessionId: string): void;
@@ -128,7 +157,8 @@ function createSessionLocks(): {
 // ---------------------------------------------------------------------------
 
 interface PooledSession {
-  opened: OpenedDocument;
+  opened: OpenedRuntimeDocument;
+  runtime: DocumentRuntimeKind;
   sessionType: SessionType;
   dirty: boolean;
   leased: boolean;
@@ -139,6 +169,7 @@ interface PooledSession {
   autosaveTimer: ReturnType<typeof setTimeout> | null;
   /** Collab-only fields */
   collaboration?: CollaborationProfile;
+  trackChanges?: TrackChangesOpenOptions;
   fingerprint?: string;
 }
 
@@ -152,6 +183,8 @@ export class InMemorySessionPool implements SessionPool {
 
   private readonly openLocal: NonNullable<SessionPoolDeps['openLocal']>;
   private readonly openCollaborative: NonNullable<SessionPoolDeps['openCollaborative']>;
+  private readonly openV2: NonNullable<SessionPoolDeps['openV2']>;
+  private readonly openV2Collaborative: NonNullable<SessionPoolDeps['openV2Collaborative']>;
   private readonly exportToPathFn: NonNullable<SessionPoolDeps['exportToPath']>;
   private readonly now: () => number;
   private readonly createTimer: NonNullable<SessionPoolDeps['createTimer']>;
@@ -160,7 +193,20 @@ export class InMemorySessionPool implements SessionPool {
   constructor(deps: SessionPoolDeps = {}) {
     this.openLocal = deps.openLocal ?? openDocument;
     this.openCollaborative = deps.openCollaborative ?? openCollaborativeDocument;
-    this.exportToPathFn = deps.exportToPath ?? exportToPath;
+    this.openV2 =
+      deps.openV2 ??
+      (async (docPath, io, options) => {
+        const mod = await loadV2Runtime();
+        return mod.openV2Document(docPath, io, options);
+      });
+    this.openV2Collaborative =
+      deps.openV2Collaborative ??
+      (async (docPath, io, profile, options) => {
+        const mod = await loadV2Runtime();
+        return mod.openV2CollaborativeDocument(docPath, io, profile, options);
+      });
+    this.exportToPathFn =
+      deps.exportToPath ?? ((opened, docPath, overwrite) => opened.exportToPath(docPath, overwrite));
     this.now = deps.now ?? Date.now;
     this.createTimer = deps.createTimer ?? setTimeout;
     this.clearTimer = deps.clearTimer ?? clearTimeout;
@@ -170,7 +216,7 @@ export class InMemorySessionPool implements SessionPool {
   // acquire
   // -------------------------------------------------------------------------
 
-  async acquire(sessionId: string, metadata: AcquireMetadata, io: CliIO): Promise<OpenedDocument> {
+  async acquire(sessionId: string, metadata: AcquireMetadata, io: CliIO): Promise<OpenedRuntimeDocument> {
     return this.sessionLocks.withLock(sessionId, async () => {
       const existing = this.sessions.get(sessionId);
 
@@ -197,7 +243,15 @@ export class InMemorySessionPool implements SessionPool {
   // adoptFromOpen
   // -------------------------------------------------------------------------
 
-  adoptFromOpen(sessionId: string, opened: OpenedDocument, metadata: AdoptMetadata): void {
+  adoptFromOpen(sessionId: string, opened: OpenedRuntimeDocument, metadata: AdoptMetadata): void {
+    if (opened.runtime !== metadata.runtime) {
+      throw new CliError(
+        'RUNTIME_MISMATCH',
+        `Session pool adopt: opened runtime '${opened.runtime}' does not match metadata runtime '${metadata.runtime}'.`,
+        { sessionId, openedRuntime: opened.runtime, metadataRuntime: metadata.runtime },
+      );
+    }
+
     const existing = this.sessions.get(sessionId);
     if (existing) {
       this.clearAutosaveTimer(existing);
@@ -206,6 +260,7 @@ export class InMemorySessionPool implements SessionPool {
 
     this.sessions.set(sessionId, {
       opened,
+      runtime: metadata.runtime,
       sessionType: metadata.sessionType,
       dirty: false,
       leased: false,
@@ -224,6 +279,7 @@ export class InMemorySessionPool implements SessionPool {
       lastUsedAtMs: this.now(),
       autosaveTimer: null,
       collaboration: metadata.collaboration,
+      trackChanges: metadata.trackChanges,
       fingerprint: metadata.collaboration ? profileToFingerprint(metadata.collaboration) : undefined,
     });
   }
@@ -314,6 +370,11 @@ export class InMemorySessionPool implements SessionPool {
   // -------------------------------------------------------------------------
 
   private isSessionValid(session: PooledSession, metadata: AcquireMetadata): boolean {
+    // Runtime drift always invalidates: a v1-pooled session cannot honor a
+    // v2 acquire request, and vice versa. Mismatched sessions are destroyed
+    // and reopened in {@link acquire}.
+    if (session.runtime !== metadata.runtime) return false;
+
     if (session.sessionType === 'collab') {
       const incomingFingerprint = metadata.collaboration ? profileToFingerprint(metadata.collaboration) : undefined;
       return session.fingerprint === incomingFingerprint && session.workingDocPath === metadata.workingDocPath;
@@ -324,15 +385,37 @@ export class InMemorySessionPool implements SessionPool {
   }
 
   private async openFreshSession(metadata: AcquireMetadata, io: CliIO): Promise<PooledSession> {
-    const opened =
-      metadata.sessionType === 'collab' && metadata.collaboration
-        ? await this.openCollaborative(metadata.workingDocPath, io, metadata.collaboration, {
-            user: metadata.user,
-          })
-        : await this.openLocal(metadata.workingDocPath, io, { user: metadata.user });
+    let opened: OpenedRuntimeDocument;
+    const editorOpenOptions = metadata.trackChanges
+      ? {
+          trackChanges: metadata.trackChanges,
+          modules: { trackChanges: metadata.trackChanges },
+        }
+      : undefined;
+    if (metadata.runtime === 'v2') {
+      if (metadata.sessionType === 'collab') {
+        if (!metadata.collaboration) {
+          throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
+        }
+        opened = await this.openV2Collaborative(metadata.workingDocPath, io, metadata.collaboration, {
+          user: metadata.user,
+          editorOpenOptions,
+        });
+      } else {
+        opened = await this.openV2(metadata.workingDocPath, io, { user: metadata.user, editorOpenOptions });
+      }
+    } else if (metadata.sessionType === 'collab' && metadata.collaboration) {
+      opened = await this.openCollaborative(metadata.workingDocPath, io, metadata.collaboration, {
+        user: metadata.user,
+        editorOpenOptions,
+      });
+    } else {
+      opened = await this.openLocal(metadata.workingDocPath, io, { user: metadata.user, editorOpenOptions });
+    }
 
     return {
       opened,
+      runtime: metadata.runtime,
       sessionType: metadata.sessionType,
       dirty: false,
       leased: true,
@@ -342,19 +425,31 @@ export class InMemorySessionPool implements SessionPool {
       lastUsedAtMs: this.now(),
       autosaveTimer: null,
       collaboration: metadata.collaboration,
+      trackChanges: metadata.trackChanges,
       fingerprint: metadata.collaboration ? profileToFingerprint(metadata.collaboration) : undefined,
     };
   }
 
-  private createLease(sessionId: string, session: PooledSession): OpenedDocument {
-    return {
-      editor: session.opened.editor,
-      meta: session.opened.meta,
+  private createLease(sessionId: string, session: PooledSession): OpenedRuntimeDocument {
+    const pooled = session.opened;
+    const lease: OpenedRuntimeDocument = {
+      runtime: pooled.runtime,
+      doc: pooled.doc,
+      meta: pooled.meta,
+      exportBytes: (options) => pooled.exportBytes(options),
+      exportToPath: (outputPath, force, options) => pooled.exportToPath(outputPath, force, options),
       dispose: () => {
         session.leased = false;
         session.lastUsedAtMs = this.now();
       },
     };
+    // Preserve the v1 `editor` reference on the lease when present so v1-only
+    // code paths (collab sync helper, headless comment bridge) keep working.
+    // v2 leases never carry an editor.
+    if (pooled.runtime === 'v1' && 'editor' in pooled) {
+      (lease as { editor?: unknown }).editor = (pooled as unknown as { editor: unknown }).editor;
+    }
+    return lease;
   }
 
   /** Checkpoint without acquiring the session lock (caller must hold it). */
@@ -378,14 +473,14 @@ export class InMemorySessionPool implements SessionPool {
   }
 
   private async checkpointLocalSession(session: PooledSession): Promise<void> {
-    await this.exportToPathFn(session.opened.editor, session.workingDocPath, true);
+    await this.exportToPathFn(session.opened, session.workingDocPath, true);
   }
 
   private async checkpointCollabSession(session: PooledSession): Promise<void> {
-    // Pool checkpoint only flushes editor state to the working doc file.
+    // Pool checkpoint only flushes session state to the working doc file.
     // Metadata writes (dirty flag, revision bump) happen through the context
     // layer during save/close — not here.
-    await this.exportToPathFn(session.opened.editor, session.workingDocPath, true);
+    await this.exportToPathFn(session.opened, session.workingDocPath, true);
   }
 
   private async destroySession(session: PooledSession): Promise<void> {

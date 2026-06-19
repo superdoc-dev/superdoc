@@ -56,7 +56,16 @@ function getConverter(editor: Editor): ConverterForMutation | undefined {
 // Undo isolation
 // ---------------------------------------------------------------------------
 
-function closeUndoGroup(editor: Editor): void {
+/**
+ * Seal the current undo group so the next edit starts a fresh one.
+ *
+ * Part mutations are deliberately isolated from PM history (a part write
+ * cannot be inverted by undo), so every `mutateParts` call seals first.
+ * Exported for callers that used to get this seal as a side effect of a
+ * trailing part mutation and must preserve undo grouping after dropping it
+ * (SD-3400 tombstoned note deletes).
+ */
+export function closeUndoGroup(editor: Editor): void {
   if (editor.options?.collaborationProvider && editor.options?.ydoc) {
     try {
       yUndoPluginKey.getState(editor.state)?.undoManager?.stopCapturing();

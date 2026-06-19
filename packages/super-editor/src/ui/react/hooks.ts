@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { shallowEqual } from '../equality.js';
 import type {
   CommentsSlice,
   ContentControlsSlice,
   DocumentSlice,
+  FontFamilyOption,
+  FontSizeOption,
   TrackChangesSlice,
   SelectionSlice,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
+  ZoomMode,
+  ZoomSlice,
 } from '../types.js';
 import { useSuperDocSlice, useSuperDocUI } from './provider.js';
 
@@ -30,6 +34,9 @@ const EMPTY_CONTENT_CONTROLS: ContentControlsSlice = { items: [], activeIds: [],
 const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
 
 const EMPTY_DOCUMENT: DocumentSlice = { ready: false, mode: null, dirty: false };
+
+const EMPTY_FONT_OPTIONS: FontFamilyOption[] = [];
+const EMPTY_FONT_SIZE_OPTIONS: FontSizeOption[] = [];
 
 /**
  * Subscribe to the current selection slice.
@@ -85,6 +92,71 @@ export function useSuperDocToolbar(): ToolbarSnapshotSlice {
  */
 export function useSuperDocDocument(): DocumentSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.document, shallowEqual), EMPTY_DOCUMENT);
+}
+
+const EMPTY_ZOOM: ZoomSlice = {
+  mode: 'manual',
+  value: 100,
+  fitZoom: null,
+  min: 10,
+  max: 100,
+  metrics: null,
+};
+
+/**
+ * Zoom state + actions for custom zoom UIs. The snapshot updates on
+ * value changes, mode-only transitions, and viewport metric updates;
+ * `set(percent)` switches the host to manual mode by contract,
+ * `setMode('fit-width')` re-enters automatic fitting.
+ *
+ * ```tsx
+ * const zoom = useSuperDocZoom();
+ * return (
+ *   <>
+ *     <span>{zoom.value}%</span>
+ *     <button
+ *       aria-pressed={zoom.mode === 'fit-width'}
+ *       onClick={() => zoom.setMode(zoom.mode === 'fit-width' ? 'manual' : 'fit-width')}
+ *     >
+ *       Fit width
+ *     </button>
+ *   </>
+ * );
+ * ```
+ */
+export function useSuperDocZoom(): ZoomSlice & {
+  set: (percent: number) => void;
+  setMode: (mode: ZoomMode) => void;
+} {
+  const ui = useSuperDocUI();
+  const slice = useSuperDocSlice((controller) => controller.select((state) => state.zoom, shallowEqual), EMPTY_ZOOM);
+  const set = useCallback(
+    (percent: number) => {
+      ui?.zoom.set(percent);
+    },
+    [ui],
+  );
+  const setMode = useCallback(
+    (mode: ZoomMode) => {
+      ui?.zoom.setMode(mode);
+    },
+    [ui],
+  );
+  // Memoized so the returned object keeps its identity while the slice and
+  // actions are unchanged; the controller-side slice memo makes `slice`
+  // reference-stable, and effects keyed on this hook's result must not
+  // re-run on unrelated parent renders.
+  return useMemo(() => ({ ...slice, set, setMode }), [slice, set, setMode]);
+}
+
+/** Subscribe to the final font-family picker options for custom toolbar UIs. */
+export function useSuperDocFontOptions(): FontFamilyOption[] {
+  return useSuperDocSlice((ui) => ui.select((state) => state.fonts.options, shallowEqual), EMPTY_FONT_OPTIONS);
+}
+
+/** Subscribe to default font-size picker options for custom toolbar UIs. */
+export function useSuperDocFontSizeOptions(): FontSizeOption[] {
+  return useSuperDocSlice((ui) => ui.select((state) => state.fonts.sizeOptions, shallowEqual), EMPTY_FONT_SIZE_OPTIONS);
 }
 
 const FALLBACK_COMMAND_STATE: UIToolbarCommandState = {

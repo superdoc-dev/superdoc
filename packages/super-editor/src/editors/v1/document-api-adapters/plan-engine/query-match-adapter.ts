@@ -25,6 +25,7 @@ import type {
   InlineAnchor,
   PageInfo,
   StoryLocator,
+  TextSelector,
 } from '@superdoc/document-api';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import {
@@ -495,8 +496,12 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
   // Execute search using the find adapter infrastructure.
   // For text selectors, omit limit/offset here because zero-width filtering (D20)
   // must run on all matches before pagination. We paginate ourselves after filtering.
+  // Strip includeDeletedText — query.match does not support raw search model.
+  const { includeDeletedText: _stripped, ...textSelectWithoutDeleted } = isTextSelector
+    ? (input.select as TextSelector)
+    : ({} as TextSelector);
   const query = {
-    select: input.select,
+    select: isTextSelector ? textSelectWithoutDeleted : input.select,
     within: input.within,
     includeNodes: input.includeNodes,
     limit: isTextSelector ? undefined : input.limit,

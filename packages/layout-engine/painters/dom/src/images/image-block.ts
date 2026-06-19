@@ -1,5 +1,5 @@
 import type { ImageBlock, ImageDrawing } from '@superdoc/contracts';
-import { buildImageFilters } from '../runs/image-run.js';
+import { buildImageFilters, resolveImageOpacity } from '../runs/image-run.js';
 import { applyImageClipPath, readImageClipPathValue } from './image-clip-path.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 
@@ -56,6 +56,10 @@ export const createBlockImageContent = ({
   const filters = buildImageFilters(block);
   if (filters.length > 0) {
     img.style.filter = filters.join(' ');
+  }
+  const opacity = resolveImageOpacity(block);
+  if (opacity != null) {
+    img.style.opacity = opacity;
   }
 
   return buildImageHyperlinkAnchor?.(img, block.hyperlink, hyperlinkDisplay) ?? img;

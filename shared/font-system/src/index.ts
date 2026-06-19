@@ -18,6 +18,7 @@ export type {
   FontFaceSource,
   FontFaceDescriptor,
   RegisteredFace,
+  RegisterFaceResult,
   FontLoadResult,
   FontLoadSummary,
   FontFaceRequest,
@@ -28,24 +29,55 @@ export type {
 } from './types';
 export { SETTLED_STATUSES, isSettled } from './types';
 
-export type { FontResolution, FontResolutionReason } from './resolver';
+export type {
+  FontResolution,
+  FontResolutionReason,
+  FaceKey,
+  HasFace,
+  FontMeasureContext,
+  ResolvePhysicalFamily,
+} from './resolver';
+export { FontResolver, createFontResolver } from './resolver';
 export {
   resolveFontFamily,
   resolvePhysicalFamily,
   resolvePrimaryPhysicalFamily,
   resolvePhysicalFamilies,
+  resolveFace,
+  DEFAULT_FONT_MEASURE_CONTEXT,
 } from './resolver';
 
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';
 
+// Per-document bundled-font activation (config-presence gate + curation). The resolver and offerings
+// consume it; the editor's runtime paths derive it via `deriveBundledActivationForConfig` (which
+// sanitizes raw `fonts.bundled`), built on the lower-level `deriveBundledActivation`.
+export type {
+  BundledFontSelection,
+  BundledActivation,
+  BundledActivationInput,
+  FontAssetConfigLike,
+} from './activation';
+export { createBundledActivation, deriveBundledActivation, FULLY_ACTIVE_BUNDLED, BASELINE_BUNDLED } from './activation';
+
 // The bundled-asset base setter is also exported here (not only the ./bundled subpath) so
 // the CDN entry can resolve it through the bare `@superdoc/font-system` specifier.
-export { setBundledFontAssetBase, getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_BASE } from './bundled';
+export {
+  setBundledFontAssetBase,
+  getBundledFontAssetBase,
+  DEFAULT_BUNDLED_FONT_BASE,
+  markBundledPackPresent,
+  isBundledPackPresent,
+  __resetBundledPackPresent,
+} from './bundled';
 
-export type { FontResolutionRecord } from './report';
-export { buildFontReport } from './report';
+export type { FontResolutionRecord, UsedFace } from './report';
+export { buildFontReport, buildFaceReport } from './report';
 
-export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions } from './registry';
+export type { EmbeddingPolicy } from './os2';
+export { parseEmbeddingPolicy } from './os2';
+
+export type { FontSetLike, FontFaceLike, FontFaceCtor, FontRegistryOptions, OwnedFaceDescriptor } from './registry';
 export {
   FontRegistry,
   getFontRegistryFor,
@@ -53,3 +85,20 @@ export {
   DEFAULT_FONT_LOAD_TIMEOUT_MS,
   __resetDefaultFontRegistry,
 } from './registry';
+
+export type { FontOffering, OfferingClass, FontGeneric } from './font-offerings';
+export {
+  FONT_OFFERINGS,
+  getBuiltInToolbarFontOfferings,
+  getDefaultFontOfferings,
+  getDefaultFontFamilyOptions,
+  fontOfferingStack,
+  fontOfferingRenderStack,
+  warnUnknownBundledSelection,
+  getBundledFamilyNames,
+  sanitizeBundledSelection,
+  deriveBundledActivationForConfig,
+} from './font-offerings';
+
+export type { DocumentFontOption, FontFamilyOption } from './document-font-options';
+export { buildDocumentFontOptions, buildFontFamilyOptions } from './document-font-options';

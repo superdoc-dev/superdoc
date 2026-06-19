@@ -7,6 +7,7 @@ import {
   removeCommentsById,
   reopenCommentById,
   resolveCommentById,
+  resolveCommentsInTr,
   translateFormatChangesToEnglish,
 } from './comments-helpers.js';
 import { resolveTrackedFormatDisplay } from './tracked-change-display.js';
@@ -312,6 +313,20 @@ export const CommentsPlugin = Extension.create({
         ({ tr, dispatch, state }) => {
           tr.setMeta(CommentsPluginKey, { event: 'update' });
           return resolveCommentById({ commentId, importedId, state, tr, dispatch });
+        },
+
+      /**
+       * Resolve a whole thread (root + replies) in ONE transaction so the
+       * mark→node conversion for every comment in the thread forms a single
+       * undo step (SD-3355). `comments` is `[{ commentId, importedId }]`.
+       */
+      resolveCommentThread:
+        ({ comments } = {}) =>
+        ({ tr, dispatch, state }) => {
+          tr.setMeta(CommentsPluginKey, { event: 'update' });
+          const converted = resolveCommentsInTr({ items: comments, state, tr });
+          if (converted) dispatch(tr);
+          return converted;
         },
       reopenComment:
         ({ commentId, importedId, internal }) =>

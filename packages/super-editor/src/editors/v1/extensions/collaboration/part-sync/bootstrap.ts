@@ -211,20 +211,10 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
   const criticalFailures: string[] = [];
 
   // Decode rels from Yjs for header/footer sectionId resolution
-  const relsEntry = partsMap.get('word/_rels/document.xml.rels');
-  const relsData = relsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsEntry)?.data ?? null) : null;
+  const relsData = decodeYjsToEnvelope(partsMap.get('word/_rels/document.xml.rels'))?.data ?? null;
 
   for (const [key, value] of partsMap.entries()) {
     if (EXCLUDED_PART_IDS.has(key)) continue;
-
-    if (!(value instanceof Y.Map)) {
-      if (CRITICAL_PART_IDS.has(key)) {
-        criticalFailures.push(`${key}: entry is not a Y.Map (got ${typeof value})`);
-      } else {
-        console.warn(`[part-sync] Skipping non-Y.Map entry "${key}" during hydration`);
-      }
-      continue;
-    }
 
     const partId = key as PartId;
 
@@ -233,7 +223,7 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
     const sectionId = isHeaderFooterPartId(key) ? (resolveHeaderFooterRId(key, relsData, editor) ?? key) : undefined;
 
     try {
-      const envelope = decodeYjsToEnvelope(value as Y.Map<unknown>);
+      const envelope = decodeYjsToEnvelope(value);
       if (!envelope || envelope.data === undefined || envelope.data === null) {
         throw new Error(`Invalid envelope for "${key}"`);
       }
@@ -310,8 +300,7 @@ function hasNonDocumentEntries(partsMap: Y.Map<unknown>): boolean {
  * Register header/footer descriptors for any header/footer parts in the Yjs parts map.
  */
 function registerHeaderFooterDescriptorsFromPartsMap(partsMap: Y.Map<unknown>, editor: Editor): void {
-  const relsEntry = partsMap.get('word/_rels/document.xml.rels');
-  const relsData = relsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsEntry)?.data ?? null) : null;
+  const relsData = decodeYjsToEnvelope(partsMap.get('word/_rels/document.xml.rels'))?.data ?? null;
 
   for (const key of partsMap.keys()) {
     if (isHeaderFooterPartId(key)) {

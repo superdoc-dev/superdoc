@@ -1,6 +1,7 @@
 import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
 import { __endComposition } from 'prosemirror-view';
 import { Extension } from '../Extension.js';
+import { CustomSelectionPluginKey, getPreservedSelection } from '../selection-state.js';
 
 const appendStoryInputDebugLog = (entry) => {
   const debugGlobal = globalThis;
@@ -76,6 +77,20 @@ const isInlineStructuredContentBoundary = (doc, pos) => {
   return isInlineStructuredContentNode(before) || isInlineStructuredContentNode(after);
 };
 
+const getInputSelection = (state) => {
+  const { selection } = state;
+  if (!selection.empty) {
+    return selection;
+  }
+
+  const preserved = getPreservedSelection(state);
+  if (preserved && !preserved.empty) {
+    return preserved;
+  }
+
+  return selection;
+};
+
 const handleInsertTextBeforeInput = (view, event, editor) => {
   const isInsertTextInput = event?.inputType === 'insertText';
   const hasTextData = typeof event?.data === 'string' && event.data.length > 0;
@@ -92,9 +107,9 @@ const handleInsertTextBeforeInput = (view, event, editor) => {
     return false;
   }
 
-  const selection = view.state.selection;
+  const selection = getInputSelection(view.state);
   const shouldHandleCollapsedSelection =
-    isStorySurfaceEditor(editor) || isInlineStructuredContentBoundary(view.state.doc, selection.from);
+    isStorySurfaceEditor(editor) || isInlineStructuredContentBoundary(view.state.doc, view.state.selection.from);
 
   if (selection.empty && !shouldHandleCollapsedSelection) {
     recordStoryInputDebug(view, event, editor, 'beforeinput:skip-empty-selection');
@@ -107,6 +122,14 @@ const handleInsertTextBeforeInput = (view, event, editor) => {
     tr.setSelection(TextSelection.create(tr.doc, insertedTo));
   } catch {
     tr.setSelection(Selection.near(tr.doc.resolve(insertedTo), 1));
+  }
+  if (!selection.empty) {
+    tr.setMeta(CustomSelectionPluginKey, {
+      focused: false,
+      preservedSelection: null,
+      showVisualSelection: false,
+      skipFocusReset: false,
+    });
   }
   tr.setMeta('inputType', 'insertText');
   view.dispatch(tr);

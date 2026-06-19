@@ -124,7 +124,7 @@ describe('editor-runtime contract  -  import boundary', () => {
   });
 
   it('self-test: reference scanner flags a smuggled concrete-impl path string', () => {
-    const line = `const p = require('../components/V2SuperEditor/host/create-v2-editor-host.js');`;
+    const line = `const p = require('@superdoc/v2-host/src/create-v2-editor-host.js');`;
     const flagged = FORBIDDEN_REFERENCE_FRAGMENTS.some((f) => line.includes(f));
     expect(flagged).toBe(true);
   });

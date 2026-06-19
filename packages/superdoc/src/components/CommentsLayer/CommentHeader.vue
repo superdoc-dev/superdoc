@@ -33,6 +33,26 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // ui-phase3-002: stable reason for disabling resolve / reject. When set,
+  // the buttons render in a disabled state and emit nothing. Used by v2 mode
+  // to keep tracked-change accept/reject controls visible-but-disabled until
+  // Phase 3 / 003 wires the tracked-change adapter.
+  resolveDisabledReason: {
+    type: String,
+    default: null,
+  },
+  rejectDisabledReason: {
+    type: String,
+    default: null,
+  },
+  // TCS Phase 0 / 004 §5: stable reason for disabling overflow Edit / Delete
+  // when the v2 host reports `canWrite === false` (e.g. author-required,
+  // host not ready). Both options are filtered out of the overflow menu so
+  // the user cannot trigger a mutation that the host will reject.
+  writeDisabledReason: {
+    type: String,
+    default: null,
+  },
 });
 
 const { proxy } = getCurrentInstance();
@@ -125,6 +145,11 @@ const allowOverflow = computed(() => {
 const getOverflowOptions = computed(() => {
   if (!generallyAllowed.value) return false;
 
+  // TCS Phase 0 / 004 §5: when the v2 host blocks write (e.g. author-required,
+  // host not ready), hide overflow Edit and Delete so the user cannot trigger
+  // a mutation the host would immediately reject.
+  if (props.writeDisabledReason) return [];
+
   const allowedOptions = [];
   const options = new Set();
 
@@ -151,8 +176,14 @@ const getOverflowOptions = computed(() => {
   return allowedOptions;
 });
 
-const handleResolve = () => emit('resolve');
-const handleReject = () => emit('reject');
+const handleResolve = () => {
+  if (props.resolveDisabledReason) return;
+  emit('resolve');
+};
+const handleReject = () => {
+  if (props.rejectDisabledReason) return;
+  emit('reject');
+};
 const handleSelect = (value) => emit('overflow-select', value);
 
 // Imported comments have `origin` set (e.g. 'word'); imported tracked changes
@@ -196,6 +227,9 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowResolve"
         class="overflow-menu__icon"
+        :class="{ 'sd-is-disabled': Boolean(resolveDisabledReason) }"
+        :data-disabled-reason="resolveDisabledReason || null"
+        :aria-disabled="Boolean(resolveDisabledReason)"
         v-html="superdocIcons.markDone"
         @click.stop.prevent="handleResolve"
       ></div>
@@ -203,6 +237,9 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowReject"
         class="overflow-menu__icon"
+        :class="{ 'sd-is-disabled': Boolean(rejectDisabledReason) }"
+        :data-disabled-reason="rejectDisabledReason || null"
+        :aria-disabled="Boolean(rejectDisabledReason)"
         v-html="superdocIcons.rejectChange"
         @click.stop.prevent="handleReject"
       ></div>
@@ -290,6 +327,14 @@ const getCurrentUser = computed(() => {
 }
 .overflow-menu__icon:hover {
   background-color: var(--sd-ui-comments-separator, #dbdbdb);
+}
+.overflow-menu__icon.sd-is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+.overflow-menu__icon.sd-is-disabled:hover {
+  background-color: transparent;
 }
 .overflow-menu__icon :deep(svg) {
   width: 100%;

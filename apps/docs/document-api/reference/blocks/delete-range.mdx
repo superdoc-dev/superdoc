@@ -30,10 +30,12 @@ Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each w
 | `end.kind` | `"block"` | yes | Constant: `"block"` |
 | `end.nodeId` | string | yes |  |
 | `end.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `end.story` | StoryLocator | no | StoryLocator |
 | `start` | BlockNodeAddress | yes | BlockNodeAddress |
 | `start.kind` | `"block"` | yes | Constant: `"block"` |
 | `start.nodeId` | string | yes |  |
 | `start.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `start.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -42,12 +44,20 @@ Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each w
   "end": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "start": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -94,6 +104,11 @@ Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each w
 - `INVALID_INPUT`
 - `CAPABILITY_UNAVAILABLE`
 - `INTERNAL_ERROR`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -260,7 +275,12 @@ Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each w
             "INVALID_TARGET",
             "INVALID_INPUT",
             "CAPABILITY_UNAVAILABLE",
-            "INTERNAL_ERROR"
+            "INTERNAL_ERROR",
+            "STORY_NOT_FOUND",
+            "STORY_MISMATCH",
+            "STORY_NOT_SUPPORTED",
+            "CROSS_STORY_PLAN",
+            "MATERIALIZATION_FAILED"
           ]
         },
         "details": {},

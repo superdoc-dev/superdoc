@@ -1,40 +1,37 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// The CDN entry defaults the bundled-font asset base to `./fonts/` next to the executing
-// <script>, captured via `document.currentScript` at module-eval time. Each test stubs
-// currentScript, re-evaluates cdn-entry, and reads the real base through the font-system
-// getter. The heavy SuperDoc graph is stubbed so re-evaluation stays cheap and isolated;
-// @superdoc/font-system is left real (vite.config aliases it to source under Vitest).
+// The CDN build is baseline-by-default: importing cdn-entry must NOT mark the bundled pack
+// present and must NOT change the font asset base. Consumers opt into the reviewed substitute
+// pack with the separate `@superdoc-dev/fonts` script (window.SuperDocFonts) instead. The heavy
+// SuperDoc graph is stubbed so re-evaluation stays cheap and isolated; @superdoc/font-system is
+// left real (vite.config aliases it to source under Vitest) so the real module state is observed.
 vi.mock('./core/SuperDoc.js', () => ({ SuperDoc: class SuperDoc {} }));
 vi.mock('./index.js', () => ({}));
 
-describe('cdn-entry bundled-font asset base default', () => {
-  afterEach(() => {
-    Object.defineProperty(document, 'currentScript', { configurable: true, value: null });
+describe('cdn-entry is baseline-by-default (ships and activates no fonts)', () => {
+  beforeEach(async () => {
+    const { __resetBundledPackPresent } = await import('@superdoc/font-system');
+    __resetBundledPackPresent();
     vi.resetModules();
   });
 
-  it('defaults the asset base to ./fonts/ next to the executing script', async () => {
-    Object.defineProperty(document, 'currentScript', {
-      configurable: true,
-      value: { src: 'https://cdn.example.com/superdoc/1.0/superdoc.min.js' },
-    });
+  afterEach(async () => {
+    const { __resetBundledPackPresent } = await import('@superdoc/font-system');
+    __resetBundledPackPresent();
     vi.resetModules();
+  });
+
+  it('does not mark the bundled pack present', async () => {
     await import('./cdn-entry.js');
-    const { getBundledFontAssetBase } = await import('@superdoc/font-system');
-    expect(getBundledFontAssetBase()).toBe('https://cdn.example.com/superdoc/1.0/fonts/');
+    const { isBundledPackPresent } = await import('@superdoc/font-system');
+    expect(isBundledPackPresent()).toBe(false);
   });
 
-  it('swallows errors while defaulting the asset base (best-effort)', async () => {
-    // An invalid script src makes `new URL('./fonts/', src)` throw; the try/catch must
-    // swallow it and leave the default base unchanged.
-    Object.defineProperty(document, 'currentScript', {
-      configurable: true,
-      value: { src: 'not-a-valid-url' },
-    });
-    vi.resetModules();
+  it('leaves the default font asset base unchanged', async () => {
     const { getBundledFontAssetBase, DEFAULT_BUNDLED_FONT_BASE } = await import('@superdoc/font-system');
-    await expect(import('./cdn-entry.js')).resolves.toBeTruthy();
+    const before = getBundledFontAssetBase();
+    await import('./cdn-entry.js');
+    expect(getBundledFontAssetBase()).toBe(before);
     expect(getBundledFontAssetBase()).toBe(DEFAULT_BUNDLED_FONT_BASE);
   });
 });

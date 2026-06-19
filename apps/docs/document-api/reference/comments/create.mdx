@@ -1,14 +1,14 @@
 ---
 title: comments.create
 sidebarTitle: comments.create
-description: Create a new comment thread (or reply when parentCommentId is given).
+description: Create a new comment thread (or reply when parentCommentId is given). Accepts TextAddress / TextTarget anchors, or a TrackedChangeCommentTarget that names a logical tracked-change id. The tracked-change target accepts both the explicit kind form and the Labs-compatible trackedChangeId-only form; the adapter normalizes it to a Word-compatible content anchor on the requested revision side.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Create a new comment thread (or reply when parentCommentId is given).
+Create a new comment thread (or reply when parentCommentId is given). Accepts TextAddress / TextTarget anchors, or a TrackedChangeCommentTarget that names a logical tracked-change id. The tracked-change target accepts both the explicit kind form and the Labs-compatible trackedChangeId-only form; the adapter normalizes it to a Word-compatible content anchor on the requested revision side.
 
 - Operation ID: `comments.create`
 - API member path: `editor.doc.comments.create(...)`
@@ -20,30 +20,37 @@ Create a new comment thread (or reply when parentCommentId is given).
 
 ## Expected result
 
-Returns a Receipt confirming the comment was created, including the new comment id; reports NO_OP if the anchor target is invalid.
+Returns a Receipt with the new commentId in `id` and `inserted` on success; rejects whitespace-only bodies, unsupported anchor contexts, and cross-story targets. Tracked-change comment targets support insertion, deletion, replacement, and paired-move revisions; they fail with `TARGET_NOT_FOUND` for stale ids, `CAPABILITY_UNAVAILABLE` for formatting / structural revisions and unpaired move sides, and `INVALID_TARGET` for incompatible side requests or ambiguous replacement targets that omit a required `side`.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `parentCommentId` | string | no |  |
-| `target` | TextAddress \| TextTarget \| SelectionTarget \| CommentTrackedChangeTarget | no | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget |
+| `side` | enum | no | `"inserted"`, `"deleted"`, `"source"`, `"destination"` |
+| `story` | StoryLocator | no | StoryLocator |
+| `target` | TextAddress \| TextTarget \| SelectionTarget \| CommentTrackedChangeTarget \| object | no | One of: TextAddress, TextTarget, SelectionTarget, CommentTrackedChangeTarget, object |
 | `text` | string | yes |  |
+| `trackedChangeId` | string | no |  |
 
 ### Example request
 
 ```json
 {
-  "parentCommentId": "comment-000",
   "target": {
     "blockId": "block-abc123",
     "kind": "text",
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   },
-  "text": "Hello, world."
+  "text": "Hello, world.",
+  "trackedChangeId": "example"
 }
 ```
 
@@ -64,7 +71,7 @@ Returns a Receipt confirming the comment was created, including the new comment 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.code` | enum | yes | `"INVALID_INPUT"`, `"INVALID_TARGET"`, `"INVALID_CONTEXT"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -97,11 +104,15 @@ Returns a Receipt confirming the comment was created, including the new comment 
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
+- `INVALID_INPUT`
 - `INVALID_TARGET`
-- `NO_OP`
+- `INVALID_CONTEXT`
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 
@@ -114,8 +125,21 @@ Returns a Receipt confirming the comment was created, including the new comment 
       "description": "Parent comment ID for creating a threaded reply.",
       "type": "string"
     },
+    "side": {
+      "description": "Optional side for the top-level trackedChangeId shorthand.",
+      "enum": [
+        "inserted",
+        "deleted",
+        "source",
+        "destination"
+      ]
+    },
+    "story": {
+      "$ref": "#/$defs/StoryLocator",
+      "description": "Optional story for the top-level trackedChangeId shorthand."
+    },
     "target": {
-      "description": "Comment target. Accepts a TextAddress, TextTarget, SelectionTarget, or {trackedChangeId, kind?:'trackedChange'} to anchor directly on tracked content.",
+      "description": "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range}, a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks, a SelectionTarget {kind:'selection', start, end} returned by query.match, a TextSearchCommentTarget {text, story?}, or a TrackedChangeCommentTarget ({kind:'trackedChange', trackedChangeId, side?} or {trackedChangeId, side?}) that names a logical tracked-change id as a convenience anchor .",
       "oneOf": [
         {
           "$ref": "#/$defs/TextAddress"
@@ -128,11 +152,31 @@ Returns a Receipt confirming the comment was created, including the new comment 
         },
         {
           "$ref": "#/$defs/CommentTrackedChangeTarget"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
+            },
+            "text": {
+              "description": "Text to find and anchor the comment to. The adapter resolves the first body/story match.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
         }
       ]
     },
     "text": {
       "description": "Comment text content.",
+      "type": "string"
+    },
+    "trackedChangeId": {
+      "description": "Compatibility shorthand for target: { trackedChangeId }. Used only when target is omitted.",
       "type": "string"
     }
   },
@@ -159,8 +203,11 @@ Returns a Receipt confirming the comment was created, including the new comment 
           "properties": {
             "code": {
               "enum": [
+                "INVALID_INPUT",
                 "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_CONTEXT",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
               ]
             },
             "details": {},
@@ -207,8 +254,11 @@ Returns a Receipt confirming the comment was created, including the new comment 
       "properties": {
         "code": {
           "enum": [
+            "INVALID_INPUT",
             "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_CONTEXT",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
           ]
         },
         "details": {},

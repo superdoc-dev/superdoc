@@ -30,9 +30,15 @@ export type CliErrorCode =
   | 'TRACK_CHANGE_COMMAND_UNAVAILABLE'
   | 'TRACK_CHANGE_CONFLICT'
   | 'COMMAND_FAILED'
+  | 'NO_OP'
+  | 'STALE_REVISION'
   | 'OPERATION_HINT_MISSING'
   | 'UNSUPPORTED_FORMAT'
   | 'TIMEOUT'
+  // Runtime-selection error codes
+  | 'INVALID_RUNTIME'
+  | 'RUNTIME_V2_UNAVAILABLE'
+  | 'RUNTIME_MISMATCH'
   // Plan-engine error codes — passed through from document-api adapters
   | 'REVISION_CHANGED_SINCE_COMPILE'
   | 'PLAN_CONFLICT_OVERLAP'
@@ -47,6 +53,7 @@ export type CliErrorCode =
   | 'PAGE_NUMBERS_NOT_MATERIALIZED'
   | 'CAPABILITY_UNAVAILABLE'
   | 'INVALID_TARGET'
+  | 'INVALID_CONTEXT'
   | 'AMBIGUOUS_TARGET'
   | 'CAPABILITY_UNSUPPORTED'
   | 'UNSUPPORTED_SOURCE'

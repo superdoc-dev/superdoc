@@ -8,7 +8,13 @@ import { ENV_VAR_NAME_PATTERN, type CollaborationProfile } from './collaboration
 import { CliError } from './errors';
 import { asRecord, isRecord, pathExists } from './guards';
 import { validateSessionId } from './session';
-import type { CliIO, ExecutionMode, UserIdentity } from './types';
+import {
+  ACCEPTED_RUNTIME_VALUES,
+  type CliIO,
+  type DocumentRuntimeKind,
+  type ExecutionMode,
+  type UserIdentity,
+} from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
@@ -24,6 +30,10 @@ export type SourceSnapshot = {
 
 export type SessionType = 'local' | 'collab';
 
+export type TrackChangesOpenOptions = {
+  replacements?: 'paired' | 'independent';
+};
+
 export type ContextMetadata = {
   contextId: string;
   projectRoot: string;
@@ -33,7 +43,13 @@ export type ContextMetadata = {
   dirty: boolean;
   revision: number;
   sessionType: SessionType;
+  /**
+   * Runtime kind selected at open time. Metadata files written by older
+   * CLIs may omit this field — readers normalize the absence to `v1`.
+   */
+  runtime: DocumentRuntimeKind;
   collaboration?: CollaborationProfile;
+  trackChanges?: TrackChangesOpenOptions;
   user?: UserIdentity;
   openedAt: string;
   updatedAt: string;
@@ -45,6 +61,7 @@ export type ContextPaths = {
   stateRoot: string;
   contextDir: string;
   metadataPath: string;
+  originalDocPath: string;
   workingDocPath: string;
   lockPath: string;
 };
@@ -56,7 +73,9 @@ export type ProjectSessionSummary = {
   dirty: boolean;
   revision: number;
   sessionType: SessionType;
+  runtime: DocumentRuntimeKind;
   collaboration?: CollaborationProfile;
+  trackChanges?: TrackChangesOpenOptions;
   openedAt: string;
   updatedAt: string;
   lastSavedAt?: string;
@@ -107,6 +126,7 @@ export function getContextPaths(contextId: string): ContextPaths {
     stateRoot,
     contextDir,
     metadataPath: join(contextDir, 'metadata.json'),
+    originalDocPath: join(contextDir, 'original.docx'),
     workingDocPath: join(contextDir, 'working.docx'),
     lockPath: join(contextDir, 'lock'),
   };
@@ -135,6 +155,13 @@ function nowIso(io: CliIO): string {
 function normalizeSessionType(value: unknown): SessionType {
   if (value === 'collab') return 'collab';
   return 'local';
+}
+
+function normalizeRuntime(value: unknown): DocumentRuntimeKind {
+  if (typeof value === 'string' && (ACCEPTED_RUNTIME_VALUES as readonly string[]).includes(value)) {
+    return value as DocumentRuntimeKind;
+  }
+  return 'v1';
 }
 
 function normalizeUser(value: unknown): UserIdentity | undefined {
@@ -258,16 +285,28 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
   return undefined;
 }
 
+function normalizeTrackChangesOpenOptions(value: unknown): TrackChangesOpenOptions | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const replacements = record.replacements;
+  if (replacements === 'paired' || replacements === 'independent') return { replacements };
+  return undefined;
+}
+
 export function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
   const sessionType = normalizeSessionType(metadata.sessionType);
   const collaboration = normalizeCollaborationProfile(metadata.collaboration);
+  const trackChanges = normalizeTrackChangesOpenOptions(metadata.trackChanges);
   const user = normalizeUser(metadata.user);
+  const runtime = normalizeRuntime(metadata.runtime);
 
   if (sessionType === 'collab' && collaboration) {
     return {
       ...metadata,
       sessionType,
+      runtime,
       collaboration,
+      trackChanges,
       user,
     };
   }
@@ -275,7 +314,9 @@ export function normalizeContextMetadata(metadata: ContextMetadata): ContextMeta
   return {
     ...metadata,
     sessionType: 'local',
+    runtime,
     collaboration: undefined,
+    trackChanges,
     user,
   };
 }
@@ -570,6 +611,7 @@ export async function listProjectSessions(): Promise<ProjectSessionSummary[]> {
       dirty: metadata.dirty,
       revision: metadata.revision,
       sessionType: metadata.sessionType,
+      runtime: metadata.runtime,
       collaboration: metadata.collaboration,
       openedAt: metadata.openedAt,
       updatedAt: metadata.updatedAt,
@@ -749,6 +791,34 @@ export async function copyWorkingDocumentToPath(
   };
 }
 
+export async function copyOriginalDocumentToPath(
+  paths: ContextPaths,
+  outputPath: string,
+  force = false,
+): Promise<{ path: string; byteLength: number }> {
+  const exists = await pathExists(outputPath);
+  if (exists && !force) {
+    throw new CliError('OUTPUT_EXISTS', `Output path already exists: ${outputPath}`, {
+      path: outputPath,
+      hint: 'Use --force to overwrite.',
+    });
+  }
+
+  try {
+    await copyFile(paths.originalDocPath, outputPath);
+  } catch (error) {
+    throw new CliError('FILE_WRITE_ERROR', `Failed to write output file: ${outputPath}`, {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const outputStat = await stat(outputPath);
+  return {
+    path: outputPath,
+    byteLength: outputStat.size,
+  };
+}
+
 export async function getWorkingDocumentSize(paths: ContextPaths): Promise<number> {
   try {
     const info = await stat(paths.workingDocPath);
@@ -796,7 +866,9 @@ export function createInitialContextMetadata(
     sourceSnapshot?: SourceSnapshot;
     sessionType?: SessionType;
     collaboration?: CollaborationProfile;
+    trackChanges?: TrackChangesOpenOptions;
     user?: UserIdentity;
+    runtime?: DocumentRuntimeKind;
   },
 ): ContextMetadata {
   const timestamp = nowIso(io);
@@ -811,7 +883,9 @@ export function createInitialContextMetadata(
     dirty: false,
     revision: 0,
     sessionType,
+    runtime: input.runtime ?? 'v1',
     collaboration: sessionType === 'collab' ? input.collaboration : undefined,
+    trackChanges: input.trackChanges,
     user: input.user,
     openedAt: timestamp,
     updatedAt: timestamp,

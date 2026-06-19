@@ -89,11 +89,13 @@ async function main() {
     stdout: () => {},
     stderr: () => {},
     readStdinBytes: async () => new Uint8Array(),
+    now: () => Date.now(),
   };
 
   const profile = {
+    providerType: 'y-websocket' as const,
     documentId: 'test-doc-id',
-    serverUrl: 'ws://localhost:1234',
+    url: 'ws://localhost:1234',
   };
 
   try {

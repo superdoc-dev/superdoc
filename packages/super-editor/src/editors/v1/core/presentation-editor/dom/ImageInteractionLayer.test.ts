@@ -77,6 +77,70 @@ describe('ImageInteractionLayer', () => {
     expect(block.dataset.displayLabel).toBe('Block image');
   });
 
+  it('does not mark behind-doc header images as draggable outside header mode', () => {
+    container.innerHTML = `
+      <div
+        class="superdoc-image-fragment"
+        data-behind-doc-section="header"
+        data-pm-start="10"
+        data-pm-end="16"
+        data-image-metadata='{"width":100}'
+      >
+        <img alt="Header image" />
+      </div>
+    `;
+
+    layer.apply(3, { activeHeaderFooterMode: 'body' });
+
+    const block = container.querySelector(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`) as HTMLElement;
+    expect(block.hasAttribute('draggable')).toBe(false);
+    expect(block.dataset.dragSourceKind).toBeUndefined();
+  });
+
+  it('marks behind-doc header images as draggable while header mode is active', () => {
+    container.innerHTML = `
+      <div
+        class="superdoc-image-fragment"
+        data-behind-doc-section="header"
+        data-pm-start="10"
+        data-pm-end="16"
+        data-image-metadata='{"width":100}'
+      >
+        <img alt="Header image" />
+      </div>
+    `;
+
+    layer.apply(3, { activeHeaderFooterMode: 'header' });
+
+    const block = container.querySelector(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`) as HTMLElement;
+    expect(block.draggable).toBe(true);
+    expect(block.dataset.dragSourceKind).toBe('existingImage');
+  });
+
+  it('clears behind-doc image drag affordances when leaving the owning mode', () => {
+    container.innerHTML = `
+      <div
+        class="superdoc-image-fragment"
+        data-behind-doc-section="header"
+        data-pm-start="10"
+        data-pm-end="16"
+        data-image-metadata='{"width":100}'
+      >
+        <img alt="Header image" />
+      </div>
+    `;
+
+    layer.apply(3, { activeHeaderFooterMode: 'header' });
+    const block = container.querySelector(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`) as HTMLElement;
+    expect(block.draggable).toBe(true);
+
+    layer.apply(3, { activeHeaderFooterMode: 'body' });
+
+    expect(block.hasAttribute('draggable')).toBe(false);
+    expect(block.dataset.dragSourceKind).toBeUndefined();
+    expect(block.dataset.imageInteractionEpoch).toBeUndefined();
+  });
+
   it('skips elements without PM position metadata', () => {
     container.innerHTML = `
       <div class="superdoc-image-fragment">

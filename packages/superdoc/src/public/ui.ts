@@ -2,17 +2,17 @@
  * SuperDoc public facade: ui entry.
  *
  * SD-3183 under SD-3178 (Phase 3 of SD-3175). Largest supported-surface
- * facade entry. Mirrors the 71-name surface today reachable via the
- * `superdoc/ui` subpath: 3 runtime values + 68 types.
+ * facade entry. Mirrors the named surface reachable via the `superdoc/ui`
+ * subpath.
  *
- * Classification per SD-3147: 50 public + 21 legacy/public-compat. All
- * 71 re-exported through the facade — tier distinction is documentation
- * posture, not facade inclusion.
+ * Classification per SD-3147 is enforced by the public-surface metadata. The
+ * facade includes both supported names and legacy/public-compat names; tier
+ * distinction is documentation posture, not facade inclusion.
  *
  * Strategy: re-export through the narrow `@superdoc/super-editor/ui`
  * subpath rather than the broad `@superdoc/super-editor` root. SD-2803
  * created that subpath specifically so consumers of `superdoc/ui` do
- * not drag the editor root/main barrel — Vue components, the SuperDoc
+ * not drag the editor root/main barrel: Vue components, the SuperDoc
  * app shell, and other top-level UI infrastructure. The bundle still
  * pulls SuperConverter, jszip, xml-js, and similar shared chunks
  * because the UI controller depends on them transitively; what the
@@ -23,18 +23,16 @@
  *   - AIDEV-NOTE: Re-export source MUST stay `@superdoc/super-editor/ui`,
  *     NOT `@superdoc/super-editor`. Routing through the root barrel
  *     regresses the strategic UI bundle shape by pulling the app-shell
- *     chunk (Vue components, SuperDoc app, etc.) — that's the
+ *     chunk (Vue components, SuperDoc app, etc.). That's the
  *     regression of SD-2803. `packages/superdoc/scripts/audit-bundle.cjs`
  *     enforces this on the emitted `dist/public/ui.es.js` by rejecting
  *     side-effect imports of the root/main barrel chunks. It does NOT
- *     and cannot claim the bundle is shared-chunk-free — SuperConverter,
+ *     and cannot claim the bundle is shared-chunk-free: SuperConverter,
  *     jszip, and xml-js chunks are pulled by both `dist/ui.es.js` and
  *     `dist/public/ui.es.js` because the UI controller depends on them.
- *   - AIDEV-NOTE: Adding or removing an export here updates the
- *     The postbuild gate `verify-public-facade-emit.cjs` parses this file
+ *   - AIDEV-NOTE: The postbuild gate `verify-public-facade-emit.cjs` parses this file
  *     and verifies that the emitted declarations expose exactly these
- *     named exports. No second hand-maintained list to keep in sync.
- *     same PR. The verifier postbuild fails on drift.
+ *     named exports. The verifier postbuild fails on drift.
  *   - This entry does not re-export `Editor` or `EditorCommands`, so
  *     the verifier skips the command-signature probe.
  */
@@ -48,6 +46,7 @@ export type {
   CommandHandle,
   CommandsHandle,
   CommentAddress,
+  CommentAnchorCapture,
   CommentInfo,
   CommentsHandle,
   CommentsListQuery,
@@ -69,6 +68,10 @@ export type {
   DynamicCommandHandle,
   EntityAddress,
   EqualityFn,
+  FontFamilyOption,
+  FontSizeOption,
+  FontsHandle,
+  FontsSlice,
   MetadataHandle,
   Receipt,
   ScrollIntoViewInput,
@@ -113,4 +116,8 @@ export type {
   ViewportPositionHit,
   ViewportRect,
   ViewportRectResult,
+  ZoomHandle,
+  ZoomMode,
+  ZoomSlice,
+  ZoomViewportMetrics,
 } from '@superdoc/super-editor/ui';

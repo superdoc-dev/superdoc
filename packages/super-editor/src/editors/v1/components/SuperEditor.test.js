@@ -1414,6 +1414,160 @@ describe('SuperEditor.vue', () => {
         vi.useRealTimers();
       });
 
+      it('should not show image resize overlay for a behind-doc header image outside header mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-header-image-hover-body',
+            fileSource: new Blob([], { type: DOCX_MIME }),
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const instance = getEditorInstance();
+        instance.isEditable = true;
+        instance.options.documentMode = 'editing';
+        wrapper.vm.getDocumentMode = () => 'editing';
+        wrapper.vm.isViewingMode = () => false;
+        wrapper.vm.activeHeaderFooterMode = 'body';
+
+        const imageEl = document.createElement('div');
+        imageEl.classList.add('superdoc-image-fragment');
+        imageEl.dataset.behindDocSection = 'header';
+        imageEl.dataset.sdBlockId = 'header-image';
+        imageEl.setAttribute('data-image-metadata', '{"width":100}');
+
+        const event = new MouseEvent('mousemove');
+        Object.defineProperty(event, 'target', { value: imageEl });
+
+        wrapper.vm.updateImageResizeOverlay(event);
+
+        expect(wrapper.vm.imageResizeState.visible).toBe(false);
+        expect(wrapper.vm.imageResizeState.imageElement).toBe(null);
+        expect(wrapper.vm.imageResizeState.blockId).toBe(null);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should show image resize overlay for a behind-doc header image in header mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-header-image-hover-header',
+            fileSource: new Blob([], { type: DOCX_MIME }),
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const instance = getEditorInstance();
+        instance.isEditable = true;
+        instance.options.documentMode = 'editing';
+        wrapper.vm.getDocumentMode = () => 'editing';
+        wrapper.vm.isViewingMode = () => false;
+        wrapper.vm.activeHeaderFooterMode = 'header';
+
+        const imageEl = document.createElement('div');
+        imageEl.classList.add('superdoc-image-fragment');
+        imageEl.dataset.behindDocSection = 'header';
+        imageEl.dataset.sdBlockId = 'header-image';
+        imageEl.setAttribute('data-image-metadata', '{"width":100}');
+
+        const event = new MouseEvent('mousemove');
+        Object.defineProperty(event, 'target', { value: imageEl });
+
+        wrapper.vm.updateImageResizeOverlay(event);
+
+        expect(wrapper.vm.imageResizeState.visible).toBe(true);
+        expect(wrapper.vm.imageResizeState.imageElement).toBe(imageEl);
+        expect(wrapper.vm.imageResizeState.blockId).toBe('header-image');
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should not apply image selection outline for a behind-doc header image outside header mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-header-image-selection-body',
+            fileSource: new Blob([], { type: DOCX_MIME }),
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const instance = getEditorInstance();
+        instance.isEditable = true;
+        instance.options.documentMode = 'editing';
+        wrapper.vm.getDocumentMode = () => 'editing';
+        wrapper.vm.isViewingMode = () => false;
+        wrapper.vm.activeHeaderFooterMode = 'body';
+
+        const imageEl = document.createElement('div');
+        imageEl.dataset.behindDocSection = 'header';
+
+        wrapper.vm.setSelectedImage(imageEl, 'header-image', 42);
+
+        expect(imageEl.classList.contains('superdoc-image-selected')).toBe(false);
+        expect(wrapper.vm.selectedImageState.element).toBe(null);
+        expect(wrapper.vm.selectedImageState.blockId).toBe(null);
+        expect(wrapper.vm.selectedImageState.pmStart).toBe(null);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
+      it('should apply image selection outline for a behind-doc header image in header mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-header-image-selection-header',
+            fileSource: new Blob([], { type: DOCX_MIME }),
+            options: {},
+          },
+        });
+
+        await flushPromises();
+        await flushPromises();
+
+        const instance = getEditorInstance();
+        instance.isEditable = true;
+        instance.options.documentMode = 'editing';
+        wrapper.vm.getDocumentMode = () => 'editing';
+        wrapper.vm.isViewingMode = () => false;
+        wrapper.vm.activeHeaderFooterMode = 'header';
+
+        const imageEl = document.createElement('div');
+        imageEl.dataset.behindDocSection = 'header';
+
+        wrapper.vm.setSelectedImage(imageEl, 'header-image', 42);
+
+        expect(imageEl.classList.contains('superdoc-image-selected')).toBe(true);
+        expect(wrapper.vm.selectedImageState.element).toBe(imageEl);
+        expect(wrapper.vm.selectedImageState.blockId).toBe('header-image');
+        expect(wrapper.vm.selectedImageState.pmStart).toBe(42);
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
+
       it('should clear image selection when props switch to viewing mode', async () => {
         vi.useFakeTimers();
         EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);

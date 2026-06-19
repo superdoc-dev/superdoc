@@ -11,7 +11,7 @@ Requires Angular 17.2+. `viewChild()` and `input()` are stable from Angular 19; 
 ## Install
 
 ```bash
-npm install superdoc
+npm install superdoc @superdoc-dev/fonts
 ```
 
 ## Basic setup
@@ -19,6 +19,7 @@ npm install superdoc
 ```typescript
 import { Component, ElementRef, viewChild, AfterViewInit, inject, DestroyRef } from '@angular/core';
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import 'superdoc/style.css';
 
 @Component({
@@ -38,6 +39,7 @@ export class EditorComponent implements AfterViewInit {
       selector: this.editorRef().nativeElement,
       document: 'contract.docx',
       documentMode: 'editing',
+      fonts: superdocFonts,
     });
   }
 }

@@ -124,11 +124,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install canvas system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential libcairo2-dev libpango1.0-dev \
-            libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev
+        run: bash scripts/install-canvas-system-dependencies.sh
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -243,11 +239,36 @@ jobs:
         run: |
           VERSION="${{ needs.auto-release.outputs.version }}"
           echo "Dispatching update-agent-sdk.yml on superdoc-dev/labs main for @superdoc-dev/sdk@$VERSION"
-          gh workflow run update-agent-sdk.yml \
+          set +e
+          DISPATCH_OUTPUT=$(gh workflow run update-agent-sdk.yml \
             --repo superdoc-dev/labs \
             --ref main \
             --field sdk_version="$VERSION" \
-            --field deploy_after_update=true
+            --field deploy_after_update=true 2>&1)
+          DISPATCH_STATUS=$?
+          set -e
+
+          if [ "$DISPATCH_STATUS" -eq 0 ]; then
+            echo "$DISPATCH_OUTPUT"
+            exit 0
+          fi
+
+          echo "$DISPATCH_OUTPUT" >&2
+          if printf '%s\n' "$DISPATCH_OUTPUT" | grep -E "Workflow does not have 'workflow_dispatch' trigger|could not find any workflows named|HTTP 404|Not Found" >/dev/null; then
+            echo "::warning::Labs SDK update workflow is unavailable; SDK release already completed, so skipping labs agent sync."
+            {
+              echo "### Labs SDK update skipped"
+              echo ""
+              echo "SDK @superdoc-dev/sdk@$VERSION was released, but the labs update workflow is unavailable."
+              echo ""
+              echo '```'
+              printf '%s\n' "$DISPATCH_OUTPUT"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          exit "$DISPATCH_STATUS"
 
   # -------------------------------------------------------------------
   # Manual fallback (workflow_dispatch)
@@ -399,11 +420,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install canvas system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential libcairo2-dev libpango1.0-dev \
-            libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev
+        run: bash scripts/install-canvas-system-dependencies.sh
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

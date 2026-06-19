@@ -2046,7 +2046,9 @@ describe('HeaderFooterSessionManager', () => {
         measures: [
           {
             kind: 'paragraph',
-            lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 100, ascent: 10, descent: 3, lineHeight: 18 }],
+            lines: [
+              { fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 100, ascent: 10, descent: 3, lineHeight: 18 },
+            ],
             totalHeight: 18,
           },
         ] as unknown as Measure[],
@@ -2263,10 +2265,7 @@ describe('HeaderFooterSessionManager', () => {
         pageSize: { w: 612, h: 792 },
         pages: [{ number: 1, sectionIndex: 0 } as never, { number: 2, sectionIndex: 1 } as never],
       } as unknown as Layout;
-      await manager.layoutPerRId(PER_RID_INPUT, layout, [
-        { sectionIndex: 0 } as never,
-        { sectionIndex: 1 } as never,
-      ]);
+      await manager.layoutPerRId(PER_RID_INPUT, layout, [{ sectionIndex: 0 } as never, { sectionIndex: 1 } as never]);
 
       manager.headerRegions.set(0, {
         kind: 'header',
@@ -2377,7 +2376,11 @@ describe('HeaderFooterSessionManager', () => {
       expect(snapshot.pageBindings[2]!.header).toMatchObject({ variant: 'default', refId: 'rId-default' });
 
       // The first/even/default stories are all surfaced and distinct.
-      expect(snapshot.storyLayouts.headers.map((s) => s.refId).sort()).toEqual(['rId-default', 'rId-even', 'rId-first']);
+      expect(snapshot.storyLayouts.headers.map((s) => s.refId).sort()).toEqual([
+        'rId-default',
+        'rId-even',
+        'rId-first',
+      ]);
     });
 
     it('keeps page-binding story keys joinable when only variant-based layouts are available', () => {

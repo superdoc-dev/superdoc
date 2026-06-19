@@ -244,7 +244,13 @@ function processDocumentPartObject(
 
     processTocChildren(
       Array.from(child.content ?? []),
-      { docPartGallery, docPartObjectId, tocInstruction, sdtMetadata: docPartSdtMetadata },
+      {
+        docPartGallery,
+        docPartObjectId,
+        tocInstruction,
+        sdtMetadata: docPartSdtMetadata,
+        tocId: docPartObjectId ?? undefined,
+      },
       {
         nextBlockId: context.nextBlockId,
         positions: context.positions,

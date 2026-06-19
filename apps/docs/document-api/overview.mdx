@@ -13,6 +13,14 @@ Document API gives you a consistent way to read and edit documents without relyi
 - Work with predictable inputs and outputs defined per operation.
 - Check capabilities up front and branch safely when features are unavailable.
 
+## Regex selectors
+
+- Use `mode: 'contains'` for literal text. It does literal substring matching and is the default.
+- `mode: 'regex'` accepts validated regular expressions. Patterns are checked for syntax, maximum length, and safety before execution.
+- `find(...)` returns zero results.
+- `query.match(...)` and selector-based plan resolution may surface as no match or `MATCH_NOT_FOUND`.
+- `assert` steps count rejected regexes as zero matches.
+
 ## Node addressing
 
 Every block in a document has a `nodeId`: a string that uniquely identifies it.

@@ -15,6 +15,7 @@ import type {
   EditorRuntimeCommand,
   EditorRuntimeCommandKind,
   EditorRuntimeCommandResult,
+  EditorRuntimeDocumentMode,
   EditorRuntimeEvent,
   EditorRuntimeFindSessionSnapshot,
   EditorRuntimeFocusOptions,
@@ -35,6 +36,7 @@ export interface FakeV1RuntimeOptions {
   documentId?: string;
   root?: HTMLElement;
   initialState?: EditorRuntimeState;
+  initialDocumentMode?: EditorRuntimeDocumentMode;
 }
 
 const SUPPORTED_COMMAND_KINDS: readonly EditorRuntimeCommandKind[] = [
@@ -76,6 +78,7 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
   const root = options.root ?? fallbackRoot();
 
   let state: EditorRuntimeState = options.initialState ?? 'editing-ready';
+  let documentMode: EditorRuntimeDocumentMode = options.initialDocumentMode ?? 'editing';
   let revision = 0; // bumped on every mutation; tokens carry the revision they were minted at
   let zoomPercent = 100;
   const selectionText = 'hello';
@@ -117,7 +120,7 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
       lifecycle: { canFocus: true, canDispose: true },
       selection: { canReadSelectedText: true, canReadSelectionSnapshot: true, canMintPositionTokens: true },
       commands: {
-        canDispatch: state === 'editing-ready' || state === 'review-ready',
+        canDispatch: state !== 'disposed' && state !== 'saving' && documentMode !== 'viewing',
         supportedCommands: SUPPORTED_COMMAND_KINDS,
       },
       layout: { supported: true, hasSyncSnapshot: true },
@@ -139,7 +142,13 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
 
     getCapabilities: capabilities,
     getSnapshot(): EditorRuntimeSnapshot {
-      return { id, kind: 'v1', documentId, state, capabilities: capabilities() };
+      return { id, kind: 'v1', documentId, state, documentMode, capabilities: capabilities() };
+    },
+    setDocumentMode(mode: EditorRuntimeDocumentMode): void {
+      documentMode = mode;
+    },
+    getDocumentMode(): EditorRuntimeDocumentMode {
+      return documentMode;
     },
     getLegacyEditorProjection() {
       // v1 returns its legacy editor here; the fixture returns an inert marker.
@@ -159,6 +168,7 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
     async dispatch(command: EditorRuntimeCommand): Promise<EditorRuntimeCommandResult> {
       if (state === 'disposed') return { status: 'rejected', reason: 'runtime-not-ready' };
       if (state === 'saving') return { status: 'rejected', reason: 'host-saving' };
+      if (documentMode === 'viewing') return { status: 'rejected', reason: 'document-readonly' };
 
       // Demonstrate opaque-token round-trip + staleness for positioned commands.
       const token = 'at' in command ? command.at : 'range' in command ? command.range : undefined;
@@ -198,8 +208,10 @@ export function createFakeV1Runtime(options: FakeV1RuntimeOptions = {}): EditorR
         case 'trackedChanges.reject':
         case 'trackedChanges.acceptAll':
         case 'trackedChanges.rejectAll':
-        case 'trackedChanges.setAuthoringMode':
           revision += 1;
+          return { status: 'committed', receipt: { revision } };
+        case 'trackedChanges.setAuthoringMode':
+          documentMode = command.mode === 'tracked' ? 'suggesting' : 'editing';
           return { status: 'committed', receipt: { revision } };
         default:
           return { status: 'rejected', reason: 'command-unsupported' };

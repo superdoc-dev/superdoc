@@ -10,6 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./ruler-core": {
+      "types": "./src/ruler/ruler-core.ts",
+      "default": "./src/ruler/ruler-core.ts"
     }
   },
   "scripts": {

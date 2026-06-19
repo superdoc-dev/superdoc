@@ -279,7 +279,12 @@ export const getListDefinitionDetails = ({ numId, level, listType = undefined, e
 };
 
 export const hasListDefinition = (editor, numId, ilvl) => {
-  const { definitions, abstracts } = editor.converter.numbering;
+  const numbering = editor?.converter?.numbering;
+  // No numbering part (e.g. a blank/programmatic editor) means no definition
+  // exists. Return false instead of throwing on a null destructure so callers
+  // surface a typed error rather than a raw TypeError.
+  if (!numbering) return false;
+  const { definitions, abstracts } = numbering;
   const numDef = definitions[numId];
   if (!numDef) return false;
 

@@ -12,7 +12,10 @@ const typeSurface = require('./type-surface.config.cjs');
 // Verify that vite-plugin-dts generated the expected type entry points.
 // Path aliases are resolved by vite-plugin-dts via tsconfig.json paths.
 const distRoot = path.resolve(__dirname, '..', 'dist');
+const packageRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const binExtension = process.platform === 'win32' ? '.cmd' : '';
+const resolvePackageBin = (name) => path.join(packageRoot, 'node_modules', '.bin', `${name}${binExtension}`);
 
 // SD-2842: vite-plugin-dts skips hand-written `.d.ts` files in its include
 // glob (it only emits declarations from `.ts`/`.js`). When a file like
@@ -68,7 +71,7 @@ if (handwrittenCopiedSuperEditor > 0) {
 const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
 {
   const { spawnSync: _spawnSync } = require('node:child_process');
-  const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
+  const tscBin = resolvePackageBin('tsc');
   const sharedCommonDistDir = path.join(distRoot, 'shared/common');
   fs.mkdirSync(sharedCommonDistDir, { recursive: true });
   const sources = SHARED_COMMON_DTS_TARGETS.map((f) => path.join(repoRoot, 'shared/common', f));
@@ -116,7 +119,7 @@ const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
 // `@superdoc/font-system` specifiers in other dist files to `shared/font-system/src/index.d.ts`.
 {
   const { spawnSync: _spawnSync } = require('node:child_process');
-  const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
+  const tscBin = resolvePackageBin('tsc');
   const fontSystemSrc = path.join(repoRoot, 'shared/font-system/src');
   const fontSystemDistDir = path.join(distRoot, 'shared/font-system/src');
   fs.mkdirSync(fontSystemDistDir, { recursive: true });

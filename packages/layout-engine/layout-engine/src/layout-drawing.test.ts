@@ -98,7 +98,7 @@ describe('layoutDrawingBlock', () => {
           columnIndex: currentState.columnIndex + 1,
           cursorY: currentState.topMargin,
         }) as unknown as PageState,
-      columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+      columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
     };
   };
 
@@ -137,6 +137,25 @@ describe('layoutDrawingBlock', () => {
       const stateAfter = context.ensurePage();
 
       expect(stateAfter.page.fragments.length).toBe(0);
+    });
+  });
+
+  describe('Textbox content measures', () => {
+    it('should attach textbox content measures to drawing fragments when provided', () => {
+      const contentMeasures = [{ kind: 'paragraph', lines: [], totalHeight: 24 }];
+      const context = {
+        ...createMockContext({
+          drawingKind: 'textboxShape',
+        }),
+        textboxContentMeasures: contentMeasures,
+      };
+
+      layoutDrawingBlock(context);
+
+      const state = context.ensurePage();
+      expect(state.page.fragments).toHaveLength(1);
+      expect(state.page.fragments[0]?.kind).toBe('drawing');
+      expect((state.page.fragments[0] as DrawingFragment).contentMeasures).toEqual(contentMeasures);
     });
   });
 
@@ -370,7 +389,7 @@ describe('layoutDrawingBlock', () => {
           };
           return stateRef as unknown as PageState;
         },
-        columnX: (columnIndex: number) => columnIndex * (mockColumns.width + mockColumns.gap),
+        columnX: (state: PageState) => state.columnIndex * (mockColumns.width + mockColumns.gap),
       };
 
       layoutDrawingBlock(context);
@@ -685,7 +704,7 @@ describe('layoutDrawingBlock', () => {
 
     it('should use correct columnX for multi-column layout', () => {
       const context = createMockContext({}, {}, { columnIndex: 2 });
-      context.columnX = (index: number) => index * 620; // width(600) + gap(20)
+      context.columnX = (state: PageState) => state.columnIndex * 620; // width(600) + gap(20)
 
       const state = context.ensurePage();
       layoutDrawingBlock(context);

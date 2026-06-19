@@ -64,6 +64,28 @@ import { parseRowHeight } from './helpers/parseRowHeight.js';
  * @property {string} [rsidTr] @internal - Editing session ID for properties modification
  * @property {string} [paraId] @internal - Unique identifier for the row
  * @property {string} [textId] @internal - Unique identifier for row text
+ * @property {TableRowTrackChange} [trackChange] @internal - Structural tracked-change revision on the row (imported from `<w:ins>`/`<w:del>` inside `<w:trPr>`)
+ */
+
+/**
+ * Structural tracked-change revision stored on a table row.
+ *
+ * A whole inserted/deleted table is encoded in OOXML as `<w:ins>`/`<w:del>`
+ * inside each row's `<w:trPr>`. The row is the structural primitive; the
+ * enumeration layer groups rows of one table that share a revision into a
+ * single logical structural change.
+ *
+ * @typedef {Object} TableRowTrackChange
+ * @property {'rowInsert' | 'rowDelete'} type - Whether the row was inserted or deleted.
+ * @property {string} id - Stable SuperDoc-internal revision id (normalized from Word `w:id`).
+ * @property {string} [sourceId] - Original Word `w:id`, preserved for round-trip export.
+ * @property {string} [author] - Revision author (`w:author`).
+ * @property {string} [authorId] - Acting user id for natively authored revisions (no OOXML counterpart).
+ * @property {string} [authorEmail] - Revision author email (`w:authorEmail`).
+ * @property {string} [authorImage] - Acting user avatar for natively authored revisions (no OOXML counterpart).
+ * @property {string} [date] - Revision timestamp (`w:date`, ISO-8601).
+ * @property {string} [importedAuthor] - Display author for imported revisions.
+ * @property {string} [revisionGroupId] - Groups rows belonging to the same logical structural change.
  */
 
 /**
@@ -158,6 +180,17 @@ export const TableRow = Node.create({
        * @see {@link https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/b7eeddec-7c50-47fb-88b6-1feec3ed832c}
        */
       textId: { rendered: false },
+      /**
+       * Structural tracked-change revision on the row.
+       * @type {TableRowTrackChange | null}
+       * @see TableRowTrackChange
+       */
+      trackChange: {
+        default: null,
+        // Preserve the revision if a tracked row is ever split.
+        keepOnSplit: true,
+        rendered: false,
+      },
     };
   },
 

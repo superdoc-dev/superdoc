@@ -26,12 +26,17 @@
  *   media closure; colliding part names / relationship ids / media names are
  *   reallocated and references rewritten consistently.
  * - `sectionDefaults`: the source `w:sectPr` that governs page 1 is adopted as
- *   the active section defaults. Intermediate / later source sections are not
- *   imported.
+ *   the current document's active/final section-default model. On multi-section
+ *   targets, its header/footer visibility model (`headerReference`,
+ *   `footerReference`, `w:titlePg`) is also propagated across the earlier
+ *   sections without overwriting their own page geometry. Intermediate / later
+ *   source sections are not imported.
  *
- * `customXml`, `docProps`, source body content, comments/tracked-changes stores,
- * glossary, signatures, and body media are out of scope and reported, never
- * applied.
+ * Selected non-body package sidecars (`customXml`, `docProps/custom.xml`,
+ * comments, notes, people, keymap customizations, and `settings.xml.rels`) are
+ * imported when present so reconstructed content can reuse the source package
+ * substrate faithfully. Source body content, glossary, signatures, embeddings,
+ * and body media remain out of scope and are reported, never applied.
  *
  * Engine-agnostic contract + execution entry point. No ProseMirror/converter imports.
  */
@@ -76,11 +81,7 @@ export interface TemplateScopeReport {
   detail?: string;
 }
 
-export type TemplateSkipReason =
-  | 'NOT_PRESENT_IN_SOURCE'
-  | 'OUT_OF_SCOPE'
-  | 'NO_CHANGE'
-  | 'CAPABILITY_UNAVAILABLE';
+export type TemplateSkipReason = 'NOT_PRESENT_IN_SOURCE' | 'OUT_OF_SCOPE' | 'NO_CHANGE' | 'CAPABILITY_UNAVAILABLE';
 
 export interface TemplateScopeSkip {
   scope: string;

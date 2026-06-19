@@ -7,7 +7,7 @@
  *   - `createSuperDocUI({ superdoc })` — browser-only state controller
  *
  * Domain namespaces (`ui.toolbar`, `ui.commands`, `ui.comments`,
- * `ui.trackChanges`, `ui.viewport`, `ui.selection`) are filed as
+ * `ui.trackChanges`, `ui.viewport`, `ui.selection`, `ui.fonts`) are filed as
  * sibling tickets under SD-2667 and layer on top of the `ui.select`
  * substrate exported here.
  *
@@ -78,6 +78,8 @@ export type {
 export type {
   // Substrate
   EqualityFn,
+  FontFamilyOption,
+  FontSizeOption,
   SelectorFn,
   Subscribable,
 
@@ -109,12 +111,15 @@ export type {
   CustomCommandRegistration,
   CustomCommandRegistrationResult,
   DynamicCommandHandle,
+  FontsHandle,
+  FontsSlice,
   ToolbarCommandHandleState,
   ToolbarHandle,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
 
   // Comments
+  CommentAnchorCapture,
   CommentsHandle,
   CommentsSlice,
 
@@ -148,4 +153,8 @@ export type {
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
+  ZoomHandle,
+  ZoomMode,
+  ZoomSlice,
+  ZoomViewportMetrics,
 } from './types.js';

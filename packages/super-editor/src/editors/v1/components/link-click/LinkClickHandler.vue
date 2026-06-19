@@ -367,13 +367,27 @@ const handleLinkClick = (event) => {
     return;
   }
 
+  // SD-3400 stage 1: links inside painted footnotes/endnotes carry
+  // STORY-LOCAL pm positions. Resolving them against the body doc moved the
+  // caret to an unrelated body position and could open the edit popover on
+  // the WRONG body link. Until note-aware link editing ships, never touch
+  // the body selection for note links; modifier-click opens the URL.
+  if (detail.noteTarget) {
+    if (detail.ctrlKey || detail.metaKey) {
+      openLinkInViewingMode(detail);
+    }
+    return;
+  }
+
   const surface = getEditorSurfaceElement(props.editor);
   if (!surface) {
     return;
   }
 
-  // Move cursor to the clicked link position
-  const pmStart = linkElement?.dataset?.pmStart;
+  // Move cursor to the clicked link position. When the click just closed a
+  // note session (SD-3400), the commit may have deleted body markers, so the
+  // painted pm positions are stale: resolve from coordinates instead.
+  const pmStart = detail.bodyPositionsMayBeStale ? null : linkElement?.dataset?.pmStart;
 
   if (pmStart != null) {
     const pos = parseInt(pmStart, 10);

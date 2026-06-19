@@ -20,8 +20,30 @@ import {
   updateNoteElement,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
 import { normalizeNotePmJson } from '../helpers/note-pm-json.js';
+import { removeNoteEverywhere } from '../plan-engine/footnote-wrappers.js';
+import { TrackChangesBasePluginKey } from '../../extensions/track-changes/plugins/index.js';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
+
+/**
+ * SD-3400: a note is "empty" once it holds no text and no embedded atoms
+ * (images, etc.). Whitespace-only content counts as empty — the user cleared it.
+ * Exported so PresentationEditor's note-session watcher applies the same rule.
+ */
+export function isNoteContentEmpty(doc: ProseMirrorNode): boolean {
+  let hasContent = false;
+  doc.descendants((node) => {
+    if (hasContent) return false;
+    if (node.isText) {
+      if ((node.text ?? '').trim().length > 0) hasContent = true;
+    } else if (node.isAtom && node.type.name !== 'text') {
+      hasContent = true;
+    }
+    return !hasContent;
+  });
+  return !hasContent;
+}
 
 interface NoteExportToXmlJsonResult {
   result?: {
@@ -97,6 +119,8 @@ export function resolveNoteRuntime(hostEditor: Editor, locator: NoteStoryLocator
   };
 }
 
+type NotesConfig = ReturnType<typeof getNotesConfig>;
+
 function commitNoteRuntime(
   hostEditor: Editor,
   storyEditor: Editor,
@@ -106,46 +130,117 @@ function commitNoteRuntime(
   const noteType = isFootnote ? 'footnote' : 'endnote';
   const notesConfig = getNotesConfig(noteType);
 
-  // Try rich export via converter's exportToXmlJson (preserves formatting)
-  const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
-  const pmJson =
-    typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
-
-  if (conv?.exportToXmlJson && pmJson) {
-    let ooxmlElements: unknown[] | null = null;
-    try {
-      const { result } = conv.exportToXmlJson({
-        data: pmJson,
-        editor: storyEditor,
-        editorSchema: storyEditor.schema,
-        isHeaderFooter: true,
-        comments: [],
-        commentDefinitions: [],
-      });
-      // result.elements[0] is the body wrapper; its children are all
-      // content elements (paragraphs, tables, etc.). Keep all of them
-      // so tables and other non-paragraph content survive the commit.
-      const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
-      ooxmlElements = body?.elements ?? null;
-    } catch {
-      // Fall through to plain-text fallback
-    }
-
-    if (ooxmlElements && ooxmlElements.length > 0) {
-      mutatePart({
-        editor: hostEditor,
-        partId: notesConfig.partId,
-        operation: 'mutate',
-        source: `story-runtime:commit:${locator.storyType}`,
-        mutate({ part }) {
-          updateNoteContentFromOoxml(part, notesConfig, locator.noteId, ooxmlElements!);
-        },
-      });
+  if (isNoteContentEmpty(storyEditor.state.doc)) {
+    // SD-3400: emptied-note auto-removal is an editing-mode behavior. In
+    // suggesting mode the marker delete would be rewritten into a tracked
+    // suggestion while the part write ran unconditionally, silently diverging
+    // doc and part. Keep the note UNTOUCHED instead (no removal AND no commit
+    // of the emptied content — a part write is untracked and not undoable);
+    // reopening the note shows the original text.
+    const trackingActive = Boolean(TrackChangesBasePluginKey.getState(hostEditor.state)?.isTrackChangesActive);
+    if (trackingActive) {
       return;
     }
+    removeEmptiedNote(hostEditor, locator);
+    return;
   }
 
-  // Fallback: plain-text export (loses formatting)
+  if (commitRichNoteContent(hostEditor, storyEditor, locator, notesConfig)) {
+    return;
+  }
+
+  commitPlainTextNoteContent(hostEditor, storyEditor, locator, notesConfig);
+}
+
+/**
+ * SD-3400: clearing all content in the note area deletes the footnote on BOTH
+ * sides — the note element in the notes part AND every body reference — and
+ * the document renumbers. This mirrors the body-side staged delete; deleting
+ * from either side removes the whole footnote. Multi-reference notes lose all
+ * their markers (the emptied note no longer exists for any of them), and
+ * resolution is type-aware so emptying endnote "2" never touches footnote "2".
+ * The `w:footnote` element itself is tombstoned (kept in the part), so a
+ * single undo restores the whole note; export prunes it while unreferenced.
+ */
+function removeEmptiedNote(hostEditor: Editor, locator: NoteStoryLocator): void {
+  removeNoteEverywhere(hostEditor, { noteId: locator.noteId, type: locator.storyType });
+}
+
+const NOTE_REFERENCE_NODE_TYPES = new Set(['footnoteReference', 'endnoteReference']);
+
+/**
+ * §17.11.14: a footnote reference inside a footnote or endnote makes the
+ * document non-conformant. Reference nodes can reach a note story through
+ * paste (HTML containing `sup[data-footnote-id]` parses to footnoteReference);
+ * strip them before the note content is exported to the OOXML part.
+ */
+function stripNoteReferenceNodes<T extends { type?: string; content?: T[] }>(node: T): T {
+  if (!Array.isArray(node.content)) return node;
+  return {
+    ...node,
+    content: node.content
+      .filter((child) => !NOTE_REFERENCE_NODE_TYPES.has(child?.type ?? ''))
+      .map((child) => stripNoteReferenceNodes(child)),
+  };
+}
+
+/**
+ * Rich commit via the converter's exportToXmlJson (preserves formatting).
+ * Returns false when the converter is unavailable or export produced nothing,
+ * so the caller can fall back to plain text.
+ */
+function commitRichNoteContent(
+  hostEditor: Editor,
+  storyEditor: Editor,
+  locator: NoteStoryLocator,
+  notesConfig: NotesConfig,
+): boolean {
+  const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
+  const rawPmJson =
+    typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
+  if (!conv?.exportToXmlJson || !rawPmJson) return false;
+  const pmJson = stripNoteReferenceNodes(rawPmJson);
+
+  let ooxmlElements: unknown[] | null = null;
+  try {
+    const { result } = conv.exportToXmlJson({
+      data: pmJson,
+      editor: storyEditor,
+      editorSchema: storyEditor.schema,
+      isHeaderFooter: true,
+      comments: [],
+      commentDefinitions: [],
+    });
+    // result.elements[0] is the body wrapper; its children are all
+    // content elements (paragraphs, tables, etc.). Keep all of them
+    // so tables and other non-paragraph content survive the commit.
+    const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
+    ooxmlElements = body?.elements ?? null;
+  } catch {
+    // Fall through to plain-text fallback
+  }
+  if (!ooxmlElements || ooxmlElements.length === 0) return false;
+
+  const elements = ooxmlElements;
+  mutatePart({
+    editor: hostEditor,
+    partId: notesConfig.partId,
+    operation: 'mutate',
+    source: `story-runtime:commit:${locator.storyType}`,
+    mutate({ part }) {
+      updateNoteContentFromOoxml(part, notesConfig, locator.noteId, elements);
+    },
+  });
+  return true;
+}
+
+/** Fallback: plain-text export (loses formatting). */
+function commitPlainTextNoteContent(
+  hostEditor: Editor,
+  storyEditor: Editor,
+  locator: NoteStoryLocator,
+  notesConfig: NotesConfig,
+): void {
   const doc = storyEditor.state.doc;
   const text = doc.textBetween(0, doc.content.size, '\n', '\n');
 

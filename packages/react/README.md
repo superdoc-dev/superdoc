@@ -49,6 +49,25 @@ function App() {
 }
 ```
 
+## File prop component
+
+When an agent needs to create a React wrapper around a DOCX `File`, use this shape:
+
+```tsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+export function ContractEditor({ file }: { file: File }) {
+  return (
+    <SuperDocEditor
+      document={file}
+      documentMode="editing"
+      onReady={({ superdoc }) => console.log('Ready', superdoc)}
+    />
+  );
+}
+```
+
 ## Changing Mode
 
 Just update the `documentMode` prop - the component handles it efficiently (no rebuild):
@@ -209,4 +228,3 @@ Types are extracted from the `superdoc` package, ensuring they stay in sync.
 ## License
 
 AGPL-3.0
-

@@ -127,7 +127,7 @@ describe('buildHeadlessCommentBridge', () => {
   beforeEach(() => {
     ydoc = new Y.Doc();
     yArray = ydoc.getArray('comments');
-    bridge = buildHeadlessCommentBridge(ydoc, { name: 'Agent', email: 'agent@test.com' }, 'doc-1');
+    bridge = buildHeadlessCommentBridge(ydoc, { name: 'Agent', email: 'agent@test.com' });
   });
 
   it('returns correct editorOptions shape', () => {

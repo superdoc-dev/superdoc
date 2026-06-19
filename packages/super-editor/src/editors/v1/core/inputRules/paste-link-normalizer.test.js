@@ -32,7 +32,10 @@ vi.mock('@superdoc/url-validation', () => {
 
       // Must have a known protocol
       const match = trimmed.match(/^([a-z]+):/i);
-      if (!match) return null;
+      if (!match) {
+        if (/^\/\//.test(trimmed) || /\s/.test(trimmed)) return null;
+        return { href: new URL(trimmed, 'http://localhost:9094/').href, protocol: null, isExternal: false };
+      }
 
       const protocol = match[1].toLowerCase();
       const allowed = config?.allowedProtocols ?? DEFAULT_ALLOWED_PROTOCOLS;
@@ -197,8 +200,27 @@ describe('detectPasteUrl', () => {
     expect(result).toEqual({ href: 'mailto:user@example.com' });
   });
 
+  it('detects tel and sms links', () => {
+    expect(detectPasteUrl('tel:5551234567')).toEqual({ href: 'tel:5551234567' });
+    expect(detectPasteUrl('sms:5551234567')).toEqual({ href: 'sms:5551234567' });
+  });
+
   it('returns null for plain text', () => {
     expect(detectPasteUrl('just some text')).toBeNull();
+  });
+
+  it('returns null for single-word plain text even when sanitizeHref accepts relative paths', () => {
+    expect(detectPasteUrl('dog')).toBeNull();
+  });
+
+  it('returns null for template tokens even when sanitizeHref accepts relative paths', () => {
+    expect(detectPasteUrl('{project_number}')).toBeNull();
+  });
+
+  it('returns null for relative paths in plain text', () => {
+    expect(detectPasteUrl('/docs/page')).toBeNull();
+    expect(detectPasteUrl('./docs/page')).toBeNull();
+    expect(detectPasteUrl('docs/page')).toBeNull();
   });
 
   it('returns null for URL with trailing text', () => {
@@ -223,17 +245,10 @@ describe('detectPasteUrl', () => {
     expect(detectPasteUrl(undefined)).toBeNull();
   });
 
-  it('normalizes protocol config entries (case and {scheme} objects)', () => {
-    // Mock sanitizeHref to accept FTP protocol when configured
-    sanitizeHref.mockImplementationOnce((raw, config) => {
-      if (raw === 'ftp://files.example.com' && config?.allowedProtocols?.includes('ftp')) {
-        return { href: 'ftp://files.example.com', protocol: 'ftp', isExternal: true };
-      }
-      return null;
-    });
-
+  it('does not allow configured protocols to expand plain-text auto-link detection', () => {
     const result = detectPasteUrl('ftp://files.example.com', [{ scheme: 'FTP' }]);
-    expect(result).toEqual({ href: 'ftp://files.example.com' });
+    expect(result).toBeNull();
+    expect(sanitizeHref).not.toHaveBeenCalled();
   });
 });
 

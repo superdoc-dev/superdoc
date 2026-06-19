@@ -56,12 +56,12 @@ const FORCE_PARAM: CliOperationParamSpec = {
   type: 'boolean',
   description: 'Bypass confirmation checks.',
 };
-const SAVE_MODE_PARAM: CliOperationParamSpec = {
+const EXPORT_MODE_PARAM: CliOperationParamSpec = {
   name: 'mode',
   kind: 'flag',
   type: 'string',
-  schema: { type: 'string', enum: ['review-preserving', 'final'] } as CliTypeSpec,
-  description: 'Save mode: review-preserving keeps revision markup; final exports accepted content.',
+  schema: { type: 'string', enum: ['review-preserving', 'final', 'original'] } as CliTypeSpec,
+  description: 'DOCX export mode: review-preserving, final, or original.',
 };
 const DRY_RUN_PARAM: CliOperationParamSpec = {
   name: 'dryRun',
@@ -110,7 +110,7 @@ const PASSWORD_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'in']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
 
 type ObjectSchemaVariant = {
   properties: Record<string, JsonSchema>;
@@ -395,7 +395,11 @@ function envelopeParams(docApiId: OperationId): CliOperationParamSpec[] {
   envelope.push(SESSION_PARAM);
 
   if (catalog.mutates) {
-    envelope.push(OUT_PARAM, FORCE_PARAM, EXPECTED_REVISION_PARAM, CHANGE_MODE_PARAM);
+    envelope.push(OUT_PARAM, FORCE_PARAM);
+    if (docApiId !== 'trackChanges.decide') {
+      envelope.push(EXPECTED_REVISION_PARAM);
+    }
+    envelope.push(CHANGE_MODE_PARAM);
 
     if (catalog.supportsDryRun) {
       envelope.push(DRY_RUN_PARAM);
@@ -520,9 +524,9 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {};
 // schema-derived and envelope params.
 // ---------------------------------------------------------------------------
 
-// Flat-flag shortcut params for text-range target normalization.
-// These are convenience alternatives to --target-json; invoke-input.ts
-// normalizes them into canonical target objects before dispatch.
+// Flat-flag shortcut params for target normalization. These are convenience
+// alternatives to --target-json; invoke-input.ts normalizes them into
+// canonical target objects before dispatch.
 const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
   { name: 'start', kind: 'flag', type: 'number', description: 'Start offset within the block (character index).' },
@@ -535,6 +539,15 @@ const TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN: CliOperationParamSpec[] = TEXT_TARGE
   ...p,
   agentVisible: false as const,
 }));
+
+const PARAGRAPH_BLOCK_ID_PARAM_AGENT_HIDDEN: CliOperationParamSpec = {
+  name: 'blockId',
+  kind: 'flag',
+  flag: 'block-id',
+  type: 'string',
+  description: 'Block ID of the target paragraph. Shortcut for a paragraph block target.',
+  agentVisible: false,
+};
 
 const SELECTION_TARGET_JSON_PARAM: CliOperationParamSpec = {
   name: 'target',
@@ -557,6 +570,12 @@ const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
 
 const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
   operationId.startsWith('format.'),
+);
+const PARAGRAPH_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter((operationId) =>
+  operationId.startsWith('format.paragraph.'),
+);
+const INLINE_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter(
+  (operationId) => !operationId.startsWith('format.paragraph.'),
 );
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
@@ -941,8 +960,12 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   ],
 };
 
-for (const operationId of FORMAT_OPERATION_IDS) {
+for (const operationId of INLINE_FORMAT_OPERATION_IDS) {
   EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN];
+}
+
+for (const operationId of PARAGRAPH_FORMAT_OPERATION_IDS) {
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [PARAGRAPH_BLOCK_ID_PARAM_AGENT_HIDDEN];
 }
 
 // ---------------------------------------------------------------------------
@@ -981,12 +1004,13 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
           oneOf: [
             {
               type: 'object',
-              description: 'WebSocket-based collaboration (y-websocket or Hocuspocus).',
+              description:
+                'WebSocket-based collaboration. `runtime: "v2"` supports only `y-websocket`; `hocuspocus` is legacy v1-only.',
               properties: {
                 providerType: {
                   type: 'string',
                   enum: ['y-websocket', 'hocuspocus'],
-                  description: 'Collaboration provider.',
+                  description: 'Collaboration provider. For `runtime: "v2"`, only `y-websocket` is supported.',
                 },
                 url: { type: 'string', description: 'WebSocket server URL.' },
                 documentId: {
@@ -1015,9 +1039,14 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             },
             {
               type: 'object',
-              description: 'Liveblocks collaboration with a public API key.',
+              description:
+                'Liveblocks collaboration with a public API key. Legacy v1-only; `runtime: "v2"` single-socket collaboration does not support Liveblocks.',
               properties: {
-                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                providerType: {
+                  type: 'string',
+                  enum: ['liveblocks'],
+                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: "v2"`.',
+                },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
                 syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
@@ -1035,9 +1064,14 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
             },
             {
               type: 'object',
-              description: 'Liveblocks collaboration with a custom auth endpoint.',
+              description:
+                'Liveblocks collaboration with a custom auth endpoint. Legacy v1-only; `runtime: "v2"` single-socket collaboration does not support Liveblocks.',
               properties: {
-                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                providerType: {
+                  type: 'string',
+                  enum: ['liveblocks'],
+                  description: 'Collaboration provider. Liveblocks is not supported on `runtime: "v2"`.',
+                },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },
                 authHeadersEnv: {
@@ -1062,26 +1096,34 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
-      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
-      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
-      { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
-      { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
       {
         name: 'trackChanges',
         kind: 'jsonFlag',
         flag: 'track-changes-json',
         type: 'json',
-        description: 'Track-changes open configuration.',
+        description: 'Tracked-change projection options for the opened session.',
         schema: {
           type: 'object',
           properties: {
             replacements: {
               type: 'string',
               enum: ['paired', 'independent'],
-              description: 'Tracked replacement grouping mode.',
+              description: 'How adjacent insertion/deletion replacement wrappers are projected.',
             },
           },
         } as CliTypeSpec,
+      },
+      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
+      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
+      { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
+      { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
+      {
+        name: 'runtime',
+        kind: 'flag',
+        flag: 'runtime',
+        type: 'string',
+        schema: { type: 'string', enum: ['v1', 'v2'] } as CliTypeSpec,
+        description: "Runtime kind: 'v1' (default, legacy editor) or 'v2' (headless SD document session).",
       },
       USER_NAME_PARAM,
       USER_EMAIL_PARAM,
@@ -1095,9 +1137,9 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     docRequirement: 'none',
     params: [
       SESSION_PARAM,
-      SAVE_MODE_PARAM,
       OUT_PARAM,
       FORCE_PARAM,
+      EXPORT_MODE_PARAM,
       { name: 'inPlace', kind: 'flag', flag: 'in-place', type: 'boolean' },
     ],
     constraints: null,

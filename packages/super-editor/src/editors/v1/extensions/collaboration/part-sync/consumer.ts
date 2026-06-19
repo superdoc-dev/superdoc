@@ -53,8 +53,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
     const operations: PartOperation[] = [];
 
     // Decode rels from Yjs for header/footer rId resolution
-    const relsYjsEntry = partsMap.get('word/_rels/document.xml.rels');
-    const relsData = relsYjsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsYjsEntry)?.data ?? null) : null;
+    const relsData = decodeYjsToEnvelope(partsMap.get('word/_rels/document.xml.rels'))?.data ?? null;
 
     event.changes.keys.forEach((change, key) => {
       if (EXCLUDED_PART_IDS.has(key)) return;
@@ -80,10 +79,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
         }
 
         // 'add' or 'update'
-        const yValue = partsMap.get(key);
-        if (!(yValue instanceof Y.Map)) return;
-
-        const envelope = decodeYjsToEnvelope(yValue);
+        const envelope = decodeYjsToEnvelope(partsMap.get(key));
         if (!envelope || envelope.data === undefined || envelope.data === null) {
           console.warn(`[part-sync] Skipping invalid envelope for "${key}"`);
           return;
@@ -190,12 +186,8 @@ function ensureHeaderFooterSectionId(partId: PartId, relsData: unknown | null, e
 }
 
 function trackFailure(failedParts: Map<string, FailedPartEntry>, key: string, partsMap: Y.Map<unknown>): void {
-  const yValue = partsMap.get(key);
-  if (yValue instanceof Y.Map) {
-    const v = yValue.get('v');
-    const clientId = yValue.get('clientId');
-    if (typeof v === 'number' && typeof clientId === 'number') {
-      failedParts.set(key, { v, clientId });
-    }
+  const envelope = decodeYjsToEnvelope(partsMap.get(key));
+  if (envelope) {
+    failedParts.set(key, { v: envelope.v, clientId: envelope.clientId });
   }
 }

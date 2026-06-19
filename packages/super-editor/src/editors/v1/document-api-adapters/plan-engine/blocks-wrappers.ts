@@ -2,8 +2,8 @@
  * Blocks convenience wrappers — bridge blocks.list, blocks.delete, and
  * blocks.deleteRange to the plan engine's execution path.
  *
- * Follows the same domain-command wrapper pattern as create-wrappers.ts
- * and lists-wrappers.ts.
+ * Uses raw transactions so direct and tracked mode share the same preflight
+ * validation and target resolution path.
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
@@ -20,6 +20,7 @@ import {
   type BlockListEntry,
   type DeletedBlockSummary,
   type MutationOptions,
+  type ParagraphNumbering,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import {
@@ -30,18 +31,18 @@ import {
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
 import { computeTextContentLength } from '../helpers/text-offset-resolver.js';
+import { toFiniteNumber } from '../helpers/value-utils.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { getRevision } from './revision-tracker.js';
+import { checkRevision, getRevision } from './revision-tracker.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-type DeleteBlockNodeByIdCommand = (id: string) => boolean;
 
 const SUPPORTED_DELETE_NODE_TYPES = new Set<string>(DELETABLE_BLOCK_NODE_TYPES);
 const REJECTED_DELETE_NODE_TYPES = new Set(['tableRow', 'tableCell']);
@@ -124,6 +125,34 @@ function resolveBlockFontSizePt(styleCtx: StyleContext | null, styleId: string |
   if (typeof styleCtx.docDefaultsFontSizeHp === 'number') return styleCtx.docDefaultsFontSizeHp / 2;
 
   return OOXML_DEFAULT_FONT_SIZE_PT;
+}
+
+/**
+ * Reads a block's direct paragraph numbering (`w:numPr`) and projects it to the
+ * public `{ numId, level }` shape. Returns undefined for non-numbered blocks.
+ *
+ * Sourced from `paragraphProperties.numberingProperties` (the same read getNode
+ * uses), so numbered headings expose their numbering even though they resolve as
+ * `heading`, not `listItem`. This is deliberately separate from the list-
+ * rendering marker/ordinal data, which the numbering plugin only attaches in a
+ * form the list projections surface for list items.
+ */
+function extractBlockNumbering(node: ProseMirrorNode): ParagraphNumbering | undefined {
+  const attrs = node.attrs as {
+    paragraphProperties?: { numberingProperties?: { numId?: unknown; ilvl?: unknown } | null } | null;
+    numberingProperties?: { numId?: unknown; ilvl?: unknown } | null;
+  };
+  const numbering = attrs?.paragraphProperties?.numberingProperties ?? attrs?.numberingProperties;
+  if (!numbering) return undefined;
+  const numId = toFiniteNumber(numbering.numId);
+  // numId 0 is the OOXML no-numbering sentinel (ECMA-376 17.9.18): it removes
+  // numbering rather than referencing a definition. Treat it as unnumbered so
+  // discovery does not surface fake sequences from explicitly un-numbered blocks.
+  if (numId === undefined || numId === 0) return undefined;
+  // Absent ilvl means level 0 in OOXML; normalize so every numbered block
+  // carries a level (matching the numbering plugin and setNumbering defaults).
+  const level = toFiniteNumber(numbering.ilvl) ?? 0;
+  return { numId, level };
 }
 
 /**
@@ -315,6 +344,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
   const blocks: BlockListEntry[] = paged.map((candidate, i) => {
     const textLength = computeTextContentLength(candidate.node);
     const fullText = input?.includeText ? extractBlockText(candidate.node) : undefined;
+    const numbering = extractBlockNumbering(candidate.node);
     const ref =
       textLength > 0
         ? encodeV4Ref({
@@ -336,6 +366,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
       ...(fullText !== undefined ? { text: fullText } : {}),
       isEmpty: textLength === 0,
       ...extractBlockFormatting(candidate.node, styleCtx),
+      ...(numbering ? { paragraphNumbering: numbering } : {}),
       ...(ref ? { ref } : {}),
     };
   });
@@ -352,7 +383,10 @@ export function blocksDeleteWrapper(
   input: BlocksDeleteInput,
   options?: MutationOptions,
 ): BlocksDeleteResult {
-  rejectTrackedMode('blocks.delete', options);
+  const mode = options?.changeMode ?? 'direct';
+  if (mode === 'tracked') {
+    ensureTrackedCapability(editor, { operation: 'blocks.delete' });
+  }
 
   const index = getBlockIndex(editor);
   const candidate = findBlockByIdStrict(index, input.target);
@@ -369,34 +403,19 @@ export function blocksDeleteWrapper(
 
   const sdBlockId = resolveSdBlockId(candidate);
 
-  const deleteBlockNodeById = requireEditorCommand(
-    editor.commands?.deleteBlockNodeById,
-    'blocks.delete',
-  ) as DeleteBlockNodeByIdCommand;
-
   validateCommandLayerUniqueness(editor, sdBlockId);
 
   if (options?.dryRun) {
     return { success: true, deleted: input.target, deletedBlock };
   }
+  checkRevision(editor, options?.expectedRevision);
 
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const didApply = deleteBlockNodeById(sdBlockId);
-      if (didApply) clearIndexCache(editor);
-      return didApply;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    throw new DocumentApiAdapterError(
-      'INTERNAL_ERROR',
-      'blocks.delete command returned false despite passing all pre-apply checks. This is an internal invariant violation.',
-      { sdBlockId, target: input.target },
-    );
-  }
+  const tr = editor.state.tr;
+  tr.delete(candidate.pos, candidate.end);
+  if (mode === 'tracked') applyTrackedMutationMeta(tr);
+  else applyDirectMutationMeta(tr);
+  editor.dispatch(tr);
+  clearIndexCache(editor);
 
   return { success: true, deleted: input.target, deletedBlock };
 }

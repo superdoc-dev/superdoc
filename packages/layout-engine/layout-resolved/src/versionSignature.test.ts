@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TabRun, TextRun } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ImageBlock,
+  ImageRun,
+  ParagraphBlock,
+  SourceAnchor,
+  TableBlock,
+  TabRun,
+  TextRun,
+} from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -63,6 +72,41 @@ describe('deriveBlockVersion - bidi', () => {
   it('is stable when bidi is identical', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
+    expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - tracked-change colors', () => {
+  const makeParagraph = (color: string): ParagraphBlock => ({
+    kind: 'paragraph',
+    id: 'tracked-color',
+    attrs: {},
+    runs: [
+      {
+        text: 'Tracked',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        trackedChange: {
+          kind: 'insert',
+          id: 'tc-1',
+          author: 'Alice',
+          color,
+        },
+      },
+    ],
+  });
+
+  it('changes when only the tracked-change author color changes', () => {
+    const purple = deriveBlockVersion(makeParagraph('#8250df'));
+    const blue = deriveBlockVersion(makeParagraph('#1f6feb'));
+
+    expect(blue).not.toBe(purple);
+  });
+
+  it('is stable when the tracked-change author color is identical', () => {
+    const a = deriveBlockVersion(makeParagraph('#8250df'));
+    const b = deriveBlockVersion(makeParagraph('#8250df'));
+
     expect(a).toBe(b);
   });
 });
@@ -188,6 +232,13 @@ describe('deriveBlockVersion - table image content', () => {
     expect(filtered).not.toBe(plain);
   });
 
+  it('changes when a table image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeTableWithImage(baseImage));
+    const transparent = deriveBlockVersion(makeTableWithImage({ ...baseImage, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
+  });
+
   it('changes when a table image hyperlink changes', () => {
     const unlinked = deriveBlockVersion(makeTableWithImage(baseImage));
     const linked = deriveBlockVersion(
@@ -214,6 +265,43 @@ describe('deriveBlockVersion - table image content', () => {
       }),
     );
 
+    expect(second).not.toBe(first);
+  });
+});
+
+describe('deriveBlockVersion - textboxShape content', () => {
+  const makeTextboxParagraph = (text: string): ParagraphBlock => ({
+    kind: 'paragraph',
+    id: 'textbox-para-1',
+    runs: [{ text, fontFamily: 'Arial', fontSize: 16, pmStart: 10, pmEnd: 10 + text.length }],
+  });
+
+  const makeTextbox = (text: string): FlowBlock => ({
+    kind: 'drawing',
+    id: 'textbox-1',
+    drawingKind: 'textboxShape',
+    geometry: { width: 120, height: 40, rotation: 0, flipH: false, flipV: false },
+    shapeKind: 'rect',
+    contentBlocks: [makeTextboxParagraph(text)],
+    textContent: {
+      parts: [{ text, fontFamily: 'Arial', fontSize: 16 }],
+    },
+    textInsets: { top: 4, right: 6, bottom: 4, left: 6 },
+    textVerticalAlign: 'top',
+  });
+
+  it('produces a different version when textbox text changes', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion(makeTextbox('Beta'));
+    expect(second).not.toBe(first);
+  });
+
+  it('produces a different version when textbox insets change', () => {
+    const first = deriveBlockVersion(makeTextbox('Alpha'));
+    const second = deriveBlockVersion({
+      ...makeTextbox('Alpha'),
+      textInsets: { top: 8, right: 6, bottom: 4, left: 6 },
+    });
     expect(second).not.toBe(first);
   });
 });
@@ -255,6 +343,13 @@ describe('deriveBlockVersion - inline image runs', () => {
     );
 
     expect(filtered).not.toBe(plain);
+  });
+
+  it('changes when an inline image fixed alpha changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const transparent = deriveBlockVersion(makeParagraphWithImageRun({ ...baseImageRun, alphaModFix: { amt: 9000 } }));
+
+    expect(transparent).not.toBe(plain);
   });
 
   it('changes when an inline image transform changes', () => {

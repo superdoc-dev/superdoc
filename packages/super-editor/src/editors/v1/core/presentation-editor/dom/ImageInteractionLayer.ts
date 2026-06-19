@@ -2,6 +2,10 @@ import { DATASET_KEYS, DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 const INTERACTION_EPOCH_KEY = 'imageInteractionEpoch';
 
+type ImageInteractionApplyOptions = {
+  activeHeaderFooterMode?: 'body' | 'header' | 'footer' | string | null;
+};
+
 function parsePmNumber(value: string | undefined): string | null {
   return value && value.trim().length > 0 ? value : null;
 }
@@ -61,6 +65,25 @@ function resolveImageKind(root: HTMLElement): 'inline' | 'block' {
   return root.classList.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) ? 'block' : 'inline';
 }
 
+function getBehindDocSection(root: HTMLElement): string | null {
+  return root.closest<HTMLElement>('[data-behind-doc-section]')?.dataset.behindDocSection ?? null;
+}
+
+function canInteractWithRoot(root: HTMLElement, activeHeaderFooterMode: string | null | undefined): boolean {
+  const section = getBehindDocSection(root);
+  if (!section) return true;
+  return section === activeHeaderFooterMode;
+}
+
+function clearImageRoot(root: HTMLElement): void {
+  root.removeAttribute('draggable');
+  delete root.dataset.dragSourceKind;
+  delete root.dataset.imageKind;
+  delete root.dataset.nodeType;
+  delete root.dataset.displayLabel;
+  delete root.dataset[INTERACTION_EPOCH_KEY];
+}
+
 export class ImageInteractionLayer {
   #container: HTMLElement | null = null;
 
@@ -68,11 +91,16 @@ export class ImageInteractionLayer {
     this.#container = container;
   }
 
-  apply(layoutEpoch: number): void {
+  apply(layoutEpoch: number, options: ImageInteractionApplyOptions = {}): void {
     if (!this.#container) return;
 
     const epochStr = String(layoutEpoch);
     for (const root of collectImageRoots(this.#container)) {
+      if (!canInteractWithRoot(root, options.activeHeaderFooterMode ?? 'body')) {
+        clearImageRoot(root);
+        continue;
+      }
+
       if (root.dataset[INTERACTION_EPOCH_KEY] === epochStr) continue;
 
       const pmStart = parsePmNumber(root.dataset.pmStart);
@@ -94,12 +122,7 @@ export class ImageInteractionLayer {
     if (!this.#container) return;
 
     for (const root of collectImageRoots(this.#container)) {
-      root.removeAttribute('draggable');
-      delete root.dataset.dragSourceKind;
-      delete root.dataset.imageKind;
-      delete root.dataset.nodeType;
-      delete root.dataset.displayLabel;
-      delete root.dataset[INTERACTION_EPOCH_KEY];
+      clearImageRoot(root);
     }
   }
 }

@@ -31,28 +31,17 @@ test('sdk-release.mjs builds Node SDK before validate', async () => {
 
 test('ci-sdk workflow builds Node SDK before validate', async () => {
   const content = await readRepoFile('.github/workflows/ci-sdk.yml');
-  assertOrder(
-    content,
-    '- name: Build Node SDK',
-    '- name: Validate SDK',
-    '.github/workflows/ci-sdk.yml',
-  );
+  assertOrder(content, '- name: Build Node SDK', '- name: Validate SDK', '.github/workflows/ci-sdk.yml');
 });
 
 test('release-sdk fallback workflow builds Node SDK before validate', async () => {
   const content = await readRepoFile('.github/workflows/release-sdk.yml');
-  assertOrder(
-    content,
-    '- name: Build Node SDK',
-    '- name: Validate SDK',
-    '.github/workflows/release-sdk.yml',
-  );
+  assertOrder(content, '- name: Build Node SDK', '- name: Validate SDK', '.github/workflows/release-sdk.yml');
 });
 
 test('release-sdk fallback workflow publishes Node SDK via sdk-release-publish', async () => {
   const content = await readRepoFile('.github/workflows/release-sdk.yml');
-  const expectedCmd =
-    'node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only';
+  const expectedCmd = 'node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only';
   assert.ok(content.includes(expectedCmd), '.github/workflows/release-sdk.yml: missing sdk-release-publish command');
   assert.equal(
     content.includes('npm publish --access public --tag latest'),
@@ -89,7 +78,9 @@ test('release-sdk auto workflow resumes releases from sdk-v tags at HEAD', async
     '.github/workflows/release-sdk.yml: auto-release must have an npm publish recovery step for reruns',
   );
   assert.ok(
-    content.includes('node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ steps.detect.outputs.dist_tag }}" --npm-only'),
+    content.includes(
+      'node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ steps.detect.outputs.dist_tag }}" --npm-only',
+    ),
     '.github/workflows/release-sdk.yml: npm publish recovery must reuse sdk-release-publish.mjs',
   );
 });
@@ -109,6 +100,22 @@ test('release-sdk auto workflow stays on main while stable uses the central orch
   assert.ok(
     stableWorkflow.includes('      - stable'),
     '.github/workflows/release-stable.yml: the central stable orchestrator must run on stable',
+  );
+});
+
+test('release-sdk labs agent sync does not fail SDK release when target workflow is unavailable', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  assert.ok(
+    content.includes("Workflow does not have 'workflow_dispatch' trigger"),
+    '.github/workflows/release-sdk.yml: labs sync must handle the deleted/non-dispatchable workflow error',
+  );
+  assert.ok(
+    content.includes('Labs SDK update workflow is unavailable; SDK release already completed'),
+    '.github/workflows/release-sdk.yml: labs sync skip must explain that SDK release already completed',
+  );
+  assert.ok(
+    content.includes('exit "$DISPATCH_STATUS"'),
+    '.github/workflows/release-sdk.yml: unexpected labs dispatch errors must still fail',
   );
 });
 
@@ -132,11 +139,11 @@ test('sdk semantic-release matches CLI channel model (next/next on main, latest 
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assert.ok(
     content.includes("{ name: 'stable', channel: 'latest' }"),
-    "packages/sdk/.releaserc.cjs: stable release branch must remain configured",
+    'packages/sdk/.releaserc.cjs: stable release branch must remain configured',
   );
   assert.ok(
     content.includes("{ name: 'main', prerelease: 'next', channel: 'next' }"),
-    "packages/sdk/.releaserc.cjs: main branch must release next versions on next channel",
+    'packages/sdk/.releaserc.cjs: main branch must release next versions on next channel',
   );
   assert.ok(
     content.includes('const isCiRelease = Boolean(process.env.CI);'),

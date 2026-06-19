@@ -61,6 +61,15 @@ export interface RegisteredFace {
   status: FontLoadStatus;
 }
 
+/**
+ * Result of {@link FontRegistry.register}: the registered face, plus whether this call actually
+ * changed the registry. `changed` is false for an idempotent no-op (the same
+ * family|weight|style|source was already registered), letting callers skip a redundant reflow.
+ */
+export interface RegisterFaceResult extends RegisteredFace {
+  changed: boolean;
+}
+
 /** Result of awaiting one required family. */
 export interface FontLoadResult {
   family: string;

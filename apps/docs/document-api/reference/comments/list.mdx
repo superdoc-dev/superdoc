@@ -158,6 +158,12 @@ Returns a CommentsListResult with an array of comment threads and total count.
           "importedId": {
             "type": "string"
           },
+          "insertedText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "isInternal": {
             "type": "boolean"
           },
@@ -201,6 +207,19 @@ Returns a CommentsListResult with an array of comment threads and total count.
               }
             ]
           },
+          "trackedChangeParentId": {
+            "description": "SuperDoc logical tracked-change id when the comment anchor sits wholly inside exactly one active tracked change. Derived on read.",
+            "type": "string"
+          },
+          "trackedChangeSide": {
+            "description": "Which side of the surrounding tracked change the comment anchor sits on.",
+            "enum": [
+              "inserted",
+              "deleted",
+              "source",
+              "destination"
+            ]
+          },
           "trackedChangeStory": {
             "oneOf": [
               {
@@ -219,9 +238,14 @@ Returns a CommentsListResult with an array of comment threads and total count.
           },
           "trackedChangeType": {
             "enum": [
+              "insertion",
+              "deletion",
+              "replacement",
+              "formatting",
+              "move",
+              "structural",
               "insert",
               "delete",
-              "replacement",
               "format"
             ]
           }

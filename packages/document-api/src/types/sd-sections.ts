@@ -1,14 +1,11 @@
 /**
  * SDM/1 section, numbering, reference catalog, and annotation types.
  */
-
 import type { SDContentNode } from './sd-nodes.js';
 import type { SDRunProps, SDParagraphProps } from './sd-props.js';
-
 // ---------------------------------------------------------------------------
 // Numbering catalog
 // ---------------------------------------------------------------------------
-
 export interface SDNumberingCatalog {
   definitions?: Record<
     string,
@@ -24,11 +21,9 @@ export interface SDNumberingCatalog {
     }
   >;
 }
-
 // ---------------------------------------------------------------------------
 // Section model
 // ---------------------------------------------------------------------------
-
 export interface SDSection {
   id: string;
   breakType?: 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
@@ -69,47 +64,54 @@ export interface SDSection {
     even?: SDContentNode[];
   };
 }
-
 // ---------------------------------------------------------------------------
 // Reference catalogs
 // ---------------------------------------------------------------------------
-
 export interface SDCitationSource {
   sourceId: string;
   tag?: string;
   type?: string;
   fields?: Record<string, unknown>;
 }
-
 export interface SDReferenceCatalogs {
   citationSources?: SDCitationSource[];
 }
-
 // ---------------------------------------------------------------------------
 // Annotations
 // ---------------------------------------------------------------------------
-
 export interface SDAnchorRange {
   kind: 'text';
   segments: Array<{ blockId: string; start: number; end: number }>;
 }
-
 export interface SDBookmark {
   id: string;
   name: string;
   target: SDAnchorRange;
 }
-
 export interface SDCommentThread {
   id: string;
   status: 'open' | 'resolved';
   target: SDAnchorRange;
   comments: Array<{ id: string; author?: string; createdAt?: string; text: string }>;
 }
-
 export interface SDTrackedChange {
   id: string;
-  type: 'insert' | 'delete' | 'replacement' | 'format';
+  /**
+   * Tracked-change broad type. Accepts the canonical v2 spec vocabulary
+   * (`insertion` / `deletion` / `replacement` / `formatting` / `move` /
+   * `structural`) and the legacy `insert` / `delete` / `format` aliases
+   * during the vocabulary migration.
+   */
+  type:
+    | 'insertion'
+    | 'deletion'
+    | 'replacement'
+    | 'formatting'
+    | 'move'
+    | 'structural'
+    | 'insert'
+    | 'delete'
+    | 'format';
   author?: string;
   date?: string;
   target?: SDAnchorRange;
@@ -122,7 +124,6 @@ export interface SDTrackedChange {
     paragraphPropsAfter?: Partial<SDParagraphProps>;
   };
 }
-
 export interface SDAnnotations {
   bookmarks?: SDBookmark[];
   comments?: SDCommentThread[];

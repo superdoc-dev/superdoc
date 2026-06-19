@@ -58,6 +58,7 @@ const ALL_TAG_PATTERNS = [
   'cli-v*', // CLI       (apps/cli/.releaserc.cjs)
   'create-v*', // Create
   'sdk-v*', // SDK
+  'fonts-v*', // Fonts
   'react-v*', // React
   'vscode-v*', // VS Code
   'mcp-v*', // MCP

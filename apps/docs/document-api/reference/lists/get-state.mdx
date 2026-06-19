@@ -1,0 +1,246 @@
+---
+title: lists.getState
+sidebarTitle: lists.getState
+description: "Read the numbering-aware list state for a paragraph (numId, ilvl, abstract reference, level format). Returns null when the target is not a list item. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Read the numbering-aware list state for a paragraph (numId, ilvl, abstract reference, level format). Returns null when the target is not a list item. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`.
+
+- Operation ID: `lists.getState`
+- API member path: `editor.doc.lists.getState(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsGetStateResult with `isListItem` plus numId/ilvl/abstract/numFmt metadata when present.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="block") \| object(kind="block") | yes | One of: object(kind="block"), object(kind="block") |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `abstractNumId` | string \| null | no |  |
+| `ilvl` | integer | yes |  |
+| `isListItem` | boolean | yes |  |
+| `lvlText` | string \| null | no |  |
+| `numFmt` | string \| null | no |  |
+| `numId` | string \| null | no |  |
+| `seed` | enum \| null | no | `"bullet"`, `"ordered"`, `null` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "abstractNumId": null,
+  "ilvl": 1,
+  "isListItem": true,
+  "numId": null,
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "paragraph"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "listItem"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "abstractNumId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ilvl": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "isListItem": {
+          "type": "boolean"
+        },
+        "lvlText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "numFmt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "numId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seed": {
+          "enum": [
+            "bullet",
+            "ordered",
+            null
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "isListItem",
+        "ilvl"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>

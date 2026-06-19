@@ -1,0 +1,90 @@
+name: Pickled
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - pickled.yml
+      - fixtures/pickled/**
+      - .github/workflows/pickled.yml
+      - AGENTS.md
+      - apps/docs/llms.txt
+      - apps/docs/llms-full.txt
+      - packages/react/README.md
+      - packages/document-api/README.md
+      - apps/mcp/README.md
+      - apps/cli/README.md
+      - packages/superdoc/scripts/README.md
+  workflow_dispatch:
+    inputs:
+      max_cells:
+        description: Max Pickled question cells for real-agent jobs
+        required: false
+        default: '20'
+      build_max_cells:
+        description: Max Pickled build executions for real-agent jobs
+        required: false
+        default: '6'
+
+concurrency:
+  group: pickled-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Calibrate answer examples
+        run: bunx @pickled-dev/cli test .
+
+      - name: Plan question cells
+        run: bunx @pickled-dev/cli check . --plan
+
+      - name: Plan build cells
+        run: bunx @pickled-dev/cli build . --plan
+
+      - name: Prove build verifiers
+        run: bunx @pickled-dev/cli build . --verify-only
+
+  real-agent:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY_PICKLED: ${{ secrets.ANTHROPIC_API_KEY_PICKLED }}
+      ANTHROPIC_API_KEY_DEFAULT: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Check secret availability
+        run: |
+          if [ -n "${ANTHROPIC_API_KEY_PICKLED:-}" ]; then
+            echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY_PICKLED}" >> "$GITHUB_ENV"
+          elif [ -n "${ANTHROPIC_API_KEY_DEFAULT:-}" ]; then
+            echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY_DEFAULT}" >> "$GITHUB_ENV"
+          else
+            echo "::error::ANTHROPIC_API_KEY_PICKLED or ANTHROPIC_API_KEY is required for real-agent Pickled runs"
+            exit 1
+          fi
+
+      - name: Run Pickled
+        run: |
+          bunx @pickled-dev/cli ci . \
+            --questions-max-cells "${{ github.event.inputs.max_cells || '20' }}" \
+            --builds-max-cells "${{ github.event.inputs.build_max_cells || '6' }}" \
+            --report-dir pickled-reports
+
+      - name: Upload Pickled reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pickled-reports
+          path: pickled-reports/*.json
+          if-no-files-found: ignore

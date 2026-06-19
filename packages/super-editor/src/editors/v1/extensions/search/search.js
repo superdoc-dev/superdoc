@@ -48,32 +48,51 @@ const mapIndexMatchesToDocMatches = ({ searchIndex, indexMatches, doc, positionT
     const ranges = searchIndex.offsetRangeToDocRanges(indexMatch.start, indexMatch.end);
     if (ranges.length === 0) continue;
 
-    const matchTexts = ranges.map((r) => doc.textBetween(r.from, r.to));
+    const matchText =
+      typeof indexMatch.text === 'string' ? indexMatch.text : ranges.map((r) => doc.textBetween(r.from, r.to)).join('');
 
-    const match = {
+    matches.push({
       from: ranges[0].from,
       to: ranges[ranges.length - 1].to,
-      text: matchTexts.join(''),
+      text: matchText,
       id: uuidv4(),
       ranges,
       trackerIds: [],
-    };
+    });
+  }
 
-    if (positionTracker?.trackMany) {
-      const trackedRanges = ranges.map((range, rangeIndex) => ({
-        from: range.from,
-        to: range.to,
-        spec: { type: SEARCH_POSITION_TRACKER_TYPE, metadata: { rangeIndex } },
-      }));
-      const trackerIds = positionTracker.trackMany(trackedRanges);
-      if (trackerIds.length > 0) {
-        match.trackerIds = trackerIds;
-        match.id = trackerIds[0];
-      }
+  if (positionTracker?.trackMany && matches.length > 0) {
+    const allTrackedRanges = [];
+    for (const match of matches) {
+      match.ranges.forEach((range, rangeIndex) => {
+        allTrackedRanges.push({
+          from: range.from,
+          to: range.to,
+          spec: { type: SEARCH_POSITION_TRACKER_TYPE, metadata: { rangeIndex } },
+        });
+      });
     }
 
-    matches.push(match);
+    const allIds = positionTracker.trackMany(allTrackedRanges);
+
+    // trackMany returns one id per input range, in order; the per-match slicing
+    // below depends on that. Fail loudly if the contract ever breaks instead of
+    // silently assigning tracker ids to the wrong matches.
+    if (allIds.length !== allTrackedRanges.length) {
+      throw new Error(
+        `Search position tracker returned ${allIds.length} ids for ${allTrackedRanges.length} ranges; expected one id per range.`,
+      );
+    }
+
+    let offset = 0;
+    for (const match of matches) {
+      const count = match.ranges.length;
+      match.trackerIds = allIds.slice(offset, offset + count);
+      match.id = match.trackerIds[0];
+      offset += count;
+    }
   }
+
   return matches;
 };
 

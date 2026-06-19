@@ -104,6 +104,20 @@ export type SuperDocContentErrorEvent = Parameters<NonNullable<SuperDocConfig['o
  */
 export type SuperDocExceptionEvent = import('superdoc').SuperDocExceptionPayload;
 
+/**
+ * Event passed to onZoomChange callback. Re-derived from the core
+ * `Config.onZoomChange` parameter so the React wrapper cannot drift
+ * from the core contract.
+ */
+export type SuperDocZoomChangeEvent = Parameters<NonNullable<SuperDocConfig['onZoomChange']>>[0];
+
+/**
+ * Event passed to onViewportChange callback. Re-derived from the core
+ * `Config.onViewportChange` parameter so the React wrapper cannot
+ * drift from the core contract.
+ */
+export type SuperDocViewportChangeEvent = Parameters<NonNullable<SuperDocConfig['onViewportChange']>>[0];
+
 // =============================================================================
 // React Component Types
 // =============================================================================
@@ -131,7 +145,20 @@ type ExplicitCallbackProps =
   | 'onEditorUpdate'
   | 'onTransaction'
   | 'onContentError'
-  | 'onException';
+  | 'onException'
+  | 'onZoomChange'
+  | 'onViewportChange';
+
+/**
+ * Explicitly typed editor implementation props.
+ */
+interface EditorImplementationProps {
+  /** Select the DOCX editor implementation. @default 1 */
+  editorVersion?: 1 | 2;
+
+  /** Private editor integration object or factory. Required when editorVersion is 2. */
+  editorIntegration?: unknown;
+}
 
 /**
  * Explicitly typed callback props to ensure proper TypeScript inference.
@@ -158,6 +185,12 @@ export interface CallbackProps {
 
   /** Callback when an exception is thrown */
   onException?: (event: SuperDocExceptionEvent) => void;
+
+  /** Callback when the zoom level changes (setZoom, toolbar, or fit-width mode) */
+  onZoomChange?: (event: SuperDocZoomChangeEvent) => void;
+
+  /** Callback when the implied fit changes (rounded fit zoom or base page width); see the core viewport-change event */
+  onViewportChange?: (event: SuperDocViewportChangeEvent) => void;
 }
 
 /**
@@ -193,8 +226,9 @@ interface ReactProps {
  * Callback props are explicitly typed to ensure proper TypeScript inference.
  */
 export interface SuperDocEditorProps
-  extends Omit<SuperDocConfig, InternalProps | OptionalInReact | ExplicitCallbackProps>,
+  extends Omit<SuperDocConfig, InternalProps | OptionalInReact | ExplicitCallbackProps | keyof EditorImplementationProps>,
     Partial<Pick<SuperDocConfig, OptionalInReact>>,
+    EditorImplementationProps,
     CallbackProps,
     ReactProps {}
 

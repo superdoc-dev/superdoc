@@ -40,10 +40,15 @@ pnpm dev
 - `POST /api/word-baseline`
   - JSON body: `{ "fileName": "document.docx", "docxBase64": "..." }`
   - Response: `{ "jobId": "...", "pageCount": 2, "pages": ["http://.../api/word-baseline/jobs/<id>/pages/page_0001.png", ...] }`
-- `POST /api/word-baseline/from-path`
-  - JSON body: `{ "localPath": "/absolute/path/to/document.docx", "fileName": "optional-name.docx" }`
-  - Response: same shape as `POST /api/word-baseline`
 - `GET /api/word-baseline/jobs/:jobId/pages/:pageName`
+
+## Security
+
+This server is for **local development only**. It listens on plain HTTP (default `127.0.0.1:9185`) and has no TLS configuration.
+
+**Never expose this server to the network.** The default bind address is loopback-only. If you change `SUPERDOC_WORD_BASELINE_HOST`, terminate TLS at a reverse proxy in front of the server.
+
+Risk acceptance: HTTP-only transport is an accepted trade-off for this local dev tool.
 
 ## Environment
 

@@ -4,6 +4,26 @@ import { actorIdentitiesMatch } from '@superdoc/common';
 
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
 
+const isV2ReviewRuntimeActive = (superdoc) =>
+  superdoc?.activeEditor?.editorVersion === 2 || superdoc?.config?.editorVersion === 2;
+
+const commentKey = (comment) => {
+  const key = comment?.commentId ?? comment?.importedId;
+  return key == null ? null : String(key);
+};
+
+const preserveLocalV2TrackedChangeRows = (superdoc, incomingComments) => {
+  if (!isV2ReviewRuntimeActive(superdoc)) return [];
+  const currentRows = superdoc?.commentsStore?.commentsList;
+  if (!Array.isArray(currentRows) || !currentRows.length) return [];
+  const incomingKeys = new Set(incomingComments.map(commentKey).filter(Boolean));
+  return currentRows.filter((row) => {
+    if (row?.trackedChange !== true) return false;
+    const key = commentKey(row);
+    return !key || !incomingKeys.has(key);
+  });
+};
+
 /**
  * Load comments from the ydoc into the comments store.
  *
@@ -42,7 +62,10 @@ export const loadCommentsFromYdoc = (superdoc) => {
     }
     filtered.push(c);
   });
-  superdoc.commentsStore.commentsList = filtered.map((c) => useComment(c));
+  superdoc.commentsStore.commentsList = [
+    ...filtered.map((c) => useComment(c)),
+    ...preserveLocalV2TrackedChangeRows(superdoc, filtered),
+  ];
   if (superdoc.provider?.synced) {
     superdoc.commentsStore.hasSyncedCollaborationComments = true;
   }

@@ -5,12 +5,24 @@ import {
   useSuperDocCommand,
   useSuperDocComments,
   useSuperDocContentControls,
+  useSuperDocFontOptions,
+  useSuperDocFontSizeOptions,
   useSuperDocTrackChanges,
   useSuperDocSelection,
   useSuperDocToolbar,
 } from './hooks.js';
 
-function makeSuperdocStub(overrides: { selectionInfo?: unknown } = {}) {
+function makeSuperdocStub(
+  overrides: {
+    selectionInfo?: unknown;
+    documentFontOptions?: Array<{ logicalFamily: string; previewFamily: string }>;
+    fontsConfig?: {
+      resolveAssetUrl?: unknown;
+      assetBaseUrl?: string;
+      bundled?: { include?: string[]; exclude?: string[] };
+    };
+  } = {},
+) {
   const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   const superdocListeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
@@ -44,7 +56,7 @@ function makeSuperdocStub(overrides: { selectionInfo?: unknown } = {}) {
 
   return {
     activeEditor: editor,
-    config: { documentMode: 'editing' as const },
+    config: { documentMode: 'editing' as const, fonts: overrides.fontsConfig },
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!superdocListeners.has(event)) superdocListeners.set(event, new Set());
       superdocListeners.get(event)!.add(handler);
@@ -52,6 +64,9 @@ function makeSuperdocStub(overrides: { selectionInfo?: unknown } = {}) {
     off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       superdocListeners.get(event)?.delete(handler);
     }),
+    fonts: {
+      getDocumentFontOptions: vi.fn(() => overrides.documentFontOptions ?? []),
+    },
   };
 }
 
@@ -145,6 +160,105 @@ describe('domain hooks', () => {
     expect(trackChanges).toEqual({ items: [], total: 0, activeId: null, authors: [] });
     expect(contentControls).toEqual({ items: [], activeIds: [], activeId: null, total: 0 });
     expect(toolbar).toEqual({ context: null, commands: {} });
+  });
+
+  it('useSuperDocFontOptions returns the configured set plus active document fonts', () => {
+    let options: ReturnType<typeof useSuperDocFontOptions> | undefined;
+    let setSuperDoc: ReturnType<typeof useSetSuperDoc> | undefined;
+
+    function Probe() {
+      options = useSuperDocFontOptions();
+      setSuperDoc = useSetSuperDoc();
+      return null;
+    }
+
+    render(
+      <SuperDocUIProvider>
+        <Probe />
+      </SuperDocUIProvider>,
+    );
+
+    expect(options).toEqual([]);
+
+    act(() => {
+      setSuperDoc!(
+        makeSuperdocStub({
+          fontsConfig: { assetBaseUrl: '/fonts/' },
+          documentFontOptions: [{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }],
+        }),
+      );
+    });
+
+    expect(options?.map((option) => option.label)).toEqual([
+      'Aptos',
+      'Arial',
+      'Arial Black',
+      'Arial Narrow',
+      'Baskerville Old Face',
+      'Bookman Old Style',
+      'Brush Script MT',
+      'Calibri',
+      'Century',
+      'Century Gothic',
+      'Comic Sans MS',
+      'Cooper Black',
+      'Courier New',
+      'Garamond',
+      'Georgia',
+      'Gill Sans MT Condensed',
+      'Helvetica',
+      'Lucida Console',
+      'Segoe UI',
+      'Tahoma',
+      'Times New Roman',
+      'Trebuchet MS',
+      'Verdana',
+    ]);
+    expect(options?.find((option) => option.label === 'Aptos')).toEqual({
+      label: 'Aptos',
+      value: 'Aptos',
+      previewFamily: 'Aptos',
+    });
+  });
+
+  it('useSuperDocFontSizeOptions returns the default size picker options', () => {
+    let options: ReturnType<typeof useSuperDocFontSizeOptions> | undefined;
+    let setSuperDoc: ReturnType<typeof useSetSuperDoc> | undefined;
+
+    function Probe() {
+      options = useSuperDocFontSizeOptions();
+      setSuperDoc = useSetSuperDoc();
+      return null;
+    }
+
+    render(
+      <SuperDocUIProvider>
+        <Probe />
+      </SuperDocUIProvider>,
+    );
+
+    expect(options).toEqual([]);
+
+    act(() => {
+      setSuperDoc!(makeSuperdocStub());
+    });
+
+    expect(options?.map((option) => option.value)).toEqual([
+      '8pt',
+      '9pt',
+      '10pt',
+      '11pt',
+      '12pt',
+      '14pt',
+      '18pt',
+      '24pt',
+      '30pt',
+      '36pt',
+      '48pt',
+      '60pt',
+      '72pt',
+      '96pt',
+    ]);
   });
 
   it('useSuperDocCommand returns the disabled fallback for unknown ids', () => {

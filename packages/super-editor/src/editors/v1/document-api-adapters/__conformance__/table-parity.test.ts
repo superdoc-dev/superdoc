@@ -24,6 +24,7 @@ import {
   tablesGetPropertiesAdapter,
   tablesSetColumnWidthAdapter,
   tablesSetCellPropertiesAdapter,
+  tablesSetCellPaddingAdapter,
 } from '../tables-adapter.js';
 
 // ---------------------------------------------------------------------------
@@ -109,7 +110,10 @@ function createNode(
   return node as unknown as ProseMirrorNode;
 }
 
-function makeTableEditorWithProps(tableProperties: Record<string, unknown> = {}): {
+function makeTableEditorWithProps(
+  tableProperties: Record<string, unknown> = {},
+  options: { firstCellAttrs?: Record<string, unknown> } = {},
+): {
   editor: Editor;
   getSetNodeMarkupCalls: () => Array<{ pos: number; type: null; attrs: Record<string, unknown> }>;
 } {
@@ -120,7 +124,7 @@ function makeTableEditorWithProps(tableProperties: Record<string, unknown> = {})
     inlineContent: true,
   });
   const cell = createNode('tableCell', [paragraph], {
-    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1 },
+    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1, ...(options.firstCellAttrs ?? {}) },
     isBlock: true,
     inlineContent: false,
   });
@@ -237,6 +241,10 @@ function findTableWrite(calls: Array<{ attrs: Record<string, unknown> }>): Recor
   return calls.find((call) => 'tableProperties' in call.attrs)?.attrs ?? {};
 }
 
+function findCellWrite(calls: Array<{ attrs: Record<string, unknown> }>): Record<string, unknown> {
+  return calls.find((call) => 'tableCellProperties' in call.attrs && !('tableProperties' in call.attrs))?.attrs ?? {};
+}
+
 // ---------------------------------------------------------------------------
 // Setter → top-level sync parity tests
 // ---------------------------------------------------------------------------
@@ -262,6 +270,31 @@ describe('table setter/getter parity', () => {
       // Top-level should be converted to pixels
       expect(attrs.tableWidth).toBeDefined();
       expect((attrs.tableWidth as any).type).toBe('dxa');
+    });
+
+    it('writes percentage preferred table width when preferredWidthType is pct', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetLayoutAdapter(editor, {
+        nodeId: 'table-1',
+        autoFitMode: 'fixedWidth',
+        preferredWidth: 2500,
+        preferredWidthType: 'pct',
+      });
+
+      const attrs = lastWrittenAttrs(getSetNodeMarkupCalls());
+      const tp = attrs.tableProperties as any;
+      expect(tp.tableWidth).toEqual({ value: 2500, type: 'pct' });
+      expect(attrs.tableWidth).toEqual({ value: 2500, type: 'pct' });
+    });
+
+    it('writes auto preferred table width when preferredWidthType is auto', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetLayoutAdapter(editor, { nodeId: 'table-1', preferredWidthType: 'auto' });
+
+      const attrs = lastWrittenAttrs(getSetNodeMarkupCalls());
+      const tp = attrs.tableProperties as any;
+      expect(tp.tableWidth).toEqual({ value: 0, type: 'auto' });
+      expect(attrs.tableWidth).toEqual({ width: 0, type: 'auto' });
     });
 
     it('converts leftIndentPt to twips (× 20) in nested props', () => {
@@ -307,6 +340,55 @@ describe('table setter/getter parity', () => {
       const tableAttrs = findTableWrite(getSetNodeMarkupCalls());
       expect((tableAttrs.tableProperties as any).tableLayout).toBe('fixed');
       expect(tableAttrs.tableLayout).toBe('fixed');
+    });
+
+    it('writes preferred cell width using the requested type', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetCellPropertiesAdapter(editor, { nodeId: 'cell-1', preferredWidthPt: 2500, preferredWidthType: 'pct' });
+
+      const cellAttrs = findCellWrite(getSetNodeMarkupCalls());
+      expect((cellAttrs.tableCellProperties as any).cellWidth).toEqual({ value: 2500, type: 'pct' });
+      expect(cellAttrs.colwidth).toBeNull();
+    });
+
+    it('writes auto preferred cell width without a stale visual colwidth', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetCellPropertiesAdapter(editor, { nodeId: 'cell-1', preferredWidthType: 'auto' });
+
+      const cellAttrs = findCellWrite(getSetNodeMarkupCalls());
+      expect((cellAttrs.tableCellProperties as any).cellWidth).toEqual({ value: 0, type: 'auto' });
+      expect(cellAttrs.colwidth).toBeNull();
+    });
+
+    it('preserves omitted cell padding sides', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps(
+        {},
+        {
+          firstCellAttrs: {
+            cellMargins: { top: 1, right: 2, bottom: 3, left: 4 },
+            tableCellProperties: {
+              cellMargins: {
+                top: { value: 20, type: 'dxa' },
+                right: { value: 40, type: 'dxa' },
+                bottom: { value: 60, type: 'dxa' },
+                left: { value: 80, type: 'dxa' },
+              },
+            },
+          },
+        },
+      );
+
+      tablesSetCellPaddingAdapter(editor, { nodeId: 'cell-1', leftPt: 6 });
+
+      const cellAttrs = findCellWrite(getSetNodeMarkupCalls());
+      expect(cellAttrs.cellMargins).toEqual({ top: 1, right: 2, bottom: 3, left: 8 });
+      expect((cellAttrs.tableCellProperties as any).cellMargins).toEqual({
+        top: { value: 20, type: 'dxa' },
+        right: { value: 40, type: 'dxa' },
+        bottom: { value: 60, type: 'dxa' },
+        left: { value: 120, type: 'dxa' },
+      });
+      expect(Object.values(cellAttrs.cellMargins as Record<string, number>).every(Number.isFinite)).toBe(true);
     });
   });
 

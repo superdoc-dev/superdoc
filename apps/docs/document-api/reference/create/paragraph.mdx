@@ -56,10 +56,12 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 | `insertionPoint.range` | Range | yes | Range |
 | `insertionPoint.range.end` | integer | yes |  |
 | `insertionPoint.range.start` | integer | yes |  |
+| `insertionPoint.story` | StoryLocator | no | StoryLocator |
 | `paragraph` | ParagraphAddress | yes | ParagraphAddress |
 | `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
 | `paragraph.nodeId` | string | yes |  |
 | `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `paragraph.story` | StoryLocator | no | StoryLocator |
 | `ref` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
@@ -84,12 +86,20 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   },
   "paragraph": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "ref": "handle:abc123",
   "success": true,

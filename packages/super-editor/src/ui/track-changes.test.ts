@@ -105,6 +105,7 @@ function makeStubs(
 
   const superdoc: SuperDocLike & {
     fireEditor(event: string, ...args: unknown[]): void;
+    fireSuperdoc(event: string, ...args: unknown[]): void;
     setComments(next: typeof commentsList): void;
     setTrackedChanges(next: typeof changesList): void;
     setActiveSelection(commentIds?: string[], changeIds?: string[]): void;
@@ -121,6 +122,11 @@ function makeStubs(
     }),
     fireEditor(event, ...args) {
       const handlers = editorListeners.get(event);
+      if (!handlers) return;
+      [...handlers].forEach((handler) => handler(...args));
+    },
+    fireSuperdoc(event, ...args) {
+      const handlers = superdocListeners.get(event);
       if (!handlers) return;
       [...handlers].forEach((handler) => handler(...args));
     },
@@ -157,6 +163,23 @@ describe('ui.trackChanges — snapshot', () => {
     const snap = ui.trackChanges.getSnapshot();
     expect(snap.items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
     expect(snap.total).toBe(2);
+
+    ui.destroy();
+  });
+
+  it('reads v2 active-editor Document API when toolbar routing has no routed editor', () => {
+    const { superdoc, editor } = makeStubs({
+      trackedChanges: [
+        { id: 'tc-v2-1', type: 'insert' },
+        { id: 'tc-v2-2', type: 'delete' },
+      ],
+    });
+    (editor as unknown as { editorVersion: number }).editorVersion = 2;
+    editor.presentationEditor = null as never;
+
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.trackChanges.getSnapshot().items.map((item) => item.id)).toEqual(['tc-v2-1', 'tc-v2-2']);
 
     ui.destroy();
   });
@@ -302,6 +325,20 @@ describe('ui.trackChanges — decide actions route through editor.doc.trackChang
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'reject', target: { scope: 'all' } });
     ui.destroy();
   });
+
+  it('accept(id) refuses synchronously in read-only mode before calling doc.trackChanges.decide', () => {
+    const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'tc1' }] });
+    superdoc.config = {
+      documentMode: 'viewing',
+      modules: { trackChanges: { enabled: false } },
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(() => ui.trackChanges.accept('tc1')).toThrow(/read-only mode/);
+    expect(mocks.decide).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
 });
 
 describe('ui.trackChanges — next/previous navigation', () => {
@@ -407,6 +444,24 @@ describe('ui.trackChanges — regression: tracked-changes-changed refreshes cach
     await Promise.resolve();
 
     expect(ui.trackChanges.getSnapshot().items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
+
+    ui.destroy();
+  });
+
+  it('editorCreate refreshes track changes after a late active editor attach', async () => {
+    const { superdoc, editor } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }],
+    });
+    superdoc.activeEditor = null;
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.trackChanges.getSnapshot().items).toEqual([]);
+
+    superdoc.activeEditor = editor as never;
+    superdoc.fireSuperdoc('editorCreate', { editor });
+    await Promise.resolve();
+
+    expect(ui.trackChanges.getSnapshot().items.map((i) => i.id)).toEqual(['tc1']);
 
     ui.destroy();
   });

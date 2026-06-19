@@ -36,7 +36,7 @@ const emit = defineEmits(['update:show', 'select']);
 
 const triggerRef = ref(null);
 const menuRef = ref(null);
-const menuPosition = ref({ top: '0px', left: '0px' });
+const menuPosition = ref({ top: '0px', left: '0px', maxHeight: 'none' });
 const optionRefs = ref([]);
 const keyboardIndex = ref(-1);
 
@@ -71,6 +71,7 @@ const menuStyle = computed(() => {
     position: 'fixed',
     top: menuPosition.value.top,
     left: menuPosition.value.left,
+    maxHeight: menuPosition.value.maxHeight,
     zIndex: 2000,
   };
 });
@@ -89,8 +90,19 @@ const updateMenuPosition = () => {
   const rect = triggerRef.value.getBoundingClientRect();
   const menuEl = menuRef.value;
   const menuWidth = menuEl?.offsetWidth ?? 0;
+  const menuHeight = menuEl?.scrollHeight ?? menuEl?.offsetHeight ?? 0;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;
+  const gap = 4;
+  const belowTop = rect.bottom + gap;
+  const aboveBottom = rect.top - gap;
+  const availableBelow = Math.max(0, viewportHeight - belowTop - gutter);
+  const availableAbove = Math.max(0, aboveBottom - gutter);
+  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow;
+  const maxHeight = openAbove ? availableAbove : availableBelow;
+  const menuRenderHeight = menuHeight ? Math.min(menuHeight, maxHeight) : maxHeight;
+  const top = openAbove ? Math.max(gutter, aboveBottom - menuRenderHeight) : belowTop;
   let left = rect.left;
 
   if (props.placement === 'bottom-end') {
@@ -102,8 +114,9 @@ const updateMenuPosition = () => {
   left = Math.min(Math.max(gutter, left), maxLeft);
 
   menuPosition.value = {
-    top: `${rect.bottom + 4}px`,
+    top: `${top}px`,
     left: `${left}px`,
+    maxHeight: `${maxHeight}px`,
   };
 };
 
@@ -177,6 +190,7 @@ const focusKeyboardIndex = () => {
   const target = optionRefs.value[keyboardIndex.value];
   if (target && typeof target.focus === 'function') {
     target.focus();
+    target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }
 };
 
@@ -343,6 +357,7 @@ watch(
     if (hasRenderOptions.value) return;
 
     keyboardIndex.value = getInitialKeyboardIndex();
+    await nextTick();
     focusKeyboardIndex();
   },
   { immediate: true },
@@ -435,6 +450,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--sd-ui-dropdown-border, #e4e6eb);
   box-shadow: var(--sd-ui-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.16));
   box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .toolbar-dropdown-menu.toolbar-dropdown-menu--render-only {

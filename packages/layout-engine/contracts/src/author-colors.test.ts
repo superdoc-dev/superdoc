@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { composeAuthorColorResolver, fallbackAuthorColor, stampTrackedChangeColors } from './author-colors.js';
-import type { FlowBlock, ParagraphBlock, TextRun } from './index.js';
+import type { FlowBlock, ParagraphBlock, TableBlock, TextRun } from './index.js';
 
 describe('composeAuthorColorResolver', () => {
   it('returns undefined when config is missing or disabled', () => {
@@ -93,5 +93,41 @@ describe('stampTrackedChangeColors', () => {
     const run: TextRun = { kind: 'text', text: 'plain', fontFamily: 'Arial', fontSize: 12 };
     stampTrackedChangeColors([makeParagraph(run)], composeAuthorColorResolver({ overrides: {} })!);
     expect((run as TextRun).color).toBeUndefined();
+  });
+
+  it('stamps color on a structural row-level tracked change', () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 't1',
+      rows: [
+        {
+          id: 'r1',
+          attrs: { trackedChange: { kind: 'insert', id: 'row-tc1', author: 'Alice' } },
+          cells: [{ id: 'c1', paragraph: { kind: 'paragraph', id: 'p1', runs: [] } }],
+        },
+      ],
+    };
+
+    stampTrackedChangeColors([table], composeAuthorColorResolver({ overrides: { Alice: '#abcdef' } })!);
+
+    expect(table.rows[0]!.attrs?.trackedChange?.color).toBe('#abcdef');
+  });
+
+  it('clears stale color on a row-level tracked change when no resolver is provided', () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 't1',
+      rows: [
+        {
+          id: 'r1',
+          attrs: { trackedChange: { kind: 'delete', id: 'row-tc2', author: 'Bob', color: '#abcdef' } },
+          cells: [{ id: 'c1', paragraph: { kind: 'paragraph', id: 'p1', runs: [] } }],
+        },
+      ],
+    };
+
+    stampTrackedChangeColors([table], undefined);
+
+    expect(table.rows[0]!.attrs?.trackedChange?.color).toBeUndefined();
   });
 });

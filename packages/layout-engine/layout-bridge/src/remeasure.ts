@@ -1550,10 +1550,14 @@ export function remeasureParagraph(
 
   // Build marker info if this is a list paragraph
   const marker = wordLayout?.marker;
+  const markerTextWidth =
+    typeof marker?.glyphWidthPx === 'number' && Number.isFinite(marker.glyphWidthPx) && marker.glyphWidthPx >= 0
+      ? marker.glyphWidthPx
+      : (measuredMarkerTextWidth ?? 0);
   const markerInfo = marker
     ? {
         markerWidth: indentHanging ?? 0,
-        markerTextWidth: measuredMarkerTextWidth ?? 0,
+        markerTextWidth,
         indentLeft,
         gutterWidth: marker.gutterWidthPx,
       }

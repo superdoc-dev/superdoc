@@ -72,6 +72,18 @@ export function executeFieldsInsert(
   if (!input.instruction || typeof input.instruction !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'fields.insert requires a non-empty instruction string.');
   }
+  if (input.updatePolicy !== undefined && input.updatePolicy !== 'rebuild' && input.updatePolicy !== 'preserveCached') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert updatePolicy must be 'rebuild' or 'preserveCached' when provided.",
+    );
+  }
+  if (input.updatePolicy === 'preserveCached' && typeof input.cachedResultText !== 'string') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      "fields.insert with updatePolicy: 'preserveCached' requires a string cachedResultText.",
+    );
+  }
   return adapter.insert(input, normalizeMutationOptions(options));
 }
 

@@ -41,11 +41,13 @@ type PresentationPostPaintPipelineDeps = {
 
 type RefreshAfterPaintOptions = {
   layoutEpoch: number;
+  activeHeaderFooterMode?: string | null;
   editorState: EditorState | null | undefined;
   domPositionIndex: DomPositionIndex;
   proofingAnnotations: ProofingAnnotation[] | null | undefined;
   rebuildDomPositionIndex: () => void;
   reapplyStructuredContentHover?: () => void;
+  reapplyTocGroupHover?: () => void;
 };
 
 /**
@@ -136,11 +138,12 @@ export class PresentationPostPaintPipeline {
   refreshAfterPaint(options: RefreshAfterPaintOptions): void {
     this.#fieldAnnotationLayer.apply(options.layoutEpoch);
     options.rebuildDomPositionIndex();
-    this.#imageLayer.apply(options.layoutEpoch);
+    this.#imageLayer.apply(options.layoutEpoch, { activeHeaderFooterMode: options.activeHeaderFooterMode });
     this.#structuredContentLayer.apply(options.layoutEpoch);
     this.syncInlineStyleLayers(options.editorState, options.domPositionIndex);
     this.applyProofingAnnotations(options.proofingAnnotations, options.rebuildDomPositionIndex);
     options.reapplyStructuredContentHover?.();
+    options.reapplyTocGroupHover?.();
   }
 
   destroy(): void {

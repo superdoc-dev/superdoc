@@ -1,0 +1,291 @@
+---
+title: blocks.merge
+sidebarTitle: blocks.merge
+description: "Merge two adjacent paragraphs in the same story. The first paragraph keeps its pPr; the second paragraph is removed. Rejects when either paragraph carries a w:sectPr or when their numbering definitions differ. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Merge two adjacent paragraphs in the same story. The first paragraph keeps its pPr; the second paragraph is removed. Rejects when either paragraph carries a w:sectPr or when their numbering definitions differ. Available on v2-backed sessions only; v1-backed sessions currently return `CAPABILITY_UNAVAILABLE`.
+
+- Operation ID: `blocks.merge`
+- API member path: `editor.doc.blocks.merge(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a BlocksMergeResult; on success carries the removed paragraph address plus affectedStories, textRangeShifts, and a txId.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `first` | BlockNodeAddress | yes | BlockNodeAddress |
+| `first.kind` | `"block"` | yes | Constant: `"block"` |
+| `first.nodeId` | string | yes |  |
+| `first.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `first.story` | StoryLocator | no | StoryLocator |
+| `second` | BlockNodeAddress | yes | BlockNodeAddress |
+| `second.kind` | `"block"` | yes | Constant: `"block"` |
+| `second.nodeId` | string | yes |  |
+| `second.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `second.story` | StoryLocator | no | StoryLocator |
+
+### Example request
+
+```json
+{
+  "first": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  },
+  "second": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
+| `removed` | BlockNodeAddress | yes | BlockNodeAddress |
+| `removed.kind` | `"block"` | yes | Constant: `"block"` |
+| `removed.nodeId` | string | yes |  |
+| `removed.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `removed.story` | StoryLocator | no | StoryLocator |
+| `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
+
+### Example response
+
+```json
+{
+  "affectedStories": [
+    {
+      "kind": "story",
+      "storyType": "body"
+    }
+  ],
+  "remappedRefs": [
+    {
+      "from": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "range": {
+          "end": 10,
+          "start": 0
+        },
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
+      },
+      "to": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "range": {
+          "end": 10,
+          "start": 0
+        },
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
+      }
+    }
+  ],
+  "removed": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_CONTEXT`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "first": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "second": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "required": [
+    "first",
+    "second"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
+    "remappedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRefRemapping"
+      },
+      "type": "array"
+    },
+    "removed": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "success": {
+      "const": true
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "txId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "success",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
+    "remappedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRefRemapping"
+      },
+      "type": "array"
+    },
+    "removed": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "success": {
+      "const": true
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "txId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "success",
+    "removed"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET",
+            "INVALID_INPUT"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
-import { DOCX } from '@superdoc/common';
+import { DOCX, PDF } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Mapping, StepMap } from 'prosemirror-transform';
@@ -104,6 +104,15 @@ const CommentsLayerStub = stubComponent('CommentsLayer');
 const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
+const PdfViewerStub = defineComponent({
+  name: 'PdfViewer',
+  props: ['config', 'file', 'fileId', 'initialScale'],
+  emits: ['selection-raw', 'bypass-selection', 'page-rendered', 'document-ready'],
+  setup(_props, { expose }) {
+    expose({ updateScale: vi.fn() });
+    return () => h('div', { class: 'sd-pdf-viewer pdf-viewer-stub' });
+  },
+});
 
 const createTrackedChangeIndexStub = () => ({
   subscribe: vi.fn(() => () => {}),
@@ -145,6 +154,26 @@ vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({
   default: HtmlViewerStub,
 }));
 
+vi.mock(
+  './components/PdfViewer/PdfViewer.vue',
+  () => ({
+    // SuperDoc.vue loads PdfViewer through defineAsyncComponent, so Vue
+    // receives this module namespace and interop-probes it (__isTeleport,
+    // __isKeepAlive, etc.). Export the common probe surface explicitly so
+    // the async resolver can take `default` without tripping over vitest's
+    // strict mock proxy.
+    default: PdfViewerStub,
+    __isTeleport: false,
+    __isKeepAlive: false,
+    name: 'PdfViewer',
+    displayName: 'PdfViewer',
+    __name: 'PdfViewer',
+    __vccOpts: PdfViewerStub,
+    __esModule: true,
+  }),
+  { spy: false },
+);
+
 vi.mock('@superdoc/components/CommentsLayer/CommentDialog.vue', () => ({
   default: CommentDialogStub,
 }));
@@ -164,6 +193,157 @@ vi.mock('@superdoc/components/AiLayer/AiLayer.vue', () => ({
 vi.mock('@superdoc/components/CommentsLayer/CommentsLayer.vue', () => ({
   default: CommentsLayerStub,
 }));
+
+// ui-phase2-001: stub the v2 DOCX editor component. The injected integration
+// renders a deterministic `.v2-super-editor` host element so the branch tests
+// can pin which path the DOCX document took without running V2.
+const V2SuperEditorStub = defineComponent({
+  name: 'V2SuperEditor',
+  props: ['fileSource', 'documentId', 'options'],
+  emits: ['v2-editor-ready', 'v2-editor-failed', 'v2-render', 'v2-render-cleared', 'v2-selection-changed'],
+  setup() {
+    return () => h('div', { class: 'v2-super-editor' }, 'v2-editor');
+  },
+});
+
+// Vue test-utils probes the resolved async-component module proxy for
+// optional Vue properties (`__isTeleport`, `__isKeepAlive`, `name`,
+// `displayName`, `__name`, …) and vitest's mock proxy throws on any
+// unknown export. Make the mock a plain object instead of a strict
+// proxy by toggling `spy: false` and exporting the common Vue probe
+// surface so the resolution path is the same as a real `.vue` module.
+const V2RulerStub = defineComponent({
+  name: 'V2Ruler',
+  setup() {
+    return () => h('div', { class: 'v2-ruler' });
+  },
+});
+
+const buildRelativeBounds = (element, layersContainer) => {
+  const elementRect = element.getBoundingClientRect();
+  const layersRect = layersContainer.getBoundingClientRect();
+  return {
+    top: elementRect.top - layersRect.top,
+    left: elementRect.left - layersRect.left,
+    right: elementRect.right - layersRect.left,
+    bottom: elementRect.bottom - layersRect.top,
+    width: elementRect.width,
+    height: elementRect.height,
+  };
+};
+
+const collectTestV2GeometryEntries = async ({ host, layersContainer, mountContainer }) => {
+  const entries = {};
+  const commentsResult = await host
+    ?.getHandles?.()
+    ?.comments?.list?.()
+    .catch(() => null);
+  const aliases = new Map();
+  for (const item of commentsResult?.items ?? []) {
+    const id = item?.id ?? item?.commentId;
+    if (id != null && item?.importedId != null) {
+      aliases.set(String(id), String(item.importedId));
+    }
+  }
+
+  for (const element of mountContainer.querySelectorAll('[data-comment-ids]')) {
+    const ids = String(element.dataset.commentIds ?? '')
+      .split(/[,\s]+/)
+      .filter(Boolean);
+    for (const id of ids) {
+      const entry = {
+        threadId: id,
+        key: id,
+        kind: id === 'pending' ? 'pending' : 'comment',
+        storyKey: element.dataset.storyKey || 'body',
+        bounds: buildRelativeBounds(element, layersContainer),
+      };
+      entries[id] = entry;
+      const importedId = aliases.get(id);
+      if (importedId) entries[importedId] = entry;
+    }
+  }
+
+  return entries;
+};
+
+const createTestV2GeometryPublisher = ({
+  getLayersContainer,
+  isCommentsEnabled,
+  publishPositions,
+  clearPositions,
+  setGeometryAvailable = () => undefined,
+}) => {
+  let lastPayload = null;
+  let lastEpoch = null;
+
+  const publish = vi.fn(async (payload) => {
+    lastPayload = payload ?? null;
+    if (!payload?.mountContainer) {
+      clearPositions();
+      setGeometryAvailable(false);
+      return;
+    }
+    const layersContainer = getLayersContainer();
+    if (!layersContainer || !isCommentsEnabled()) {
+      clearPositions();
+      setGeometryAvailable(false);
+      return;
+    }
+    const entries = await collectTestV2GeometryEntries({
+      host: payload.host,
+      layersContainer,
+      mountContainer: payload.mountContainer,
+    });
+    publishPositions(entries);
+    lastEpoch = payload.epoch ?? null;
+    setGeometryAvailable(true);
+  });
+
+  return {
+    publish,
+    recollect: vi.fn(async () => {
+      if (lastPayload) await publish(lastPayload);
+    }),
+    reset: vi.fn(() => {
+      lastPayload = null;
+      lastEpoch = null;
+      setGeometryAvailable(false);
+    }),
+    getLastEpoch: vi.fn(() => lastEpoch),
+    getLastPayload: vi.fn(() => lastPayload),
+  };
+};
+
+const createTestV2ReviewHydrationController = () => ({
+  setContext: vi.fn(),
+  onRenderReadiness: vi.fn(),
+  reset: vi.fn(),
+  getDiagnostics: vi.fn(() => null),
+});
+
+const isTestSyntheticTrackedChangeCommentLaneItem = (item) => {
+  const id = item?.id ?? item?.commentId;
+  return typeof id === 'string' && id.startsWith('tc-comment:');
+};
+
+const isTestV2SyntheticTrackedChangeRow = (row) =>
+  row?.trackedChange === true &&
+  typeof row?.trackedChangeAnchorKey === 'string' &&
+  row.trackedChangeAnchorKey.startsWith('tc::body::');
+
+// SuperDoc.vue now receives the v2 editor / ruler components through the
+// injected `config.editorIntegration` seam. Build a test integration with
+// lightweight local stubs so the public package does not import V2 implementation code.
+const buildTestV2Integration = () => ({
+  version: 2,
+  EditorComponent: V2SuperEditorStub,
+  RulerComponent: V2RulerStub,
+  createGeometryPublisher: createTestV2GeometryPublisher,
+  createReviewHydrationController: createTestV2ReviewHydrationController,
+  isSyntheticTrackedChangeCommentLaneItem: isTestSyntheticTrackedChangeCommentLaneItem,
+  isV2SyntheticTrackedChangeRow: isTestV2SyntheticTrackedChangeRow,
+});
 
 const buildSuperdocStore = () => {
   const documents = ref([
@@ -189,6 +369,8 @@ const buildSuperdocStore = () => {
     selectionPosition: ref(null),
     activeSelection: ref(null),
     activeZoom: ref(100),
+    zoomMode: ref('manual'),
+    viewportMetrics: ref(null),
     modules: reactive({ comments: { readOnly: false }, ai: {}, 'hrbr-fields': [] }),
     handlePageReady: vi.fn(),
     user: { name: 'Ada', email: 'ada@example.com' },
@@ -244,6 +426,7 @@ const buildCommentsStore = () => ({
   },
   processLoadedDocxComments: vi.fn(),
   translateCommentsForExport: vi.fn(() => []),
+  syncResolvedCommentsWithDocument: vi.fn(),
   requestInstantSidebarAlignment: vi.fn(),
   peekInstantSidebarAlignment: vi.fn(() => null),
   clearInstantSidebarAlignment: vi.fn(),
@@ -337,6 +520,7 @@ const mountComponent = async (
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };
   const runtimeMap = new Map();
+  const eventHandlers = new Map();
   return {
     config: {
       modules: { comments: {}, ai: {}, toolbar: {}, pdf: {} },
@@ -346,6 +530,10 @@ const createSuperdocStub = () => {
       suppressDefaultDocxStyles: false,
       disableContextMenu: false,
       layoutEngineOptions: {},
+      // Inject the v2 integration seam so the editorVersion: 2 branch resolves
+      // the stub editor / ruler components. v1 tests keep editorVersion: 1, so
+      // the integration factory is present but never rendered.
+      editorIntegration: buildTestV2Integration,
     },
     activeEditor: null,
     toolbar,
@@ -355,7 +543,9 @@ const createSuperdocStub = () => {
     broadcastEditorDestroy: vi.fn(),
     broadcastPdfDocumentReady: vi.fn(),
     broadcastSidebarToggle: vi.fn(),
-    setActiveEditor: vi.fn(),
+    setActiveEditor: vi.fn(function setActiveEditor(editor) {
+      this.activeEditor = editor;
+    }),
     registerEditorRuntime: vi.fn((runtime) => {
       if (runtime?.id) runtimeMap.set(runtime.id, runtime);
     }),
@@ -364,8 +554,24 @@ const createSuperdocStub = () => {
     getActiveRuntime: vi.fn(() => null),
     activateRuntimeFromEventTarget: vi.fn(() => false),
     lockSuperdoc: vi.fn(),
-    emit: vi.fn(),
-    listeners: vi.fn(),
+    on: vi.fn((eventName, handler) => {
+      const handlers = eventHandlers.get(eventName) ?? new Set();
+      handlers.add(handler);
+      eventHandlers.set(eventName, handlers);
+      return undefined;
+    }),
+    off: vi.fn((eventName, handler) => {
+      eventHandlers.get(eventName)?.delete(handler);
+      return undefined;
+    }),
+    emit: vi.fn((eventName, payload) => {
+      const handlers = eventHandlers.get(eventName);
+      if (handlers) {
+        for (const handler of [...handlers]) handler(payload);
+      }
+      return true;
+    }),
+    listeners: vi.fn((eventName) => [...(eventHandlers.get(eventName) ?? [])]),
     captureLayoutPipelineEvent: vi.fn(),
     canPerformPermission: vi.fn(() => true),
   };
@@ -1169,6 +1375,10 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncResolvedCommentsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
@@ -1179,6 +1389,7 @@ describe('SuperDoc.vue', () => {
 
     commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
     commentsStoreStub.syncTrackedChangeComments.mockClear();
+    commentsStoreStub.syncResolvedCommentsWithDocument.mockClear();
 
     options.onTransaction({
       editor: editorMock,
@@ -1187,6 +1398,10 @@ describe('SuperDoc.vue', () => {
     });
 
     expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncResolvedCommentsWithDocument).toHaveBeenCalledWith({
       documentId: 'doc-1',
       editor: editorMock,
     });
@@ -2903,5 +3118,1103 @@ describe('SuperDoc.vue', () => {
 
     const styleVars = wrapper.vm.superdocStyleVars;
     expect(styleVars['--sd-comments-highlight-hover']).toBe('#abcdef88');
+  });
+
+  describe('viewport-change + fit-to-container', () => {
+    // Letter page: 8.5in * 96 = 816px base width through the page-styles path.
+    const stubPageStylesEditor = (superdocStub) => {
+      superdocStub.activeEditor = {
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+    };
+
+    const setContainerWidth = (wrapper, width) => {
+      const rootEl = wrapper.find('.superdoc').element;
+      const parentEl = rootEl.parentElement;
+      Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: width });
+      if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: width });
+    };
+
+    const viewportChangeCalls = (superdocStub) =>
+      superdocStub.emit.mock.calls.filter(([name]) => name === 'viewport-change');
+
+    it('does not emit viewport-change before isReady', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.isReady.value = false;
+      await nextTick();
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('emits viewport-change with page-styles-derived widths when ready', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('keeps documentWidth zoom-independent (page styles win over scaled DOM)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      // A zoom applied before the first measurement must not corrupt the base.
+      superdocStoreStub.activeZoom.value = 50;
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].documentWidth).toBe(816);
+      expect(calls[0][1].fitZoom).toBe(147);
+    });
+
+    it('falls back to page styles when laid-out pages are unavailable', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => {
+          throw new Error('layout not ready');
+        }),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('dedupes width changes that round to the same fit', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // 1199 / 816 rounds to the same fitZoom (147) as 1200 / 816.
+      setContainerWidth(wrapper, 1199);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+      // The event dedupes, but stored metrics stay latest: reads must see
+      // the 1199 measurement the deduped event skipped.
+      expect(superdocStoreStub.viewportMetrics.value.availableWidth).toBe(1199);
+
+      // A materially different width emits again.
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(2);
+      expect(calls[1][1].fitZoom).toBe(74);
+    });
+
+    it('skips emission entirely while no document width is measurable', async () => {
+      const superdocStub = createSuperdocStub();
+      // No activeEditor and no laid-out DOM: base width unresolvable.
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('does not scan PDF page DOM for DOCX-only documents', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      const rootEl = wrapper.find('.superdoc').element;
+      const querySelectorAllSpy = vi.spyOn(rootEl, 'querySelectorAll');
+
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      rootEl.appendChild(pageEl);
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(querySelectorAllSpy).not.toHaveBeenCalledWith('.sd-pdf-viewer-page');
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
+    });
+
+    const zoomChangeCalls = (superdocStub) => superdocStub.emit.mock.calls.filter(([name]) => name === 'zoomChange');
+
+    it('stores the latest metrics for getViewportMetrics()', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(superdocStoreStub.viewportMetrics.value).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
+    it('fit-width mode applies the fit with default clamping (max 100)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width' };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // fitZoom = 600 / 816 = 74; within [10, 100] so applied as-is. The
+      // fit writes the store directly (setZoom would flip mode to manual).
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub)).toEqual([['zoomChange', { zoom: 74, mode: 'fit-width' }]]);
+      expect(viewportChangeCalls(superdocStub)[0][1].fitZoom).toBe(74);
+    });
+
+    it('clamps the applied fit but emits the raw fitZoom', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width', fitWidth: { min: 80 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      setContainerWidth(wrapper, 408);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Raw fit is 50 (408 / 816); applied value clamps to min 80.
+      expect(viewportChangeCalls(superdocStub)[0][1].fitZoom).toBe(50);
+      expect(superdocStoreStub.activeZoom.value).toBe(80);
+    });
+
+    it('padding shapes the applied fit only, never the metrics', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width', fitWidth: { padding: 96 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      superdocStoreStub.activeZoom.value = 50;
+      setContainerWidth(wrapper, 912);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Metrics are policy-free: availableWidth stays 912 and fitZoom is
+      // the raw ratio. The applied fit reserves the padding: (912 - 96) /
+      // 816 = 100.
+      expect(viewportChangeCalls(superdocStub)[0][1]).toEqual({
+        availableWidth: 912,
+        documentWidth: 816,
+        fitZoom: 112,
+      });
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+    });
+
+    it('subtracts the comments sidebar width through the owned template ref', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+      await nextTick();
+
+      const sidebarEl = wrapper.find('.superdoc__right-sidebar').element;
+      Object.defineProperty(sidebarEl, 'offsetWidth', { configurable: true, value: 240 });
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 960,
+        documentWidth: 816,
+        fitZoom: 118,
+      });
+    });
+
+    it('does not re-apply zoom when the target equals the current zoom', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { mode: 'fit-width' };
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      superdocStoreStub.activeZoom.value = 74;
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      // Same-value guard: target 74 equals current zoom, so no write and
+      // no zoomChange, while the viewport-change event still emits.
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub).length).toBe(0);
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+    });
+
+    it('manual mode never applies the fit (metrics still emit)', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = { fitWidth: { min: 25 } };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(1);
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+      expect(zoomChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('switching zoomMode to fit-width applies the fit immediately', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+      superdocStub.config.zoom = {};
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 600);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(superdocStoreStub.activeZoom.value).toBe(100);
+
+      superdocStoreStub.zoomMode.value = 'fit-width';
+      await nextTick();
+
+      expect(superdocStoreStub.activeZoom.value).toBe(74);
+      expect(zoomChangeCalls(superdocStub)).toEqual([['zoomChange', { zoom: 74, mode: 'fit-width' }]]);
+    });
+
+    it('resolves documentWidth as the widest page across documents', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      // Two DOCX documents: portrait letter (8.5in) and landscape (11in).
+      // Zoom is global, so the fit must target the widest page.
+      superdocStoreStub.documents.value = [
+        {
+          id: 'doc-portrait',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 8.5, height: 11 } }) })),
+          setEditor: vi.fn(),
+        },
+        {
+          id: 'doc-landscape',
+          type: DOCX,
+          editorMountNonce: ref(0),
+          getEditor: vi.fn(() => ({ getPageStyles: () => ({ pageSize: { width: 11, height: 8.5 } }) })),
+          setEditor: vi.fn(),
+        },
+      ];
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      // 11in * 96 = 1056: the widest page wins over 816.
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('prefers the widest laid-out page over body page styles (landscape sections)', async () => {
+      const superdocStub = createSuperdocStub();
+      // Portrait body section (8.5in) but a laid-out interior landscape
+      // page: the fit must target what the renderer paints (getPages max),
+      // exactly like SuperEditor's own container sizing.
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => [{ size: { w: 816 } }, { size: { w: 1056 } }]),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('re-evaluates document width after pagination updates', async () => {
+      const superdocStub = createSuperdocStub();
+      let pages = [{ size: { w: 816 } }];
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => pages),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
+
+      pages = [{ size: { w: 816 } }, { size: { w: 1056 } }];
+      superdocStub.emit.mockClear();
+      superdocStub.emit('pagination-update', { totalPages: 2, superdoc: superdocStub });
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 1056,
+        fitZoom: 114,
+      });
+    });
+
+    it('resolves PDF page width scale-relatively (zoom-sync state cannot corrupt the base)', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.documents.value = [
+        {
+          id: 'pdf-1',
+          type: PDF,
+          data: { name: 'doc.pdf' },
+          editorMountNonce: ref(0),
+          setEditor: vi.fn(),
+          getEditor: vi.fn(() => null),
+        },
+      ];
+      await nextTick();
+
+      // A rendered 612pt PDF page at 50% viewer zoom measures 408px with
+      // --scale-factor 2/3 (zoom * 96/72). The store zoom claims 100% (a
+      // seeded zoom the viewer has not applied yet); the resolver must
+      // trust the page's actual scale factor and report 816 regardless.
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      Object.defineProperty(pageEl, 'clientWidth', { configurable: true, value: 408 });
+      wrapper.find('.superdoc').element.appendChild(pageEl);
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const computedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+        if (el === pageEl) {
+          return { getPropertyValue: (prop) => (prop === '--scale-factor' ? `${2 / 3}` : '') };
+        }
+        return originalGetComputedStyle(el, pseudo);
+      });
+
+      try {
+        setContainerWidth(wrapper, 1200);
+        wrapper.vm.recalculateCompactCommentsMode();
+        superdocStoreStub.isReady.value = true;
+        await nextTick();
+
+        const calls = viewportChangeCalls(superdocStub);
+        expect(calls.length).toBe(1);
+        expect(calls[0][1].documentWidth).toBeCloseTo(816, 6);
+        expect(calls[0][1].fitZoom).toBe(147);
+      } finally {
+        computedStyleSpy.mockRestore();
+      }
+    });
+  });
+
+  // ui-phase2-001: branch selection + v1 non-regression for the
+  // public `editorVersion` switch. These tests look at the rendered
+  // DOCX branch by class name (`SuperEditorStub` adds `super-editor-stub`,
+  // `V2SuperEditor` adds `v2-super-editor`) rather than reaching into Vue
+  // internals so the public branch contract is what we pin.
+  describe('editorVersion branch selection', () => {
+    it('renders the v1 SuperEditor for DOCX when editorVersion is omitted', async () => {
+      const superdocStub = createSuperdocStub();
+      // editorVersion intentionally not set
+      const wrapper = await mountComponent(superdocStub);
+      await nextTick();
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(true);
+      expect(wrapper.find('.v2-super-editor').exists()).toBe(false);
+    });
+
+    it('renders the v1 SuperEditor for DOCX when editorVersion is 1', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 1;
+      const wrapper = await mountComponent(superdocStub);
+      await nextTick();
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(true);
+      expect(wrapper.find('.v2-super-editor').exists()).toBe(false);
+    });
+
+    it('renders V2SuperEditor for DOCX when editorVersion is 2', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const wrapper = await mountComponent(superdocStub);
+      // The v2 editor component now comes from the injected integration; flush
+      // pending microtasks so the rendered branch settles.
+      await flushPromises();
+      await nextTick();
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(false);
+      expect(wrapper.find('.v2-super-editor').exists()).toBe(true);
+    });
+
+    it('forwards the injected v2 editor component as the rendered v2 editor', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const wrapper = await mountComponent(superdocStub);
+      await flushPromises();
+      await nextTick();
+      // The component rendered for the v2 branch is exactly the one supplied via
+      // config.editorIntegration.EditorComponent (the test stub), proving the seam
+      // forwards the integration's component provider.
+      expect(wrapper.findComponent(V2SuperEditorStub).exists()).toBe(true);
+    });
+
+    it('surfaces a clear exception when editorVersion is 2 without an integration', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      // No integration injected: the local stub must fail closed.
+      delete superdocStub.config.editorIntegration;
+      const wrapper = await mountComponent(superdocStub);
+      await flushPromises();
+      await nextTick();
+
+      expect(wrapper.findComponent(V2SuperEditorStub).exists()).toBe(false);
+      const exceptionCalls = superdocStub.emit.mock.calls.filter((call) => call[0] === 'exception');
+      expect(exceptionCalls.length).toBeGreaterThan(0);
+      const payload = exceptionCalls.at(-1)?.[1];
+      expect(String(payload?.code ?? payload?.error?.message ?? '')).toContain('v2-integration-missing');
+    });
+
+    it('forwards document V2 collaboration options to V2SuperEditor', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customSuperdocStore = buildSuperdocStore();
+      const v2Collaboration = {
+        documentId: 'sd-v2-proof-v2',
+        params: { clientSessionId: 'labs-preview-v2' },
+        serverUrl: 'ws://127.0.0.1:8081/v1/collaboration',
+      };
+      customSuperdocStore.documents.value[0].v2Collaboration = v2Collaboration;
+
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customSuperdocStore });
+      await flushPromises();
+      await nextTick();
+
+      const v2Editor = wrapper.findComponent(V2SuperEditorStub);
+      expect(v2Editor.exists()).toBe(true);
+      expect(v2Editor.props('options').v2Collaboration).toEqual(v2Collaboration);
+    });
+
+    it('emits collaboration-ready when a V2 collaborative editor is ready', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const onCollaborationReady = vi.fn();
+      superdocStub.on('collaboration-ready', onCollaborationReady);
+      const customSuperdocStore = buildSuperdocStore();
+      customSuperdocStore.documents.value[0].v2Collaboration = {
+        documentId: 'sd-v2-proof-v2',
+        params: { clientSessionId: 'labs-preview-v2' },
+        serverUrl: 'ws://127.0.0.1:8081/v1/collaboration',
+      };
+
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customSuperdocStore });
+      await flushPromises();
+      await nextTick();
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host: { save: vi.fn(async () => new Uint8Array().buffer), getCapabilities: vi.fn(() => ({})) },
+        mount: { focus: { focus: vi.fn(() => true) } },
+        documentId: 'doc-1',
+      });
+      await nextTick();
+
+      const facade = customSuperdocStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0];
+      expect(superdocStub.emit).toHaveBeenCalledWith('collaboration-ready', { editor: facade });
+      expect(onCollaborationReady).toHaveBeenCalledWith({ editor: facade });
+      await nextTick();
+      expect(customSuperdocStore.isReady.value).toBe(true);
+    });
+
+    it('does not pass a v1 editorCtor to SuperEditor when editorVersion is 2', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const wrapper = await mountComponent(superdocStub);
+      await nextTick();
+      // No v1 SuperEditor stub means no v1 editorCtor was passed by definition.
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(false);
+    });
+
+    it('keeps PDF documents on the existing PdfViewer when editorVersion is 2', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customSuperdocStore = buildSuperdocStore();
+      customSuperdocStore.documents.value = [
+        {
+          id: 'pdf-doc',
+          type: 'application/pdf',
+          data: new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])], { type: 'application/pdf' }),
+          state: {},
+          isReady: false,
+          rulers: false,
+          editorMountNonce: ref(0),
+          setEditor: vi.fn(),
+          getEditor: vi.fn(() => null),
+        },
+      ];
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customSuperdocStore });
+      await nextTick();
+      // Neither v1 SuperEditor nor V2SuperEditor render for PDF.
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(false);
+      expect(wrapper.find('.v2-super-editor').exists()).toBe(false);
+    });
+
+    it('keeps HTML documents on the existing HtmlViewer when editorVersion is 2', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customSuperdocStore = buildSuperdocStore();
+      customSuperdocStore.documents.value = [
+        {
+          id: 'html-doc',
+          type: 'text/html',
+          data: '<p>HTML</p>',
+          state: {},
+          html: '<p>HTML</p>',
+          isReady: false,
+          rulers: false,
+          editorMountNonce: ref(0),
+          setEditor: vi.fn(),
+          getEditor: vi.fn(() => null),
+        },
+      ];
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customSuperdocStore });
+      await nextTick();
+      expect(wrapper.find('.super-editor-stub').exists()).toBe(false);
+      expect(wrapper.find('.v2-super-editor').exists()).toBe(false);
+      expect(wrapper.find('.HtmlViewer-stub').exists()).toBe(true);
+    });
+
+    it('hides v1-only chrome (comments layer, AI layer, hrbr fields, whiteboard, AI writer) in v2 mode', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      superdocStub.config.modules = {
+        ...superdocStub.config.modules,
+        'hrbr-fields': [{ id: 'field' }],
+        whiteboard: { enabled: true },
+      };
+      const customStore = buildSuperdocStore();
+      customStore.modules.whiteboard = { enabled: true };
+      customStore.modules['hrbr-fields'] = [{ id: 'field' }];
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await nextTick();
+      expect(wrapper.find('.CommentsLayer-stub').exists()).toBe(false);
+      expect(wrapper.find('.HrbrFieldsLayer-stub').exists()).toBe(false);
+      expect(wrapper.find('.AIWriter-stub').exists()).toBe(false);
+      expect(wrapper.find('.superdoc__selection-layer').exists()).toBe(false);
+      // No selection exists, so the shared floating tools menu should stay hidden.
+      expect(wrapper.find('.tools-item').exists()).toBe(false);
+    });
+
+    it('publishes editor positions and lifts the sidebar gate when v2-render fires (ui-phase3-001)', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      superdocStub.config.modules = {
+        ...superdocStub.config.modules,
+        comments: {},
+      };
+      // Stable RAF mock so we can observe the publish path without timers.
+      const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 1;
+      });
+      vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      const mountContainer = document.createElement('div');
+      const carrier = document.createElement('span');
+      carrier.dataset.commentIds = 'c-1';
+      carrier.dataset.storyKey = 'body';
+      carrier.getBoundingClientRect = () => ({
+        top: 200,
+        left: 100,
+        right: 160,
+        bottom: 220,
+        width: 60,
+        height: 20,
+        x: 100,
+        y: 200,
+        toJSON() {
+          return this;
+        },
+      });
+      mountContainer.appendChild(carrier);
+
+      // Provide a deterministic layers rect via the wrapper's root layers div.
+      const layersEl = wrapper.find('.superdoc__layers').element;
+      layersEl.getBoundingClientRect = () => ({
+        top: 100,
+        left: 50,
+        right: 850,
+        bottom: 1100,
+        width: 800,
+        height: 1000,
+        x: 50,
+        y: 100,
+        toJSON() {
+          return this;
+        },
+      });
+
+      // Mark the host as ready so the sidebar's other gates are open.
+      const listComments = vi.fn(async () => ({ items: [{ id: 'c-1', importedId: '0' }] }));
+      const host = {
+        save: vi.fn(async () => new Uint8Array().buffer),
+        getCapabilities: vi.fn(() => ({})),
+        getHandles: vi.fn(() => ({
+          comments: { list: listComments },
+        })),
+      };
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host,
+        mount: { focus: { focus: vi.fn() } },
+        documentId: 'doc-1',
+        capabilities: {},
+      });
+      await nextTick();
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-render', {
+        epoch: 1,
+        mountContainer,
+        host,
+        mount: { getRenderEpoch: () => 1 },
+      });
+      await flushPromises();
+      await nextTick();
+
+      expect(commentsStoreStub.handleEditorLocationsUpdate).toHaveBeenCalled();
+      const lastEntries = commentsStoreStub.handleEditorLocationsUpdate.mock.calls.at(-1)?.[0];
+      expect(listComments).toHaveBeenCalled();
+      expect(lastEntries['c-1']).toMatchObject({
+        threadId: 'c-1',
+        key: 'c-1',
+        kind: 'comment',
+        storyKey: 'body',
+      });
+      expect(lastEntries['0']).toBe(lastEntries['c-1']);
+      expect(lastEntries['c-1'].bounds.top).toBe(100);
+
+      rafSpy.mockRestore();
+    });
+
+    it('clears v2 positions when viewing-mode hides comments (ui-phase3-001)', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      superdocStub.config.documentMode = 'viewing';
+      superdocStub.config.allowSelectionInViewMode = false;
+      superdocStub.config.comments = { visible: false };
+      superdocStub.config.trackChanges = { visible: false };
+      superdocStub.config.modules = {
+        ...superdocStub.config.modules,
+        comments: {},
+      };
+      const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 1;
+      });
+      vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      const wrapper = await mountComponent(superdocStub);
+      await flushPromises();
+      await nextTick();
+
+      const mountContainer = document.createElement('div');
+      const carrier = document.createElement('span');
+      carrier.dataset.commentIds = 'c-1';
+      carrier.dataset.storyKey = 'body';
+      carrier.getBoundingClientRect = () => ({
+        top: 0,
+        left: 0,
+        right: 10,
+        bottom: 10,
+        width: 10,
+        height: 10,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      });
+      mountContainer.appendChild(carrier);
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-render', {
+        epoch: 1,
+        mountContainer,
+        host: { getHandles: vi.fn(() => ({ comments: { list: vi.fn(async () => ({ items: [] })) } })) },
+      });
+      await flushPromises();
+      await nextTick();
+
+      // Viewing mode + hidden comments + hidden tracked changes means the
+      // collector should be skipped and any prior positions cleared. The
+      // store's handleEditorLocationsUpdate must NOT be called for this
+      // payload; clearEditorCommentPositions must run instead.
+      expect(commentsStoreStub.handleEditorLocationsUpdate).not.toHaveBeenCalled();
+      expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+
+      rafSpy.mockRestore();
+    });
+
+    it('reuses the floating comment tool in v2 mode and publishes pending geometry (ui-phase3-002)', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      superdocStub.config.modules = {
+        ...superdocStub.config.modules,
+        comments: {},
+      };
+      superdocStub.setActiveEditor = vi.fn((editor) => {
+        superdocStub.activeEditor = editor;
+      });
+      commentsStoreStub.showAddComment.mockReturnValue({ ok: true });
+      commentsStoreStub.editorCommentPositions.value = {};
+
+      const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+        cb(0);
+        return 1;
+      });
+      vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      const mountContainer = document.createElement('div');
+      const selectedBlock = document.createElement('p');
+      selectedBlock.dataset.sourceNodeId = 'p-1';
+      selectedBlock.getBoundingClientRect = () => ({
+        top: 220,
+        left: 110,
+        right: 410,
+        bottom: 250,
+        width: 300,
+        height: 30,
+        x: 110,
+        y: 220,
+        toJSON() {
+          return this;
+        },
+      });
+      mountContainer.appendChild(selectedBlock);
+
+      const layersEl = wrapper.find('.superdoc__layers').element;
+      layersEl.getBoundingClientRect = () => ({
+        top: 100,
+        left: 50,
+        right: 850,
+        bottom: 1100,
+        width: 800,
+        height: 1000,
+        x: 50,
+        y: 100,
+        toJSON() {
+          return this;
+        },
+      });
+
+      const commentsAdapter = {
+        getCapabilityState: vi.fn(() => ({ canWrite: true, reason: null })),
+      };
+      const host = {
+        save: vi.fn(async () => new Uint8Array().buffer),
+        getCapabilities: vi.fn(() => ({})),
+        getHandles: vi.fn(() => ({
+          comments: { list: vi.fn(async () => ({ items: [] })) },
+        })),
+      };
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host,
+        mount: { focus: { focus: vi.fn() } },
+        documentId: 'doc-1',
+        capabilities: {},
+        commentsAdapter,
+      });
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-render', {
+        epoch: 1,
+        mountContainer,
+        host,
+      });
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-selection-changed', {
+        hasRangeSelection: true,
+        snapshot: {
+          anchor: { blockId: 'p-1', blockOffset: 0, fragmentId: 'p-1' },
+          focus: { blockId: 'p-1', blockOffset: 5, fragmentId: 'p-1' },
+        },
+      });
+      await flushPromises();
+      await nextTick();
+
+      expect(wrapper.find('.superdoc__right-sidebar').exists()).toBe(false);
+      expect(wrapper.vm.showToolsFloatingMenu).toBe(true);
+
+      const tools = wrapper.findAll('.tools-item');
+      expect(tools).toHaveLength(1);
+      await tools[0].trigger('mousedown');
+
+      expect(commentsStoreStub.showAddComment).toHaveBeenCalledWith(superdocStub, 220);
+      expect(commentsStoreStub.handleEditorLocationsUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pending: expect.objectContaining({
+            threadId: 'pending',
+            key: 'pending',
+            kind: 'pending',
+            storyKey: 'body',
+            bounds: {
+              top: 120,
+              left: 60,
+              right: 360,
+              bottom: 150,
+              width: 300,
+              height: 30,
+            },
+          }),
+        }),
+      );
+
+      rafSpy.mockRestore();
+    });
+
+    it('publishes a v2 facade with shell export and focus hooks when V2SuperEditor is ready', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      const saveBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer;
+      const selectionSnapshot = {
+        anchor: { blockId: 'block-1', blockOffset: 2 },
+        focus: { blockId: 'block-1', blockOffset: 5 },
+        story: { storyType: 'body', storyId: null },
+      };
+      const host = {
+        save: vi.fn(async () => saveBytes),
+        getCapabilities: vi.fn(() => ({ editing: { canType: true } })),
+        getHandles: vi.fn(() => ({
+          editing: {
+            selection: {
+              getSnapshot: vi.fn(() => selectionSnapshot),
+            },
+          },
+        })),
+      };
+      const focusController = { focus: vi.fn(() => true) };
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host,
+        mount: { focus: focusController },
+        documentId: 'doc-1',
+        capabilities: { editing: { canType: true } },
+      });
+      await nextTick();
+
+      const facade = customStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0];
+      expect(facade).toMatchObject({
+        editorVersion: 2,
+        documentId: 'doc-1',
+        commands: null,
+        state: null,
+        view: null,
+      });
+
+      await expect(facade.save()).resolves.toBe(saveBytes);
+      const exported = await facade.exportDocx();
+      expect(exported).toBeInstanceOf(Blob);
+      expect(exported.type).toBe(DOCX);
+      expect(host.save).toHaveBeenCalledTimes(2);
+      expect(facade.doc.selection.current()).toEqual({
+        empty: false,
+        target: {
+          kind: 'text',
+          segments: [{ blockId: 'block-1', range: { start: 2, end: 5 } }],
+        },
+        activeMarks: [],
+        activeCommentIds: [],
+        activeChangeIds: [],
+      });
+      expect(facade.focus()).toBe(true);
+      expect(focusController.focus).toHaveBeenCalledTimes(1);
+      expect(superdocStub.broadcastEditorCreate).toHaveBeenCalledWith(facade);
+    });
+
+    it('guards mutating v2 Document API facade methods when document mode is viewing', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      const documentApi = {
+        comments: {
+          list: vi.fn(() => ({ items: [] })),
+          get: vi.fn(() => null),
+          create: vi.fn(() => ({ success: true })),
+          patch: vi.fn(() => ({ success: true })),
+          delete: vi.fn(() => ({ success: true })),
+        },
+        trackChanges: {
+          list: vi.fn(() => ({ items: [] })),
+          get: vi.fn(() => null),
+          decide: vi.fn(() => ({ success: true })),
+        },
+        history: {
+          get: vi.fn(() => ({ canUndo: true, canRedo: true })),
+          undo: vi.fn(() => ({ success: true })),
+          redo: vi.fn(() => ({ success: true })),
+        },
+      };
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host: { save: vi.fn(async () => new Uint8Array().buffer), getCapabilities: vi.fn(() => ({})) },
+        mount: { focus: { focus: vi.fn(() => true) } },
+        documentId: 'doc-1',
+        documentApi,
+      });
+      await nextTick();
+
+      const facade = customStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0];
+      expect(facade.doc.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } })).toEqual({
+        success: true,
+      });
+      expect(documentApi.trackChanges.decide).toHaveBeenCalledTimes(1);
+
+      superdocStub.config.documentMode = 'viewing';
+      expect(facade.doc.trackChanges.list()).toEqual({ items: [] });
+      expect(facade.doc.history.get()).toEqual({ canUndo: true, canRedo: true });
+      expect(() => facade.doc.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } })).toThrow(
+        /document is read-only/,
+      );
+      expect(() => facade.doc.comments.create({ text: 'blocked' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.comments.patch({ commentId: 'c-1', text: 'blocked' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.comments.delete({ commentId: 'c-1' })).toThrow(/document is read-only/);
+      expect(() => facade.doc.history.undo()).toThrow(/document is read-only/);
+      expect(() => facade.doc.history.redo()).toThrow(/document is read-only/);
+      expect(documentApi.trackChanges.decide).toHaveBeenCalledTimes(1);
+      expect(documentApi.comments.create).not.toHaveBeenCalled();
+      expect(documentApi.comments.patch).not.toHaveBeenCalled();
+      expect(documentApi.comments.delete).not.toHaveBeenCalled();
+      expect(documentApi.history.undo).not.toHaveBeenCalled();
+      expect(documentApi.history.redo).not.toHaveBeenCalled();
+    });
+
+    it('clears a ready v2 facade when the render surface is torn down', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host: { save: vi.fn(async () => new Uint8Array().buffer), getCapabilities: vi.fn(() => ({})) },
+        mount: { focus: { focus: vi.fn(() => true) } },
+        documentId: 'doc-1',
+      });
+      await nextTick();
+      expect(superdocStub.activeEditor?.editorVersion).toBe(2);
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-render-cleared', { documentId: 'doc-1' });
+      await nextTick();
+
+      expect(superdocStub.activeEditor).toBeNull();
+      expect(customStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0]).toBeNull();
+    });
+
+    it('clears a ready v2 facade when the v2 editor reports a terminal failure', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.config.editorVersion = 2;
+      const customStore = buildSuperdocStore();
+      const wrapper = await mountComponent(superdocStub, { superdocStore: customStore });
+      await flushPromises();
+      await nextTick();
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-ready', {
+        host: { save: vi.fn(async () => new Uint8Array().buffer), getCapabilities: vi.fn(() => ({})) },
+        mount: { focus: { focus: vi.fn(() => true) } },
+        documentId: 'doc-1',
+      });
+      await nextTick();
+      expect(superdocStub.activeEditor?.editorVersion).toBe(2);
+
+      wrapper.findComponent(V2SuperEditorStub).vm.$emit('v2-editor-failed', {
+        documentId: 'doc-1',
+        error: new Error('open failed'),
+      });
+      await nextTick();
+
+      expect(superdocStub.activeEditor).toBeNull();
+      expect(customStore.documents.value[0].setEditor.mock.calls.at(-1)?.[0]).toBeNull();
+    });
   });
 });

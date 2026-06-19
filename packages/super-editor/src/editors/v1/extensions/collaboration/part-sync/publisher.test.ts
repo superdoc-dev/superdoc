@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { createPartPublisher } from './publisher.js';
 import { PARTS_MAP_KEY } from './constants.js';
+import { decodeYjsToEnvelope } from './json-crdt.js';
 import type { PartChangedEvent } from '../../../core/parts/types.js';
 import { registerPartDescriptor, clearPartDescriptors } from '../../../core/parts/registry/part-registry.js';
 import { clearInvalidationHandlers } from '../../../core/parts/invalidation/part-invalidation-registry.js';
@@ -58,9 +59,11 @@ describe('PartPublisher', () => {
 
     const partsMap = ydoc.getMap(PARTS_MAP_KEY);
     const entry = partsMap.get('word/styles.xml');
-    expect(entry).toBeInstanceOf(Y.Map);
-    expect((entry as Y.Map<unknown>).get('v')).toBe(1);
-    expect((entry as Y.Map<unknown>).get('clientId')).toBe(ydoc.clientID);
+    expect(decodeYjsToEnvelope(entry)).toEqual({
+      v: 1,
+      clientId: ydoc.clientID,
+      data: { type: 'element', name: 'doc' },
+    });
 
     publisher.destroy();
   });
@@ -74,8 +77,8 @@ describe('PartPublisher', () => {
     publisher.handlePartChanged(makeEvent('word/styles.xml', 'mutate'));
 
     const partsMap = ydoc.getMap(PARTS_MAP_KEY);
-    const entry = partsMap.get('word/styles.xml') as Y.Map<unknown>;
-    expect(entry.get('v')).toBe(2);
+    const entry = decodeYjsToEnvelope(partsMap.get('word/styles.xml'));
+    expect(entry?.v).toBe(2);
 
     publisher.destroy();
   });

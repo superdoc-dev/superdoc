@@ -461,6 +461,44 @@ describe('previewPlan: success/failure shape parity', () => {
     expect(result.steps.length).toBeGreaterThan(0);
   });
 
+  it('treats unsafe assert regex as zero matches in preview', () => {
+    const { editor } = makeEditor('aaaaaaaaaaaaaaaaaaaaaaaa');
+
+    const assertStep: AssertStep = {
+      id: 'assert-unsafe',
+      op: 'assert',
+      where: {
+        by: 'select',
+        select: { type: 'text', pattern: '^(a+)+$', mode: 'regex' },
+      },
+      args: { expectCount: 1 },
+    };
+
+    mockedDeps.compilePlan.mockReturnValue(
+      makeCompiledPlan({
+        assertSteps: [assertStep],
+      }),
+    );
+
+    const result = previewPlan(editor, {
+      steps: [
+        {
+          id: 's1',
+          op: 'text.rewrite',
+          where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+          args: { replacement: { text: 'Hi' } },
+        },
+        assertStep,
+      ],
+    });
+
+    expect(result.evaluatedRevision).toBeTruthy();
+    expect(result.valid).toBe(false);
+    expect(result.failures).toBeDefined();
+    expect(result.failures![0].code).toBe('PRECONDITION_FAILED');
+    expect(result.failures![0].details).toEqual({ expectedCount: 1, actualCount: 0 });
+  });
+
   it('execute-phase capability failures are reported when textStyle attrs are missing', () => {
     const { editor, dispatch, tr } = makeTextStyleEditor([
       'color',

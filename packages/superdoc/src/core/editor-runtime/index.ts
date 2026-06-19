@@ -9,6 +9,7 @@ export type {
   // identity + lifecycle
   EditorRuntimeKind,
   EditorRuntimeId,
+  EditorRuntimeDocumentMode,
   EditorRuntimeState,
   // the runtime
   EditorRuntime,

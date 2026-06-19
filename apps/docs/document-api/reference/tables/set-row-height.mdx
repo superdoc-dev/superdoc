@@ -29,7 +29,7 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `heightPt` | number | yes |  |
-| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `rule` | enum | no | `"atLeast"`, `"exact"`, `"auto"` |
 | `target` | TableRowAddress | yes | TableRowAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -41,20 +41,20 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 | --- | --- | --- | --- |
 | `heightPt` | number | yes |  |
 | `rowIndex` | integer | yes |  |
-| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `rule` | enum | no | `"atLeast"`, `"exact"`, `"auto"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 3 (required: nodeId, rowIndex, heightPt, rule)
+### Variant 3 (required: nodeId, rowIndex, heightPt)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `heightPt` | number | yes |  |
 | `nodeId` | string | yes |  |
 | `rowIndex` | integer | yes |  |
-| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `rule` | enum | no | `"atLeast"`, `"exact"`, `"auto"` |
 
 ### Example request
 
@@ -154,8 +154,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
       },
       "required": [
         "target",
-        "heightPt",
-        "rule"
+        "heightPt"
       ],
       "type": "object"
     },
@@ -184,8 +183,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
       "required": [
         "target",
         "rowIndex",
-        "heightPt",
-        "rule"
+        "heightPt"
       ],
       "type": "object"
     },
@@ -214,8 +212,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
       "required": [
         "nodeId",
         "rowIndex",
-        "heightPt",
-        "rule"
+        "heightPt"
       ],
       "type": "object"
     }

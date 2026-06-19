@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -160,7 +160,10 @@ test('Packed tarball installs and resolves package entry in CJS', { skip: !exist
     const filename = packOutput[0]?.filename;
     assert.equal(typeof filename, 'string', 'npm pack should output a tarball filename');
 
-    await run('pnpm', ['init'], { cwd: consumerDir, env });
+    await writeFile(
+      path.join(consumerDir, 'package.json'),
+      `${JSON.stringify({ name: 'sdk-node-package-smoke-consumer', private: true }, null, 2)}\n`,
+    );
     await run('pnpm', ['add', path.join(packDir, filename)], { cwd: consumerDir, env });
 
     const script = `

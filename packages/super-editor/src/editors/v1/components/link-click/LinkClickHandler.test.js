@@ -1401,4 +1401,82 @@ describe('LinkClickHandler', () => {
       });
     });
   });
+
+  describe('note links (SD-3400 stage 1)', () => {
+    // Defeat the module-level click debounce: each dispatch happens at a
+    // synthetic time far from the previous one.
+    let nowOffset = 0;
+    beforeEach(() => {
+      nowOffset += 60_000;
+      const base = 1_700_000_000_000;
+      vi.spyOn(Date, 'now').mockImplementation(() => base + nowOffset);
+    });
+
+    const dispatchNoteLinkClick = async (surface, detail = {}) => {
+      const linkElement = document.createElement('a');
+      linkElement.dataset.pmStart = '4';
+      const event = new CustomEvent('superdoc-link-click', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          href: 'https://example.com/source',
+          target: '_blank',
+          rel: 'noopener',
+          element: linkElement,
+          clientX: 250,
+          clientY: 250,
+          noteTarget: { storyType: 'footnote', noteId: '3' },
+          ctrlKey: false,
+          metaKey: false,
+          ...detail,
+        },
+      });
+      surface.dispatchEvent(event);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+
+    const mountHandler = () =>
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+        },
+      });
+
+    it('never sets the body selection from a note link (story-local pm positions)', async () => {
+      mountHandler();
+
+      await dispatchNoteLinkClick(mockSurfaceElement);
+
+      // The wrong-body-link mis-edit path: body selection set from the note's
+      // story-local pmStart, then the popover opens on whatever body link sits
+      // there. Both must stay untouched.
+      expect(mockEditor.dispatch).not.toHaveBeenCalled();
+      expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+      expect(mockOpenPopover).not.toHaveBeenCalled();
+      expect(windowOpenSpy).not.toHaveBeenCalled();
+    });
+
+    it('opens the URL on modifier-click without touching the body', async () => {
+      mountHandler();
+
+      await dispatchNoteLinkClick(mockSurfaceElement, { metaKey: true });
+
+      expect(windowOpenSpy).toHaveBeenCalledWith('https://example.com/source', '_blank', 'noopener');
+      expect(mockEditor.dispatch).not.toHaveBeenCalled();
+      expect(mockOpenPopover).not.toHaveBeenCalled();
+    });
+
+    it('body links (noteTarget null) keep the existing popover flow', async () => {
+      selectionHasNodeOrMark.mockReturnValue(true);
+      TextSelection.create.mockReturnValue({ from: 10, to: 10 });
+      mountHandler();
+
+      await dispatchNoteLinkClick(mockSurfaceElement, { noteTarget: null });
+
+      expect(mockEditor.dispatch).toHaveBeenCalled();
+      expect(mockOpenPopover).toHaveBeenCalled();
+    });
+  });
 });

@@ -130,6 +130,72 @@ describe('handleShapeTextboxImport', () => {
     expect(result.attrs.style).toBe('width: 100pt;height: 50pt;');
   });
 
+  it('should extract anchorData and marginOffset from VML positioning styles', () => {
+    parseInlineStyles.mockReturnValue({
+      width: '100pt',
+      height: '50pt',
+      'margin-left': '72pt',
+      'margin-top': '36pt',
+      'mso-position-horizontal': 'center',
+      'mso-position-horizontal-relative': 'margin',
+      'mso-position-vertical': 'top',
+      'mso-position-vertical-relative': 'page',
+    });
+
+    const pict = {
+      elements: [
+        createShape({
+          style: 'width:100pt;height:50pt;margin-left:72pt;margin-top:36pt',
+        }),
+      ],
+    };
+
+    const options = {
+      params: { docx: {} },
+      pNode: {},
+      pict,
+    };
+
+    const result = handleShapeTextboxImport(options);
+
+    expect(result.attrs.anchorData).toEqual({
+      alignH: 'center',
+      hRelativeFrom: 'margin',
+      alignV: 'top',
+      vRelativeFrom: 'page',
+    });
+    expect(result.attrs.marginOffset).toEqual({
+      horizontal: 96,
+      top: 48,
+    });
+  });
+
+  it('should omit anchorData and marginOffset when positioning styles are absent', () => {
+    parseInlineStyles.mockReturnValue({
+      width: '100pt',
+      height: '50pt',
+    });
+
+    const pict = {
+      elements: [
+        createShape({
+          style: 'width:100pt;height:50pt',
+        }),
+      ],
+    };
+
+    const options = {
+      params: { docx: {} },
+      pNode: {},
+      pict,
+    };
+
+    const result = handleShapeTextboxImport(options);
+
+    expect(result.attrs.anchorData).toBeUndefined();
+    expect(result.attrs.marginOffset).toBeUndefined();
+  });
+
   it('should include wrapAttributes when wrap element exists', () => {
     const pict = {
       elements: [

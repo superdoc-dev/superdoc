@@ -36,6 +36,7 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   '@superdoc-dev/template-builder/defaults',
   '@superdoc-dev/template-builder/field-types.css',
   '@superdoc-dev/superdoc-yjs-collaboration',
+  '@superdoc-dev/fonts',
 ]);
 
 const EXACT_EXTERNAL_IMPORTS = new Set([

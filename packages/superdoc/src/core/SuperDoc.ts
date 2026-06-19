@@ -8,6 +8,7 @@ import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
+import { resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
@@ -85,10 +86,15 @@ import type {
   SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocFontsApi,
   SuperDocLockedPayload,
   SuperDocReadyPayload,
   SuperDocState,
-  SuperDocFontsApi,
+  SuperDocViewportChangePayload,
+  SuperDocViewportMetrics,
+  SuperDocZoomMode,
+  SuperDocZoomPayload,
+  SuperDocZoomState,
   SurfaceHandle,
   SurfaceRequest,
   UpgradeToCollaborationOptions,
@@ -109,17 +115,54 @@ import type * as Y from 'yjs';
 // as a type here without a separate `import type` declaration.
 import type { WhiteboardData } from './whiteboard/Whiteboard.js';
 
-type ActiveEditor = Editor & {
-  editorVersion?: 1 | 2;
+type V1ActiveEditor = Editor & {
+  editorVersion?: 1;
+  toolbar?: SuperToolbar;
+  presentationEditor?: PresentationEditor | null;
 };
+
+type V2ActiveEditorFacade = {
+  editorVersion: 2;
+  documentId?: string;
+  host?: unknown;
+  mount?: unknown;
+  options?: {
+    documentId?: string;
+    documentMode?: DocumentMode;
+    [key: string]: unknown;
+  };
+  capabilities?: unknown;
+  save?: (...args: unknown[]) => Promise<unknown>;
+  exportDocx?: (...args: unknown[]) => Promise<Blob>;
+  focus?: () => unknown;
+  v2Comments?: unknown;
+  v2TrackedChanges?: unknown;
+  pageMetrics?: unknown;
+  pageLayout?: unknown;
+  pageFurniture?: unknown;
+  reviewHydration?: unknown;
+  commands?: null;
+  state?: null;
+  view?: null;
+  setHighContrastMode?: (isHighContrast: boolean) => void;
+  [key: string]: unknown;
+};
+
+type ActiveEditor = Editor | V2ActiveEditorFacade;
+
+function isV2ActiveEditorFacade(editor: unknown): editor is V2ActiveEditorFacade {
+  return Boolean(editor && typeof editor === 'object' && (editor as { editorVersion?: unknown }).editorVersion === 2);
+}
+
+function getActivePresentationEditor(editor: ActiveEditor | null | undefined): PresentationEditor | null {
+  if (!editor || isV2ActiveEditorFacade(editor)) return null;
+  return (editor as V1ActiveEditor).presentationEditor ?? null;
+}
 
 // Internal-only event payload shapes (consumer-facing payloads are
 // exported from `core/types/index.ts` and imported above).
 interface SuperDocWhiteboardPayload {
   whiteboard: Whiteboard;
-}
-interface SuperDocZoomPayload {
-  zoom: number;
 }
 interface SuperDocFormattingMarksPayload {
   showFormattingMarks: boolean;
@@ -171,6 +214,7 @@ interface SuperDocEventMap {
   'whiteboard:enabled': [boolean];
   'whiteboard:tool': [string];
   exception: [SuperDocExceptionPayload];
+  'viewport-change': [SuperDocViewportChangePayload];
 }
 // Notes on the event map above:
 //
@@ -198,7 +242,7 @@ interface SuperDocEventMap {
  *
  * @param projection The runtime's `getLegacyEditorProjection()` result.
  */
-function isCommandCapableV1LegacyProjection(projection: unknown): projection is ActiveEditor {
+function isCommandCapableV1LegacyProjection(projection: unknown): projection is V1ActiveEditor {
   if (!projection || typeof projection !== 'object') return false;
   const candidate = projection as { editorVersion?: number; commands?: unknown };
   if (candidate.editorVersion === 2) return false;
@@ -364,7 +408,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   // runtime own-property initializer. Each is assigned during `#init`
   // (called synchronously from the constructor), so by the time any
   // external callsite reads them they exist.
-  declare activeEditor: ActiveEditor | null;
+  declare activeEditor: Editor | null;
+  declare editorVersion: 1 | 2;
   declare toolbar: SuperToolbar | null;
   declare toolbarElement: string | HTMLElement | undefined;
   declare userColorMap: Map<string, string>;
@@ -503,6 +548,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     // Internal: toggle layout-engine-powered PresentationEditor in dev shells
     useLayoutEngine: true,
+
+    // Existing v1 DOCX path unless the host explicitly opts into the injected
+    // v2 shell.
+    editorVersion: 1,
   };
   constructor(config: Config) {
     super();
@@ -568,6 +617,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       this.config.layoutEngineOptions.flowMode = 'paginated';
     }
 
+    this.editorVersion = this.#normalizeEditorVersion(this.config.editorVersion);
+    this.config.editorVersion = this.editorVersion;
+
     const incomingUser = this.config.user;
     if (!incomingUser || typeof incomingUser !== 'object') {
       this.config.user = { ...DEFAULT_USER };
@@ -576,7 +628,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
         ...DEFAULT_USER,
         ...incomingUser,
       };
-      if (!this.config.user.name) {
+      if (!this.config.user.name && this.editorVersion !== 2) {
         this.config.user.name = DEFAULT_USER.name;
       }
     }
@@ -921,6 +973,8 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#onConfig('pagination-update', this.config.onPaginationUpdate);
     this.#onConfig('fonts-resolved', this.config.onFontsResolved);
     this.#onConfig('fonts-changed', this.config.onFontsChanged);
+    this.#onConfig('zoomChange', this.config.onZoomChange);
+    this.#onConfig('viewport-change', this.config.onViewportChange);
   }
 
   /**
@@ -1615,6 +1669,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.emit('sidebar-toggle', isOpened);
   }
 
+  #normalizeEditorVersion(raw: unknown): 1 | 2 {
+    if (raw === undefined || raw === null) return 1;
+    if (raw === 1) return 1;
+    if (raw === 2) return 2;
+    console.warn(
+      `[SuperDoc] Ignoring invalid editorVersion ${String(raw)}; falling back to v1 DOCX path. Supported values: 1 | 2.`,
+    );
+    return 1;
+  }
+
   /** @param args */
   #log(...args: unknown[]) {
     (console.debug ? console.debug : console.log)('🦋 🦸‍♀️ [superdoc]', ...args);
@@ -1631,10 +1695,17 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   get fonts(): SuperDocFontsApi {
     if (!this.#fontsApi) {
       this.#fontsApi = {
-        getReport: () => this.activeEditor?.presentationEditor?.getFontReport() ?? [],
-        getMissingFonts: () => this.activeEditor?.presentationEditor?.getMissingFonts() ?? [],
-        getDocumentFonts: () =>
-          (this.activeEditor?.presentationEditor?.getFontReport() ?? []).map((record) => record.logicalFamily),
+        getReport: () => getActivePresentationEditor(this.activeEditor)?.getFontReport() ?? [],
+        getMissingFonts: () => getActivePresentationEditor(this.activeEditor)?.getMissingFonts() ?? [],
+        getDocumentFontOptions: () => getActivePresentationEditor(this.activeEditor)?.getDocumentFontOptions() ?? [],
+        getDocumentFonts: () => [
+          // Deduped by logical family: the report can now carry multiple FACE rows per family.
+          ...new Set(
+            (getActivePresentationEditor(this.activeEditor)?.getFontReport() ?? []).map(
+              (record) => record.logicalFamily,
+            ),
+          ),
+        ],
         onReport: (callback) => {
           // Snapshot-then-subscribe: the report may already have resolved (it fires during
           // load, before a consumer subscribes - and a document swap creates a fresh editor),
@@ -1647,15 +1718,37 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
           // replaying a stale prior-editor payload. Returns an unsubscribe.
           const activeEditor = this.activeEditor;
           const current = activeEditor
-            ? (activeEditor.presentationEditor?.getLastFontsChangedPayload?.() ?? null)
+            ? (getActivePresentationEditor(activeEditor)?.getLastFontsChangedPayload?.() ?? null)
             : (this.#lastFontsChangedPayload ?? null);
           if (current) callback(current);
           this.on('fonts-changed', callback);
           return () => this.off('fonts-changed', callback);
         },
+        // Active-editor scoped like the read methods, but these are WRITES. Route through the
+        // document font controller; with no active editor, fail loudly rather than silently no-op.
+        map: (mappings) => {
+          const pe = getActivePresentationEditor(this.activeEditor);
+          if (!pe) throw new Error('superdoc.fonts.map requires an active editor');
+          pe.mapFonts(mappings);
+        },
+        unmap: (families) => {
+          const pe = getActivePresentationEditor(this.activeEditor);
+          if (!pe) throw new Error('superdoc.fonts.unmap requires an active editor');
+          pe.unmapFonts(families);
+        },
+        add: (families) => {
+          const pe = getActivePresentationEditor(this.activeEditor);
+          if (!pe) throw new Error('superdoc.fonts.add requires an active editor');
+          pe.addFonts(Array.isArray(families) ? families : [families]);
+        },
+        preload: (families) => {
+          const pe = getActivePresentationEditor(this.activeEditor);
+          if (!pe) throw new Error('superdoc.fonts.preload requires an active editor');
+          return pe.preloadFonts(families);
+        },
       };
     }
-    return this.#fontsApi;
+    return this.#fontsApi!;
   }
 
   /**
@@ -1680,11 +1773,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    *
    * @param editor The v1 legacy editor projection.
    */
-  #applyActiveEditorProjection(editor: ActiveEditor) {
+  #applyActiveEditorProjection(editor: V1ActiveEditor) {
     this.activeEditor = editor;
-    if (editor?.editorVersion === 2) return;
     if (this.toolbar) {
-      this.activeEditor.toolbar = this.toolbar;
+      editor.toolbar = this.toolbar;
       this.toolbar.setActiveEditor(editor);
     }
   }
@@ -1752,7 +1844,15 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    *
    * @param editor The editor to set as active
    */
+  setActiveEditor(editor: Editor | null): void;
   setActiveEditor(editor: ActiveEditor | null) {
+    if (isV2ActiveEditorFacade(editor)) {
+      if (!this.#applyingRuntimeActiveChange && this.#editorRuntimeRegistry.getActive()) {
+        this.#editorRuntimeRegistry.setActive(null, 'set-active-v2-facade');
+      }
+      this.activeEditor = editor as unknown as Editor;
+      return;
+    }
     if (!isCommandCapableV1LegacyProjection(editor)) {
       this.#clearActiveEditorProjection();
       return;
@@ -1783,6 +1883,136 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       }
     }
     this.#applyActiveEditorProjection(editor);
+  }
+
+  getV2FeatureMatrix() {
+    return [
+      {
+        feature: 'docx.open-render',
+        status: 'supported',
+        reason: 'editorVersion: 2 opens and renders DOCX documents through the injected private V2 integration seam',
+      },
+      {
+        feature: 'docx.review-handles',
+        status: 'supported',
+        reason: 'Comment/tracked-change list + decide via v2 host handles',
+      },
+      {
+        feature: 'shell.toolbar',
+        status: 'disabled',
+        reason: 'v1 SuperToolbar requires v1 Editor; v2 toolbar bridge is a Phase 2.x follow-up',
+      },
+      {
+        feature: 'shell.rich-formatting',
+        status: 'not-shipped',
+        reason: 'format-target-unsupported: v2 host has no format.* family yet',
+      },
+      {
+        feature: 'shell.comments-sidebar',
+        status: 'supported',
+        reason:
+          'ui-phase3-002: v2 comments adapter routes create/reply/edit/resolve/delete through V2EditorHost.dispatch',
+      },
+      {
+        feature: 'shell.comments-sidebar.reopen',
+        status: 'not-shipped',
+        reason: 'comment-reopen-ui-omitted: public v2 shell keeps resolved-state reopen disabled',
+      },
+      {
+        feature: 'shell.tracked-change-sidebar',
+        status: 'supported',
+        reason: 'ui-phase3-003: v2 tracked-change adapter lists/decides via V2EditorHost.dispatch (body-story scope)',
+      },
+      {
+        feature: 'shell.tracked-change-sidebar.bulk',
+        status: 'not-shipped',
+        reason:
+          'bulk-tracked-change-decisions-omitted: acceptAll/rejectAll are matrix-disabled by default in the v2 host',
+      },
+      {
+        feature: 'shell.tracked-change-sidebar.non-body',
+        status: 'not-shipped',
+        reason: 'story-target-not-shipped: public v2 shell only hydrates body-story tracked changes',
+      },
+      {
+        feature: 'shell.comments-sidebar.persistence',
+        status: 'supported',
+        reason:
+          'ui-phase3-004: comment create/reply/edit/resolve/delete persist through SuperDoc.export() → re-mount via the v2 host save bridge',
+      },
+      {
+        feature: 'shell.tracked-change-sidebar.persistence',
+        status: 'supported',
+        reason:
+          'ui-phase3-004: tracked-change accept/reject persist through SuperDoc.export() → re-mount via the v2 host save bridge',
+      },
+      {
+        feature: 'shell.comments-sidebar.author-required',
+        status: 'supported',
+        reason:
+          'ui-phase3-004: v2 comments adapter surfaces commentCommandsReason=author-required from the host capability matrix; write controls disable and forced dispatch reports ok:false',
+      },
+      {
+        feature: 'shell.find-replace',
+        status: 'disabled',
+        reason: 'find-replace-omitted: public v2 shell does not expose v2 find/replace yet',
+      },
+      {
+        feature: 'shell.ai-writer',
+        status: 'disabled',
+        reason: 'ai-omitted: public v2 shell hides AI chrome until a v2 command bridge exists',
+      },
+      {
+        feature: 'shell.collaboration',
+        status: 'not-shipped',
+        reason: 'Y.js / Hocuspocus bridge for v2 not yet wired',
+      },
+      {
+        feature: 'shell.context-menu',
+        status: 'not-shipped',
+        reason: 'context-menu-omitted: public v2 shell disables v1 context menu in v2 mode',
+      },
+      {
+        feature: 'shell.page-metrics',
+        status: 'supported',
+        reason:
+          'ui-phase4-001: v2 page metrics snapshot ' +
+          '(editorVersion: 2, documentId, renderEpoch, layoutGeneration, zoom, pages[], capabilities) ' +
+          'available via superdoc.activeEditor.pageMetrics.{ getSnapshot, subscribe, setZoom }',
+      },
+      {
+        feature: 'shell.zoom',
+        status: 'supported',
+        reason:
+          'ui-phase4-001: SuperDoc.setZoom routes to V2EditorHost.setZoom in v2 mode; ' +
+          'single CSS-transform wrapper applies scale to the painted document, page metrics ' +
+          'viewport coords scale with the same zoom value',
+      },
+      {
+        feature: 'shell.ruler-page-margins',
+        status: 'supported',
+        reason:
+          'ui-phase4-002: v2 ruler renders against the V2PageMetricsSnapshot and dispatches margin drags through ' +
+          'a narrow v2 page-layout bridge (`activeEditor.pageLayout.setMargins(...)`) backed by ' +
+          '`doc.sections.setPageMargins(...)`. The v2 page metrics snapshot now reports ' +
+          '`capabilities.marginEdit = { supported: true }`',
+      },
+      {
+        feature: 'shell.custom-extensions',
+        status: 'not-shipped',
+        reason: 'Customer ProseMirror extensions cannot register against the v2 host',
+      },
+      { feature: 'pdf.viewer', status: 'supported', reason: 'editorVersion ignored for PDF documents' },
+      { feature: 'html.viewer', status: 'supported', reason: 'editorVersion ignored for HTML documents' },
+    ];
+  }
+
+  get v2() {
+    if (this.editorVersion !== 2) return null;
+    return {
+      version: 2,
+      featureMatrix: this.getV2FeatureMatrix(),
+    };
   }
 
   /**
@@ -2159,6 +2389,17 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * @param mode - The document mode ('editing', 'viewing', 'suggesting')
    */
   #applyDocumentMode(doc: RuntimeDocument, mode: DocumentMode) {
+    const documentId = typeof doc.id === 'string' && doc.id.length > 0 ? doc.id : null;
+    if (documentId) {
+      const runtimes = this.#editorRuntimeRegistry.getAllByDocumentId(documentId);
+      if (runtimes.length > 0) {
+        for (const runtime of runtimes) {
+          runtime.setDocumentMode(mode);
+        }
+        return;
+      }
+    }
+
     const presentationEditor = typeof doc.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;
     if (presentationEditor) {
       presentationEditor.setDocumentMode(mode);
@@ -2341,12 +2582,14 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
-   * Set the zoom level for all documents.
+   * Set the zoom level for all documents and switch the zoom mode to
+   * `manual` (an explicit numeric zoom expresses intent to leave
+   * `fit-width`; use `setZoomMode('fit-width')` to re-enter fitting).
    * Updates the centralized activeZoom state, which propagates to all
    * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
    * @param percent - The zoom level as a percentage (e.g., 100, 150, 200)
    * @example
-   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(150); // Set zoom to 150%, mode becomes 'manual'
    * superdoc.setZoom(50);  // Set zoom to 50%
    */
   setZoom(percent: number) {
@@ -2354,14 +2597,86 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
       return;
     }
+    // Before async init attaches the store there is nothing to write, and
+    // emitting anyway would tell listeners about a zoom that never
+    // happened. Use config.zoom.initial for pre-init zoom instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoom called before initialization; use config.zoom.initial for the starting zoom');
+      return;
+    }
 
     // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
     // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
-    if (this.superdocStore) {
-      this.superdocStore.activeZoom = percent;
-    }
+    this.superdocStore.activeZoom = percent;
+    this.superdocStore.zoomMode = 'manual';
 
-    this.emit('zoomChange', { zoom: percent });
+    this.emit('zoomChange', { zoom: percent, mode: 'manual' });
+  }
+
+  /**
+   * Switch the zoom mode. `fit-width` continuously re-fits the
+   * document to the available container width (clamped by
+   * `config.zoom.fitWidth`); `manual` holds the current value.
+   * Switching to `fit-width` applies the fit immediately when
+   * viewport metrics are available. Emits `zoomChange` (with the
+   * current value) so zoom UIs observe mode-only transitions; a
+   * same-mode call is a no-op.
+   * @param mode - The zoom mode: `'manual'` or `'fit-width'`
+   * @example
+   * superdoc.setZoomMode('fit-width'); // start fitting to the container
+   * superdoc.setZoomMode('manual');    // hold the current zoom value
+   */
+  setZoomMode(mode: SuperDocZoomMode) {
+    if (mode !== 'manual' && mode !== 'fit-width') {
+      console.warn("[SuperDoc] setZoomMode expects 'manual' or 'fit-width'");
+      return;
+    }
+    // Before async init attaches the store the mode cannot persist, and
+    // emitting anyway would advertise a mode change that never happened.
+    // Use config.zoom.mode for the starting mode instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoomMode called before initialization; use config.zoom.mode for the starting mode');
+      return;
+    }
+    if (this.superdocStore.zoomMode === mode) return;
+    this.superdocStore.zoomMode = mode;
+    this.emit('zoomChange', { zoom: this.getZoom(), mode });
+  }
+
+  /**
+   * Get a snapshot of the current zoom state: mode, value, the latest
+   * computed fit zoom (null before the first viewport measurement),
+   * and the effective fit bounds.
+   * @returns The current zoom state snapshot
+   * @example
+   * const { mode, value, fitZoom } = superdoc.getZoomState();
+   */
+  getZoomState(): SuperDocZoomState {
+    // Same resolver the fit policy applies, so the reported bounds cannot
+    // drift from the clamping behavior.
+    const fit = resolveFitWidthOptions(this.config.zoom?.fitWidth);
+    return {
+      mode: this.superdocStore?.zoomMode ?? 'manual',
+      value: this.superdocStore?.activeZoom ?? 100,
+      fitZoom: this.superdocStore?.viewportMetrics?.fitZoom ?? null,
+      min: fit.min,
+      max: fit.max,
+    };
+  }
+
+  /**
+   * Get the latest viewport measurements: the width available to the
+   * document, the document's base page width at 100% zoom, and the
+   * unclamped fit zoom. Returns `null` until the first measurement
+   * (editors still mounting). Subscribe to `viewport-change` (or pass
+   * `Config.onViewportChange`) for updates.
+   * @returns The latest viewport metrics, or `null` before the first measurement
+   * @example
+   * const metrics = superdoc.getViewportMetrics();
+   * if (metrics) superdoc.setZoom(Math.min(100, metrics.fitZoom));
+   */
+  getViewportMetrics(): SuperDocViewportMetrics | null {
+    return this.superdocStore?.viewportMetrics ?? null;
   }
 
   /**
@@ -2517,39 +2832,53 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // else: UI store unhydrated → leave `comments` undefined and
     // let the engine's `converter.comments` fallback fire.
 
-    const docxPromises = this.#requireSuperdocStore('exportEditorsToDOCX').documents.map(
-      async (doc: RuntimeDocument) => {
-        if (!doc || doc.type !== DOCX) return null;
+    const bridgedExportErrors = new WeakSet<object>();
+    const rememberBridgedExportError = (payload: SuperDocExceptionPayload) => {
+      if ('editor' in payload && payload.error && typeof payload.error === 'object') {
+        bridgedExportErrors.add(payload.error);
+      }
+    };
 
-        const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
-        const fallbackDocx = () => {
-          if (!doc.data) return null;
-          if (doc.data.type && doc.data.type !== DOCX) return null;
-          return doc.data;
-        };
+    this.on('exception', rememberBridgedExportError);
+    try {
+      const docxPromises = this.#requireSuperdocStore('exportEditorsToDOCX').documents.map(
+        async (doc: RuntimeDocument) => {
+          if (!doc || doc.type !== DOCX) return null;
 
-        if (!editor) return fallbackDocx();
+          const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
+          const fallbackDocx = () => {
+            if (!doc.data) return null;
+            if (doc.data.type && doc.data.type !== DOCX) return null;
+            return doc.data;
+          };
 
-        try {
-          const exported = await editor.exportDocx({
-            isFinalDoc,
-            comments: comments as import('@superdoc/super-editor').Comment[] | undefined,
-            commentsType,
-            fieldsHighlightColor,
-          });
-          if (exported) return exported;
-        } catch (error) {
-          this.emit('exception', { error, document: doc });
-        }
+          if (!editor) return fallbackDocx();
 
-        return fallbackDocx();
-      },
-    );
+          try {
+            const exported = await editor.exportDocx({
+              isFinalDoc,
+              comments: comments as import('@superdoc/super-editor').Comment[] | undefined,
+              commentsType,
+              fieldsHighlightColor,
+            });
+            if (exported) return exported;
+          } catch (error) {
+            if (!error || typeof error !== 'object' || !bridgedExportErrors.has(error)) {
+              this.emit('exception', { error, document: doc });
+            }
+          }
 
-    const docxFiles = await Promise.all(docxPromises);
-    // Type-predicate filter so callers see `Blob[]` instead of `(Blob | null)[]`.
-    // `filter(Boolean)` narrows at runtime but not in the type system.
-    return docxFiles.filter((file): file is Blob => file != null);
+          return fallbackDocx();
+        },
+      );
+
+      const docxFiles = await Promise.all(docxPromises);
+      // Type-predicate filter so callers see `Blob[]` instead of `(Blob | null)[]`.
+      // `filter(Boolean)` narrows at runtime but not in the type system.
+      return docxFiles.filter((file): file is Blob => file != null);
+    } finally {
+      this.off('exception', rememberBridgedExportError);
+    }
   }
 
   /**

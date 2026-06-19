@@ -648,11 +648,25 @@ export function selectionMutationWrapper(
     const where = buildSelectionWhere(request);
     const step = buildSelectionStepDef(stepId, request, where);
 
+    // Reject stale optimistic-concurrency requests BEFORE compilePlan can
+    // dispatch the identity-repair transaction. Without this, a stale
+    // selection mutation (or dry run) would surface REVISION_MISMATCH only
+    // *after* the repair already rewrote block identities — rejecting the
+    // user's intent but still leaving the document mutated. Mirrors the
+    // pre-compile guard in `executePlan`. This also covers dry-run: callers
+    // need to know the document drifted regardless of execution.
+    checkRevision(storyEditor, options?.expectedRevision);
+
     // Compile the one-step plan through the real compiler.
-    // Compilation is side-effect-free — it resolves targets against the current
-    // document state without mutating anything. The story editor is used so that
-    // the compiler resolves against the correct story's document state.
-    const compiled = compilePlan(storyEditor, [step]);
+    // Compilation is side-effect-free on clean docs: it resolves targets
+    // against the current document state without mutating anything. On a doc
+    // carrying duplicate block identities (e.g. older Yjs restore),
+    // the compiler dispatches an in-place identity-repair transaction before
+    // assembling the plan. Dry-run is documented as non-mutating, so route
+    // those calls through the same non-mutating identity path as previewPlan.
+    // The story editor is used so that the compiler resolves against the
+    // correct story's document state.
+    const compiled = compilePlan(storyEditor, [step], options?.dryRun ? { skipIdentityRepair: true } : undefined);
 
     // Text inserts require a position inside a textblock. Node-edge targets
     // (e.g., "before paragraph/table/image") resolve to block boundaries where
@@ -701,11 +715,8 @@ export function selectionMutationWrapper(
       }
     }
 
-    // Enforce expectedRevision even on dry-run — callers need to know if the
-    // document has drifted since their last query, regardless of execution.
-    checkRevision(storyEditor, options?.expectedRevision);
-
     // Dry-run: compile and resolve, but do NOT execute.
+    // (expectedRevision was already enforced before compile, above.)
     if (options?.dryRun) {
       const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
       if (request.kind === 'insert' && !request.text) {
@@ -1016,6 +1027,12 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
     }
     effectiveTarget = { kind: 'text', blockId, range: { start: offset, end: offset } };
   } else if (ref) {
+    // Reject stale optimistic-concurrency requests BEFORE compilePlan can
+    // dispatch the identity-repair transaction while resolving the ref. This
+    // mirrors the pre-compile guard in executePlan/selectionMutationWrapper:
+    // a stale request must fail without mutating the document.
+    checkRevision(editor, options?.expectedRevision);
+
     // Resolve ref via a dummy compile step to get the absolute position
     const dummyStepId = uuidv4();
     const dummyStep = {
@@ -1024,7 +1041,7 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
       where: { by: 'ref' as const, ref },
       args: { position: 'before', content: { text: '' } },
     } as unknown as MutationStep;
-    const compiled = compilePlan(editor, [dummyStep]);
+    const compiled = compilePlan(editor, [dummyStep], options?.dryRun ? { skipIdentityRepair: true } : undefined);
     const compiledStep = compiled.mutationSteps.find((s) => s.step.id === dummyStepId);
     const compiledTarget = compiledStep?.targets[0];
     if (!compiledTarget) {

@@ -1,6 +1,7 @@
 import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { TextTarget } from '../types/address.js';
+import type { SDFragment } from '../types/fragment.js';
 
 // ---------------------------------------------------------------------------
 // Address
@@ -48,15 +49,38 @@ export interface FootnoteGetInput {
   target: FootnoteAddress;
 }
 
-export interface FootnoteInsertInput {
-  at: TextTarget;
-  type: 'footnote' | 'endnote';
-  content: string;
-}
+/**
+ * Insert a footnote/endnote.
+ *
+ * Two mutually exclusive content forms:
+ * - legacy `content: string` for plain-text note content
+ * - structured `body: SDFragment` for SDM/1 content
+ *
+ * `at` is optional: when omitted, host runtimes insert at the current
+ * selection/caret position (the toolbar/default editor path).
+ */
+export type FootnoteInsertInput =
+  | {
+      at?: TextTarget;
+      type: 'footnote' | 'endnote';
+      content: string;
+      body?: never;
+    }
+  | {
+      at?: TextTarget;
+      type: 'footnote' | 'endnote';
+      body: SDFragment;
+      content?: never;
+    };
+
+export type FootnoteUpdatePatch =
+  | { content: string; body?: never }
+  | { body: SDFragment; content?: never }
+  | { content?: undefined; body?: undefined };
 
 export interface FootnoteUpdateInput {
   target: FootnoteAddress;
-  patch: { content?: string };
+  patch: FootnoteUpdatePatch;
 }
 
 export interface FootnoteRemoveInput {

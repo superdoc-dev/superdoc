@@ -32,6 +32,7 @@ Returns a TableMutationResult receipt; reports NO_OP if the table already uses t
 | `autoFitMode` | enum | no | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
 | `leftIndentPt` | number | no |  |
 | `preferredWidth` | number | no |  |
+| `preferredWidthType` | enum | no | `"dxa"`, `"auto"`, `"pct"` |
 | `tableDirection` | enum | no | `"ltr"`, `"rtl"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
@@ -47,14 +48,15 @@ Returns a TableMutationResult receipt; reports NO_OP if the table already uses t
 | `leftIndentPt` | number | no |  |
 | `nodeId` | string | yes |  |
 | `preferredWidth` | number | no |  |
+| `preferredWidthType` | enum | no | `"dxa"`, `"auto"`, `"pct"` |
 | `tableDirection` | enum | no | `"ltr"`, `"rtl"` |
 
 ### Example request
 
 ```json
 {
-  "alignment": "left",
   "preferredWidth": 12.5,
+  "preferredWidthType": "dxa",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -162,6 +164,13 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     },
     "preferredWidth": {
       "type": "number"
+    },
+    "preferredWidthType": {
+      "enum": [
+        "dxa",
+        "auto",
+        "pct"
+      ]
     },
     "tableDirection": {
       "enum": [

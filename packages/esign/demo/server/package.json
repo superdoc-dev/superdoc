@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "helmet": "^8.0.0",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
     "express": "^4.19.2"

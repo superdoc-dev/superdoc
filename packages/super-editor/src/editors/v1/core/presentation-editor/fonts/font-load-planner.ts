@@ -1,107 +1,201 @@
-import { resolvePrimaryPhysicalFamily, type FontFaceRequest } from '@superdoc/font-system';
+import {
+  resolveFontFamily,
+  type FaceKey,
+  type FontFaceRequest,
+  type FontResolutionReason,
+  type FontResolver,
+  type UsedFace,
+} from '@superdoc/font-system';
 import type { FlowBlock, ParagraphBlock, TableBlock, ListBlock, Run } from '@superdoc/contracts';
 
 /**
- * Face-aware font-load planner.
+ * Face-aware font planner.
  *
- * The load gate must await the exact physical FACES the document RENDERS - family +
- * weight + style - not every family declared in the docx fontTable. Two reasons:
- *  1. `document.fonts.load('16px "Carlito"')` loads only the regular (400/normal) face,
- *     so bold/italic text would measure against the wrong face and reflow on late load.
- *  2. A docx fontTable declares many fonts that are never rendered; awaiting all of them
- *     over-fetches and (with a large pack on a slow link) causes a late-load reflow storm.
+ * Walks the layout input ONCE and produces the single render font plan that drives loading,
+ * diagnostics, paint/measure resolution, and cache identity:
+ *  - `requiredFaces`: the exact physical FACES the load gate must await - the substitute, a synthetic
+ *    source face explicitly allowed by DocFonts, or the logical family when the substitute lacks that
+ *    face. It never awaits a phantom `{substitute, 700}` for a face the substitute does not provide.
+ *  - `usedFaces`: the logical faces the document renders, for the face-level report.
+ *  - `effectiveSignature`: the render/measure CACHE identity (see {@link FontPlan}).
  *
- * This walks the layout input (`blocksForLayout`) - which exists BEFORE measurement and
- * already carries each run's `fontFamily` + `bold`/`italic` - and emits the deduped set of
- * physical face requests. It resolves logical -> physical with `resolvePrimaryPhysicalFamily`,
- * the SAME primary resolution measure and paint use, so the planned set cannot disagree
- * with what is actually measured/painted. Declared-font diagnostics stay separate
- * (`getDocumentFonts()` / `getReport()`); this feeds loading only.
+ * Why face-aware: `document.fonts.load('16px "Carlito"')` loads only the regular face, and a
+ * single-face substitute (or a customer `fonts.map` to one) must NOT be faux-styled onto a
+ * weight/style it lacks unless docfonts explicitly names a synthetic source face. Resolution therefore
+ * consults `hasFace` - the registry's registered-face oracle (bundled faces + `fonts.add()` faces) -
+ * via the document's resolver.
  */
 
-/** Anything that carries a measurable text font: a run, a list marker run, etc. */
+/** Face-availability oracle: does the PHYSICAL family provide this face? Registry-backed. */
+export type HasFace = (physicalFamily: string, weight: '400' | '700', style: 'normal' | 'italic') => boolean;
+
+/** The single render font plan from one walk of the layout blocks. */
+export interface FontPlan {
+  /** Physical faces the load gate must await (resolved substitute, or logical for fallback_face_absent). */
+  requiredFaces: FontFaceRequest[];
+  /** Logical faces the document renders, for the face-level report (`buildFaceReport`). */
+  usedFaces: UsedFace[];
+  /**
+   * Render/measure CACHE IDENTITY: a stable, sorted, collision-safe JSON serialization of the
+   * document's resolved faces - sorted tuples
+   * `[logicalLower, weight, style, physicalLower, sourceWeight, sourceStyle, reason]`
+   * (empty `''` when no faces are used). This (NOT `resolver.signature`, which
+   * captures only the family map) is what measure/paint/layout cache keys must fold in: a
+   * `fonts.add()` that makes a face available changes a face's resolution for the SAME family map, so
+   * two documents with the same map but different registered faces resolve differently and must not
+   * share entries in the shared (module-singleton) measure cache. Load status is intentionally
+   * EXCLUDED - loading/timeout/late-load have their own invalidation and reporting paths; this
+   * answers only "for this rendered face, what CSS family will measure and paint use".
+   */
+  effectiveSignature: string;
+}
+
+/** Anything that carries a measurable text font: a run, a list marker run, a drop cap run, etc. */
 interface FontBearing {
   fontFamily?: unknown;
   bold?: unknown;
   italic?: unknown;
 }
 
-function faceKey(req: FontFaceRequest): string {
-  return `${req.family.toLowerCase()}|${req.weight}|${req.style}`;
+/** The bare primary family of a CSS value: "Calibri, sans-serif" -> "Calibri". */
+function primaryFamily(css: string): string {
+  const comma = css.indexOf(',');
+  // Strip surrounding quotes like the resolver's normalizeFamilyKey, so a quoted primary
+  // (`"Calibri"`) and its bare form collapse to ONE used face / report row / signature entry
+  // instead of two. Case is preserved for display; the dedup key lowercases separately.
+  return (comma === -1 ? css : css.slice(0, comma)).trim().replace(/^["']|["']$/g, '');
 }
 
-/** Collect a face request from any font-bearing object into the deduped map. */
-function collect(out: Map<string, FontFaceRequest>, node: FontBearing | null | undefined): void {
-  if (!node || typeof node.fontFamily !== 'string' || !node.fontFamily) return;
-  const family = resolvePrimaryPhysicalFamily(node.fontFamily);
-  if (!family) return;
-  const req: FontFaceRequest = {
-    family,
-    weight: node.bold === true ? '700' : '400',
-    style: node.italic === true ? 'italic' : 'normal',
+/** Resolve a logical family + face to its physical render family and reason, for this document. */
+type ResolveFace = (
+  logicalFamily: string,
+  face: FaceKey,
+) => { physicalFamily: string; reason: FontResolutionReason; sourceFace?: FaceKey };
+
+function makeResolveFace(resolver: FontResolver | undefined, hasFace: HasFace | undefined): ResolveFace {
+  if (resolver && hasFace) {
+    return (logical, face) => {
+      const r = resolver.resolveFace(logical, face, hasFace);
+      return { physicalFamily: r.physicalFamily, reason: r.reason, sourceFace: r.sourceFace };
+    };
+  }
+  // No face oracle: fall back to family-level resolution (legacy behaviour, e.g. context-free tests).
+  if (resolver) {
+    return (logical) => {
+      const r = resolver.resolveFontFamily(logical);
+      return { physicalFamily: r.physicalFamily, reason: r.reason };
+    };
+  }
+  // No resolver at all (legacy / context-free): route through the shared DEFAULT resolver so the
+  // reason still reflects a bundled substitute when a clone applies, instead of a misleading
+  // 'as_requested'. Family-level (no face oracle here); PE always passes the document resolver.
+  return (logical) => {
+    const r = resolveFontFamily(logical);
+    return { physicalFamily: r.physicalFamily, reason: r.reason };
   };
-  const key = faceKey(req);
-  if (!out.has(key)) out.set(key, req);
 }
 
-function collectRuns(out: Map<string, FontFaceRequest>, runs: Run[] | undefined): void {
+interface Acc {
+  requiredFaces: Map<string, FontFaceRequest>;
+  usedFaces: Map<string, UsedFace>;
+  /**
+   * usedKey -> the structured resolution tuple with requested face, physical family, source face, and
+   * reason.
+   * Serialized to the effective signature as JSON (NOT a delimited join): a font family is a free
+   * ST_String that may contain `;`, `|`, or `=>`, so a delimited form could serialize two distinct
+   * resolution sets to the same key and cause wrong cache reuse. JSON of structured tuples is
+   * collision-safe, matching {@link FontResolver.signature}.
+   */
+  sigEntries: Map<
+    string,
+    [string, '400' | '700', 'normal' | 'italic', string, '400' | '700', 'normal' | 'italic', string]
+  >;
+}
+
+/** Collect a face from any font-bearing object into the dedup maps + signature entries. */
+function collect(acc: Acc, node: FontBearing | null | undefined, resolveFace: ResolveFace): void {
+  if (!node || typeof node.fontFamily !== 'string' || !node.fontFamily) return;
+  const weight: '400' | '700' = node.bold === true ? '700' : '400';
+  const style: 'normal' | 'italic' = node.italic === true ? 'italic' : 'normal';
+  const logicalPrimary = primaryFamily(node.fontFamily);
+  if (!logicalPrimary) return;
+  const usedKey = `${logicalPrimary.toLowerCase()}|${weight}|${style}`;
+  if (acc.usedFaces.has(usedKey)) return; // already collected this used face
+  const { physicalFamily, reason, sourceFace } = resolveFace(node.fontFamily, { weight, style });
+  const requiredFace = sourceFace ?? { weight, style };
+  acc.usedFaces.set(usedKey, { logicalFamily: logicalPrimary, weight, style });
+  acc.sigEntries.set(usedKey, [
+    logicalPrimary.toLowerCase(),
+    weight,
+    style,
+    (physicalFamily || '').toLowerCase(),
+    requiredFace.weight,
+    requiredFace.style,
+    reason,
+  ]);
+  if (physicalFamily) {
+    const reqKey = `${physicalFamily.toLowerCase()}|${requiredFace.weight}|${requiredFace.style}`;
+    if (!acc.requiredFaces.has(reqKey)) {
+      acc.requiredFaces.set(reqKey, {
+        family: physicalFamily,
+        weight: requiredFace.weight,
+        style: requiredFace.style,
+      });
+    }
+  }
+}
+
+function collectRuns(acc: Acc, runs: Run[] | undefined, resolveFace: ResolveFace): void {
   if (!runs) return;
-  // Duck-typed on fontFamily so every font-bearing run kind is covered (text,
-  // fieldAnnotation, dropCap, ...) - missing one would silently measure against fallback.
+  // Duck-typed on fontFamily so every font-bearing run kind is covered (text, fieldAnnotation,
+  // dropCap, ...) - missing one would silently measure against a fallback.
   for (const run of runs) {
     const bearing = run as unknown as FontBearing;
-    // A field annotation with no explicit font is measured against 'Arial' by the measurer
-    // (its buildFontString default), so plan that face rather than skip the fontless run.
+    // A field annotation with no explicit font is measured against 'Arial' by the measurer (its
+    // buildFontString default), so plan that face rather than skip the fontless run.
     if (run.kind === 'fieldAnnotation' && (typeof bearing.fontFamily !== 'string' || !bearing.fontFamily)) {
-      collect(out, { ...bearing, fontFamily: 'Arial' });
+      collect(acc, { ...bearing, fontFamily: 'Arial' }, resolveFace);
     } else {
-      collect(out, bearing);
+      collect(acc, bearing, resolveFace);
     }
   }
 }
 
-function collectParagraph(out: Map<string, FontFaceRequest>, paragraph: ParagraphBlock | undefined): void {
+function collectParagraph(acc: Acc, paragraph: ParagraphBlock | undefined, resolveFace: ResolveFace): void {
   if (!paragraph) return;
-  collectRuns(out, paragraph.runs);
-  // The word-layout list marker glyph ("1.", "•") is measured with its OWN run font
-  // (attrs.wordLayout.marker.run, used by the measurer's buildFontString), which can be a
+  collectRuns(acc, paragraph.runs, resolveFace);
+  // The word-layout list marker glyph ("1.", "•") is measured with its OWN run font, which can be a
   // different family/weight/style than the item text - so it must be planned too.
-  collect(out, paragraph.attrs?.wordLayout?.marker?.run as FontBearing | undefined);
-  // A drop cap is measured from attrs.dropCapDescriptor.run (measureDropCap) with its own,
-  // often distinct and large, font; the cap text is moved out of `runs`, so plan it here.
-  collect(out, paragraph.attrs?.dropCapDescriptor?.run as FontBearing | undefined);
+  collect(acc, paragraph.attrs?.wordLayout?.marker?.run as FontBearing | undefined, resolveFace);
+  // A drop cap is measured from attrs.dropCapDescriptor.run with its own, often large, font; the cap
+  // text is moved out of `runs`, so plan it here.
+  collect(acc, paragraph.attrs?.dropCapDescriptor?.run as FontBearing | undefined, resolveFace);
 }
 
-function collectTable(out: Map<string, FontFaceRequest>, table: TableBlock): void {
+function collectTable(acc: Acc, table: TableBlock, resolveFace: ResolveFace): void {
   for (const row of table.rows) {
     for (const cell of row.cells) {
-      collectParagraph(out, cell.paragraph);
-      if (cell.blocks) for (const b of cell.blocks) collectBlock(out, b as FlowBlock);
+      collectParagraph(acc, cell.paragraph, resolveFace);
+      if (cell.blocks) for (const b of cell.blocks) collectBlock(acc, b as FlowBlock, resolveFace);
     }
   }
 }
 
-function collectList(out: Map<string, FontFaceRequest>, list: ListBlock): void {
-  for (const item of list.items) {
-    // collectParagraph covers the item text AND any word-layout marker font on the
-    // paragraph's attrs. The ListBlock-level `item.marker` (ListMarker) carries no font of
-    // its own - that glyph is measured with the paragraph font, already collected here.
-    collectParagraph(out, item.paragraph);
-  }
+function collectList(acc: Acc, list: ListBlock, resolveFace: ResolveFace): void {
+  // collectParagraph covers the item text AND any word-layout marker font on the paragraph attrs.
+  for (const item of list.items) collectParagraph(acc, item.paragraph, resolveFace);
 }
 
-function collectBlock(out: Map<string, FontFaceRequest>, block: FlowBlock): void {
+function collectBlock(acc: Acc, block: FlowBlock, resolveFace: ResolveFace): void {
   switch (block.kind) {
     case 'paragraph':
-      // Via collectParagraph (not collectRuns) so a top-level paragraph's word-layout
-      // marker run font is collected too, not just its text runs.
-      collectParagraph(out, block);
+      collectParagraph(acc, block, resolveFace);
       break;
     case 'table':
-      collectTable(out, block);
+      collectTable(acc, block, resolveFace);
       break;
     case 'list':
-      collectList(out, block);
+      collectList(acc, block, resolveFace);
       break;
     default:
       // image/drawing/section/page/column breaks carry no measurable text font.
@@ -110,13 +204,43 @@ function collectBlock(out: Map<string, FontFaceRequest>, block: FlowBlock): void
 }
 
 /**
- * The deduped physical face requests the given layout blocks actually render. The caller
- * passes every block this render measures - body, notes, header/footer, and (in paginated
- * mode) footnotes - so each measured face is planned; this function only walks what it is
- * given.
+ * Build the single render font plan from one walk of the given layout blocks. A `resolver` (the
+ * document's) + `hasFace` (its registry's oracle) make resolution face-aware; without `hasFace` it
+ * falls back to family-level resolution (e.g. context-free tests). The caller passes every block
+ * this render measures - body, notes, header/footer, footnotes - so each measured face is planned.
  */
-export function planRequiredFontFaces(blocks: readonly FlowBlock[] | null | undefined): FontFaceRequest[] {
-  const out = new Map<string, FontFaceRequest>();
-  if (blocks) for (const block of blocks) collectBlock(out, block);
-  return [...out.values()];
+export function planFontFaces(
+  blocks: readonly FlowBlock[] | null | undefined,
+  resolver?: FontResolver,
+  hasFace?: HasFace,
+): FontPlan {
+  const resolveFace = makeResolveFace(resolver, hasFace);
+  const acc: Acc = { requiredFaces: new Map(), usedFaces: new Map(), sigEntries: new Map() };
+  if (blocks) for (const block of blocks) collectBlock(acc, block, resolveFace);
+  return {
+    requiredFaces: [...acc.requiredFaces.values()],
+    usedFaces: [...acc.usedFaces.values()],
+    // Collision-safe: sort by usedKey (deterministic, order-independent) and JSON-encode the
+    // structured resolution tuples, so a family name containing a delimiter cannot forge a
+    // colliding signature (see Acc.sigEntries). Empty stays '' (not '[]') so default documents keep
+    // the shared-cache fast path that keys on a falsy signature.
+    effectiveSignature:
+      acc.sigEntries.size === 0
+        ? ''
+        : JSON.stringify(
+            [...acc.sigEntries.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, tuple]) => tuple),
+          ),
+  };
+}
+
+/**
+ * Back-compat: the deduped physical face requests only (family-level when no `hasFace` is given).
+ * Prefer {@link planFontFaces} for the full render plan (faces + report inputs + cache identity).
+ */
+export function planRequiredFontFaces(
+  blocks: readonly FlowBlock[] | null | undefined,
+  resolver?: FontResolver,
+  hasFace?: HasFace,
+): FontFaceRequest[] {
+  return planFontFaces(blocks, resolver, hasFace).requiredFaces;
 }

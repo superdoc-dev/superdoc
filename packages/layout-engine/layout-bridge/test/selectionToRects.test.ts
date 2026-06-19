@@ -17,6 +17,12 @@ import {
   tableLayout,
   tableBlock,
   tableMeasure,
+  tableEmptyParaLayout,
+  tableEmptyParaBlock,
+  tableEmptyParaMeasure,
+  bodyEmptyParaLayout,
+  bodyEmptyParaBlocks,
+  bodyEmptyParaMeasures,
   tableSpacingBeforeBlock,
   tableSpacingBeforeMeasure,
   tableSpacingBeforeLayout,
@@ -72,6 +78,37 @@ describe('selectionToRects', () => {
     const rects = selectionToRects(tableLayout, [tableBlock], [tableMeasure], 2, 8);
     expect(rects.length).toBeGreaterThan(0);
     expect(rects[0].x).toBeGreaterThan(tableLayout.pages[0].fragments[0].x);
+  });
+
+  it('highlights an empty paragraph row spanned by a table-cell selection (SD-3328)', () => {
+    // Selection 2..26 passes through p1 -> empty paragraph -> p3. The empty line is a
+    // zero-width slice; before the fix the builder skipped it, leaving a gap in the
+    // highlight band (the reported "selection highlight disappears over empty space").
+    const rects = selectionToRects(tableEmptyParaLayout, [tableEmptyParaBlock], [tableEmptyParaMeasure], 2, 26);
+
+    // One rect per line: text, empty, text — the empty row must NOT be dropped.
+    expect(rects).toHaveLength(3);
+
+    // The middle (empty) row sits vertically between the two text rows and is visible.
+    const sorted = [...rects].sort((a, b) => a.y - b.y);
+    const emptyRect = sorted[1];
+    expect(emptyRect.y).toBeGreaterThan(sorted[0].y);
+    expect(emptyRect.y).toBeLessThan(sorted[2].y);
+    expect(emptyRect.width).toBeGreaterThan(1);
+  });
+
+  it('highlights a blank line between body paragraphs spanned by a selection (SD-3328)', () => {
+    // Selection 1..25 passes through p1 -> empty paragraph -> p3 in body text.
+    // The blank line must be highlighted just like inside a table cell.
+    const rects = selectionToRects(bodyEmptyParaLayout, bodyEmptyParaBlocks, bodyEmptyParaMeasures, 1, 25);
+
+    expect(rects).toHaveLength(3);
+
+    const sorted = [...rects].sort((a, b) => a.y - b.y);
+    const emptyRect = sorted[1];
+    expect(emptyRect.y).toBeGreaterThan(sorted[0].y);
+    expect(emptyRect.y).toBeLessThan(sorted[2].y);
+    expect(emptyRect.width).toBeGreaterThan(1);
   });
 
   it('accounts for visual-only prefix runs when mapping PM selections to X coordinates', () => {

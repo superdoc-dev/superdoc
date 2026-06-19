@@ -205,14 +205,59 @@ function snakeCase(value) {
     .toLowerCase();
 }
 
+const PYTHON_RESERVED_IDENTIFIERS = new Set([
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
+]);
+
+function sanitizePythonIdentifier(identifier) {
+  if (/^[0-9]/.test(identifier)) {
+    identifier = `_${identifier}`;
+  }
+  if (PYTHON_RESERVED_IDENTIFIERS.has(identifier)) {
+    return `${identifier}_`;
+  }
+  return identifier;
+}
+
 function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap) {
   const className = classNameFor(pathParts, asyncMode);
   const lines = [`class ${className}:`, '    def __init__(self, runtime):', '        self._runtime = runtime', ''];
 
   for (const [key, value] of Object.entries(treeNode)) {
     if (value.__operation) {
-      const methodName = snakeCase(key);
-      const camelAlias = camelCase(key);
+      const methodName = sanitizePythonIdentifier(snakeCase(key));
+      const camelAlias = sanitizePythonIdentifier(camelCase(key));
       const operationId = value.__operation.id;
       const resultType = resultTypeMap.get(operationId) ?? 'dict[str, Any]';
       const paramsType = paramTypeMap.get(operationId) ?? 'dict[str, Any]';
@@ -266,8 +311,8 @@ function renderClass(treeNode, pathParts, asyncMode, resultTypeMap, paramTypeMap
       continue;
     }
 
-    const propertyName = snakeCase(key);
-    const camelAlias = camelCase(key);
+    const propertyName = sanitizePythonIdentifier(snakeCase(key));
+    const camelAlias = sanitizePythonIdentifier(camelCase(key));
     const nestedClassName = classNameFor([...pathParts, key], asyncMode);
     lines.push('    @property');
     lines.push(`    def ${propertyName}(self):`);

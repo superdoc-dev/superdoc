@@ -14,7 +14,7 @@ Use the tables below to see what operations are available and where each one is 
 | Namespace | Canonical ops | Aliases | Total surface | Reference |
 | --- | --- | --- | --- | --- |
 | Anchored Metadata | 6 | 0 | 6 | [Reference](/document-api/reference/metadata/index) |
-| Blocks | 3 | 0 | 3 | [Reference](/document-api/reference/blocks/index) |
+| Blocks | 6 | 0 | 6 | [Reference](/document-api/reference/blocks/index) |
 | Bookmarks | 5 | 0 | 5 | [Reference](/document-api/reference/bookmarks/index) |
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
 | Captions | 6 | 0 | 6 | [Reference](/document-api/reference/captions/index) |
@@ -34,9 +34,9 @@ Use the tables below to see what operations are available and where each one is 
 | Hyperlinks | 6 | 0 | 6 | [Reference](/document-api/reference/hyperlinks/index) |
 | Images | 27 | 0 | 27 | [Reference](/document-api/reference/images/index) |
 | Index | 11 | 0 | 11 | [Reference](/document-api/reference/index/index) |
-| Lists | 39 | 0 | 39 | [Reference](/document-api/reference/lists/index) |
-| Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
-| Paragraph Formatting | 19 | 0 | 19 | [Reference](/document-api/reference/format/paragraph/index) |
+| Lists | 44 | 0 | 44 | [Reference](/document-api/reference/lists/index) |
+| Mutations | 3 | 0 | 3 | [Reference](/document-api/reference/mutations/index) |
+| Paragraph Formatting | 21 | 0 | 21 | [Reference](/document-api/reference/format/paragraph/index) |
 | Paragraph Styles | 2 | 0 | 2 | [Reference](/document-api/reference/styles/paragraph/index) |
 | Permission Ranges | 5 | 0 | 5 | [Reference](/document-api/reference/permission-ranges/index) |
 | Protection | 3 | 0 | 3 | [Reference](/document-api/reference/protection/index) |
@@ -47,7 +47,7 @@ Use the tables below to see what operations are available and where each one is 
 | Styles | 1 | 0 | 1 | [Reference](/document-api/reference/styles/index) |
 | Table of Authorities | 11 | 0 | 11 | [Reference](/document-api/reference/authorities/index) |
 | Table of Contents | 10 | 0 | 10 | [Reference](/document-api/reference/toc/index) |
-| Tables | 47 | 0 | 47 | [Reference](/document-api/reference/tables/index) |
+| Tables | 48 | 0 | 48 | [Reference](/document-api/reference/tables/index) |
 | Templates | 1 | 0 | 1 | [Reference](/document-api/reference/templates/index) |
 | Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
 
@@ -62,6 +62,9 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.list(...)</code></span> | [`blocks.list`](/document-api/reference/blocks/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.delete(...)</code></span> | [`blocks.delete`](/document-api/reference/blocks/delete) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.deleteRange(...)</code></span> | [`blocks.deleteRange`](/document-api/reference/blocks/delete-range) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.split(...)</code></span> | [`blocks.split`](/document-api/reference/blocks/split) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.merge(...)</code></span> | [`blocks.merge`](/document-api/reference/blocks/merge) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.move(...)</code></span> | [`blocks.move`](/document-api/reference/blocks/move) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.list(...)</code></span> | [`bookmarks.list`](/document-api/reference/bookmarks/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.get(...)</code></span> | [`bookmarks.get`](/document-api/reference/bookmarks/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.insert(...)</code></span> | [`bookmarks.insert`](/document-api/reference/bookmarks/insert) |
@@ -334,8 +337,14 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevelText(...)</code></span> | [`lists.setLevelText`](/document-api/reference/lists/set-level-text) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevelStart(...)</code></span> | [`lists.setLevelStart`](/document-api/reference/lists/set-level-start) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevelLayout(...)</code></span> | [`lists.setLevelLayout`](/document-api/reference/lists/set-level-layout) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.getState(...)</code></span> | [`lists.getState`](/document-api/reference/lists/get-state) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.apply(...)</code></span> | [`lists.apply`](/document-api/reference/lists/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.continue(...)</code></span> | [`lists.continue`](/document-api/reference/lists/continue) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.restart(...)</code></span> | [`lists.restart`](/document-api/reference/lists/restart) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.remove(...)</code></span> | [`lists.remove`](/document-api/reference/lists/remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | [`mutations.preview`](/document-api/reference/mutations/preview) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.plan.execute(...)</code></span> | [`plan.execute`](/document-api/reference/mutations/plan-execute) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.resetDirectFormatting(...)</code></span> | [`format.paragraph.resetDirectFormatting`](/document-api/reference/format/paragraph/reset-direct-formatting) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setAlignment(...)</code></span> | [`format.paragraph.setAlignment`](/document-api/reference/format/paragraph/set-alignment) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearAlignment(...)</code></span> | [`format.paragraph.clearAlignment`](/document-api/reference/format/paragraph/clear-alignment) |
@@ -353,8 +362,10 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearBorder(...)</code></span> | [`format.paragraph.clearBorder`](/document-api/reference/format/paragraph/clear-border) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setShading(...)</code></span> | [`format.paragraph.setShading`](/document-api/reference/format/paragraph/set-shading) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearShading(...)</code></span> | [`format.paragraph.clearShading`](/document-api/reference/format/paragraph/clear-shading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setMarkRunProps(...)</code></span> | [`format.paragraph.setMarkRunProps`](/document-api/reference/format/paragraph/set-mark-run-props) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setDirection(...)</code></span> | [`format.paragraph.setDirection`](/document-api/reference/format/paragraph/set-direction) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearDirection(...)</code></span> | [`format.paragraph.clearDirection`](/document-api/reference/format/paragraph/clear-direction) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setNumbering(...)</code></span> | [`format.paragraph.setNumbering`](/document-api/reference/format/paragraph/set-numbering) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.paragraph.setStyle(...)</code></span> | [`styles.paragraph.setStyle`](/document-api/reference/styles/paragraph/set-style) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.paragraph.clearStyle(...)</code></span> | [`styles.paragraph.clearStyle`](/document-api/reference/styles/paragraph/clear-style) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.list(...)</code></span> | [`permissionRanges.list`](/document-api/reference/permission-ranges/list) |
@@ -417,6 +428,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setLayout(...)</code></span> | [`tables.setLayout`](/document-api/reference/tables/set-layout) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.insertRow(...)</code></span> | [`tables.insertRow`](/document-api/reference/tables/insert-row) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.deleteRow(...)</code></span> | [`tables.deleteRow`](/document-api/reference/tables/delete-row) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.moveRow(...)</code></span> | [`tables.moveRow`](/document-api/reference/tables/move-row) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setRowHeight(...)</code></span> | [`tables.setRowHeight`](/document-api/reference/tables/set-row-height) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.distributeRows(...)</code></span> | [`tables.distributeRows`](/document-api/reference/tables/distribute-rows) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setRowOptions(...)</code></span> | [`tables.setRowOptions`](/document-api/reference/tables/set-row-options) |

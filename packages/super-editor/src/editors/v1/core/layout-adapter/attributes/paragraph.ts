@@ -203,6 +203,18 @@ const resolveHeadingLevel = (
   return undefined;
 };
 
+export const resolveParagraphHeadingLevel = (
+  paragraphProperties: ParagraphProperties | undefined,
+  converterContext?: ConverterContext,
+): number | undefined => {
+  const properties = paragraphProperties ?? {};
+  const resolvedParagraphProperties = converterContext
+    ? resolveParagraphProperties(converterContext, properties, converterContext.tableInfo)
+    : properties;
+
+  return resolveHeadingLevel(resolvedParagraphProperties.styleId, resolvedParagraphProperties, converterContext);
+};
+
 const TRACKED_CHANGE_KEYS = new Set(['trackInsert', 'trackDelete']);
 
 export const hasExplicitParagraphRunProperties = (

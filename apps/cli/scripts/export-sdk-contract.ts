@@ -15,22 +15,12 @@ import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { COMMAND_CATALOG, INTENT_GROUP_META } from '@superdoc/document-api';
-import { buildContractSnapshot } from '@superdoc/document-api/scripts/lib/contract-snapshot.ts';
+import { COMMAND_CATALOG } from '../../../packages/document-api/src/contract/command-catalog.ts';
+import { INTENT_GROUP_META } from '../../../packages/document-api/src/contract/operation-definitions.ts';
+import { buildContractSnapshot } from '../../../packages/document-api/scripts/lib/contract-snapshot.ts';
+import { ensureDocumentApiBuild } from './ensure-superdoc-build.js';
 
-import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
-import {
-  CLI_OPERATION_IDS,
-  cliCategory,
-  cliDescription,
-  cliCommandTokens,
-  cliRequiresDocumentContext,
-  toDocApiId,
-} from '../src/cli/operation-set';
 import type { CliOnlyOperation, CliOperationParamSpec, CliTypeSpec } from '../src/cli/types';
-import { CLI_ONLY_OPERATION_DEFINITIONS } from '../src/cli/cli-only-operation-definitions';
-import { RESPONSE_ENVELOPE_KEY } from '../src/cli/operation-hints';
-import { HOST_PROTOCOL_VERSION, HOST_PROTOCOL_FEATURES, HOST_PROTOCOL_NOTIFICATIONS } from '../src/host/protocol';
 
 // ---------------------------------------------------------------------------
 // SDK surface classification
@@ -53,14 +43,17 @@ function classifySdkSurface(operationId: string): SdkSurface {
  * on missing entries. Missing entries would otherwise be coerced to null and
  * silently leak a `[undefined]: result` wrap from the CLI orchestrators.
  */
-function resolveDocBackedEnvelopeKey(docApiId: string): string | null {
-  if (!Object.prototype.hasOwnProperty.call(RESPONSE_ENVELOPE_KEY, docApiId)) {
+function resolveDocBackedEnvelopeKey(
+  responseEnvelopeKeyByOperation: Record<string, string | null>,
+  docApiId: string,
+): string | null {
+  if (!Object.prototype.hasOwnProperty.call(responseEnvelopeKeyByOperation, docApiId)) {
     throw new Error(
       `export-sdk-contract: doc-backed operation '${docApiId}' has no RESPONSE_ENVELOPE_KEY entry. ` +
         `Add one in apps/cli/src/cli/operation-hints.ts before regenerating the contract.`,
     );
   }
-  return RESPONSE_ENVELOPE_KEY[docApiId as keyof typeof RESPONSE_ENVELOPE_KEY];
+  return responseEnvelopeKeyByOperation[docApiId] ?? null;
 }
 
 function buildParamSchema(param: CliOperationParamSpec): Record<string, unknown> {
@@ -126,7 +119,26 @@ function loadCliPackage(): { name: string; version: string } {
 // Build contract
 // ---------------------------------------------------------------------------
 
-function buildSdkContract() {
+async function buildSdkContract() {
+  // The CLI metadata modules still import the packaged document-api entrypoint.
+  // Build it first so clean checkouts can regenerate artifacts without any
+  // prior manual package build.
+  ensureDocumentApiBuild();
+
+  const [
+    { CLI_OPERATION_METADATA },
+    { CLI_OPERATION_IDS, cliCategory, cliDescription, cliCommandTokens, cliRequiresDocumentContext, toDocApiId },
+    { CLI_ONLY_OPERATION_DEFINITIONS },
+    { RESPONSE_ENVELOPE_KEY },
+    { HOST_PROTOCOL_VERSION, HOST_PROTOCOL_FEATURES, HOST_PROTOCOL_NOTIFICATIONS },
+  ] = await Promise.all([
+    import('../src/cli/operation-params.ts'),
+    import('../src/cli/operation-set.ts'),
+    import('../src/cli/cli-only-operation-definitions.ts'),
+    import('../src/cli/operation-hints.ts'),
+    import('../src/host/protocol.ts'),
+  ]);
+
   // Read the live document-api source snapshot instead of the generated JSON
   // artifact. This keeps SDK export resilient when developers add operations
   // before refreshing packages/document-api/generated/.
@@ -162,7 +174,7 @@ function buildSdkContract() {
       // Doc-backed ops must have an explicit entry in RESPONSE_ENVELOPE_KEY; missing entries
       // would otherwise be coerced to null here and silently leak a `[undefined]: result`
       // wrap from the CLI orchestrators.
-      responseEnvelopeKey: docApiId ? resolveDocBackedEnvelopeKey(docApiId) : null,
+      responseEnvelopeKey: docApiId ? resolveDocBackedEnvelopeKey(RESPONSE_ENVELOPE_KEY, docApiId) : null,
 
       // Transport plane
       params: metadata.params.map((p) => {
@@ -245,9 +257,9 @@ function buildSdkContract() {
 // Main
 // ---------------------------------------------------------------------------
 
-function main() {
+async function main() {
   const isCheck = process.argv.includes('--check');
-  const contract = buildSdkContract();
+  const contract = await buildSdkContract();
   const json = JSON.stringify(contract, null, 2) + '\n';
 
   if (isCheck) {
@@ -285,4 +297,7 @@ function main() {
   console.log(`Wrote ${OUTPUT_PATH} (${opCount} operations)`);
 }
 
-main();
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

@@ -4,6 +4,7 @@ import {
   executeCreateHeading,
   executeCreateSectionBreak,
   executeCreateTable,
+  executeCreateTableOfContents,
   normalizeCreateParagraphInput,
 } from './create.js';
 
@@ -55,6 +56,13 @@ describe('normalizeCreateParagraphInput', () => {
     expect(result.text).toBe('Hello world');
   });
 
+  it('preserves an explicit story locator', () => {
+    const story = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId100' };
+    const result = normalizeCreateParagraphInput({ in: story });
+
+    expect(result.in).toEqual(story);
+  });
+
   it('preserves both explicit at and text', () => {
     const result = normalizeCreateParagraphInput({
       at: { kind: 'documentStart' },
@@ -65,6 +73,14 @@ describe('normalizeCreateParagraphInput', () => {
       at: { kind: 'documentStart' },
       text: 'First paragraph',
     });
+  });
+
+  it('preserves explicit story targeting', () => {
+    const locator = { kind: 'story', storyType: 'footnote', noteId: 'fn1' } as const;
+    const result = normalizeCreateParagraphInput({ in: locator, text: 'In note' });
+
+    expect(result.in).toEqual(locator);
+    expect(result.text).toBe('In note');
   });
 });
 
@@ -132,6 +148,59 @@ describe('create.paragraph input validation', () => {
   it('rejects invalid story locator', () => {
     expect(() => executeCreateParagraph(adapter, { in: { kind: 'bogus' } } as any)).toThrow(/StoryLocator/);
   });
+
+  it('preserves story targeting when executing', () => {
+    const locator = { kind: 'story', storyType: 'footnote', noteId: 'fn1' } as const;
+
+    executeCreateParagraph(adapter, {
+      in: locator,
+      at: { kind: 'documentEnd' },
+      text: 'Story paragraph',
+    });
+
+    expect(adapter.paragraph).toHaveBeenCalledWith(
+      {
+        in: locator,
+        at: { kind: 'documentEnd' },
+        text: 'Story paragraph',
+      },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('passes header/footer story locators through to the adapter', () => {
+    const story = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId100' };
+
+    executeCreateParagraph(adapter, {
+      in: story,
+      at: { kind: 'documentEnd' },
+      text: 'Hello',
+    });
+
+    expect(adapter.paragraph).toHaveBeenCalledWith(
+      expect.objectContaining({
+        in: story,
+        at: { kind: 'documentEnd' },
+        text: 'Hello',
+      }),
+      expect.anything(),
+    );
+  });
+  it('rejects invalid at.target.story locators', () => {
+    expect(() =>
+      executeCreateParagraph(adapter, {
+        at: {
+          kind: 'before',
+          target: {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p1',
+            story: { kind: 'bogus' } as any,
+          },
+        },
+      }),
+    ).toThrow(/StoryLocator/);
+  });
 });
 
 describe('create.heading input validation', () => {
@@ -181,6 +250,48 @@ describe('create.heading input validation', () => {
 
   it('rejects invalid story locator', () => {
     expect(() => executeCreateHeading(adapter, { level: 1, in: { kind: 'bogus' } } as any)).toThrow(/StoryLocator/);
+  });
+
+  it('preserves story targeting when executing', () => {
+    const locator = { kind: 'story', storyType: 'footnote', noteId: 'fn1' } as const;
+
+    executeCreateHeading(adapter, {
+      in: locator,
+      level: 2,
+      at: { kind: 'documentEnd' },
+      text: 'Story heading',
+    });
+
+    expect(adapter.heading).toHaveBeenCalledWith(
+      {
+        in: locator,
+        level: 2,
+        at: { kind: 'documentEnd' },
+        text: 'Story heading',
+      },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('passes header/footer story locators through to the adapter', () => {
+    const story = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId100' };
+
+    executeCreateHeading(adapter, {
+      level: 1,
+      in: story,
+      at: { kind: 'documentStart' },
+      text: 'Heading',
+    });
+
+    expect(adapter.heading).toHaveBeenCalledWith(
+      expect.objectContaining({
+        in: story,
+        level: 1,
+        at: { kind: 'documentStart' },
+        text: 'Heading',
+      }),
+      expect.anything(),
+    );
   });
 });
 
@@ -233,6 +344,54 @@ describe('create.table input validation', () => {
   });
 });
 
+describe('create.tableOfContents input validation', () => {
+  it('passes a raw TOC instruction through to the adapter', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: () => ({ success: true }),
+      tableOfContents: mock(() => ({
+        success: true,
+        toc: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' },
+      })),
+    } as any;
+
+    executeCreateTableOfContents(adapter, {
+      at: { kind: 'documentStart' },
+      instruction: 'TOC \\\\h \\\\u \\\\z \\\\t "Heading 1,1,Heading 2,2,"',
+    });
+
+    expect(adapter.tableOfContents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        at: { kind: 'documentStart' },
+        instruction: 'TOC \\\\h \\\\u \\\\z \\\\t "Heading 1,1,Heading 2,2,"',
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('rejects a non-TOC raw instruction', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: () => ({ success: true }),
+      tableOfContents: mock(() => ({
+        success: true,
+        toc: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' },
+      })),
+    } as any;
+
+    expect(() =>
+      executeCreateTableOfContents(adapter, {
+        instruction: 'REF BookmarkOne \\\\h',
+      } as any),
+    ).toThrow(/raw TOC field instruction/i);
+    expect(adapter.tableOfContents).not.toHaveBeenCalled();
+  });
+});
+
 describe('create target validation', () => {
   it('rejects nodeId-based before/after placement for create.paragraph', () => {
     let paragraphCalled = false;
@@ -276,12 +435,54 @@ describe('executeCreateSectionBreak', () => {
     expect(adapter.sectionBreak).toHaveBeenCalledWith(
       expect.objectContaining({
         at: { kind: 'documentEnd' },
+        representation: 'asNewParagraph',
         breakType: 'nextPage',
       }),
       { changeMode: 'direct', dryRun: false, expectedRevision: undefined },
     );
   });
 
+  it('passes through attachToPreviousParagraph representation', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: mock(() => ({
+        success: true,
+        section: { kind: 'section', sectionId: 'section-1' },
+      })),
+    } as any;
+
+    executeCreateSectionBreak(adapter, {
+      at: { kind: 'documentEnd' },
+      representation: 'attachToPreviousParagraph',
+      breakType: 'nextPage',
+    });
+
+    expect(adapter.sectionBreak).toHaveBeenCalledWith(
+      expect.objectContaining({
+        at: { kind: 'documentEnd' },
+        representation: 'attachToPreviousParagraph',
+        breakType: 'nextPage',
+      }),
+      { changeMode: 'direct', dryRun: false, expectedRevision: undefined },
+    );
+  });
+  it('rejects invalid section break representation', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: mock(() => ({ success: true })),
+    } as any;
+
+    expect(() =>
+      executeCreateSectionBreak(adapter, {
+        representation: 'unsupported-representation' as any,
+      }),
+    ).toThrow(/create\.sectionBreak representation must be one of/i);
+    expect(adapter.sectionBreak).not.toHaveBeenCalled();
+  });
   it('rejects invalid section break type', () => {
     const adapter = {
       paragraph: () => ({ success: true }),
@@ -295,6 +496,21 @@ describe('executeCreateSectionBreak', () => {
         breakType: 'invalidBreakType' as any,
       }),
     ).toThrow(/create\.sectionBreak breakType must be one of/i);
+  });
+
+  it('rejects invalid section break representation', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: mock(() => ({ success: true })),
+    } as any;
+
+    expect(() =>
+      executeCreateSectionBreak(adapter, {
+        representation: 'invalidRepresentation' as any,
+      }),
+    ).toThrow(/create\.sectionBreak representation must be one of/i);
   });
 
   it('rejects nodeId-based before/after placement', () => {

@@ -59,6 +59,7 @@ vi.mock('./shapes.js', () => ({
   shapeGroupNodeToDrawingBlock: vi.fn(),
   shapeContainerNodeToDrawingBlock: vi.fn(),
   shapeTextboxNodeToDrawingBlock: vi.fn(),
+  hydrateTextboxDrawingContent: vi.fn((_, drawingBlock) => drawingBlock),
 }));
 
 vi.mock('../attributes/index.js', () => ({
@@ -4004,6 +4005,21 @@ describe('paragraph converters', () => {
         pmStart: 10,
         pmEnd: 11,
       });
+    });
+
+    it('includes DrawingML fixed alpha adjustment when provided', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.png',
+          inline: true,
+          alphaModFix: { amt: 9000 },
+        },
+      };
+
+      const result = imageNodeToRun(buildImageParams(node, positions));
+
+      expect(result?.alphaModFix).toEqual({ amt: 9000 });
     });
 
     it('returns null when src is missing', () => {

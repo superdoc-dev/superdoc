@@ -930,6 +930,7 @@ describe('toFlowBlocks', () => {
         gap: 101.53333333333333,
         withSeparator: false,
         widths: [72, 497.26666666666665],
+        gaps: [101.53333333333333],
         equalWidth: false,
       });
     });
@@ -1622,7 +1623,7 @@ describe('toFlowBlocks', () => {
       const drawingBlock = blocks.find((block) => block.kind === 'drawing');
 
       expect(drawingBlock).toBeDefined();
-      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
       expect(drawingBlock?.geometry).toMatchObject({
         width: 200,
         height: 150,
@@ -1678,7 +1679,7 @@ describe('toFlowBlocks', () => {
       const drawingBlock = blocks.find((block) => block.kind === 'drawing');
 
       expect(drawingBlock).toBeDefined();
-      expect(drawingBlock?.drawingKind).toBe('vectorShape');
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
       expect(drawingBlock?.geometry).toMatchObject({
         width: 300,
         height: 100,
@@ -1835,6 +1836,60 @@ describe('toFlowBlocks', () => {
       expect(blocks[2].runs[0].text).toContain('text after');
     });
 
+    it('propagates nested VML textbox content from shapeContainer into the drawing block', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'shapeContainer',
+                attrs: {
+                  width: 300,
+                  height: 120,
+                  kind: 'textbox',
+                },
+                content: [
+                  {
+                    type: 'shapeTextbox',
+                    attrs: {
+                      attributes: {
+                        inset: '0pt,0pt,0pt,0pt',
+                        style: 'v-text-anchor:middle',
+                      },
+                    },
+                    content: [
+                      {
+                        type: 'paragraph',
+                        attrs: {
+                          paragraphProperties: {
+                            justification: 'center',
+                          },
+                        },
+                        content: [{ type: 'text', text: 'Textbox from VML' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      const drawingBlock = blocks.find((block) => block.kind === 'drawing');
+
+      expect(drawingBlock?.drawingKind).toBe('textboxShape');
+      expect(drawingBlock?.textContent).toEqual({
+        horizontalAlign: 'center',
+        parts: [{ text: 'Textbox from VML' }],
+      });
+      expect(drawingBlock?.textVerticalAlign).toBe('center');
+      expect(drawingBlock?.textInsets).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+    });
+
     it('handles shapeContainer and shapeTextbox in all conversion paths', () => {
       // Test documentToFlowBlocks path (top-level doc children)
       const docWithShapes = {
@@ -1858,8 +1913,8 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(docWithShapes);
       const drawingBlocks = blocks.filter((b) => b.kind === 'drawing');
       expect(drawingBlocks).toHaveLength(2);
-      expect(drawingBlocks[0].drawingKind).toBe('vectorShape');
-      expect(drawingBlocks[1].drawingKind).toBe('vectorShape');
+      expect(drawingBlocks[0].drawingKind).toBe('textboxShape');
+      expect(drawingBlocks[1].drawingKind).toBe('textboxShape');
     });
   });
 
@@ -2584,6 +2639,47 @@ describe('toFlowBlocks', () => {
         pageRefMetadata: {
           bookmarkId: '_Toc987654321',
           instruction: 'PAGEREF "_Toc987654321" \\h',
+        },
+      });
+    });
+
+    it('uses typed pageReference attrs before reparsing raw instruction', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'pageReference',
+                attrs: {
+                  instruction: 'PAGEREF legacy',
+                  bookmarkId: '_TypedTarget',
+                  hasHyperlinkSwitch: true,
+                  hasRelativePositionSwitch: true,
+                  pageNumberFieldFormat: { format: 'upperRoman' },
+                  numericPictureFormat: { picture: '00' },
+                  fieldResultFormat: 'mergeformat',
+                },
+                content: [{ type: 'text', text: '7' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks[0].runs[0]).toMatchObject({
+        token: 'pageReference',
+        link: { anchor: '_TypedTarget' },
+        pageRefMetadata: {
+          bookmarkId: '_TypedTarget',
+          instruction: 'PAGEREF legacy',
+          relativePosition: true,
+          pageNumberFieldFormat: { format: 'upperRoman' },
+          numericPictureFormat: { picture: '00' },
+          fieldResultFormat: 'mergeformat',
         },
       });
     });

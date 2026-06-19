@@ -59,6 +59,7 @@ import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeTy
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from '../helpers/text-with-tabs.js';
+import { compileSafeTextRegex } from '../helpers/safe-regex.js';
 import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelection.js';
 import {
   TrackDeleteMarkName,
@@ -886,6 +887,16 @@ export function executeTextRewrite(
 
   const replacementText = getReplacementText(step.args.replacement);
   const marks = resolveMarksForRange(editor, target, step);
+  // A rewrite range can start in a normal parent (a run) and span into a
+  // `text*`-only inline container (e.g. total-page-number) that rejects
+  // lineBreak. The edits below land at remapped positions whose parent may
+  // differ from `absFrom`, so probe admission at each actual edit position
+  // rather than once at the range start: a newline that lands in a restrictive
+  // parent falls back to literal text (the export safety net still emits
+  // <w:br/>). Probe on the current `tr` so prior in-loop steps are reflected.
+  const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+  const parentAllowsLineBreakAt = (pos: number): boolean =>
+    lineBreakNodeType ? parentAllowsNodeAt(tr, pos, lineBreakNodeType) : false;
   const structuralRewrite = resolveStructuralRangeRewrite(tr.doc, absFrom, absTo, step);
 
   if (structuralRewrite) {
@@ -935,7 +946,9 @@ export function executeTextRewrite(
       tr.delete(absFrom, absTo);
       return { changed: target.text.length > 0 };
     }
-    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks));
+    const content = buildTextWithTabs(editor.state.schema, replacementText, asProseMirrorMarks(marks), {
+      parentAllowsLineBreak: parentAllowsLineBreakAt(absFrom),
+    });
     tr.replaceWith(absFrom, absTo, content);
     return { changed: replacementText !== target.text };
   }
@@ -991,10 +1004,14 @@ export function executeTextRewrite(
       if (change.type === 'delete') {
         tr.delete(remap(change.docFrom), remap(change.docTo));
       } else if (change.type === 'insert') {
-        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks), {
+          parentAllowsLineBreak: parentAllowsLineBreakAt(remap(change.docPos)),
+        });
         tr.insert(remap(change.docPos), content);
       } else {
-        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks));
+        const content = buildTextWithTabs(editor.state.schema, change.newText, asProseMirrorMarks(marks), {
+          parentAllowsLineBreak: parentAllowsLineBreakAt(remap(change.docFrom)),
+        });
         tr.replaceWith(remap(change.docFrom), remap(change.docTo), content);
       }
     }
@@ -1002,12 +1019,15 @@ export function executeTextRewrite(
     // Pure deletion after trimming: a non-empty replacement whose new text is
     // fully contained in the old text's common prefix + suffix collapses to an
     // empty delta (e.g. "best endeavours to:" → "endeavours to:" leaves
-    // trimmedNew === ""). Delete the removed range rather than building
-    // schema.text('') — ProseMirror rejects empty text nodes.
+    // trimmedNew === ""). This also covers removing a lineBreak, now that
+    // lineBreak counts as "\n" in the diff. Delete the removed range rather than
+    // building schema.text(''), which ProseMirror rejects for empty text.
     tr.delete(trimmedFrom, trimmedTo);
   } else {
     // 0 or 1 word change: replace just the trimmed range.
-    const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks));
+    const content = buildTextWithTabs(editor.state.schema, trimmedNew, asProseMirrorMarks(marks), {
+      parentAllowsLineBreak: parentAllowsLineBreakAt(trimmedFrom),
+    });
     tr.replaceWith(trimmedFrom, trimmedTo, content);
   }
 
@@ -1138,7 +1158,12 @@ export function executeTextInsert(
 
   const tabNodeType = editor.state.schema.nodes?.tab;
   const parentAllowsTab = tabNodeType && text.includes('\t') ? parentAllowsNodeAt(tr, absPos, tabNodeType) : false;
-  tr.insert(absPos, buildTextWithTabs(editor.state.schema, text, marks, { parentAllowsTab }));
+  // Restrictive parents like total-page-number are `text*` and reject lineBreak;
+  // probe admission so newline-bearing inserts fall back to literal text there.
+  const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+  const parentAllowsLineBreak =
+    lineBreakNodeType && /[\r\n]/.test(text) ? parentAllowsNodeAt(tr, absPos, lineBreakNodeType) : false;
+  tr.insert(absPos, buildTextWithTabs(editor.state.schema, text, marks, { parentAllowsTab, parentAllowsLineBreak }));
 
   return { changed: true };
 }
@@ -1323,7 +1348,13 @@ export function executeSpanTextRewrite(
   // For single replacement block, use flat replacement into the span
   if (replacementBlocks.length === 1) {
     const marks = resolveSpanMarks(editor, target, policy, step.id);
-    const content = buildTextWithTabs(editor.state.schema, replacementBlocks[0], asProseMirrorMarks(marks));
+    // Probe parent admission so a newline replacement into a `text*`-only span
+    // parent falls back to literal text (the export safety net handles the rest).
+    const lineBreakNodeType = editor.state.schema.nodes?.lineBreak;
+    const parentAllowsLineBreak = lineBreakNodeType ? parentAllowsNodeAt(tr, absFrom, lineBreakNodeType) : false;
+    const content = buildTextWithTabs(editor.state.schema, replacementBlocks[0], asProseMirrorMarks(marks), {
+      parentAllowsLineBreak,
+    });
     tr.replaceWith(absFrom, absTo, content);
     return { changed: true };
   }
@@ -1932,15 +1963,14 @@ function resolveSegmentMarks(
 
 function countTextMatches(text: string, pattern: string, mode: string, caseSensitive: boolean): number {
   if (mode === 'regex') {
-    if (pattern.length > 1024) return 0;
-    const flags = caseSensitive ? 'g' : 'gi';
-    try {
-      const regex = new RegExp(pattern, flags);
-      const matches = text.match(regex);
-      return matches ? matches.length : 0;
-    } catch {
+    // Invalid or unsafe (ReDoS-prone) patterns preserve the existing assert behavior:
+    // they count as zero matches and fail unless the expected count is zero.
+    const result = compileSafeTextRegex(pattern, { caseSensitive });
+    if (!result.ok) {
       return 0;
     }
+    const matches = text.match(result.regex);
+    return matches ? matches.length : 0;
   }
 
   const searchText = caseSensitive ? text : text.toLowerCase();
@@ -2386,6 +2416,13 @@ export function executePlan(editor: Editor, input: MutationsApplyInput): PlanRec
   if (!input.steps?.length) {
     throw planError('INVALID_INPUT', 'plan must contain at least one step');
   }
+
+  // Reject stale optimistic-concurrency requests BEFORE compilePlan can
+  // dispatch the identity-repair transaction. Without this, a caller's
+  // mismatched expectedRevision would surface as REVISION_MISMATCH *after*
+  // the repair already rewrote block identities on the doc — we'd reject
+  // the user's intent but still leave the document mutated.
+  checkRevision(editor, input.expectedRevision);
 
   const compiled = compilePlan(editor, input.steps, {
     selectTextModel: input.changeMode === 'tracked' ? 'raw' : 'visible',

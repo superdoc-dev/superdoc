@@ -141,7 +141,7 @@ describe('goToAnchor', () => {
     expect(result).toBe(true);
   });
 
-  it('should use nextFragmentY when bookmark is in a gap between fragments', async () => {
+  it('should use nextFragmentY when bookmark gap is closer to next fragment', async () => {
     const scrollContainer = createMockScrollContainer({ scrollTop: 0, rectTop: 0 });
     const layout = makeLayout([
       {
@@ -152,7 +152,32 @@ describe('goToAnchor', () => {
         ],
       },
     ]);
-    // Bookmark at position 50 — in the gap between fragments
+    // Bookmark at position 55 — gap to next (5) is smaller than gap to prev (15)
+    const deps = makeDeps({
+      layout,
+      scrollContainer,
+      bookmarks: new Map([['heading1', 55]]),
+    });
+
+    await goToAnchor(deps);
+
+    // Should use nextFragmentY = 200 from the second fragment
+    const call = (scrollContainer.scrollTo as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call.top).toBe(100 + 200);
+  });
+
+  it('falls back to next fragment on a PM-distance tie (preserves prior behaviour)', async () => {
+    const scrollContainer = createMockScrollContainer({ scrollTop: 0, rectTop: 0 });
+    const layout = makeLayout([
+      {
+        number: 1,
+        fragments: [
+          { kind: 'para', pmStart: 0, pmEnd: 40, y: 72 },
+          { kind: 'para', pmStart: 60, pmEnd: 100, y: 200 },
+        ],
+      },
+    ]);
+    // Bookmark at position 50 — equidistant from both fragments
     const deps = makeDeps({
       layout,
       scrollContainer,
@@ -161,9 +186,37 @@ describe('goToAnchor', () => {
 
     await goToAnchor(deps);
 
-    // Should use nextFragmentY = 200 from the second fragment
     const call = (scrollContainer.scrollTo as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.top).toBe(100 + 200); // pageRect.top + nextFragmentY * zoom(1)
+    expect(call.top).toBe(100 + 200);
+  });
+
+  it('prefers the previous fragment when the bookmark sits just past it (SD-3227)', async () => {
+    // Mirrors the SD-3227 customer doc: the _Toc bookmark for the Section 1.3
+    // heading is embedded inside a hidden TC field and ends up at a PM
+    // position right after the paragraph's visible runs. It must still
+    // resolve to that paragraph, not to the next heading paragraph.
+    const scrollContainer = createMockScrollContainer({ scrollTop: 0, rectTop: 0 });
+    const layout = makeLayout([
+      {
+        number: 1,
+        fragments: [
+          { kind: 'para', pmStart: 0, pmEnd: 25, y: 72 },
+          { kind: 'para', pmStart: 40, pmEnd: 80, y: 300 },
+        ],
+      },
+    ]);
+    // Bookmark at position 28 — only 3 past prev.pmEnd, 12 before next.pmStart
+    const deps = makeDeps({
+      layout,
+      scrollContainer,
+      bookmarks: new Map([['heading1', 28]]),
+    });
+
+    await goToAnchor(deps);
+
+    const call = (scrollContainer.scrollTo as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // Should land on the first fragment (y=72), not the next one (y=300).
+    expect(call.top).toBe(100 + 72);
   });
 
   it('should handle Window as scrollContainer', async () => {

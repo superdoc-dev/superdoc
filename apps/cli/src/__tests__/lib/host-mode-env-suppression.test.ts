@@ -36,12 +36,12 @@ afterEach(async () => {
 /** Call invokeCommand, catching CliErrors into a result object. */
 async function invokeExpectingResult(argv: string[], executionMode: 'oneshot' | 'host', stateDir: string) {
   try {
-    const result = await invokeCommand(argv, {
+    await invokeCommand(argv, {
       stateDir,
       executionMode,
       ioOverrides: silentIo,
     });
-    return { code: result.execution?.code ?? 0, error: null };
+    return { code: 0, error: null };
   } catch (e) {
     if (e instanceof CliError) {
       return { code: 1, error: { code: e.code, message: e.message } };

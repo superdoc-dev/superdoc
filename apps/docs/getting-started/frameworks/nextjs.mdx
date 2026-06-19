@@ -10,7 +10,7 @@ SuperDoc works seamlessly with Next.js. The recommended approach is using `@supe
 The React wrapper is the simplest way to integrate SuperDoc with Next.js:
 
 ```bash
-npm install @superdoc-dev/react
+npm install @superdoc-dev/react @superdoc-dev/fonts
 ```
 
 ### App Router (Next.js 13+)
@@ -20,12 +20,14 @@ npm install @superdoc-dev/react
 'use client';
 
 import { SuperDocEditor } from '@superdoc-dev/react';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import '@superdoc-dev/react/style.css';
 
 export default function EditorPage() {
   return (
     <SuperDocEditor
       document="/sample.docx"
+      fonts={superdocFonts}
       documentMode="editing"
       onReady={() => console.log('Editor ready!')}
       style={{ height: '100vh' }}

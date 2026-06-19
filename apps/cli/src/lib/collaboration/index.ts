@@ -29,3 +29,4 @@ export {
 export { resolveCollaborationProfile, resolveCollaborationToken, toPublicCollaborationSummary } from './resolve';
 
 export { createCollaborationRuntime } from './runtime';
+export { createCliV2SingleDocCollaborationRuntime, type CliV2CollaborationRuntime } from './v2-runtime';

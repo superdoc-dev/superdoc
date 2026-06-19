@@ -4,7 +4,7 @@ import WS from 'ws';
 import { Doc as YDoc } from 'yjs';
 import { CliError, type CliErrorCode } from '../errors';
 import { isRecord } from '../guards';
-import { DEFAULT_SYNC_TIMEOUT_MS } from './runtime';
+import { DEFAULT_SYNC_TIMEOUT_MS } from './defaults';
 import type { CollaborationRuntime, LiveblocksCollaborationProfile } from './types';
 
 // ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ const AUTH_FETCH_CEILING_MS = 15_000;
 // Node polyfill helper
 // ---------------------------------------------------------------------------
 
-function buildNodePolyfills(): { WebSocket: unknown; fetch: typeof fetch; atob: typeof atob } {
+export function buildLiveblocksNodePolyfills(): { WebSocket: unknown; fetch: typeof fetch; atob: typeof atob } {
   return {
     WebSocket: WS as unknown,
     fetch: globalThis.fetch,
@@ -74,15 +74,15 @@ function resolveAuthHeaders(profile: LiveblocksCollaborationProfile): Record<str
 // Auth endpoint callback builder
 // ---------------------------------------------------------------------------
 
-function buildAuthEndpointCallback(
+export function buildLiveblocksAuthEndpointCallback(
   profile: LiveblocksCollaborationProfile,
   syncTimeoutMs: number,
-): (room: string) => Promise<{ token: string }> {
+): (args: { room: string }) => Promise<{ token: string }> {
   const endpoint = profile.authEndpoint!;
   const customHeaders = resolveAuthHeaders(profile);
   const fetchTimeoutMs = Math.min(syncTimeoutMs, AUTH_FETCH_CEILING_MS);
 
-  return async (room: string) => {
+  return async ({ room }: { room: string }) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
 
@@ -268,13 +268,13 @@ export function createLiveblocksRuntime(profile: LiveblocksCollaborationProfile)
 
   // Build client options
   const clientOptions: Record<string, unknown> = {
-    polyfills: buildNodePolyfills(),
+    polyfills: buildLiveblocksNodePolyfills(),
   };
 
   if (profile.publicApiKey) {
     clientOptions.publicApiKey = profile.publicApiKey;
   } else if (profile.authEndpoint) {
-    clientOptions.authEndpoint = buildAuthEndpointCallback(profile, syncTimeoutMs);
+    clientOptions.authEndpoint = buildLiveblocksAuthEndpointCallback(profile, syncTimeoutMs);
   }
 
   const client = createClient(clientOptions as Parameters<typeof createClient>[0]);

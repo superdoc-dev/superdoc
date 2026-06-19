@@ -6,6 +6,8 @@
  * matching Microsoft Word's behavior.
  */
 
+import { getColumnGeometry, getColumnX } from '@superdoc/contracts';
+
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
@@ -156,9 +158,18 @@ export function calculateBalancedColumnHeight(
     };
   }
 
-  // Calculate total content height and block-height extremes
+  // Calculate total content height and block-height extremes. A column can
+  // never be shorter than its tallest INDIVISIBLE chunk: the full height for
+  // an unbreakable block, but only the tallest LINE for a breakable paragraph
+  // (SD-3359 — flooring at a breakable paragraph's full height pinned the
+  // search above the balanced height and packed the overflow lines into the
+  // first column instead of splitting evenly).
   const totalHeight = ctx.contentBlocks.reduce((sum, b) => sum + b.measuredHeight, 0);
-  const maxBlockHeight = ctx.contentBlocks.reduce((m, b) => Math.max(m, b.measuredHeight), 0);
+  const maxBlockHeight = ctx.contentBlocks.reduce((m, b) => {
+    const indivisible =
+      b.canBreak && b.lineHeights && b.lineHeights.length > 1 ? Math.max(...b.lineHeights) : b.measuredHeight;
+    return Math.max(m, indivisible);
+  }, 0);
 
   // Early exit: content is very small, no need to balance
   if (totalHeight < config.minColumnHeight * ctx.columnCount) {
@@ -504,6 +515,13 @@ export interface BalancingFragment {
   fromLine?: number;
   /** Ending line index (exclusive) for partial paragraph fragments */
   toLine?: number;
+  /**
+   * Remeasured lines carried by the fragment itself (set when a paragraph measured at one
+   * width is placed in a narrower column or beside a float). When present, the resolve
+   * stage renders THIS array and ignores fromLine/toLine into measure.lines - so balancing
+   * must source heights from it and slice it when splitting a fragment across columns.
+   */
+  lines?: Array<{ lineHeight: number }>;
   /** Pre-computed height for non-paragraph fragments */
   height?: number;
 }
@@ -547,6 +565,11 @@ interface FragmentInfo {
  */
 function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, MeasureData>): number {
   if (fragment.kind === 'para') {
+    // A fragment remeasured for a narrower column carries its own lines; the resolve
+    // stage renders (and sizes) from THAT array, so balancing must agree with it.
+    if (fragment.lines && fragment.lines.length > 0) {
+      return fragment.lines.reduce((sum, l) => sum + (l.lineHeight ?? 0), 0);
+    }
     const measure = measureMap.get(fragment.blockId);
     if (!measure || measure.kind !== 'paragraph' || !measure.lines) {
       return 0;
@@ -628,6 +651,11 @@ export interface SectionColumnLayout {
   gap: number;
   width?: number;
   widths?: number[];
+  /**
+   * Per-column gaps (px), length count-1; explicit mode only. Drives geometry so equal-width
+   * sections with non-uniform gaps (e.g. F9) balance with correct column positions. (SD-2629)
+   */
+  gaps?: number[];
   equalWidth?: boolean;
 }
 
@@ -658,6 +686,12 @@ export interface BalanceSectionOnPageArgs {
    * Optional; when omitted no fragment is treated as a marker.
    */
   sectPrMarkerBlockIds?: Set<string>;
+  /**
+   * Block IDs of paragraphs with `w:keepLines` — the author asked Word not to
+   * split these, so they stay atomic during balancing. Optional; when omitted
+   * every multi-line paragraph is splittable. (SD-3359)
+   */
+  keepLinesBlockIds?: Set<string>;
 }
 
 /**
@@ -670,15 +704,33 @@ export interface BalanceSectionOnPageArgs {
  * Guards (skip balancing when):
  *   - Section has <= 1 column (nothing to balance)
  *   - Section contains an explicit column break (author intent wins)
- *   - Section uses unequal column widths (Word doesn't rebalance these)
+ *   - Section uses GENUINELY-unequal column widths (Word fills these column-by-column;
+ *     explicit widths that are all equal still balance — SD-2324)
  *   - No fragments on this page belong to the section
  */
+/** True when every explicit column width is equal within a sub-pixel tolerance. */
+function allColumnWidthsEqual(widths: number[]): boolean {
+  if (widths.length <= 1) return true;
+  const first = widths[0];
+  return widths.every((w) => Math.abs(w - first) <= 0.5);
+}
+
 export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: number } | null {
   const { sectionColumns, sectionHasExplicitColumnBreak, sectionIndex, blockSectionMap, fragments } = args;
 
   if (sectionColumns.count <= 1) return null;
   if (sectionHasExplicitColumnBreak) return null;
-  if (sectionColumns.equalWidth === false && Array.isArray(sectionColumns.widths) && sectionColumns.widths.length > 0) {
+  // Genuinely-unequal explicit widths: Word fills these column-by-column rather than
+  // rebalancing, and the height-balancer measures each fragment at a single width so it
+  // can't reflow per column. Explicit widths that are all EQUAL (equalWidth="0" with every
+  // <w:col w:w> equal — the common continuous newspaper case) DO balance like implicit
+  // equal columns. (SD-2324)
+  if (
+    sectionColumns.equalWidth === false &&
+    Array.isArray(sectionColumns.widths) &&
+    sectionColumns.widths.length > 0 &&
+    !allColumnWidthsEqual(sectionColumns.widths)
+  ) {
     return null;
   }
 
@@ -759,13 +811,42 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
   // Use `getBalancingHeight` so empty sectPr-marker paragraphs contribute 0
   // to their column's cursor — matching Word's behavior of not rendering a
   // blank line for such markers.
-  const contentBlocks: BalancingBlock[] = ordered.map((f, i) => ({
-    blockId: `${f.blockId}#${i}`,
-    measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
-    canBreak: false,
-    keepWithNext: false,
-    keepTogether: true,
-  }));
+  //
+  // SD-3359: multi-line paragraphs additionally expose their per-line heights so
+  // the balancer can SPLIT a paragraph that straddles the column boundary (Word
+  // flows content line-by-line when balancing a continuous section, ECMA-376
+  // §17.18.77 — atomic assignment leaves the columns lumpy whenever one
+  // paragraph is large relative to the section). sectPr markers, `w:keepLines`
+  // paragraphs, non-paragraph fragments, and single-line paragraphs stay atomic.
+  const lineHeightsFor = (f: BalancingFragment): number[] | undefined => {
+    if (f.kind !== 'para') return undefined;
+    if (args.sectPrMarkerBlockIds?.has(f.blockId)) return undefined;
+    if (args.keepLinesBlockIds?.has(f.blockId)) return undefined;
+    // A remeasured fragment renders its own `lines` (resolveParagraph ignores
+    // fromLine/toLine then), so break points must be computed against that array.
+    if (f.lines && f.lines.length > 0) {
+      if (f.lines.length <= 1) return undefined;
+      return f.lines.map((l) => l.lineHeight);
+    }
+    const measure = args.measureMap.get(f.blockId);
+    if (!measure || measure.kind !== 'paragraph' || !Array.isArray(measure.lines)) return undefined;
+    const fromLine = f.fromLine ?? 0;
+    const toLine = f.toLine ?? measure.lines.length;
+    if (toLine - fromLine <= 1) return undefined;
+    return measure.lines.slice(fromLine, toLine).map((l) => l.lineHeight);
+  };
+
+  const contentBlocks: BalancingBlock[] = ordered.map((f, i) => {
+    const lineHeights = lineHeightsFor(f);
+    return {
+      blockId: `${f.blockId}#${i}`,
+      measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
+      canBreak: lineHeights !== undefined,
+      keepWithNext: false,
+      keepTogether: lineHeights === undefined,
+      lineHeights,
+    };
+  });
 
   if (
     shouldSkipBalancing({
@@ -785,7 +866,17 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     DEFAULT_BALANCING_CONFIG,
   );
 
-  const columnX = (columnIndex: number): number => args.margins.left + columnIndex * (columnWidth + columnGap);
+  // Per-column x from the resolved geometry, not a uniform stride. SD-2629's core case is equal
+  // widths with NON-uniform gaps (e.g. F9), which the equal-width guard above still admits, so
+  // columnIndex * (width + gap) would mis-place later columns. Equal gaps reduce to the old stride.
+  const balancedGeometry = getColumnGeometry({
+    count: columnCount,
+    gap: columnGap,
+    width: columnWidth,
+    ...(Array.isArray(sectionColumns.widths) ? { widths: sectionColumns.widths } : {}),
+    ...(Array.isArray(sectionColumns.gaps) ? { gaps: sectionColumns.gaps } : {}),
+  });
+  const columnX = (columnIndex: number): number => getColumnX(balancedGeometry, columnIndex, args.margins.left);
 
   const colCursors = new Array<number>(columnCount).fill(sectionTopY);
   let maxY = sectionTopY;
@@ -796,6 +887,49 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     f.x = columnX(col);
     f.y = colCursors[col];
     f.width = columnWidth;
+    // SD-3359: apply a line-boundary split chosen by the balancer. The first
+    // half keeps the leading lines in this column; a cloned second half carries
+    // the remaining lines to the top of the next column — the same
+    // fromLine/toLine + continuation-flag surgery pagination uses when a
+    // paragraph splits across pages. The simulation assigns the block to the
+    // column of its FIRST half and flows the remainder into the next column,
+    // so the cursors advance by the split heights it computed.
+    const bp = result.blockBreakPoints?.get(block.blockId);
+    if (bp && bp.heightAfterBreak > 0 && col < columnCount - 1) {
+      const fromLine = f.fromLine ?? 0;
+      const splitLine = fromLine + bp.breakAfterLine + 1;
+      const measureLineCount = args.measureMap.get(f.blockId)?.lines?.length ?? splitLine;
+      const originalToLine = f.toLine ?? measureLineCount;
+      const originalContinuesOnNext = (f as { continuesOnNext?: boolean }).continuesOnNext ?? false;
+      const secondHalf = {
+        ...f,
+        fromLine: splitLine,
+        toLine: originalToLine,
+        x: columnX(col + 1),
+        y: colCursors[col + 1],
+        width: columnWidth,
+        continuesFromPrev: true,
+        continuesOnNext: originalContinuesOnNext,
+      } as BalancingFragment;
+      // Remeasured fragments render their own `lines` wholesale (fromLine/toLine are
+      // ignored by the resolve stage then), so the halves must each carry ONLY their
+      // slice or both columns render the entire paragraph.
+      if (f.lines && f.lines.length > 0) {
+        secondHalf.lines = f.lines.slice(bp.breakAfterLine + 1);
+        f.lines = f.lines.slice(0, bp.breakAfterLine + 1);
+      }
+      f.toLine = splitLine;
+      (f as { continuesOnNext?: boolean }).continuesOnNext = true;
+      colCursors[col] += bp.heightBeforeBreak;
+      colCursors[col + 1] += bp.heightAfterBreak;
+      // Insert right after the first half so document order is preserved for
+      // any later consumer that walks the page fragments.
+      const fragIdx = fragments.indexOf(f);
+      if (fragIdx >= 0) fragments.splice(fragIdx + 1, 0, secondHalf);
+      if (colCursors[col] > maxY) maxY = colCursors[col];
+      if (colCursors[col + 1] > maxY) maxY = colCursors[col + 1];
+      continue;
+    }
     colCursors[col] += block.measuredHeight;
     if (colCursors[col] > maxY) maxY = colCursors[col];
   }

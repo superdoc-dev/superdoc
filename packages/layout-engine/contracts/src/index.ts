@@ -92,6 +92,13 @@ export {
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 
+export {
+  resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
+  type ColumnLayoutForAnchor,
+  type ResolveAnchoredGraphicYInput,
+} from './graphic-placement.js';
+
 // Editor-neutral layout identity primitives (prep-001).
 // Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
 // alongside these on every fragment/run.
@@ -112,8 +119,23 @@ export type {
   LayoutStoryLocator,
 } from './layout-identity.js';
 import type { LayoutSourceIdentity } from './layout-identity.js';
-export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
-export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  columnRenderLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  resolveColumnCount,
+  resolveColumnLayout,
+  resolveColumnMode,
+  widthsEqual,
+} from './column-layout.js';
+export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
 export {
   authorFromTrackedChangeMeta,
   authorIdentityKey,
@@ -139,6 +161,7 @@ export {
 } from './header-footer-inheritance.js';
 export {
   formatChapterPageNumberText,
+  formatIntegerWithNumericPicture,
   formatPageNumber,
   formatPageNumberFieldValue,
   formatSectionPageNumberText,
@@ -146,6 +169,23 @@ export {
   type PageNumberChapterSeparator,
   type PageNumberFormat,
 } from './page-number-formatting.js';
+
+export { buildPageRefAnchorMap } from './page-ref-anchor.js';
+export {
+  DRAWING_DIAGNOSTIC_CODES,
+  DRAWING_DIAGNOSTIC_CODE_ALIASES,
+  DRAWING_SUPPORT_TAXONOMY,
+  DRAWING_FAMILIES,
+  canonicalDrawingDiagnosticCode,
+  getDrawingFamilySpec,
+  isSupportedDrawingFamily,
+  type DrawingContractTarget,
+  type DrawingDiagnosticCode,
+  type DrawingFamily,
+  type DrawingFamilySpec,
+  type DrawingSupportLevel,
+  type DrawingTaxonomyDrawingKind,
+} from './drawing-taxonomy.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -330,9 +370,6 @@ export type TrackedChangeMeta = {
   author?: string;
   authorEmail?: string;
   authorImage?: string;
-  date?: string;
-  before?: RunMark[];
-  after?: RunMark[];
   /**
    * Paint-ready per-author color, resolved upstream (in/around the
    * pm-adapter data-preparation pass) from the author identity. DomPainter
@@ -342,6 +379,9 @@ export type TrackedChangeMeta = {
    * case the static default tracked-change palette applies.
    */
   color?: string;
+  date?: string;
+  before?: RunMark[];
+  after?: RunMark[];
 };
 
 export type FlowRunLinkTarget = '_blank' | '_self' | '_parent' | '_top';
@@ -398,6 +438,26 @@ export type RunMarks = {
   baselineShift?: number;
 };
 
+export type PageReferenceRelativePositionText = 'above' | 'below';
+
+export type FieldResultFormat = 'charformat' | 'mergeformat';
+
+export type NumericPictureFormat = {
+  /** Raw argument after the \# switch, without surrounding quotes. */
+  picture: string;
+};
+
+export interface PageRefLocation {
+  physicalPage: number;
+  displayNumber: number;
+  displayText: string;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+  sectionIndex?: number;
+  pmPosition?: number;
+}
+
 export type TextRun = RunMarks & {
   kind?: 'text';
   text: string;
@@ -419,8 +479,8 @@ export type TextRun = RunMarks & {
   visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
-  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount';
-  /** Explicit formatting requested by PAGE/NUMPAGES field switches. */
+  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount' | 'seq';
+  /** Explicit formatting requested by PAGE/NUMPAGES/SECTIONPAGES field switches. */
   pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
@@ -430,6 +490,29 @@ export type TextRun = RunMarks & {
   pageRefMetadata?: {
     bookmarkId: string;
     instruction: string;
+    /** True when the instruction has \p. */
+    relativePosition?: boolean;
+    /** General numeric formatting switch for the PAGEREF page value. */
+    pageNumberFieldFormat?: PageNumberFieldFormat;
+    /** Raw numeric picture from \#. */
+    numericPictureFormat?: NumericPictureFormat;
+    /** CHARFORMAT / MERGEFORMAT, if present. */
+    fieldResultFormat?: FieldResultFormat;
+  };
+  /** Metadata for SEQ tokens (resolved by super-editor before layout measurement). */
+  seqMetadata?: {
+    identifier: string;
+    instruction?: string;
+    fieldArgument?: string;
+    sequenceMode?: 'next' | 'current';
+    hideResult?: boolean;
+    restartNumber?: number | null;
+    restartLevel?: number | null;
+    format?: string;
+    hasGeneralFormat?: boolean;
+    pageNumberFieldFormat?: PageNumberFieldFormat | null;
+    numericPictureFormat?: NumericPictureFormat | null;
+    cachedText?: string;
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
@@ -492,6 +575,11 @@ export type ImageLuminanceAdjustment = {
   bright?: number;
   /** OOXML a:lum/@contrast in raw units (-100000..100000). */
   contrast?: number;
+};
+
+export type ImageAlphaModFix = {
+  /** OOXML a:alphaModFix/@amt in raw fixed-percentage units (0..100000). */
+  amt: number;
 };
 
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
@@ -571,6 +659,7 @@ export type ImageRun = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
 };
@@ -798,6 +887,23 @@ export type TableRowAttrs = {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
   };
+  /**
+   * Structural tracked change on the whole row (inserted/deleted row), imported
+   * from `<w:ins>`/`<w:del>` inside `<w:trPr>`. Reuses the same shared
+   * {@link TrackedChangeMeta} shape that inline runs carry, so one painter +
+   * color-stamping system handles both inline and structural tracked changes.
+   * `kind` is `'insert'` for an inserted row and `'delete'` for a deleted row.
+   * `color` is stamped downstream by {@link stampTrackedChangeColors}.
+   */
+  trackedChange?: TrackedChangeMeta;
+  /**
+   * Row-level border override from OOXML `w:tblPrEx/w:tblBorders` (§17.4.61).
+   * Table property exceptions override the table-level borders for this row
+   * only. Rows without a `tblPrEx` border block leave this undefined and fall
+   * through to the table's borders. Resolved (eighth-points → px) by the v1
+   * layout-adapter; the painter merges it over the table borders per edge.
+   */
+  borders?: TableBorders;
 };
 
 export type TableRow = {
@@ -872,6 +978,7 @@ export type ImageBlock = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
@@ -881,7 +988,7 @@ export type ImageBlock = {
   sourceAnchor?: SourceAnchor;
 };
 
-export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
+export type DrawingKind = 'image' | 'vectorShape' | 'textboxShape' | 'shapeGroup' | 'chart';
 
 export type DrawingContentSnapshot = {
   name: string;
@@ -1062,6 +1169,7 @@ export type ShapeGroupImageChild = {
     src: string;
     alt?: string;
     clipPath?: string;
+    alphaModFix?: ImageAlphaModFix;
     imageId?: string;
     imageName?: string;
   };
@@ -1123,6 +1231,30 @@ export type VectorShapeDrawing = DrawingBlockBase & {
     bottom: number;
     left: number;
   };
+};
+
+export type TextboxDrawing = DrawingBlockBase & {
+  drawingKind: 'textboxShape';
+  geometry: DrawingGeometry;
+  shapeKind?: string;
+  customGeometry?: CustomGeometryData;
+  fillColor?: FillColor;
+  strokeColor?: StrokeColor;
+  strokeWidth?: number;
+  lineEnds?: LineEnds;
+  effectExtent?: EffectExtent;
+  textContent?: ShapeTextContent;
+  textAlign?: string;
+  textVerticalAlign?: 'top' | 'center' | 'bottom';
+  textInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+  contentBlocks: ParagraphBlock[];
+  /** Paragraph layout results for table-cell textboxes; populated by the layout bridge, read by the painter. */
+  contentMeasures?: ParagraphMeasure[];
 };
 
 export type ShapeGroupDrawing = DrawingBlockBase & {
@@ -1197,7 +1329,7 @@ export type ChartDrawing = DrawingBlockBase & {
   chartPartPath?: string;
 };
 
-export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
+export type DrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
 
 /**
  * Vertical alignment of content within a section/page.
@@ -1693,6 +1825,8 @@ export type ParagraphAttrs = {
   directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
+  /** Stable id shared by every paragraph in the same TOC (docPartObj uniqueId or parent sdBlockId). */
+  tocId?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
   floatAlignment?: 'left' | 'right' | 'center';
   /**
@@ -1762,6 +1896,12 @@ export type ColumnLayout = {
   withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+  /**
+   * Per-column inter-column gaps in px, length `count - 1`: the gap after each column except the
+   * last. Explicit mode (`equalWidth === false`) only, derived from each `<w:col w:space>`; equal
+   * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
+   */
+  gaps?: number[];
 };
 
 /**
@@ -2255,6 +2395,7 @@ export type DrawingFragment = {
   geometry: DrawingGeometry;
   scale: number;
   drawingContentId?: string;
+  contentMeasures?: ParagraphMeasure[];
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;

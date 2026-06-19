@@ -1,6 +1,6 @@
 import type { Editor } from '../editors/v1/core/Editor.js';
 import type { PresentationEditor } from '../editors/v1/core/presentation-editor/index.js';
-import type { HeadlessToolbarSurface, ToolbarContext, ToolbarTarget } from './types.js';
+import type { HeadlessToolbarActiveEditor, HeadlessToolbarSurface, ToolbarContext, ToolbarTarget } from './types.js';
 import type { ResolvedToolbarSources } from './internal-types.js';
 
 // Normalize raw Editor and PresentationEditor into one toolbar-facing shape.
@@ -13,7 +13,7 @@ const resolveSurfaceFromDocumentId = (documentId: string | null | undefined): He
   return 'body';
 };
 
-const resolveSurface = (activeEditor: Editor | null | undefined): HeadlessToolbarSurface => {
+const resolveSurface = (activeEditor: HeadlessToolbarActiveEditor | null | undefined): HeadlessToolbarSurface => {
   if (activeEditor?.options?.isHeaderOrFooter) {
     const headerFooterType = activeEditor.options?.headerFooterType;
     if (headerFooterType === 'footer') return 'footer';
@@ -47,13 +47,17 @@ type EditorWithPresentationOwner = Editor & {
   _presentationEditor?: PresentationEditor | null;
 };
 
+const isV1ToolbarEditor = (editor: HeadlessToolbarActiveEditor | null | undefined): editor is Editor => {
+  return Boolean(editor && editor.editorVersion !== 2);
+};
+
 // SD-3213f: accept both the narrow SuperDoc method
 // (`getPresentationEditorForDocument`) and the legacy `superdocStore`
 // shape. The narrow method is preferred when present (SuperDoc
 // instances and host stubs that adopt the new API). The legacy fallback
 // keeps existing custom host stubs working without forcing a churn.
 type ToolbarHostShape = {
-  activeEditor?: Editor | null;
+  activeEditor?: HeadlessToolbarActiveEditor | null;
   getPresentationEditorForDocument?: (documentId: string) => PresentationEditor | null;
   superdocStore?: {
     documents?: Array<{
@@ -64,8 +68,10 @@ type ToolbarHostShape = {
 };
 
 const resolvePresentationEditor = (superdoc: ToolbarHostShape): PresentationEditor | null => {
-  const activeEditor = (superdoc.activeEditor as EditorWithPresentationOwner | null | undefined) ?? null;
-  const directPresentationEditor = activeEditor?.presentationEditor ?? activeEditor?._presentationEditor ?? null;
+  const activeEditor = superdoc.activeEditor ?? null;
+  const activeEditorWithPresentation = activeEditor as unknown as EditorWithPresentationOwner | null;
+  const directPresentationEditor =
+    activeEditorWithPresentation?.presentationEditor ?? activeEditorWithPresentation?._presentationEditor ?? null;
   if (directPresentationEditor) {
     return directPresentationEditor;
   }
@@ -111,6 +117,14 @@ export const resolveToolbarSources = (superdoc: ToolbarHostShape): ResolvedToolb
 
   const activeEditor = superdoc.activeEditor;
   if (!activeEditor) {
+    return {
+      activeEditor: null,
+      presentationEditor: null,
+      context: null,
+    };
+  }
+
+  if (!isV1ToolbarEditor(activeEditor)) {
     return {
       activeEditor: null,
       presentationEditor: null,

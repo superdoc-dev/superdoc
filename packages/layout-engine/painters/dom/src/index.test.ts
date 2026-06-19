@@ -432,6 +432,39 @@ describe('DomPainter', () => {
     expect(fragment.textContent).toContain('world');
   });
 
+  it('isolates unresolved document text from host foreground CSS', () => {
+    const hostStyle = document.createElement('style');
+    hostStyle.textContent = `
+      :root { color: #f2f4f8; }
+      body * { color: #f2f4f8; }
+      span { color: #f2f4f8; }
+    `;
+    document.head.appendChild(hostStyle);
+
+    try {
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
+      painter.paint(layout, mount);
+
+      const page = mount.querySelector('.superdoc-page') as HTMLElement;
+      const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      const textRun = Array.from(mount.querySelectorAll<HTMLElement>('.superdoc-text-run')).find((el) =>
+        el.textContent?.includes('Hello'),
+      );
+      const styleEl = document.querySelector('[data-superdoc-document-surface-styles="true"]');
+      const cssText = styleEl?.textContent ?? '';
+
+      expect(page.classList.contains('superdoc-page')).toBe(true);
+      expect(fragment.style.color).toBe('inherit');
+      expect(line.style.color).toBe('inherit');
+      expect(textRun).toBeTruthy();
+      expect(cssText).toContain('color: var(--sd-layout-page-color, #000000);');
+      expect(cssText).toContain('.superdoc-layout .superdoc-page .superdoc-text-run');
+    } finally {
+      hostStyle.remove();
+    }
+  });
+
   it('paints document-level page background from resolved layout', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint({ ...layout, documentBackground: { color: '#EEEEEE' } }, mount);
@@ -3703,6 +3736,93 @@ describe('DomPainter', () => {
     expect(wrapperAfter?.style.fontSize).toBe('10px');
   });
 
+  it('keeps segment-positioned inline SDT text aligned with adjacent plain runs', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'segment-positioned-inline-sdt-baseline',
+      runs: [
+        { text: 'KvK', fontFamily: 'Arial, sans-serif', fontSize: 16, pmStart: 0, pmEnd: 3 },
+        { kind: 'tab', text: '\t', width: 48, fontSize: 16 },
+        {
+          text: 'KvK_number',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 14,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'header-value-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Header value',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 10,
+          width: 140,
+          maxWidth: 300,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          segments: [
+            { runIndex: 0, fromChar: 0, toChar: 3, width: 28 },
+            { runIndex: 2, fromChar: 0, toChar: 10, width: 92, x: 80 },
+          ],
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'segment-positioned-inline-sdt-baseline',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="header-value-sdt"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.padding).toBe('0px');
+    expect(wrapper?.style.borderWidth).toBe('0px');
+    expect(wrapper?.style.lineHeight).toBe('20px');
+
+    const value = wrapper?.querySelector('[data-pm-start="4"]') as HTMLElement | null;
+    expect(value).toBeTruthy();
+    expect(value?.style.left).toBe('0px');
+    expect(value?.style.top).toBe('0px');
+  });
+
   it('uses first run font-size for inline SDT wrapper when a field has mixed run sizes', () => {
     const mixedSizeBlock: FlowBlock = {
       kind: 'paragraph',
@@ -4315,7 +4435,7 @@ describe('DomPainter', () => {
     expect(textSpan?.style.left).toBe('48px');
   });
 
-  it('positions first-line list text from the resolved tab stop instead of stale wordLayout.textStartPx', () => {
+  it('keeps segment-positioned first-line list text at its measured segment offset', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: 'list-tab-stop-block',
@@ -4395,7 +4515,7 @@ describe('DomPainter', () => {
       | HTMLElement
       | undefined;
     expect(textSpan).toBeTruthy();
-    expect(textSpan?.style.left).toBe('144px');
+    expect(textSpan?.style.left).toBe('48px');
   });
 
   it('preserves measured justification width for inline list first lines without explicit segments', () => {
@@ -5104,6 +5224,47 @@ describe('DomPainter', () => {
     expect(headerEl?.textContent).toBe('Page 1 of 1');
   });
 
+  it('stamps a stable header/footer ref-id attribute on the decoration container', () => {
+    const headerBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-block',
+      runs: [{ text: 'HEADER_LINE_1', fontFamily: 'Arial', fontSize: 14 }],
+    };
+    const headerMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 1, toChar: 1, width: 120, ascent: 10, descent: 4, lineHeight: 16 }],
+      totalHeight: 16,
+    };
+    const headerFragment = {
+      kind: 'para' as const,
+      blockId: 'header-block',
+      fromLine: 0,
+      toLine: 1,
+      x: 0,
+      y: 0,
+      width: 200,
+    };
+
+    const painter = createTestPainter({
+      blocks: [block, headerBlock],
+      measures: [measure, headerMeasure],
+      headerProvider: () => ({
+        fragments: [headerFragment],
+        height: 16,
+        headerFooterRefId: 'rId101',
+        sectionType: 'first',
+      }),
+    });
+
+    painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+    const headerEl = mount.querySelector('.superdoc-page-header') as HTMLElement | null;
+    expect(headerEl).toBeTruthy();
+    expect(headerEl?.getAttribute('data-sd-headerfooter-ref-id')).toBe('rId101');
+    expect(headerEl?.getAttribute('data-sd-headerfooter-variant')).toBe('first');
+    expect(headerEl?.getAttribute('data-sd-headerfooter-kind')).toBe('header');
+  });
+
   it('renders behindDoc header images directly on page, not in header container', () => {
     // Per OOXML spec, behindDoc images should render behind body content.
     // This requires placing them directly on the page element (not in header container)
@@ -5499,7 +5660,7 @@ describe('DomPainter', () => {
             id: 'change-1',
             author: 'Reviewer 1',
             authorEmail: 'reviewer@example.com',
-            color: '#123456',
+            color: '#8250df',
           },
         },
       ],
@@ -5524,9 +5685,47 @@ describe('DomPainter', () => {
     expect(span.dataset.trackChangeKind).toBe('insert');
     expect(span.dataset.trackChangeAuthor).toBe('Reviewer 1');
     expect(span.dataset.trackChangeAuthorEmail).toBe('reviewer@example.com');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#123456');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('#12345622');
-    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#12345644');
+    expect(span.dataset.trackChangeAuthorColor).toBe('#8250df');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('#8250df');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('#8250df44');
+  });
+
+  it('does not turn named author colors into opaque tracked-change backgrounds', () => {
+    const trackedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'tracked-block',
+      runs: [
+        {
+          text: 'Inserted content',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          trackedChange: {
+            kind: 'insert',
+            id: 'change-1',
+            author: 'Reviewer 1',
+            color: 'red',
+          },
+        },
+      ],
+      attrs: {
+        trackedChangesMode: 'review',
+        trackedChangesEnabled: true,
+      },
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      trackedBlock.id,
+      trackedBlock.runs[0].text.length,
+    );
+
+    const painter = createTestPainter({ blocks: [trackedBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-line span') as HTMLElement;
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-border')).toBe('red');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background')).toBe('');
+    expect(span.style.getPropertyValue('--sd-tracked-changes-insert-background-focused')).toBe('');
   });
 
   it('renders overlapping parent insert and child delete as an insertion with delete strikethrough metadata', () => {
@@ -6263,7 +6462,7 @@ describe('DomPainter', () => {
 
       expect(behindDocEl).toBeTruthy();
       expect(behindDocEl.style.top).toBe('40px');
-      expect(behindDocEl.style.left).toBe('42px');
+      expect(behindDocEl.style.left).toBe('12px');
     });
 
     it('renders footer page-relative media using normalized band-local coordinates', () => {
@@ -6868,6 +7067,261 @@ describe('DomPainter', () => {
     expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Page 2');
   });
 
+  it('renders textboxShape contentMeasures as line-based DOM with pm datasets', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-textbox-lines',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'textbox-paragraph-lines',
+          runs: [{ text: 'Textbox line', fontFamily: 'Arial', fontSize: 16, pmStart: 10, pmEnd: 22 }],
+        },
+      ],
+      textContent: {
+        parts: [{ text: 'Fallback textbox line' }],
+      },
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const textboxLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'drawing',
+              drawingKind: 'textboxShape',
+              blockId: 'drawing-textbox-lines',
+              x: 30,
+              y: 40,
+              width: 120,
+              height: 80,
+              geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+              scale: 1,
+              contentMeasures: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 12,
+                      width: 80,
+                      ascent: 12,
+                      descent: 4,
+                      lineHeight: 20,
+                    },
+                  ],
+                  totalHeight: 20,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [textboxBlock], measures: [textboxMeasure] });
+    painter.paint(textboxLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement | null;
+
+    expect(shapeEl).toBeTruthy();
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.dataset.pmStart).toBe('10');
+    expect(lineEl?.dataset.pmEnd).toBe('22');
+    expect(shapeEl?.textContent).toContain('Textbox line');
+    expect(shapeEl?.textContent).not.toContain('Fallback textbox line');
+  });
+
+  it('renders textboxShape fallback text inside table cells', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'table-textbox-drawing',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      fillColor: '#ffffff',
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      textContent: {
+        parts: [{ text: 'Contract ACC' }],
+      },
+      contentBlocks: [],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-with-textbox',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0',
+              blocks: [textboxBlock],
+              attrs: {},
+            },
+          ],
+        },
+      ],
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          height: 80,
+          cells: [
+            {
+              width: 140,
+              height: 80,
+              gridColumnStart: 0,
+              blocks: [textboxMeasure],
+            },
+          ],
+        },
+      ],
+      columnWidths: [140],
+      totalWidth: 140,
+      totalHeight: 80,
+    };
+
+    const tableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'table-with-textbox',
+              x: 0,
+              y: 0,
+              width: 140,
+              height: 80,
+              fromRow: 0,
+              toRow: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    painter.paint(tableLayout, mount);
+
+    const shapeEl = mount.querySelector('.superdoc-vector-shape') as HTMLElement | null;
+    expect(shapeEl).toBeTruthy();
+    expect(shapeEl?.textContent).toContain('Contract ACC');
+  });
+
+  it('renders textboxShape with contentMeasures as superdoc-line DOM inside table cell', () => {
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'table-cell-textbox-lines',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+      shapeKind: 'rect',
+      textInsets: { top: 4, right: 8, bottom: 4, left: 12 },
+      contentBlocks: [
+        {
+          kind: 'paragraph',
+          id: 'cell-textbox-para',
+          runs: [{ text: 'Cell text', fontFamily: 'Arial', fontSize: 14, pmStart: 5, pmEnd: 14 }],
+        },
+      ],
+      contentMeasures: [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 9, width: 80, ascent: 12, descent: 4, lineHeight: 18 }],
+          totalHeight: 18,
+        },
+      ],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'table-cell-textbox',
+      rows: [{ id: 'row-0', cells: [{ id: 'cell-0', blocks: [textboxBlock], attrs: {} }] }],
+    };
+
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'textboxShape',
+      width: 120,
+      height: 80,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 80,
+      geometry: { width: 120, height: 80, rotation: 0, flipH: false, flipV: false },
+    };
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [{ height: 80, cells: [{ width: 140, height: 80, gridColumnStart: 0, blocks: [textboxMeasure] }] }],
+      columnWidths: [140],
+      totalWidth: 140,
+      totalHeight: 80,
+    };
+
+    const tableLayout: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'table', blockId: 'table-cell-textbox', x: 0, y: 0, width: 140, height: 80, fromRow: 0, toRow: 1 },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+    painter.paint(tableLayout, mount);
+
+    const wrapper = mount.querySelector('[data-block-id="table-cell-textbox-lines"]') as HTMLElement | null;
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement | null;
+
+    expect(wrapper).toBeTruthy();
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.dataset.pmStart).toBe('5');
+    expect(lineEl?.dataset.pmEnd).toBe('14');
+    expect(mount.querySelector('.superdoc-vector-shape')?.textContent).toContain('Cell text');
+  });
+
   it('renders formatted PAGE fields in drawing text', () => {
     const vectorShapeBlock: FlowBlock = {
       kind: 'drawing',
@@ -6945,6 +7399,31 @@ describe('DomPainter', () => {
     expect(
       resolvePartText({ text: '3', fieldType: 'SECTIONPAGES' }, { pageNumber: 1, totalPages: 9, section: 'body' }),
     ).toBe('3');
+  });
+
+  it('formats NUMPAGES drawing text with supported pageNumberFormat', () => {
+    const painter = new DomPainter();
+    const resolvePartText = (
+      painter as unknown as {
+        resolveShapeTextPartText: (
+          part: { text: string; fieldType: string; pageNumberFormat?: string },
+          context: { pageNumber: number; totalPages: number; section: 'body' },
+        ) => string;
+      }
+    ).resolveShapeTextPartText.bind(painter);
+
+    expect(
+      resolvePartText(
+        { text: '9', fieldType: 'NUMPAGES', pageNumberFormat: 'upperRoman' },
+        { pageNumber: 1, totalPages: 9, section: 'body' },
+      ),
+    ).toBe('IX');
+    expect(
+      resolvePartText(
+        { text: '9', fieldType: 'NUMPAGES', pageNumberFormat: 'ordinal' },
+        { pageNumber: 1, totalPages: 12, section: 'body' },
+      ),
+    ).toBe('12th');
   });
   describe('resolved paragraph rendering', () => {
     it('renders resolved paragraph lines with precomputed indent styles', () => {
@@ -7322,7 +7801,8 @@ describe('DomPainter', () => {
 
       const dropCapEl = mount.querySelector('.superdoc-drop-cap') as HTMLElement;
       expect(dropCapEl.textContent).toBe('H');
-      expect(dropCapEl.style.fontFamily).toBe('Georgia');
+      // Drop caps paint the physical render family: Georgia's bundled substitute is Gelasio.
+      expect(dropCapEl.style.fontFamily).toBe('Gelasio');
       expect(dropCapEl.style.fontSize).toBe('72px');
       expect(dropCapEl.style.fontWeight).toBe('bold');
       expect(dropCapEl.style.width).toBe('50px');
@@ -8577,6 +9057,20 @@ describe('DomPainter', () => {
       expect(img).toBeTruthy();
       expect((img as HTMLElement).style.filter).toContain('contrast(0)');
       expect((img as HTMLElement).style.filter).toContain('brightness(0)');
+    });
+
+    it('renders DrawingML fixed alpha as image opacity', () => {
+      renderInlineImageRun({
+        kind: 'image',
+        src: inlineImageSrc,
+        width: 100,
+        height: 100,
+        alphaModFix: { amt: 9000 },
+      });
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.opacity).toBe('0.09');
     });
 
     it('renders VML gain and blacklevel using fixed-fraction units', () => {
@@ -13333,6 +13827,81 @@ describe('applyRunDataAttributes', () => {
       expect(fragment).toBeTruthy();
       expect(fragment.dataset.pmStart).toBe('5');
       expect(fragment.dataset.pmEnd).toBe('10');
+    });
+
+    it('renders a trailing lineBreak continuation as a bare PM-ranged line', () => {
+      const lineBreakBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'linebreak-continuation',
+        runs: [
+          { text: 'Text', fontFamily: 'Arial', fontSize: 16, pmStart: 5, pmEnd: 9 },
+          { kind: 'lineBreak', pmStart: 9, pmEnd: 10 },
+        ],
+      };
+
+      const lineBreakMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 4,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 1,
+            fromChar: 0,
+            toRun: 1,
+            toChar: 0,
+            width: 0,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+      };
+
+      const lineBreakLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'linebreak-continuation',
+                fromLine: 0,
+                toLine: 2,
+                x: 20,
+                y: 20,
+                width: 300,
+                pmStart: 5,
+                pmEnd: 10,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [lineBreakBlock],
+        measures: [lineBreakMeasure],
+      });
+
+      painter.paint(lineBreakLayout, mount);
+
+      const lines = mount.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines).toHaveLength(2);
+      expect(lines[1].dataset.pmStart).toBe('9');
+      expect(lines[1].dataset.pmEnd).toBe('10');
+      expect(lines[1].children).toHaveLength(0);
+      expect(lines[1].querySelector('.superdoc-empty-run')).toBeNull();
+      expect(lines[1].textContent).toBe('');
     });
 
     it('handles multiple consecutive lineBreak runs', () => {

@@ -56,6 +56,7 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
     'superdoc blocks list --limit 20',
     'superdoc blocks list --offset 10 --limit 10',
     'superdoc blocks list --node-types-json \'["paragraph","heading"]\'',
+    'superdoc blocks list --in-json \'{"kind":"story","storyType":"footnote","noteId":"1"}\' --include-text',
   ],
   'blocks.delete': [
     'superdoc blocks delete --node-type paragraph --node-id abc123',
@@ -141,8 +142,22 @@ export const DOC_COMMAND_EXAMPLES: Readonly<Record<string, readonly string[]>> =
   'create.tableOfContents': [
     'superdoc create table-of-contents',
     'superdoc create table-of-contents --at-json \'{"kind":"documentStart"}\'',
+    'superdoc create table-of-contents --instruction \'TOC \\h \\z \\u\' --at-json \'{"kind":"documentStart"}\'',
   ],
 
   // ── Capabilities ────────────────────────────────────────────────────
   'capabilities.get': ['superdoc capabilities'],
+
+  // ── Fields / Notes ──────────────────────────────────────────────────
+  'fields.insert': [
+    'superdoc fields insert --mode-json \'"raw"\' --instruction \'PAGE\' --update-policy rebuild --at-json \'{"kind":"text","segments":[{"blockId":"abc123","range":{"start":0,"end":0}}]}\'',
+  ],
+  'footnotes.insert': [
+    'superdoc footnotes insert --type footnote --at-json \'{"kind":"text","segments":[{"blockId":"abc123","range":{"start":0,"end":0}}]}\' --content "Example footnote content."',
+  ],
+
+  // ── Paragraph Format ────────────────────────────────────────────────
+  'format.paragraph.setMarkRunProps': [
+    'superdoc format paragraph set-mark-run-props --block-id abc123 --mark-run-props-json \'{"bold":true,"italic":true,"color":{"model":"rgb","value":"FF0000"}}\'',
+  ],
 };

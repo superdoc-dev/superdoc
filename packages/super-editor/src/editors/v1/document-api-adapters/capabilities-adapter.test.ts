@@ -300,12 +300,8 @@ describe('getDocumentApiCapabilities', () => {
   });
 
   it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
-    const editor = makeEditor({
-      commands: {
-        deleteBlockNodeById: vi.fn(() => true),
-      } as unknown as Editor['commands'],
-    });
-    // editor has the command but no helpers.blockNode.getBlockNodeById
+    const editor = makeEditor();
+    // editor has no helpers.blockNode.getBlockNodeById
     const capabilities = getDocumentApiCapabilities(editor);
 
     expect(capabilities.operations['blocks.delete'].available).toBe(false);
@@ -314,13 +310,8 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations['blocks.delete'].reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 
-  it('marks blocks.delete as available when both command and helper are present', () => {
-    const editor = makeEditor({
-      commands: {
-        deleteBlockNodeById: vi.fn(() => true),
-      } as unknown as Editor['commands'],
-    });
-    // Add the required helper
+  it('marks blocks.delete as available when the blockNode helper is present', () => {
+    const editor = makeEditor();
     (editor as any).helpers = {
       blockNode: { getBlockNodeById: vi.fn(() => []) },
     };
@@ -328,7 +319,28 @@ describe('getDocumentApiCapabilities', () => {
 
     expect(capabilities.operations['blocks.delete'].available).toBe(true);
     expect(capabilities.operations['blocks.delete'].dryRun).toBe(true);
-    expect(capabilities.operations['blocks.delete'].tracked).toBe(false);
+    expect(capabilities.operations['blocks.delete'].tracked).toBe(true);
+  });
+
+  it('marks v2-only compatibility stub operations as unavailable in v1', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const stubbedOperations = [
+      'blocks.split',
+      'blocks.merge',
+      'blocks.move',
+      'lists.getState',
+      'lists.apply',
+      'lists.continue',
+      'lists.restart',
+      'lists.remove',
+      'format.paragraph.setMarkRunProps',
+      'tables.moveRow',
+    ] as const;
+
+    for (const operationId of stubbedOperations) {
+      expect(capabilities.operations[operationId].available).toBe(false);
+      expect(capabilities.operations[operationId].reasons).toContain('OPERATION_UNAVAILABLE');
+    }
   });
 
   it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for non-command-backed availability failures', () => {

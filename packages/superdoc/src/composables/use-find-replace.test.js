@@ -641,6 +641,33 @@ describe('useFindReplace', () => {
         }),
       );
     });
+
+    it('uses raw search model when includeDeletedText is true in config', async () => {
+      manager.lastHandle._settle({ status: 'closed' });
+      await tick();
+
+      const customEditor = createEditorStub();
+      const fr = useFindReplace({
+        getSurfaceManager: () => manager,
+        getActiveEditor: () => customEditor,
+        activeEditorRef: ref(customEditor),
+        getFindReplaceConfig: () => ({ includeDeletedText: true }),
+      });
+
+      await fr.open();
+      await vi.dynamicImportSettled();
+      const customHandle = manager.open.mock.calls.at(-1)[0].props.findReplace;
+
+      customHandle.findQuery.value = 'deleted';
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      expect(customEditor.commands.setSearchSession).toHaveBeenCalledWith(
+        'deleted',
+        expect.objectContaining({
+          searchModel: 'raw',
+        }),
+      );
+    });
   });
 
   describe('handle reactive state', () => {

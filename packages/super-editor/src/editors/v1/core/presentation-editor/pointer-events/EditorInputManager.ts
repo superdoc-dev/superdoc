@@ -31,17 +31,25 @@ import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
 } from '../input/ClickSelectionUtilities.js';
-import { calculateExtendedSelection } from '../selection/SelectionHelpers.js';
+import { calculateExtendedSelection, stabilizeTextSelectionAcrossTableCells } from '../selection/SelectionHelpers.js';
 import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
   getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
   getTablePosFromHit as getTablePosFromHitFromHelper,
   hitTestTable as hitTestTableFromHelper,
+  resolveCrossCellSelection,
+  resolveCellAnchorStateFromCellPos,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
-import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
+import {
+  isRenderedNoteBlockId,
+  isSameRenderedNoteTarget,
+  parseRenderedNoteTarget,
+  type RenderedNoteTarget,
+} from '../notes/note-target.js';
+import { resolveNoteReferenceAtPointer } from './note-reference-hit.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import {
   findStructuredContentBlockAtPos,
@@ -87,57 +95,6 @@ type CommentThreadHit = {
   isAmbiguous: boolean;
   threadId: string | null;
 };
-
-/**
- * Block IDs for note content use `footnote-{id}-` / `endnote-{id}-` prefixes.
- * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
- * shared constants — it matches both heading and body footnote block IDs.
- */
-function isRenderedNoteBlockId(blockId: string): boolean {
-  return (
-    typeof blockId === 'string' &&
-    (blockId.startsWith('footnote-') || blockId.startsWith('endnote-') || isSemanticFootnoteBlockId(blockId))
-  );
-}
-
-type RenderedNoteTarget = {
-  storyType: 'footnote' | 'endnote';
-  noteId: string;
-};
-
-function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
-  if (typeof blockId !== 'string' || blockId.length === 0) {
-    return null;
-  }
-
-  if (blockId.startsWith('footnote-')) {
-    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('__sd_semantic_footnote-')) {
-    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('endnote-')) {
-    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'endnote', noteId } : null;
-  }
-
-  return null;
-}
-
-function isSameRenderedNoteTarget(
-  left: RenderedNoteTarget | null | undefined,
-  right: RenderedNoteTarget | null | undefined,
-): boolean {
-  if (!left || !right) {
-    return false;
-  }
-
-  return left.storyType === right.storyType && left.noteId === right.noteId;
-}
 
 function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number, pageLocalY?: number): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(pageIndex) || !Number.isFinite(pageLocalY)) {
@@ -595,6 +552,9 @@ export class EditorInputManager {
   // Margin click state
   #pendingMarginClick: PendingMarginClick | null = null;
 
+  /** TOC link recorded at pointerdown; navigates on pointerup unless the pointer dragged. */
+  #pendingTocLinkNav: HTMLAnchorElement | null = null;
+
   // Image selection state
   #lastSelectedImageBlockId: string | null = null;
 
@@ -1050,18 +1010,59 @@ export class EditorInputManager {
     return getTablePosFromHitFromHelper(tableHit, editor?.state?.doc ?? null, layoutState?.blocks ?? []);
   }
 
+  #setCellAnchorState(cellAnchor: CellAnchorState, mode: 'pending' | 'active' = 'pending'): void {
+    this.#cellAnchor = cellAnchor;
+    this.#cellDragMode = mode;
+  }
+
   #setCellAnchor(tableHit: TableHitResult, tablePos: number): void {
     const cellPos = this.#getCellPosFromTableHit(tableHit);
     if (cellPos === null) return;
 
-    this.#cellAnchor = {
-      tablePos,
+    this.#setCellAnchorState(
+      {
+        tablePos,
+        cellPos,
+        cellRowIndex: tableHit.cellRowIndex,
+        cellColIndex: tableHit.cellColIndex,
+        tableBlockId: tableHit.block.id,
+      },
+      'pending',
+    );
+  }
+
+  #setCellAnchorFromCellPos(cellPos: number, mode: 'pending' | 'active' = 'pending'): boolean {
+    const editor = this.#deps?.getEditor();
+    const layoutState = this.#deps?.getLayoutState();
+    const cellAnchor = resolveCellAnchorStateFromCellPos(
+      editor?.state?.doc ?? null,
+      layoutState?.blocks ?? [],
       cellPos,
-      cellRowIndex: tableHit.cellRowIndex,
-      cellColIndex: tableHit.cellColIndex,
-      tableBlockId: tableHit.block.id,
-    };
-    this.#cellDragMode = 'pending';
+    );
+    if (!cellAnchor) return false;
+
+    this.#setCellAnchorState(cellAnchor, mode);
+    return true;
+  }
+
+  #dispatchExtendedTextSelection(editor: Editor, anchor: number, head: number): boolean {
+    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
+    const stabilized = stabilizeTextSelectionAcrossTableCells(editor.state.doc, selAnchor, selHead);
+    if (!stabilized) {
+      return false;
+    }
+
+    try {
+      const tr = editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, stabilized.selAnchor, stabilized.selHead),
+      );
+      editor.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+      return true;
+    } catch (error) {
+      console.warn('[SELECTION] Failed to extend text selection:', error);
+      return false;
+    }
   }
 
   #hitTestTable(x: number, y: number): TableHitResult | null {
@@ -1359,12 +1360,18 @@ export class EditorInputManager {
       return;
     }
 
-    // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
-    // Navigation prevention happens in #handleClick (on 'click' event)
+    // Handle link clicks - dispatch custom event on pointerdown for immediate UI response.
+    // Navigation prevention happens in #handleClick (on 'click' event).
+    // TOC links are deferred to pointerup so the user can drag-select inside the TOC.
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
+    this.#pendingTocLinkNav = null;
     if (linkEl) {
-      this.#handleLinkClick(event, linkEl);
-      return;
+      if (linkEl.closest(`.${DOM_CLASS_NAMES.TOC_ENTRY}`)) {
+        this.#pendingTocLinkNav = linkEl;
+      } else {
+        this.#handleLinkClick(event, linkEl);
+        return;
+      }
     }
 
     // Handle field annotation clicks
@@ -1812,6 +1819,13 @@ export class EditorInputManager {
 
     this.#suppressFocusInFromDraggable = false;
 
+    // Resolve a deferred TOC click: navigate only if the pointer never dragged.
+    const pendingTocLink = this.#pendingTocLinkNav;
+    this.#pendingTocLinkNav = null;
+    if (pendingTocLink && !this.#dragThresholdExceeded) {
+      this.#handleLinkClick(event, pendingTocLink);
+    }
+
     if (!this.#isDragging) {
       this.#stopAutoScroll();
       return;
@@ -1832,6 +1846,15 @@ export class EditorInputManager {
 
     const dragAnchor = this.#dragAnchor;
     const dragMode = this.#dragExtensionMode;
+
+    if (
+      (!pendingMarginClick || pendingMarginClick.pointerId !== event.pointerId) &&
+      dragAnchor != null &&
+      this.#dragThresholdExceeded
+    ) {
+      this.#handleDragSelectionAt(event.clientX, event.clientY);
+    }
+
     const dragUsedFallback = this.#dragUsedPageNotMountedFallback;
     const dragPointer = this.#dragLastPointer;
 
@@ -1876,6 +1899,25 @@ export class EditorInputManager {
     this.#callbacks.clearHoverRegion?.();
   }
 
+  /**
+   * SD-3400: resolve a double-clicked BODY footnote/endnote reference marker to
+   * its note target so navigation can open the corresponding note. Delegates to
+   * the pure {@link resolveNoteReferenceAtPointer} helper.
+   */
+  #resolveFootnoteReferenceTargetAtPointer(
+    target: HTMLElement | null,
+    clientX: number,
+    clientY: number,
+  ): RenderedNoteTarget | null {
+    return resolveNoteReferenceAtPointer({
+      target,
+      clientX,
+      clientY,
+      doc: this.#deps?.getEditor()?.state?.doc,
+      ownerDocument: this.#deps?.getViewportHost()?.ownerDocument ?? document,
+    });
+  }
+
   #handleDoubleClick(event: MouseEvent): void {
     if (!this.#deps) return;
     if (event.button !== 0) return;
@@ -1897,6 +1939,21 @@ export class EditorInputManager {
 
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
+
+    // SD-3400: double-clicking a BODY footnote/endnote reference marker navigates
+    // to its note content. Activating the note session focuses the note and scrolls
+    // its selection into view, so the user lands on the corresponding note.
+    const footnoteRefTarget = this.#resolveFootnoteReferenceTargetAtPointer(target, event.clientX, event.clientY);
+    if (footnoteRefTarget) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#callbacks.activateRenderedNoteSession?.(footnoteRefTarget, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageIndex: normalized.pageIndex,
+      });
+      return;
+    }
 
     const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
     if (clickedNoteTarget) {
@@ -2030,6 +2087,13 @@ export class EditorInputManager {
     const href = linkEl.getAttribute('href') ?? '';
     const isAnchorLink = href.startsWith('#') && href.length > 1;
 
+    // SD-3400: links painted inside footnote/endnote fragments carry
+    // STORY-LOCAL pm positions. Flag the note context on the event so
+    // downstream handlers never resolve those positions against the body doc
+    // (which caused caret jumps and a silent wrong-body-link popover).
+    const noteBlockId = linkEl.closest('[data-block-id]')?.getAttribute('data-block-id') ?? '';
+    const noteTarget = parseRenderedNoteTarget(noteBlockId);
+
     // SD-2495: route any internal-anchor click (`#<bookmark>`) to in-document
     // navigation. Covers TOC entries, heading/bookmark cross-references
     // (REF fields with `\h`), and any other internal-hyperlink case — they all
@@ -2037,8 +2101,23 @@ export class EditorInputManager {
     if (isAnchorLink) {
       event.preventDefault();
       event.stopPropagation();
+      // Bookmark anchors resolve by NAME against the BODY doc; exit any
+      // active story session first so the caret lands in the body story.
+      this.#callbacks.exitActiveStorySession?.();
       this.#callbacks.goToAnchor?.(href);
       return;
+    }
+
+    // A BODY link clicked while a story session is active is a body
+    // interaction: exit the session (this early-returning link path used to
+    // skip every session-exit branch). Note links keep their session. The
+    // exit COMMITS the session — an emptied note removes its body markers —
+    // so painted pm positions may be stale afterwards; flag that so the
+    // handler resolves the caret from coordinates instead.
+    let bodyPositionsMayBeStale = false;
+    if (!noteTarget) {
+      bodyPositionsMayBeStale = this.#getActiveRenderedNoteTarget() != null;
+      this.#callbacks.exitActiveStorySession?.();
     }
 
     // Dispatch link click event
@@ -2056,6 +2135,11 @@ export class EditorInputManager {
         element: linkEl,
         clientX: event.clientX,
         clientY: event.clientY,
+        // SD-3400 (additive, backward compatible): note context + modifiers.
+        noteTarget,
+        bodyPositionsMayBeStale,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
       },
     });
     linkEl.dispatchEvent(linkClickEvent);
@@ -2298,7 +2382,18 @@ export class EditorInputManager {
       visiblePointerSurface?.kind === 'headerFooter' &&
       visiblePointerSurface.surface.closest(activeSurfaceSelector) != null;
 
+    // behindDoc fragments are placed directly on the page element (not inside
+    // .superdoc-page-footer/header), so resolveVisibleSurfaceAtPointer classifies
+    // them as 'bodyContent'. Detect them via data-behind-doc-section and let the
+    // active H/F editor handle the click instead of exiting the session.
     if (visiblePointerSurface?.kind === 'bodyContent') {
+      const behindDocSection = (
+        event.target instanceof Element ? event.target.closest<HTMLElement>('[data-behind-doc-section]') : null
+      )?.dataset.behindDocSection;
+      const sessionMode = session?.session?.mode;
+      if (behindDocSection && behindDocSection === sessionMode) {
+        return false; // Fall through to normal hit testing in the active H/F editor
+      }
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling after exiting the active H/F session
     }
@@ -2463,6 +2558,10 @@ export class EditorInputManager {
   ): boolean {
     if (!fragmentHit) return false;
     if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+    // Textboxes use text selection (caret), not image-style anchor drag selection.
+    if (fragmentHit.fragment.kind === 'drawing' && fragmentHit.fragment.drawingKind === 'textboxShape') {
+      return false;
+    }
 
     const editor = this.#deps?.getEditor();
     try {
@@ -2502,15 +2601,7 @@ export class EditorInputManager {
     if (!editor) return;
 
     const anchor = editor.state.selection.anchor;
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, headPos, this.#dragExtensionMode);
-
-    try {
-      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-      editor.view?.dispatch(tr);
-      this.#callbacks.scheduleSelectionUpdate?.();
-    } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection on shift+click:', error);
-    }
+    this.#dispatchExtendedTextSelection(editor, anchor, headPos);
 
     this.#focusEditor();
   }
@@ -2576,23 +2667,45 @@ export class EditorInputManager {
       return;
     }
 
-    // Text selection mode
     const anchor = this.#dragAnchor!;
     const head = hit.pos;
 
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-    try {
-      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-      editor.view?.dispatch(tr);
-      this.#callbacks.scheduleSelectionUpdate?.();
-    } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection during drag:', error);
+    // SD-3328: Cross-cell selection from the resolved PM positions. The geometry trigger above
+    // (#hitTestTable) can miss empty cell paragraphs and similar spots, leaving #cellAnchor unset,
+    // so a drag across cells falls to the text path — where prosemirror-tables collapses it
+    // (forward) or the guard freezes it (backward). Deriving the cells from the resolved positions
+    // is reliable: when the anchor and head land in different cells of the same table, select the
+    // cell range directly, the way Word and Google Docs do, regardless of the flaky geometry hit.
+    if (!useActiveSurfaceHitTest) {
+      const crossCell = resolveCrossCellSelection(editor.state.doc, anchor, head);
+      if (crossCell) {
+        try {
+          const tr = editor.state.tr.setSelection(
+            CellSelection.create(editor.state.doc, crossCell.anchorCellPos, crossCell.headCellPos),
+          );
+          editor.view?.dispatch(tr);
+          if (!this.#setCellAnchorFromCellPos(crossCell.anchorCellPos, 'active')) {
+            console.warn('[CELL-SELECTION] Failed to cache anchor state for cross-cell drag selection.');
+          }
+          this.#callbacks.scheduleSelectionUpdate?.();
+          return;
+        } catch (error) {
+          // Fall through to text selection if the cell range cannot be built.
+          console.warn('[SELECTION] Failed to create cross-cell CellSelection during drag:', error);
+        }
+      }
     }
+
+    this.#dispatchExtendedTextSelection(editor, anchor, head);
   }
 
   #handleCellDragSelection(currentTableHit: TableHitResult | null, hit: PositionHit): void {
-    const headCellPos = currentTableHit ? this.#getCellPosFromTableHit(currentTableHit) : null;
+    if (!this.#cellAnchor) return;
+    if (!currentTableHit || currentTableHit.block.id !== this.#cellAnchor.tableBlockId) {
+      return;
+    }
+
+    const headCellPos = this.#getCellPosFromTableHit(currentTableHit);
     if (headCellPos === null) return;
 
     if (this.#cellDragMode !== 'active') {
@@ -2614,16 +2727,8 @@ export class EditorInputManager {
       this.#callbacks.scheduleSelectionUpdate?.();
     } catch (error) {
       console.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
-      // Fall back to text selection
       const anchor = this.#dragAnchor!;
-      const head = hit.pos;
-      const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-      try {
-        const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-        editor.view?.dispatch(tr);
-        this.#callbacks.scheduleSelectionUpdate?.();
-      } catch {}
+      this.#dispatchExtendedTextSelection(editor, anchor, hit.pos);
     }
   }
 

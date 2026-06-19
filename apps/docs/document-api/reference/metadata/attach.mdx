@@ -33,6 +33,7 @@ Returns an AnchoredMetadataAttachResult with the assigned id and the backing Sto
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -45,13 +46,25 @@ Returns an AnchoredMetadataAttachResult with the assigned id and the backing Sto
     "end": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 0,
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     },
     "kind": "selection",
     "start": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 0,
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   }
 }

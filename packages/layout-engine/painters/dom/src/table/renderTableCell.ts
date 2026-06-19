@@ -19,6 +19,7 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
@@ -604,6 +605,12 @@ type TableCellRenderDependencies = {
   fromLine?: number;
   /** Ending line index for partial row rendering (exclusive), -1 means render to end */
   toLine?: number;
+  /**
+   * Per-document logical->physical font resolver for in-cell list markers and drop caps. Threaded
+   * from the renderer's per-document resolver so they paint the same physical family they were
+   * measured in. Undefined falls back to the global resolver.
+   */
+  resolvePhysical?: ResolvePhysicalFamily;
 };
 
 /**
@@ -695,6 +702,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     cellWidth,
     fromLine,
     toLine,
+    resolvePhysical,
   } = deps;
 
   const attrs = cell?.attrs;
@@ -910,6 +918,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingWrapper.style.flexShrink = '0';
         drawingWrapper.style.maxWidth = '100%';
         drawingWrapper.style.boxSizing = 'border-box';
+        drawingWrapper.dataset.blockId = (block as DrawingBlock).id;
         applySdtDataset(drawingWrapper, (block as DrawingBlock).attrs as SdtMetadata | undefined);
 
         const drawingInner = doc.createElement('div');
@@ -1028,6 +1037,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           },
           contentControlsChrome: chrome,
           applySdtDataset,
+          resolvePhysical,
           renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
             renderLine(block, line, { ...context, section: 'body' }, lineIndex, isLastLine, resolvedListTextStartPx),
           convertFinalParagraphMark: isLastBlockInCell,
@@ -1125,6 +1135,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         drawingWrapper.style.maxWidth = '100%';
         drawingWrapper.style.boxSizing = 'border-box';
         drawingWrapper.style.zIndex = String(zIndex);
+        drawingWrapper.dataset.blockId = anchoredBlock.id;
         applySdtDataset(drawingWrapper, anchoredBlock.attrs as SdtMetadata | undefined);
 
         const drawingInner = doc.createElement('div');

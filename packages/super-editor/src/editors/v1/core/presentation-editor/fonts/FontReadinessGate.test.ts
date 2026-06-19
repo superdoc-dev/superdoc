@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { getFontConfigVersion, __resetFontConfigVersion } from '@superdoc/font-system';
 import type {
   FontFaceLoadResult,
   FontFaceRequest,
   FontLoadResult,
   FontLoadStatus,
   FontRegistry,
+  UsedFace,
 } from '@superdoc/font-system';
 import { FontReadinessGate, type FontEnvironment } from './FontReadinessGate';
 
@@ -135,6 +137,29 @@ describe('FontReadinessGate', () => {
     });
   }
 
+  it('installs the bundled pack even with NO font set, so bundled substitutes are not disabled', () => {
+    // A document with no `document.fonts` (SSR/jsdom, some iframe/embedded timings) still needs the
+    // bundled face METADATA so `hasFace` is true and a substitute (e.g. Calibri -> Carlito) applies;
+    // loading needs a font set, availability must not.
+    const onRegistryResolved = vi.fn();
+    const gate = new FontReadinessGate({
+      registry: registry.asRegistry(),
+      getDocumentFonts: () => [],
+      requestReflow,
+      invalidateCaches,
+      getFontEnvironment: () => null, // no font set
+      onRegistryResolved,
+      timeoutMs: 1000,
+      scheduleTimeout: clock.scheduleTimeout,
+      cancelTimeout: clock.cancelTimeout,
+    });
+
+    gate.resolveRegistry();
+    expect(onRegistryResolved).toHaveBeenCalledTimes(1); // callback invoked despite no font set
+    gate.resolveRegistry();
+    expect(onRegistryResolved).toHaveBeenCalledTimes(1); // idempotent per registry instance
+  });
+
   it('awaits the resolved physical family, not the logical one', async () => {
     registry.statuses.set('Carlito', 'loaded');
     registry.available.add('Carlito');
@@ -248,24 +273,55 @@ describe('FontReadinessGate', () => {
     expect(requestReflow).not.toHaveBeenCalled();
   });
 
-  it('notifyFontConfigChanged bumps the epoch, invalidates, and reflows immediately (not batched)', () => {
+  it('notifyDocumentFontConfigChanged (mapping change) bumps the LOCAL version and reflows, without the global epoch', () => {
+    __resetFontConfigVersion();
     const gate = makeGate(['Calibri']);
 
-    gate.notifyFontConfigChanged();
+    gate.notifyDocumentFontConfigChanged();
 
-    expect(gate.fontConfigVersion).toBe(1);
-    expect(invalidateCaches).toHaveBeenCalledTimes(1);
+    expect(gate.fontConfigVersion).toBe(1); // local version bumped so fonts-changed re-emits
+    expect(getFontConfigVersion()).toBe(0); // a mapping is document-local: NO global epoch bump
+    expect(invalidateCaches).not.toHaveBeenCalled(); // the per-document signature busts the cache
     expect(requestReflow).toHaveBeenCalledTimes(1);
   });
 
-  it('notifyFontConfigChanged cancels a pending batched late-load (no double reflow)', async () => {
+  it('notifyDocumentFontConfigChanged (availabilityChanged) invalidates caches and bumps the global epoch', () => {
+    // A `fonts.add` registers a face for a family the document may already render with fallback
+    // metrics. The resolver signature is unchanged, so it cannot bust the measure caches; the gate
+    // must clear them and bump the global epoch (like a late load) or the reflow keeps stale widths.
+    __resetFontConfigVersion();
+    const gate = makeGate(['Calibri']);
+
+    gate.notifyDocumentFontConfigChanged({ availabilityChanged: true });
+
+    expect(gate.fontConfigVersion).toBe(1); // local version bumped so fonts-changed re-emits
+    expect(getFontConfigVersion()).toBe(1); // a registration is a GLOBAL availability change
+    expect(invalidateCaches).toHaveBeenCalledTimes(1); // signature is unchanged, so clear explicitly
+    expect(requestReflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidateCachesForConfigRegistration clears caches without reflow, event, or epoch bump', () => {
+    // Config-time registration (before first layout) has the same unchanged-signature risk, but must
+    // not reflow/emit/bump - the first layout measures fresh against the cleared cache.
+    __resetFontConfigVersion();
+    const gate = makeGate(['Calibri']);
+
+    gate.invalidateCachesForConfigRegistration();
+
+    expect(invalidateCaches).toHaveBeenCalledTimes(1); // so the first measure can't reuse stale widths
+    expect(requestReflow).not.toHaveBeenCalled(); // nothing has rendered yet
+    expect(gate.fontConfigVersion).toBe(0); // no event
+    expect(getFontConfigVersion()).toBe(0); // no global epoch bump at config time
+  });
+
+  it('notifyDocumentFontConfigChanged cancels a pending batched late-load (no double reflow)', async () => {
     registry.statuses.set('Carlito', 'timed_out');
     const gate = makeGate(['Calibri']);
     await gate.ensureReadyForMeasure();
 
     registry.statuses.set('Carlito', 'loaded');
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // schedules a batched reflow
-    gate.notifyFontConfigChanged(); // immediate reflow; must also cancel the pending batch
+    gate.notifyDocumentFontConfigChanged(); // immediate reflow; must also cancel the pending batch
     expect(requestReflow).toHaveBeenCalledTimes(1);
 
     clock.advance(300); // the cancelled quiet timer must NOT fire a second reflow
@@ -343,6 +399,26 @@ describe('FontReadinessGate', () => {
       expect(summary.loaded).toBe(0);
       expect(summary.failed).toBe(1);
       expect(summary.results).toEqual([{ family: 'Carlito', status: 'failed' }]);
+    });
+
+    it('replans once when a required face terminally FAILS, so it can demote to the clone (Fix 2b)', async () => {
+      registry.faceStatuses.set(faceKey(BOLD), 'failed');
+      const gate = makeFaceGate(() => [BOLD]);
+
+      await gate.ensureReadyForMeasure();
+      // The failed required face triggers a demotion replan: caches invalidated synchronously, the
+      // (batched) reflow flushes after the scheduler window. The next render re-resolves to the clone.
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
+      expect(requestReflow).not.toHaveBeenCalled();
+      clock.advance(300);
+      expect(requestReflow).toHaveBeenCalledTimes(1);
+
+      // A second measure pass with the SAME face still failed must NOT replan again - fire-once, so it
+      // cannot loop when the bundled clone it steps down to also fails. Drain the full cooldown.
+      await gate.ensureReadyForMeasure();
+      clock.advance(2500);
+      expect(invalidateCaches).toHaveBeenCalledTimes(1);
+      expect(requestReflow).toHaveBeenCalledTimes(1);
     });
 
     it('reflows once when the required bold face loads after a timed-out first paint', async () => {
@@ -425,5 +501,57 @@ describe('FontReadinessGate', () => {
       expect(second.loaded).toBe(0);
       expect(second.results).toEqual([]);
     });
+  });
+});
+
+describe('FontReadinessGate.getDocumentFontOptions (document-used fonts, public read API)', () => {
+  // The full public chain needs a painted render plan, so this covers the gate seam that owns used-face wiring.
+  class FaceRegistry {
+    getStatus(): FontLoadStatus {
+      return 'unloaded';
+    }
+    getFaceStatus(): FontLoadStatus {
+      return 'unloaded';
+    }
+    hasFace(): boolean {
+      return false;
+    }
+    asRegistry(): FontRegistry {
+      return this as unknown as FontRegistry;
+    }
+  }
+
+  const regular = (logicalFamily: string): UsedFace => ({ logicalFamily, weight: '400', style: 'normal' });
+
+  function makeOptionsGate(getUsedFaces: () => UsedFace[], documentFonts: string[] = []) {
+    return new FontReadinessGate({
+      registry: new FaceRegistry().asRegistry(),
+      getDocumentFonts: () => documentFonts,
+      getUsedFaces,
+      requestReflow: vi.fn(),
+      invalidateCaches: vi.fn(),
+      getFontEnvironment: () => null,
+    });
+  }
+
+  it('returns one option per RENDERED font, ignoring declared-but-unused font-table rows and the defaults', () => {
+    const gate = makeOptionsGate(() => [regular('Aptos')], ['Calibri', 'Georgia', 'Aptos']);
+
+    const options = gate.getDocumentFontOptions();
+
+    expect(options.map((o) => o.logicalFamily)).toEqual(['Aptos']);
+    expect(options[0]).toEqual({ logicalFamily: 'Aptos', previewFamily: 'Aptos' });
+  });
+
+  it('returns [] when the document renders no fonts, even with declared families (no defaults leak in)', () => {
+    const gate = makeOptionsGate(() => [], ['Calibri', 'Arial']);
+    expect(gate.getDocumentFontOptions()).toEqual([]);
+  });
+
+  it('never throws (font UI must not break layout): returns [] when the used-faces read fails', () => {
+    const gate = makeOptionsGate(() => {
+      throw new Error('render plan unavailable');
+    });
+    expect(gate.getDocumentFontOptions()).toEqual([]);
   });
 });

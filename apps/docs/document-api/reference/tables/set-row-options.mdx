@@ -29,32 +29,56 @@ Returns a TableMutationResult receipt; reports NO_OP if row options already matc
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allowBreakAcrossPages` | boolean | no |  |
+| `gridAfter` | integer | no |  |
+| `gridBefore` | integer | no |  |
 | `repeatHeader` | boolean | no |  |
 | `target` | TableRowAddress | yes | TableRowAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
+| `wAfter` | object | no |  |
+| `wAfter.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wAfter.value` | integer | no |  |
+| `wBefore` | object | no |  |
+| `wBefore.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wBefore.value` | integer | no |  |
 
 ### Variant 2 (target.nodeType="table")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allowBreakAcrossPages` | boolean | no |  |
+| `gridAfter` | integer | no |  |
+| `gridBefore` | integer | no |  |
 | `repeatHeader` | boolean | no |  |
 | `rowIndex` | integer | yes |  |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+| `wAfter` | object | no |  |
+| `wAfter.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wAfter.value` | integer | no |  |
+| `wBefore` | object | no |  |
+| `wBefore.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wBefore.value` | integer | no |  |
 
 ### Variant 3 (required: nodeId, rowIndex)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allowBreakAcrossPages` | boolean | no |  |
+| `gridAfter` | integer | no |  |
+| `gridBefore` | integer | no |  |
 | `nodeId` | string | yes |  |
 | `repeatHeader` | boolean | no |  |
 | `rowIndex` | integer | yes |  |
+| `wAfter` | object | no |  |
+| `wAfter.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wAfter.value` | integer | no |  |
+| `wBefore` | object | no |  |
+| `wBefore.type` | enum | no | `"auto"`, `"dxa"`, `"nil"`, `"pct"` |
+| `wBefore.value` | integer | no |  |
 
 ### Example request
 
@@ -140,11 +164,63 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         "allowBreakAcrossPages": {
           "type": "boolean"
         },
+        "gridAfter": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gridBefore": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "repeatHeader": {
           "type": "boolean"
         },
         "target": {
           "$ref": "#/$defs/TableRowAddress"
+        },
+        "wAfter": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
+        },
+        "wBefore": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
         }
       },
       "required": [
@@ -158,6 +234,14 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         "allowBreakAcrossPages": {
           "type": "boolean"
         },
+        "gridAfter": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gridBefore": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "repeatHeader": {
           "type": "boolean"
         },
@@ -167,6 +251,50 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         },
         "target": {
           "$ref": "#/$defs/TableAddress"
+        },
+        "wAfter": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
+        },
+        "wBefore": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
         }
       },
       "required": [
@@ -181,6 +309,14 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         "allowBreakAcrossPages": {
           "type": "boolean"
         },
+        "gridAfter": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gridBefore": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "nodeId": {
           "type": "string"
         },
@@ -190,6 +326,50 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         "rowIndex": {
           "minimum": 0,
           "type": "integer"
+        },
+        "wAfter": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
+        },
+        "wBefore": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "auto",
+                "dxa",
+                "nil",
+                "pct"
+              ]
+            },
+            "value": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "type"
+          ],
+          "type": "object"
         }
       },
       "required": [

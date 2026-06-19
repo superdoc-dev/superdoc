@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DrawingBlock } from '@superdoc/contracts';
-import { createDrawingImageElement } from './drawing-image.js';
+import type { DrawingBlock, ShapeGroupImageChild } from '@superdoc/contracts';
+import { createDrawingImageElement, createShapeGroupImageElement } from './drawing-image.js';
 import { buildImageHyperlinkAnchor } from './hyperlink.js';
 import { resolveBlockImageClipPath } from './image-block.js';
 
@@ -35,6 +35,7 @@ describe('createDrawingImageElement', () => {
       src: 'data:image/png;base64,AAA',
       grayscale: true,
       gain: 2,
+      alphaModFix: { amt: 9000 },
     } as DrawingBlock;
 
     const imgEl = createDrawingImageElement(doc, drawing, (imageEl) => imageEl) as HTMLImageElement;
@@ -42,6 +43,7 @@ describe('createDrawingImageElement', () => {
     expect(imgEl.style.display).toBe('block');
     expect(imgEl.style.filter).toContain('grayscale(100%)');
     expect(imgEl.style.filter).toContain('contrast(2)');
+    expect(imgEl.style.opacity).toBe('0.09');
   });
 
   it('wraps drawing images with unified hyperlink anchors', () => {
@@ -63,5 +65,30 @@ describe('createDrawingImageElement', () => {
     expect(anchor.href).toBe('https://example.com/drawing-image');
     expect(anchor.style.display).toBe('block');
     expect(anchor.querySelector('img.superdoc-drawing-image')).toBeTruthy();
+  });
+});
+
+describe('createShapeGroupImageElement', () => {
+  const createDoc = (): Document => document.implementation.createHTMLDocument('shape-group-image');
+
+  it('applies DrawingML fixed alpha to grouped images', () => {
+    const doc = createDoc();
+    const child: ShapeGroupImageChild = {
+      shapeType: 'image',
+      attrs: {
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 80,
+        src: 'data:image/png;base64,AAA',
+        alphaModFix: { amt: 9000 },
+      },
+    };
+
+    const imgEl = createShapeGroupImageElement(doc, child) as HTMLImageElement;
+
+    expect(imgEl.src).toBe('data:image/png;base64,AAA');
+    expect(imgEl.style.display).toBe('block');
+    expect(imgEl.style.opacity).toBe('0.09');
   });
 });

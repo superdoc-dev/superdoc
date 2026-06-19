@@ -37,6 +37,8 @@ type ExecuteOperationCallRequest = {
 export type ExecuteOperationRequest = ExecuteOperationWrapperRequest | ExecuteOperationCallRequest;
 
 const MANUAL_OPERATION_ALLOWLIST_SET = new Set<CliOperationId>(MANUAL_OPERATION_ALLOWLIST);
+const CALL_VALIDATION_COMMAND_FAILED_DOC_API_IDS = new Set(['images.setSize', 'images.setZOrder']);
+const WRAPPER_VALIDATION_INVALID_INPUT_DOC_API_IDS = new Set(['insert', 'format.paragraph.setIndentation']);
 
 function pruneUndefinedDeep(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -195,28 +197,60 @@ function normalizeLegacyInput(operationId: string, input: Record<string, unknown
   return input;
 }
 
+function resolveInputValidationErrorCode(request: ExecuteOperationRequest): 'INVALID_INPUT' | 'COMMAND_FAILED' | null {
+  const docApiId = toDocApiId(request.operationId);
+  if (!docApiId) return null;
+
+  // Host/SDK `call` requests are already API-shaped, but the Labs contract
+  // treats negative-path validation for these image updates as a command-level
+  // failure instead of an INVALID_INPUT envelope.
+  if (request.mode === 'call') {
+    return CALL_VALIDATION_COMMAND_FAILED_DOC_API_IDS.has(docApiId) ? 'COMMAND_FAILED' : 'INVALID_INPUT';
+  }
+
+  // These wrapper commands are exercised as API-level INVALID_INPUT on the
+  // public SDK surface. Other wrapper commands retain their schema-shaped
+  // VALIDATION_ERROR envelope.
+  return WRAPPER_VALIDATION_INVALID_INPUT_DOC_API_IDS.has(docApiId) ? 'INVALID_INPUT' : null;
+}
+
+function maybeRemapInputValidationError(request: ExecuteOperationRequest, error: unknown): never {
+  const remappedCode = resolveInputValidationErrorCode(request);
+  if (remappedCode && error instanceof CliError && error.code === 'VALIDATION_ERROR') {
+    throw new CliError(remappedCode, error.message, error.details);
+  }
+  throw error;
+}
+
 export async function executeOperation(request: ExecuteOperationRequest): Promise<CommandExecution> {
   let input: Record<string, unknown>;
-  const baseContext = request.context;
+  const baseContext: CommandContext = {
+    ...request.context,
+    argumentSource: request.mode === 'call' ? 'input' : 'cli',
+  };
   let commandName: string;
 
   if (request.mode === 'wrapper') {
     commandName = request.commandName;
     const hasDefaults = request.defaultInput != null && Object.keys(request.defaultInput).length > 0;
-    input = (pruneUndefinedDeep(
-      await parseWrapperOperationInput(request.operationId, request.tokens, request.commandName, {
-        skipConstraints: hasDefaults,
-        extraOptionSpecs: request.extraOptionSpecs,
-      }),
-    ) ?? {}) as Record<string, unknown>;
-    // Merge helper command defaults (e.g., inline: { bold: 'on' } for `format bold`).
-    // User-provided values take precedence over defaults.
-    if (request.defaultInput) {
-      input = { ...request.defaultInput, ...input };
-    }
-    // Apply helper-specific input transforms (e.g., --id → target: { id })
-    if (request.inputTransform) {
-      input = request.inputTransform(input);
+    try {
+      input = (pruneUndefinedDeep(
+        await parseWrapperOperationInput(request.operationId, request.tokens, request.commandName, {
+          skipConstraints: hasDefaults,
+          extraOptionSpecs: request.extraOptionSpecs,
+        }),
+      ) ?? {}) as Record<string, unknown>;
+      // Merge helper command defaults (e.g., inline: { bold: 'on' } for `format bold`).
+      // User-provided values take precedence over defaults.
+      if (request.defaultInput) {
+        input = { ...request.defaultInput, ...input };
+      }
+      // Apply helper-specific input transforms (e.g., --id → target: { id })
+      if (request.inputTransform) {
+        input = request.inputTransform(input);
+      }
+    } catch (error) {
+      maybeRemapInputValidationError(request, error);
     }
   } else {
     commandName = 'call';
@@ -227,7 +261,11 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
   }
 
   input = normalizeLegacyInput(request.operationId, input);
-  validateOperationInputData(request.operationId, input, commandName);
+  try {
+    validateOperationInputData(request.operationId, input, commandName);
+  } catch (error) {
+    maybeRemapInputValidationError(request, error);
+  }
   await preflightCallContext(request.operationId, input, baseContext);
   const effectiveContext = applySessionInputToContext(baseContext, input);
 

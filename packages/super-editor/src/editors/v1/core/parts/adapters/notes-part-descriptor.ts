@@ -128,13 +128,25 @@ export function getNoteElements(part: unknown, childElementName: string): OoxmlE
  * Used during insert/update to write text content directly into the
  * canonical OOXML part. The result is valid w:p elements that can be
  * re-imported by the standard footnote importer.
+ *
+ * Each paragraph carries the FootnoteText/EndnoteText paragraph style —
+ * Word always stamps it on note body paragraphs, and without it exported
+ * new notes render at the Normal style's size in Word.
  */
-export function textToNoteOoxmlParagraphs(text: string): OoxmlElement[] {
+export function textToNoteOoxmlParagraphs(text: string, childElementName: string): OoxmlElement[] {
+  const styleName = childElementName === 'w:endnote' ? 'EndnoteText' : 'FootnoteText';
+  const pPr: OoxmlElement = {
+    type: 'element',
+    name: 'w:pPr',
+    elements: [{ type: 'element', name: 'w:pStyle', attributes: { 'w:val': styleName } }],
+  };
+
   return text.split(/\r?\n/).map((line) => ({
     type: 'element',
     name: 'w:p',
-    elements:
-      line.length > 0
+    elements: [
+      structuredClone(pPr),
+      ...(line.length > 0
         ? [
             {
               type: 'element',
@@ -149,7 +161,8 @@ export function textToNoteOoxmlParagraphs(text: string): OoxmlElement[] {
               ],
             },
           ]
-        : [],
+        : []),
+    ],
   }));
 }
 
@@ -220,7 +233,7 @@ export function addNoteElement(part: unknown, config: NotePartConfig, noteId: st
     throw new Error(`addNoteElement: note id "${noteId}" already exists in ${config.partId}`);
   }
 
-  const paragraphs = textToNoteOoxmlParagraphs(text);
+  const paragraphs = textToNoteOoxmlParagraphs(text, config.childElementName);
   ensureFootnoteRefRun(paragraphs, config.childElementName);
 
   const noteElement: OoxmlElement = {
@@ -245,7 +258,7 @@ export function updateNoteElement(part: unknown, config: NotePartConfig, noteId:
   const target = notes.find((el) => el.attributes?.['w:id'] === noteId);
   if (!target) return false;
 
-  const paragraphs = textToNoteOoxmlParagraphs(text);
+  const paragraphs = textToNoteOoxmlParagraphs(text, config.childElementName);
   ensureFootnoteRefRun(paragraphs, config.childElementName);
   target.elements = paragraphs;
   return true;
@@ -438,6 +451,53 @@ export function getNotesConfig(type: 'footnote' | 'endnote'): NotePartConfig {
   return type === 'endnote' ? ENDNOTES_CONFIG : FOOTNOTES_CONFIG;
 }
 
+// ---------------------------------------------------------------------------
+// Session-managed note ids (SD-3400 tombstones)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ids of notes inserted or deleted through this editing session.
+ *
+ * Interactive deletes tombstone the `w:footnote`/`w:endnote` element (the PM
+ * marker delete is history-recorded, the part element stays) so undo restores
+ * the note text. Export prunes notes that are BOTH registered here AND
+ * unreferenced in the exported body. Pre-existing orphans from the imported
+ * file are never in the registry and survive untouched (Round-Trip Principle).
+ */
+export interface SessionManagedNoteIds {
+  footnotes: Set<string>;
+  endnotes: Set<string>;
+}
+
+/**
+ * Yjs `meta`-map / editor event name carrying a session-managed note id to
+ * collaborative peers. The collaboration extension listens for it and shares
+ * the id so peers and late joiners converge on the same tombstone provenance
+ * (SD-3400). No listener exists outside a collaborative session, so this is a
+ * no-op for single-client editing.
+ */
+export const NOTE_TOMBSTONE_EVENT = 'note-tombstoned';
+
+/** Register a note id as managed by this session (insert or delete). */
+export function markSessionManagedNoteId(editor: Editor, type: 'footnote' | 'endnote', noteId: string): void {
+  const converter = (editor as unknown as { converter?: { sessionManagedNoteIds?: SessionManagedNoteIds } }).converter;
+  if (!converter) return;
+  if (!converter.sessionManagedNoteIds) {
+    converter.sessionManagedNoteIds = { footnotes: new Set(), endnotes: new Set() };
+  }
+  converter.sessionManagedNoteIds[getNotesConfig(type).converterKey].add(String(noteId));
+
+  // SD-3400 collaboration: broadcast the id so other peers (and late joiners)
+  // share the same tombstone set. Without this the local converter registry is
+  // peer-private, and peer B would re-export deleted note text and re-enumerate
+  // dead notes as revision-capable stories. The shared store is Yjs `meta`
+  // (collaboration-only state, never written into the exported DOCX).
+  (editor as unknown as { emit?: (event: string, payload: unknown) => void }).emit?.(NOTE_TOMBSTONE_EVENT, {
+    type,
+    noteId: String(noteId),
+  });
+}
+
 /**
  * Ensure the notes OOXML part exists in `convertedXml`.
  *
@@ -457,4 +517,35 @@ export function bootstrapNotesPart(editor: Editor, type: 'footnote' | 'endnote')
   if (converter.convertedXml[config.partId] !== undefined) return;
 
   converter.convertedXml[config.partId] = createInitialNotesPart(config);
+  ensureSpecialNotesListInSettings(converter.convertedXml, config);
+}
+
+/**
+ * Write the special-note list to `word/settings.xml` alongside a freshly
+ * bootstrapped notes part (§17.11.9): `w:footnotePr`/`w:endnotePr` listing
+ * the separator (-1) and continuation separator (0) ids. Strict consumers
+ * do not load separators that are not listed here.
+ *
+ * Imported documents own their settings — this runs only on bootstrap, and
+ * preserves any existing properties element (it just adds the missing ids).
+ */
+function ensureSpecialNotesListInSettings(convertedXml: Record<string, unknown>, config: NotePartConfig): void {
+  const settingsRoot = getRootElement(convertedXml['word/settings.xml']);
+  if (!settingsRoot) return;
+  if (!settingsRoot.elements) settingsRoot.elements = [];
+
+  const prName = config.childElementName === 'w:endnote' ? 'w:endnotePr' : 'w:footnotePr';
+  let pr = settingsRoot.elements.find((el) => el.name === prName);
+  if (!pr) {
+    pr = { type: 'element', name: prName, elements: [] };
+    settingsRoot.elements.push(pr);
+  }
+  if (!pr.elements) pr.elements = [];
+
+  for (const id of ['-1', '0']) {
+    const listed = pr.elements.some((el) => el.name === config.childElementName && el.attributes?.['w:id'] === id);
+    if (!listed) {
+      pr.elements.push({ type: 'element', name: config.childElementName, attributes: { 'w:id': id } });
+    }
+  }
 }

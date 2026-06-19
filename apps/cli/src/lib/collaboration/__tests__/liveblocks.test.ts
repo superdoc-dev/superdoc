@@ -50,6 +50,15 @@ function makeLiveblocksProfile(overrides = {}) {
   };
 }
 
+function getLastCreateClientOptions(): Record<string, unknown> {
+  const lastCall = mockCreateClient.mock.calls.at(-1) as [Record<string, unknown>] | undefined;
+  expect(lastCall).toBeDefined();
+  if (!lastCall) {
+    throw new Error('Expected createClient to be called.');
+  }
+  return lastCall[0];
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -84,8 +93,8 @@ describe('createLiveblocksRuntime', () => {
     );
 
     expect(mockCreateClient).toHaveBeenCalledTimes(1);
-    const clientOpts = mockCreateClient.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(typeof clientOpts?.authEndpoint).toBe('function');
+    const clientOpts = getLastCreateClientOptions();
+    expect(typeof clientOpts.authEndpoint).toBe('function');
     expect(runtime.ydoc).toBeDefined();
   });
 
@@ -215,11 +224,8 @@ describe('auth endpoint response validation', () => {
 
       // The authEndpoint callback is invoked by createClient when enterRoom is called.
       // Since we mocked createClient, we need to extract and call the callback directly.
-      const clientOpts = mockCreateClient.mock.calls[mockCreateClient.mock.calls.length - 1]?.[0] as Record<
-        string,
-        unknown
-      >;
-      const authCallback = clientOpts?.authEndpoint as (room: string) => Promise<unknown>;
+      const clientOpts = getLastCreateClientOptions();
+      const authCallback = clientOpts.authEndpoint as (room: string) => Promise<unknown>;
       expect(typeof authCallback).toBe('function');
 
       try {
@@ -248,11 +254,8 @@ describe('auth endpoint response validation', () => {
         }),
       );
 
-      const clientOpts = mockCreateClient.mock.calls[mockCreateClient.mock.calls.length - 1]?.[0] as Record<
-        string,
-        unknown
-      >;
-      const authCallback = clientOpts?.authEndpoint as (room: string) => Promise<unknown>;
+      const clientOpts = getLastCreateClientOptions();
+      const authCallback = clientOpts.authEndpoint as (room: string) => Promise<unknown>;
 
       try {
         await authCallback('test-room');
@@ -283,11 +286,8 @@ describe('auth endpoint response validation', () => {
         }),
       );
 
-      const clientOpts = mockCreateClient.mock.calls[mockCreateClient.mock.calls.length - 1]?.[0] as Record<
-        string,
-        unknown
-      >;
-      const authCallback = clientOpts?.authEndpoint as (room: string) => Promise<unknown>;
+      const clientOpts = getLastCreateClientOptions();
+      const authCallback = clientOpts.authEndpoint as (room: string) => Promise<unknown>;
 
       const result = await authCallback('test-room');
       expect(result).toEqual({ token: 'test-jwt-token' });

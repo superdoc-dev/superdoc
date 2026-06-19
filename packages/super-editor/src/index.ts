@@ -73,6 +73,7 @@ export type {
 // Font report types (used to type `fonts-changed` payloads + the fonts read API)
 export type {
   FontResolutionRecord,
+  DocumentFontOption,
   FontResolutionReason,
   FontLoadStatus,
   FontLoadSummary,
@@ -88,6 +89,8 @@ export type {
   EditorOptions,
   User,
   FontConfig,
+  FontFaceConfig,
+  FontFamilyConfig,
   FontsConfig,
   FieldValue,
   DocxFileEntry,

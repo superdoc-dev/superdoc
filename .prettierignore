@@ -1,6 +1,5 @@
 examples
 demos
-devtools/visual-testing/results
 public
 dist
 node_modules
@@ -29,6 +28,11 @@ src/tests/data
 src/tests/data/**
 tests/data
 tests/data/**
+
+# Generated artifacts
+apps/mcp/src/generated/**
+packages/sdk/langs/browser/src/intent-dispatch.ts
+tests/consumer-typecheck/tsconfig.matrix.json
 
 # Markdown files
 *.md

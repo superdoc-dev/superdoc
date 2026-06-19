@@ -284,6 +284,7 @@ function makeTablesAdapter(): TablesAdapter {
     setLayout: mutation,
     insertRow: mutation,
     deleteRow: mutation,
+    moveRow: mutation,
     setRowHeight: mutation,
     distributeRows: mutation,
     setRowOptions: mutation,
@@ -1047,7 +1048,7 @@ describe('createDocumentApi', () => {
       expectError(
         () => api.trackChanges.decide({ decision: 'maybe', target: { id: 'tc-1' } } as any),
         'INVALID_INPUT',
-        '"accept" or "reject"',
+        'must be one of: accept, reject',
       );
     });
 
@@ -1056,7 +1057,7 @@ describe('createDocumentApi', () => {
       expectError(
         () => api.trackChanges.decide({ decision: 'accept', target: 'tc-1' } as any),
         'INVALID_TARGET',
-        '{ id }, { kind: "range", range }, or { scope: "all" }',
+        "{ kind: 'id', id } / { kind: 'range', range } / { kind: 'all' }",
       );
     });
 
@@ -1065,7 +1066,7 @@ describe('createDocumentApi', () => {
       expectError(
         () => api.trackChanges.decide({ decision: 'accept', target: null } as any),
         'INVALID_TARGET',
-        '{ id }, { kind: "range", range }, or { scope: "all" }',
+        "{ kind: 'id', id } / { kind: 'range', range } / { kind: 'all' }",
       );
     });
 
@@ -1074,7 +1075,7 @@ describe('createDocumentApi', () => {
       expectError(
         () => api.trackChanges.decide({ decision: 'accept', target: { foo: 'bar' } } as any),
         'INVALID_TARGET',
-        '{ id }, { kind: "range", range }, or { scope: "all" }',
+        'target.kind is required',
       );
     });
 
@@ -1084,6 +1085,216 @@ describe('createDocumentApi', () => {
         () => api.trackChanges.decide({ decision: 'accept', target: { id: '' } } as any),
         'INVALID_TARGET',
         'non-empty id',
+      );
+    });
+
+    it('promotes legacy id plus partial range targets into logical range targets', () => {
+      const trackAdpt = makeTrackChangesAdapter();
+      trackAdpt.decide = mock(() => ({ success: true as const }));
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: trackAdpt,
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.trackChanges.decide({
+        decision: 'accept',
+        target: { id: 'tc-1', range: { kind: 'partial', start: 0, end: 2 } },
+      } as any);
+
+      expect(trackAdpt.decide).toHaveBeenCalledWith(
+        {
+          decision: 'accept',
+          target: {
+            kind: 'range',
+            range: { anchor: 'tc-1', relativeStart: 0, relativeEnd: 2 },
+          },
+        },
+        undefined,
+      );
+    });
+
+    it('rejects malformed legacy id plus range targets with INVALID_INPUT', () => {
+      const api = makeApi();
+      expectError(
+        () =>
+          api.trackChanges.decide({
+            decision: 'accept',
+            target: { id: 'tc-1', range: { kind: 'partial', start: 2, end: 0 } },
+          } as any),
+        'INVALID_INPUT',
+        'legacy partial range targets',
+      );
+    });
+
+    it('accepts logical range targets and forwards range disambiguators', () => {
+      const trackAdpt = makeTrackChangesAdapter();
+      trackAdpt.decide = mock(() => ({ success: true as const }));
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: trackAdpt,
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const result = api.trackChanges.decide({
+        decision: 'reject',
+        target: {
+          kind: 'range',
+          range: {
+            anchor: 'tc-anchor-1',
+            relativeStart: 1,
+            relativeEnd: 4,
+          },
+          overlap: 'tc-child-1',
+          side: 'delete',
+          story: { kind: 'story', storyType: 'footnote', noteId: '12' },
+          part: 'word/footnotes.xml',
+        },
+        expectedRevision: 'r7',
+      });
+
+      expect(result.success).toBe(true);
+      expect(trackAdpt.decide).toHaveBeenCalledWith(
+        {
+          decision: 'reject',
+          target: {
+            kind: 'range',
+            range: {
+              anchor: 'tc-anchor-1',
+              relativeStart: 1,
+              relativeEnd: 4,
+            },
+            overlap: 'tc-child-1',
+            side: 'delete',
+            story: { kind: 'story', storyType: 'footnote', noteId: '12' },
+            part: 'word/footnotes.xml',
+          },
+        },
+        { expectedRevision: 'r7' },
+      );
+    });
+
+    it('accepts TextTarget range targets with optional overlap and side fields', () => {
+      const trackAdpt = makeTrackChangesAdapter();
+      trackAdpt.decide = mock(() => ({ success: true as const }));
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: trackAdpt,
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.trackChanges.decide({
+        decision: 'accept',
+        target: {
+          kind: 'range',
+          range: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 2 } }] },
+          overlap: 'tc-parent-1',
+          side: 'inserted',
+        },
+      });
+
+      expect(trackAdpt.decide).toHaveBeenCalledWith(
+        {
+          decision: 'accept',
+          target: {
+            kind: 'range',
+            range: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 2 } }] },
+            overlap: 'tc-parent-1',
+            side: 'inserted',
+          },
+        },
+        undefined,
+      );
+    });
+
+    it('lets options.expectedRevision override the input expectedRevision alias', () => {
+      const trackAdpt = makeTrackChangesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: trackAdpt,
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.trackChanges.decide(
+        { decision: 'accept', target: { id: 'tc-1' }, expectedRevision: 'input-r1' },
+        { expectedRevision: 'options-r2' },
+      );
+
+      expect(trackAdpt.accept).toHaveBeenCalledWith({ id: 'tc-1' }, { expectedRevision: 'options-r2' });
+    });
+
+    it('passes input.expectedRevision to legacy id-target adapters when options are omitted', () => {
+      const trackAdpt = makeTrackChangesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: trackAdpt,
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.trackChanges.decide({ decision: 'reject', target: { id: 'tc-1' }, expectedRevision: 'input-r1' });
+
+      expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, { expectedRevision: 'input-r1' });
+    });
+
+    it('rejects malformed logical range target fields', () => {
+      const api = makeApi();
+      expectError(
+        () =>
+          api.trackChanges.decide({
+            decision: 'accept',
+            target: { kind: 'range', range: { anchor: 'tc-anchor-1', relativeStart: 3, relativeEnd: 2 } },
+          } as any),
+        'INVALID_TARGET',
+        '0 <= relativeStart <= relativeEnd',
+      );
+      expectError(
+        () =>
+          api.trackChanges.decide({
+            decision: 'accept',
+            target: { kind: 'range', anchor: 'tc-anchor-1', relativeStart: 0, relativeEnd: 2, side: 'before' },
+          } as any),
+        'INVALID_TARGET',
+        'target.side must be',
       );
     });
 
@@ -2132,6 +2343,28 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts kindless tracked-change target shape', () => {
+      const commentsAdpt = makeCommentsAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: commentsAdpt,
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+      const target = { trackedChangeId: 'tc-1', side: 'deleted' as const };
+      const result = api.comments.create({ target, text: 'comment' });
+      expect(result.success).toBe(true);
+      expect(commentsAdpt.add).toHaveBeenCalledWith({ target, text: 'comment' }, undefined);
+    });
+
     it('accepts SelectionTarget', () => {
       const api = makeApi();
       const target = {
@@ -2206,7 +2439,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.comments.create({ target: { kind: 'text', blockId: 'p1' }, text: 'comment' } as any),
-        'SelectionTarget, or tracked-change target',
+        'TextTarget, SelectionTarget, TrackedChangeCommentTarget',
       );
     });
 
@@ -2390,6 +2623,28 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts kindless tracked-change target shape', () => {
+      const commentsAdpt = makeCommentsAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: commentsAdpt,
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+      const target = { trackedChangeId: 'tc-1', side: 'source' as const };
+      const result = api.comments.patch({ commentId: 'c1', target });
+      expect(result.success).toBe(true);
+      expect(commentsAdpt.move).toHaveBeenCalledWith({ commentId: 'c1', target }, undefined);
+    });
+
     it('accepts SelectionTarget', () => {
       const api = makeApi();
       const target = {
@@ -2459,7 +2714,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.comments.patch({ commentId: 'c1', target: { kind: 'text', blockId: 'p1' } } as any),
-        'SelectionTarget, or tracked-change target',
+        'TextTarget, SelectionTarget, TrackedChangeCommentTarget',
       );
     });
 
@@ -2933,7 +3188,7 @@ describe('createDocumentApi', () => {
   });
 
   describe('tables.* locator validation', () => {
-    function makeApi() {
+    function makeApi(tables: TablesAdapter = makeTablesAdapter()) {
       return createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -2947,7 +3202,7 @@ describe('createDocumentApi', () => {
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
-        tables: makeTablesAdapter(),
+        tables,
       });
     }
 
@@ -2966,7 +3221,25 @@ describe('createDocumentApi', () => {
     it('accepts nodeId for table-locator operations', () => {
       const api = makeApi();
       expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', autoFitMode: 'fixedWidth', preferredWidthType: 'auto' }),
+      ).not.toThrow();
+      expect(() =>
+        api.tables.setLayout({ nodeId: 't1', preferredWidthType: 'pct', preferredWidth: 5000 }),
+      ).not.toThrow();
       expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
+    });
+
+    it('rejects non-zero preferredWidth when preferredWidthType is auto', () => {
+      const api = makeApi();
+      expect(() =>
+        api.tables.setLayout({
+          nodeId: 't1',
+          autoFitMode: 'fixedWidth',
+          preferredWidthType: 'auto',
+          preferredWidth: 1200,
+        } as any),
+      ).toThrow(/preferredWidth must be omitted or 0/);
     });
 
     it('rejects both target + nodeId for table-locator operations', () => {
@@ -2987,6 +3260,7 @@ describe('createDocumentApi', () => {
       const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
       expect(() => api.tables.insertRow({ target, position: 'after' })).not.toThrow();
       expect(() => api.tables.deleteRow({ target })).not.toThrow();
+      expect(() => api.tables.moveRow({ target, destination: { kind: 'last' } })).not.toThrow();
     });
 
     it('accepts table-scoped locator for row-locator operations', () => {
@@ -2994,6 +3268,19 @@ describe('createDocumentApi', () => {
       const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' })).not.toThrow();
       expect(() => api.tables.deleteRow({ nodeId: 't1', rowIndex: 0 })).not.toThrow();
+      expect(() => api.tables.moveRow({ target, rowIndex: 0, destination: { kind: 'last' } })).not.toThrow();
+    });
+
+    it('returns CAPABILITY_UNAVAILABLE when legacy table adapters omit moveRow', () => {
+      const tables = makeTablesAdapter();
+      delete tables.moveRow;
+      const api = makeApi(tables);
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+
+      expect(api.tables.moveRow({ target, destination: { kind: 'last' } })).toMatchObject({
+        success: false,
+        failure: { code: 'CAPABILITY_UNAVAILABLE' },
+      });
     });
 
     it('rejects table-target row ops without rowIndex at the public API boundary', () => {
@@ -3002,6 +3289,9 @@ describe('createDocumentApi', () => {
 
       expect(() => api.tables.insertRow({ target, position: 'after' } as any)).toThrow(/rowIndex is required/);
       expect(() => api.tables.deleteRow({ target } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.moveRow({ target, destination: { kind: 'last' } } as any)).toThrow(
+        /rowIndex is required/,
+      );
       expect(() => api.tables.setRowHeight({ target, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
         /rowIndex is required/,
       );
@@ -3013,6 +3303,9 @@ describe('createDocumentApi', () => {
 
       expect(() => api.tables.insertRow({ nodeId: 't1', position: 'after' } as any)).toThrow(/rowIndex is required/);
       expect(() => api.tables.deleteRow({ nodeId: 't1' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.moveRow({ nodeId: 't1', destination: { kind: 'last' } } as any)).toThrow(
+        /rowIndex is required/,
+      );
       expect(() => api.tables.setRowHeight({ nodeId: 't1', heightPt: 12, rule: 'atLeast' } as any)).toThrow(
         /rowIndex is required/,
       );
@@ -3029,12 +3322,21 @@ describe('createDocumentApi', () => {
         /rowIndex must not be provided/,
       );
       expect(() => api.tables.deleteRow({ target, rowIndex: 0 } as any)).toThrow(/rowIndex must not be provided/);
+      expect(() => api.tables.moveRow({ target, rowIndex: 0, destination: { kind: 'last' } } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
       expect(() => api.tables.setRowHeight({ target, rowIndex: 0, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
         /rowIndex must not be provided/,
       );
       expect(() => api.tables.setRowOptions({ target, rowIndex: 0, repeatHeader: true } as any)).toThrow(
         /rowIndex must not be provided/,
       );
+    });
+
+    it('accepts row height updates without an explicit rule', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      expect(() => api.tables.setRowHeight({ target, heightPt: 12 })).not.toThrow();
     });
 
     // -- column-locator operations (target/nodeId) --

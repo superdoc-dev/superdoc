@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { config as dotenvConfig } from 'dotenv';
 
 dotenvConfig();
 
 const app = express();
+app.use(helmet());
 const PORT = process.env.PORT || 3001;
 const SUPERDOC_SERVICES_API_KEY = process.env.SUPERDOC_SERVICES_API_KEY;
 const SUPERDOC_SERVICES_BASE_URL = process.env.SUPERDOC_SERVICES_BASE_URL || 'https://api.superdoc.dev';

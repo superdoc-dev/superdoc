@@ -180,6 +180,21 @@ export const pickNumber = (value: unknown): number | undefined => {
 };
 
 /**
+ * Apply wp:anchor dist* padding to wrap distances when wrap omitted them.
+ * Only promotes sides each wrap type may express in OOXML (see CT_WrapSquare / Tight / Through / TopBottom).
+ */
+export const mergeWrapDistancesFromPadding = (wrap: NonNullable<ImageBlock['wrap']>, padding?: BoxSpacing): void => {
+  if (!padding || wrap.type === 'None' || wrap.type === 'Inline') return;
+  const mergeVertical = wrap.type === 'Square' || wrap.type === 'TopAndBottom';
+  const mergeHorizontal = wrap.type === 'Square' || wrap.type === 'Tight' || wrap.type === 'Through';
+
+  if (mergeVertical && wrap.distTop == null && padding.top != null) wrap.distTop = padding.top;
+  if (mergeVertical && wrap.distBottom == null && padding.bottom != null) wrap.distBottom = padding.bottom;
+  if (mergeHorizontal && wrap.distLeft == null && padding.left != null) wrap.distLeft = padding.left;
+  if (mergeHorizontal && wrap.distRight == null && padding.right != null) wrap.distRight = padding.right;
+};
+
+/**
  * Normalizes a color string, ensuring it has a leading '#' symbol.
  *
  * Filters out special values like 'auto' and 'none'. Prepends '#' if not present.
@@ -1182,7 +1197,7 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
         // for w:drawing inside textbox runs). Hydrate the same way as
         // ImageRuns so Uint8Array (Y.js binary) and string (zip) media
         // alike resolve to a data URI.
-        if (drawingBlock.drawingKind === 'vectorShape') {
+        if (drawingBlock.drawingKind === 'vectorShape' || drawingBlock.drawingKind === 'textboxShape') {
           const parts = (drawingBlock as VectorShapeDrawing).textContent?.parts;
           if (!parts || parts.length === 0) return blk;
           let partsChanged = false;

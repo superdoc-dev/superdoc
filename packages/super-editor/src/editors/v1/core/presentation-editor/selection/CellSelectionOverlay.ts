@@ -2,6 +2,8 @@ import { TableMap } from 'prosemirror-tables';
 import type { CellSelection } from 'prosemirror-tables';
 import type { FlowBlock, Layout, Measure, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
 
+import { getTopLevelTableBlockAtPos } from '../tables/TableSelectionUtilities.js';
+
 /**
  * Coordinate pair in overlay space (absolute positioning within the selection overlay container).
  */
@@ -120,16 +122,10 @@ export function renderCellSelectionOverlay({
       | undefined;
   }
   if (!tableBlock) {
-    const expectedBlockId = `${tableStart}-table`;
-    tableBlock = blocks.find((block) => block.kind === 'table' && block.id === expectedBlockId) as
-      | TableBlock
-      | undefined;
-  }
-  if (!tableBlock) {
-    const tableBlocks = blocks.filter((block) => block.kind === 'table') as TableBlock[];
-    if (tableBlocks.length === 1) {
-      tableBlock = tableBlocks[0];
-    }
+    // SD-3328: CellSelection can be created without a geometry cell anchor (for example when a
+    // drag starts on an empty cell paragraph). Fall back to the selection table's top-level
+    // document order instead of guessing from the PM position or counting nested tables.
+    tableBlock = getTopLevelTableBlockAtPos($anchorCell.node(0), blocks, tableStart) ?? undefined;
   }
   if (!tableBlock) {
     return;

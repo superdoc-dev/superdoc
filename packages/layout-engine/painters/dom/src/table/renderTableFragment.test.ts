@@ -577,6 +577,61 @@ describe('renderTableFragment', () => {
       });
     });
 
+    // Build a one-row measure whose single cell occupies only column 0, leaving
+    // the last grid column as an empty trailing gridAfter spacer.
+    const spacerMeasure = (spacerWidth: number): TableMeasure => ({
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+              width: 100,
+              height: 20,
+              gridColumnStart: 0,
+              colSpan: 1,
+            },
+          ],
+          height: 20,
+        },
+      ],
+      columnWidths: [100, spacerWidth],
+      totalWidth: 100 + spacerWidth,
+      totalHeight: 20,
+    });
+
+    const renderSpacerTable = (spacerWidth: number): Element =>
+      renderTableFragment({
+        doc,
+        fragment: createTestTableFragment([
+          { index: 0, x: 0, width: 100, minWidth: 25, resizable: true },
+          { index: 1, x: 100, width: spacerWidth, minWidth: 25, resizable: true },
+        ]),
+        context,
+        block: createTestTableBlock(),
+        measure: spacerMeasure(spacerWidth),
+        cellSpacingPx: 0,
+        effectiveColumnWidths: [100, spacerWidth],
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+    it('omits the resize boundary for a degenerate trailing gridAfter spacer column (SD-3345)', () => {
+      // Spacer is narrower than its own min width → degenerate → its left-edge
+      // resize boundary is suppressed so it does not crowd the table-edge handle.
+      const parsed = JSON.parse(renderSpacerTable(7).getAttribute('data-table-boundaries')!);
+      expect(parsed.segments[1]).toEqual([]);
+    });
+
+    it('keeps the resize boundary for a normal-width trailing column (control)', () => {
+      // Same shape but the trailing column meets its min width → not degenerate →
+      // the boundary is kept. Proves the suppression is gated on degeneracy.
+      const parsed = JSON.parse(renderSpacerTable(40).getAttribute('data-table-boundaries')!);
+      expect(parsed.segments[1].length).toBeGreaterThan(0);
+    });
+
     it('should embed row boundary metadata when rowBoundaries are present', () => {
       const block = createTestTableBlock();
       const measure = createTestTableMeasure();

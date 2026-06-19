@@ -28,6 +28,15 @@ const props = defineProps({
   fileId: {
     type: String,
   },
+  /**
+   * Zoom scale to render the first paint at (1 = 100%). The host seeds
+   * this from `config.zoom.initial` so a PDF never flashes 100% before
+   * a watcher catches up; later changes still arrive via updateScale().
+   */
+  initialScale: {
+    type: Number,
+    default: 1,
+  },
 });
 
 const pdfConfig = createPDFConfig({
@@ -43,7 +52,13 @@ const documentRef = ref(null);
 
 const pdf = ref(null);
 const pages = ref([]);
-const scale = ref(1); // zoom scale
+// Zoom scale, seeded from the host's initial zoom (rounded the same way
+// updateScale rounds) so the first render already matches getZoom().
+const scale = ref(
+  typeof props.initialScale === 'number' && Number.isFinite(props.initialScale) && props.initialScale > 0
+    ? floor(props.initialScale, 2)
+    : 1,
+);
 const totalPages = ref(0);
 const renderedPages = ref(0);
 

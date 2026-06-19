@@ -9,11 +9,12 @@ import {
 import { resolvePhysicalFamily } from '@superdoc/font-system';
 import { assertPmPositions } from '../pm-position-validation.js';
 import type { FragmentRenderContext } from '../renderer.js';
-import { BROWSER_DEFAULT_FONT_SIZE } from '../styles.js';
+import { BROWSER_DEFAULT_FONT_SIZE, CLASS_NAMES } from '../styles.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { applyLinkAttributes, applyLinkDataset, buildLinkRenderData, enhanceAccessibility } from './links.js';
 import { setTextContentWithFormattingSpaceMarks } from './formatting-marks.js';
+import { allowFontSynthesis } from './font-synthesis.js';
 import {
   normalizeRtlDateTokenForWordParity,
   resolveRunDirectionAttribute,
@@ -80,7 +81,15 @@ const applyRunVerticalPositioning = (element: HTMLElement, run: TextRun): void =
  *                  inline colors are now applied to all runs (including links) to
  *                  ensure OOXML hyperlink character styles appear correctly.
  */
-export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void => {
+export const applyRunStyles = (
+  element: HTMLElement,
+  run: Run,
+  _isLink = false,
+  resolvePhysical: (
+    cssFontFamily: string,
+    face: { weight: '400' | '700'; style: 'normal' | 'italic' },
+  ) => string = resolvePhysicalFamily,
+): void => {
   if (
     run.kind === 'tab' ||
     run.kind === 'image' ||
@@ -89,14 +98,20 @@ export const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false):
     run.kind === 'fieldAnnotation' ||
     run.kind === 'math'
   ) {
-    // Tab, image, lineBreak, break, and fieldAnnotation runs don't have text styling properties
+    // Non-text visual runs don't have text styling properties.
     return;
   }
 
   // Paint the physical render family (e.g. Carlito for Calibri) - the same family the
-  // text was measured in, so glyph advances match the laid-out positions.
-  element.style.fontFamily = resolvePhysicalFamily(run.fontFamily);
+  // text was measured in, so glyph advances match the laid-out positions. The resolver is the
+  // per-document one (passed by the caller from the render context), so two editors that map a
+  // logical family differently paint different physical families. Defaults to the global bundled.
+  element.style.fontFamily = resolvePhysical(run.fontFamily, {
+    weight: run.bold ? '700' : '400',
+    style: run.italic ? 'italic' : 'normal',
+  });
   element.style.fontSize = `${run.fontSize}px`;
+  allowFontSynthesis(element);
   if (run.bold) element.style.fontWeight = 'bold';
   if (run.italic) element.style.fontStyle = 'italic';
 
@@ -164,12 +179,13 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
   if (!runToken) {
     return run.text ?? '';
   }
+  const pageNumberFieldFormat = 'pageNumberFieldFormat' in run ? run.pageNumberFieldFormat : undefined;
   if (runToken === 'pageNumber') {
-    if (run.pageNumberFieldFormat) {
+    if (pageNumberFieldFormat) {
       return formatChapterPageNumberText({
         pageComponent: formatPageNumberFieldValue(
           context.displayPageNumber ?? context.pageNumber,
-          run.pageNumberFieldFormat,
+          pageNumberFieldFormat,
         ),
         chapterNumberText: context.pageNumberChapterText,
         chapterSeparator: context.pageNumberChapterSeparator,
@@ -186,8 +202,8 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     return context.pageNumberText ?? String(context.pageNumber);
   }
   if (runToken === 'totalPageCount') {
-    if (run.pageNumberFieldFormat) {
-      return formatPageNumberFieldValue(context.totalPages || 1, run.pageNumberFieldFormat);
+    if (pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(context.totalPages || 1, pageNumberFieldFormat);
     }
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
@@ -196,8 +212,8 @@ export const resolveRunText = (run: Run, context: FragmentRenderContext): string
     if (sectionPageCount == null) {
       return run.text ?? '';
     }
-    if (run.pageNumberFieldFormat) {
-      return formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat);
+    if (pageNumberFieldFormat) {
+      return formatPageNumberFieldValue(sectionPageCount, pageNumberFieldFormat);
     }
     return String(sectionPageCount);
   }
@@ -228,6 +244,7 @@ export const renderTextRun = (
   const linkData = extractLinkData(run);
   const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
   const elem = isActiveLink ? renderContext.doc.createElement('a') : renderContext.doc.createElement('span');
+  elem.classList.add(CLASS_NAMES.textRun);
   const text = resolveRunText(run, context);
   const effectiveText =
     run.bidi?.rtl === true && typeof text === 'string' ? normalizeRtlDateTokenForWordParity(text) : text;
@@ -256,7 +273,7 @@ export const renderTextRun = (
   }
 
   // Pass isLink flag to skip applying inline color/decoration styles for links
-  applyRunStyles(elem as HTMLElement, run, isActiveLink);
+  applyRunStyles(elem as HTMLElement, run, isActiveLink, renderContext.resolvePhysical);
   const dirAttr = resolveRunDirectionAttribute({
     runText: run.text,
     effectiveText,

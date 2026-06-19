@@ -33,6 +33,7 @@ Returns an SDMutationReceipt with applied status; resolution reports the inserte
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
+| `target.story` | StoryLocator | no | StoryLocator |
 | `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
 | `value` | string | yes |  |
 
@@ -66,6 +67,7 @@ Returns an SDMutationReceipt with applied status; resolution reports the inserte
 | `target.kind` | `"block"` | no | Constant: `"block"` |
 | `target.nodeId` | string | no |  |
 | `target.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -106,6 +108,7 @@ Returns an SDMutationReceipt with applied status; resolution reports the inserte
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
@@ -128,6 +131,7 @@ Returns an SDMutationReceipt with applied status; resolution reports the inserte
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `false` | yes | Constant: `false` |
 

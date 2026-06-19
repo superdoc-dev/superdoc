@@ -33,6 +33,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
 | `target.start` | SelectionPoint | yes | SelectionPoint |
+| `target.story` | StoryLocator | no | StoryLocator |
 | `text` | string | yes |  |
 
 ### Variant 1.2 (required: ref, text)
@@ -101,6 +102,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
@@ -123,6 +125,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.story` | StoryLocator | no | StoryLocator |
 | `resolution.target` | TextAddress \| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `false` | yes | Constant: `false` |
 

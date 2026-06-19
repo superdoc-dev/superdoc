@@ -2,6 +2,7 @@ import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { PresentationPostPaintPipeline } from './dom/PresentationPostPaintPipeline.js';
+import { HoverGroupCoordinator } from './dom/HoverGroupCoordinator.js';
 import { ProofingSessionManager } from './proofing/ProofingSessionManager.js';
 import { PresentationPainterAdapter } from './rendering/PresentationPainterAdapter.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
@@ -83,6 +84,7 @@ function serializePerIdNumbering(
   }
   return parts.join(';');
 }
+
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -95,7 +97,7 @@ import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/R
 import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
 import { PresentationInputBridge } from './input/PresentationInputBridge.js';
-import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
+import { calculateExtendedSelection, stabilizeTextSelectionAcrossTableCells } from './selection/SelectionHelpers.js';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './utils/SchemaNodeTypes.js';
 import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
 import {
@@ -110,7 +112,9 @@ import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelec
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
 import { shouldUseNativeCaretFallback } from './selection/native-caret-fallback.js';
 import {
+  computeCaretRectFromPmPosition as computeCaretRectFromPmPositionFromHelper,
   computeCaretRectFromVisibleTextOffset as computeCaretRectFromVisibleTextOffsetFromHelper,
+  computeSelectionRectsFromPmRange as computeSelectionRectsFromPmRangeFromHelper,
   computeSelectionRectsFromVisibleTextOffsets as computeSelectionRectsFromVisibleTextOffsetsFromHelper,
   measureVisibleTextOffset as measureVisibleTextOffsetFromHelper,
   measureVisibleTextOffsetInContainers as measureVisibleTextOffsetInContainersFromHelper,
@@ -139,6 +143,8 @@ import type {
 } from './story-session/StoryPresentationSessionManager.js';
 import type { StoryPresentationSession } from './story-session/types.js';
 import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { parseRenderedNoteTarget, type RenderedNoteTarget } from './notes/note-target.js';
+import { NoteSessionCoordinator } from './notes/NoteSessionCoordinator.js';
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
@@ -175,14 +181,24 @@ import type {
   HeaderFooterType,
   PositionHit,
   TableHitResult,
+  FootnoteReserveSeed,
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
-import { resolvePhysicalFamilies, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
+import {
+  createFontResolver,
+  deriveBundledActivation,
+  type FontResolutionRecord,
+  type DocumentFontOption,
+  type FontLoadSummary,
+  type ResolvePhysicalFamily,
+} from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
-import { planRequiredFontFaces } from './fonts/font-load-planner';
+import { DocumentFontController, type EmbeddedFontFace } from './fonts/DocumentFontController';
+import { planFontFaces, type FontPlan } from './fonts/font-load-planner';
 import type { FontsChangedPayload } from '../types/EditorEvents';
+import type { FontFamilyConfig } from '../types/EditorConfig';
 import type {
   ColumnLayout,
   FlowBlock,
@@ -228,11 +244,6 @@ type ThreadAnchorScrollPlan = {
   applyScroll: (behavior: ScrollBehavior) => void;
 };
 
-type RenderedNoteTarget = {
-  storyType: 'footnote' | 'endnote';
-  noteId: string;
-};
-
 type UnifiedHistoryDebugGlobal = typeof globalThis & {
   __SD_DEBUG_UNIFIED_HISTORY__?: boolean;
 };
@@ -273,30 +284,8 @@ type RenderedNoteFragmentHit = {
   pageIndex: number;
 };
 
-function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
-  if (typeof blockId !== 'string' || blockId.length === 0) {
-    return null;
-  }
-
-  if (blockId.startsWith('footnote-')) {
-    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('__sd_semantic_footnote-')) {
-    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'footnote', noteId } : null;
-  }
-
-  if (blockId.startsWith('endnote-')) {
-    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
-    return noteId ? { storyType: 'endnote', noteId } : null;
-  }
-
-  return null;
-}
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
-import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
@@ -500,12 +489,27 @@ export class PresentationEditor extends EventEmitter {
   #painterHost: HTMLElement;
   #selectionOverlay: HTMLElement;
   #permissionOverlay: HTMLElement | null = null;
+  /** SD-3400: highlight + smart-scroll + emptied-note commit for the open note session. */
+  #noteSessionCoordinator: NoteSessionCoordinator | null = null;
   #hiddenHost: HTMLElement;
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #configuredDocumentBackground: DocumentBackground | undefined;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /**
+   * The font-mapping signature `#layoutState.measures` were produced with. Travels with the
+   * measures so the next render can tell incrementalLayout whether a mapping change since the
+   * prior pass invalidates previous-measure reuse (that reuse fast path bypasses the cache key).
+   */
+  #layoutFontSignature = '';
+  /**
+   * SD-3432: the previous render's footnote reserve fixed point, used to
+   * warm-start the next render's convergence loop (validated, never trusted
+   * — see FootnoteReserveSeed). Private: deliberately NOT part of LayoutState
+   * (that payload is emitted publicly via onLayoutUpdated).
+   */
+  #footnoteReserveSeed: FootnoteReserveSeed | null = null;
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
@@ -534,10 +538,59 @@ export class PresentationEditor extends EventEmitter {
   #selectionSync = new SelectionSyncCoordinator();
   /** Load-before-measure gate: awaits required fonts before measurement, reflows on late load. */
   #fontGate: FontReadinessGate | null = null;
+  /**
+   * This document's logical->physical font resolver. Per-instance (per document) so two
+   * editors can map the same logical family differently without leaking. Planner, gate, report,
+   * MEASURE (body, footnotes, header/footer, per-rId header/footer, field-annotation pills, table
+   * AutoFit column widths, and line-height metrics) and document-content PAINT (text, field
+   * annotations, list markers, drop caps) resolve through THIS instance, FACE-aware (per weight/style)
+   * so a single-face clone is never mapped onto a face it lacks. Rendered-layout identity - measure
+   * caches and paint-reuse versions - is keyed on the stored render plan's `FontPlan.effectiveSignature`,
+   * which captures the actual per-face resolutions (so a `fonts.add()` that changes a face for an
+   * UNCHANGED family map still busts the cache); `resolver.signature` is used ONLY for map-change
+   * detection in the document font controller, never as a cache key. Two documents with different
+   * mappings do not share a measure or reuse each other's content paint. (Editor chrome such as
+   * formatting marks is not document content and is out of scope.) `superdoc.fonts.map` mutates this
+   * resolver at runtime through that controller (the only writer): the changed resolution re-measures
+   * and repaints THIS document while others are left untouched. Seeded with bundled DocFonts fallbacks.
+   */
+  readonly #fontResolver = createFontResolver();
+  /**
+   * Source for the NEXT `fonts-changed` emit. The controller sets it to 'config-change' when a
+   * runtime mapping change is applied, so the emit is not mislabelled 'late-load'. Consumed (and
+   * cleared) by #emitFontsChangedIfChanged on the next emit.
+   */
+  #nextFontsChangedSource: 'config-change' | null = null;
+  /**
+   * The single writer for this document's font state (map/unmap/reset; add/preload follow). Config
+   * and `superdoc.fonts.*` route through it so they share one path. It owns orchestration, not the
+   * resolver: it mutates the injected #fontResolver and reflows via the gate's mapping path.
+   */
+  readonly #fontController = new DocumentFontController({
+    resolver: this.#fontResolver,
+    getGate: () => this.#fontGate,
+    onDocumentFontConfigApplied: () => {
+      this.#nextFontsChangedSource = 'config-change';
+    },
+  });
   /** Layout blocks for the current render, stashed so the gate's planner reads the live set. */
   #fontPlanBlocks: FlowBlock[] | null = null;
+  /**
+   * The current render font plan, rebuilt each render before the gate runs. The SINGLE source for
+   * load (requiredFaces), diagnostics (usedFaces), and measure/paint cache identity (effectiveSignature).
+   */
+  #fontPlan: FontPlan | null = null;
+  /**
+   * Face-availability oracle for face-aware resolution: is a (family, weight, style) face REGISTERED
+   * (bundled + `fonts.add()`) in THIS document's registry? False before the gate/registry exists.
+   */
+  #hasFace = (family: string, weight: '400' | '700', style: 'normal' | 'italic'): boolean =>
+    this.#fontGate ? this.#fontGate.resolveRegistry().hasFace(family, weight, style) : false;
   /** Dedup key for `fonts-changed`: epoch + per-face load status. Null until the first emit. */
   #lastFontsChangedKey: string | null = null;
+  /** Font-config epoch at the last emit, so a face-set delta (epoch unchanged) is distinguished from a
+   *  late load (epoch bumped) when labelling the `fonts-changed` source. */
+  #lastFontsChangedVersion = -1;
   /** Last emitted `fonts-changed` payload, so a late relay subscriber can replay it. */
   #lastFontsChangedPayload: FontsChangedPayload | null = null;
   /**
@@ -644,10 +697,14 @@ export class PresentationEditor extends EventEmitter {
     id: string | null;
     elements: HTMLElement[];
   } | null = null;
-  #lastHoveredStructuredContentBlock: {
-    id: string | null;
-    elements: HTMLElement[];
-  } | null = null;
+  /**
+   * Group-hover coordinators. SDT and TOC entries each highlight every
+   * fragment that shares an id, so they share the same "hover one, class the
+   * whole group" mechanic. Wired in #initializeHoverCoordinators after
+   * painterHost/painterAdapter exist.
+   */
+  #sdtHoverCoordinator: HoverGroupCoordinator | null = null;
+  #tocHoverCoordinator: HoverGroupCoordinator | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
@@ -761,9 +818,13 @@ export class PresentationEditor extends EventEmitter {
     ensureEditorFieldAnnotationInteractionStyles(doc);
     ensureEditorMovableObjectInteractionStyles(doc);
 
-    // Add event listeners for structured content hover coordination
-    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
-    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+    // Hover coordination — structured-content blocks and TOC entries each
+    // group their fragments by id so the whole control greys out together.
+    this.#initializeHoverCoordinators();
+    this.#painterHost.addEventListener('mouseover', this.#sdtHoverCoordinator!.handleMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#sdtHoverCoordinator!.handleMouseLeave);
+    this.#painterHost.addEventListener('mouseover', this.#tocHoverCoordinator!.handleMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#tocHoverCoordinator!.handleMouseLeave);
 
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
@@ -893,6 +954,7 @@ export class PresentationEditor extends EventEmitter {
       initBudgetMs: HEADER_FOOTER_INIT_BUDGET_MS,
       defaultPageSize: DEFAULT_PAGE_SIZE,
       defaultMargins: DEFAULT_MARGINS,
+      getFontSignature: () => this.#layoutFontSignature,
     });
     this.#headerFooterSession.setHoverElements({
       hoverOverlay: this.#hoverOverlay,
@@ -959,31 +1021,34 @@ export class PresentationEditor extends EventEmitter {
           const converter = (this.#editor as Editor & { converter?: { getDocumentFonts?: () => string[] } }).converter;
           return converter?.getDocumentFonts?.() ?? [];
         },
-        requestReflow: () => {
-          // A font finished loading (or the resolution changed). Incremental layout reuses
-          // this editor's previousMeasures for unchanged blocks, so clearing the global
-          // measurement caches alone will not re-measure. Drop the cached blocks + measures
-          // to force a full re-measure, then schedule a DOCUMENT re-layout - #scheduleRerender
-          // with the pending-change flag, not #selectionSync.requestRender (selection-only).
-          this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
-          this.#pendingDocChange = true;
-          this.#scheduleRerender();
-        },
+        // Reflow so unchanged blocks re-measure (see #requestFontReflow). The gate calls this for
+        // a late font load AND for a document font config change from the controller.
+        requestReflow: () => this.#requestFontReflow(),
         // Face-aware required set: the exact physical faces (family + weight + style) the
         // rendered document uses, from the planner walking the current layout blocks. The
         // gate awaits these - so bold/italic load before measure and declared-but-unused
         // fonts are not fetched. Reads the blocks stashed just before each gate await.
-        getRequiredFaces: () => planRequiredFontFaces(this.#fontPlanBlocks),
-        // Fallback family path (used only if getRequiredFaces is unavailable): wait on the
-        // resolved PHYSICAL families (Calibri -> Carlito).
-        resolveFamilies: resolvePhysicalFamilies,
-        // Register the bundled substitute pack (Carlito) into the document's registry the
-        // first time it resolves, so the substitute is available with no manual setup.
-        onRegistryResolved: (registry) =>
+        // Consume the stored render plan (built each render just before this gate runs) so the gate
+        // never recomputes independently: load awaits its requiredFaces, the report uses its usedFaces.
+        getRequiredFaces: () => this.#fontPlan?.requiredFaces ?? [],
+        getUsedFaces: () => this.#fontPlan?.usedFaces ?? [],
+        // The document's resolver: the gate derives the family-path resolution from it and
+        // resolves its report through it (load + diagnostics). The document's measure and
+        // content-paint paths resolve through this same instance, so load, measure, paint, and
+        // diagnostics stay consistent.
+        fontResolver: this.#fontResolver,
+        // Register the bundled fallback pack into the document's registry the first time it resolves -
+        // but ONLY when the pack is actually configured (a base URL / resolver, or a page-global pack).
+        // Baseline (no config) must NOT register substitute faces: that would map e.g. Calibri to a
+        // now-nonexistent default `/fonts/` URL and, via first-config-wins on the shared per-document
+        // registry, block a later configured instance on the same page from registering correctly.
+        onRegistryResolved: (registry) => {
+          if (!deriveBundledActivation(this.#options.fontAssets).packConfigured) return;
           installBundledSubstitutes(registry, {
             assetBaseUrl: this.#options.fontAssets?.assetBaseUrl,
             resolveAssetUrl: this.#options.fontAssets?.resolveAssetUrl,
-          }),
+          });
+        },
         getFontEnvironment: () => {
           // Bind the registry and the watched font set to THIS editor's document, so an
           // editor inside an iframe awaits and listens on the same FontFaceSet.
@@ -994,6 +1059,8 @@ export class PresentationEditor extends EventEmitter {
           return fontSet && FontFaceCtor ? { fontSet, FontFaceCtor } : null;
         },
       });
+      this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      this.#applyEmbeddedDocumentFonts();
       if (typeof this.#options.disableContextMenu === 'boolean') {
         this.setContextMenuDisabled(this.#options.disableContextMenu);
       }
@@ -1860,20 +1927,38 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Alias for the visible host container so callers can attach listeners explicitly.
    *
-   * This is the main scrollable container that hosts the rendered pages.
-   * Use this element to attach scroll listeners, measure viewport bounds, or
-   * position floating UI elements relative to the editor.
+   * The painted host element that contains the rendered pages. This is
+   * NOT necessarily the scroll container — the scrollable element is
+   * often an ancestor. Use {@link scrollContainer} to attach scroll
+   * listeners or measure the scroll viewport; use the host to position
+   * floating UI relative to the painted content.
    *
    * @returns The visible host HTMLElement
    *
    * @example
    * ```typescript
    * const host = presentation.visibleHost;
-   * host.addEventListener('scroll', () => console.log('Scrolled!'));
+   * const rect = host.getBoundingClientRect();
    * ```
    */
   get visibleHost(): HTMLElement {
     return this.#visibleHost;
+  }
+
+  /**
+   * The resolved scroll container: the nearest ancestor of the visible
+   * host with `overflow: auto`/`scroll` (it may be the host itself). It
+   * can change after the first layout if a closer scrollable ancestor is
+   * detected. Returns `null` when the document/window scrolls instead of
+   * a dedicated element — callers should fall back to `window` then.
+   *
+   * @returns The scroll container element, or `null` when the window scrolls
+   */
+  get scrollContainer(): HTMLElement | null {
+    const container = this.#scrollContainer;
+    if (!container || !('ownerDocument' in container)) return null;
+    const HTMLElementCtor = container.ownerDocument?.defaultView?.HTMLElement;
+    return HTMLElementCtor && container instanceof HTMLElementCtor ? (container as HTMLElement) : null;
   }
 
   /**
@@ -2282,6 +2367,22 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Like {@link getRangeRects} but pins the body surface, ignoring any
+   * active header/footer/note session. Used by `ui.viewport.getRect`'s
+   * text-target path (SD-3329): a body-anchored target must return body
+   * geometry even while the user is editing a header/footer, where
+   * `getRangeRects` would otherwise route to the active non-body surface.
+   *
+   * @param from - Start position in the body ProseMirror document
+   * @param to - End position in the body ProseMirror document
+   * @param relativeTo - Optional element for coordinate reference (see {@link getRangeRects})
+   * @returns Array of body-surface rects (pageIndex + position data)
+   */
+  getBodyRangeRects(from: number, to: number, relativeTo?: HTMLElement): RangeRect[] {
+    return this.#computeRangeRects(from, to, relativeTo, { forceBodySurface: true });
+  }
+
+  /**
    * Get selection bounds for a document range with aggregated bounding box.
    * Returns null if layout is unavailable or the range is invalid.
    *
@@ -2542,8 +2643,96 @@ export class PresentationEditor extends EventEmitter {
         storyKey: BODY_STORY_KEY,
       }),
       ...this.#collectIndexedTrackedChangePositions(),
+      ...this.#collectStructuralBodyTrackedChangePositions(),
       ...this.#collectRenderedTrackedChangePositions(),
     };
+  }
+
+  /**
+   * Emit position entries for decidable whole-table structural tracked changes
+   * living in the BODY story (table insert / table delete).
+   *
+   * Structural row revisions are whole-table changes that the right rail
+   * surfaces as review bubbles (see comments-store
+   * `syncStructuralTrackedChangeComments`). Unlike inline body tracked changes
+   * (whose marks are measured downstream by mark span) and non-body story
+   * changes (handled by `#collectIndexedTrackedChangePositions`, which skips the
+   * body story), a body-story structural change has no inline mark to anchor on.
+   *
+   * We key each entry by the tracked-change index `anchorKey` (matching the
+   * bubble's `trackedChangeAnchorKey`) and carry the table's PM range as
+   * `start`/`end`. `getCommentBounds` falls through `#getStoryTrackedChangeBounds`
+   * (null for the body story) into `#getThreadSelectionBounds`, which resolves
+   * the range to layout rects via `#computeRangeRects(..., forceBodySurface)` —
+   * the exact path body comments/inline TC use — so the bubble lines up with the
+   * table in layout-engine viewing mode.
+   */
+  #collectStructuralBodyTrackedChangePositions(): Record<
+    string,
+    {
+      threadId: string;
+      key: string;
+      storyKey: string;
+      kind: 'trackedChange';
+      structural: true;
+      start?: number;
+      end?: number;
+    }
+  > {
+    const positions: Record<
+      string,
+      {
+        threadId: string;
+        key: string;
+        storyKey: string;
+        kind: 'trackedChange';
+        structural: true;
+        start?: number;
+        end?: number;
+      }
+    > = {};
+
+    let snapshots: ReadonlyArray<{
+      anchorKey?: unknown;
+      type?: unknown;
+      runtimeRef?: { rawId?: unknown; storyKey?: unknown };
+      range?: { from?: unknown; to?: unknown };
+    }> = [];
+
+    try {
+      snapshots = getTrackedChangeIndex(this.#editor).getAll();
+    } catch {
+      return positions;
+    }
+
+    snapshots.forEach((snapshot) => {
+      if (snapshot?.type !== 'structural') return;
+      const storyKey =
+        typeof snapshot?.runtimeRef?.storyKey === 'string' ? snapshot.runtimeRef.storyKey : BODY_STORY_KEY;
+      // Body-story structural changes only — non-body structural would be
+      // picked up by the rendered/indexed passes which key on their own story.
+      if (storyKey !== BODY_STORY_KEY) return;
+
+      const key = typeof snapshot?.anchorKey === 'string' ? snapshot.anchorKey : null;
+      const rawId = snapshot?.runtimeRef?.rawId;
+      const threadId = rawId == null ? null : String(rawId);
+      if (!key || !threadId || positions[key]) return;
+
+      const start = Number.isFinite(snapshot?.range?.from) ? Number(snapshot.range.from) : undefined;
+      const end = Number.isFinite(snapshot?.range?.to) ? Number(snapshot.range.to) : undefined;
+
+      positions[key] = {
+        threadId,
+        key,
+        storyKey,
+        kind: 'trackedChange',
+        structural: true,
+        ...(start !== undefined ? { start } : {}),
+        ...(end !== undefined ? { end } : {}),
+      };
+    });
+
+    return positions;
   }
 
   #collectIndexedTrackedChangePositions(): Record<
@@ -2963,6 +3152,15 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
+   * the document renders, each with the family to preview it in. DOCUMENT fonts only - the toolbar
+   * composes them with its defaults. Surfaced publicly as `superdoc.fonts.getDocumentFontOptions()`.
+   */
+  getDocumentFontOptions(): DocumentFontOption[] {
+    return this.#fontGate?.getDocumentFontOptions() ?? [];
+  }
+
+  /**
    * Declared families with no faithful render font loaded (substitution-aware): the
    * subset of {@link getFontReport} where `missing` is true - genuinely absent fonts
    * such as Aptos with no metric-compatible clone. The accurate replacement for the
@@ -2970,9 +3168,80 @@ export class PresentationEditor extends EventEmitter {
    * `superdoc.fonts.getMissingFonts()`.
    */
   getMissingFonts(): string[] {
-    return this.getFontReport()
-      .filter((record) => record.missing)
-      .map((record) => record.logicalFamily);
+    // Deduped by logical family: the report can now carry multiple FACE rows per family, but a
+    // missing-font list is per family.
+    return [
+      ...new Set(
+        this.getFontReport()
+          .filter((record) => record.missing)
+          .map((record) => record.logicalFamily),
+      ),
+    ];
+  }
+
+  /**
+   * Map logical families to physical render families for THIS document (e.g.
+   * `{ Georgia: 'Gelasio' }`), via the document font controller (the sole writer), which reflows
+   * once iff the mapping actually changed. Per-document: other editors on the page are untouched.
+   * Surfaced as `superdoc.fonts.map()`.
+   */
+  mapFonts(mappings: Record<string, string>): void {
+    this.#fontController.map(mappings);
+  }
+
+  /**
+   * Remove runtime font mappings for THIS document; each family reverts to its bundled default.
+   * Via the document font controller. Surfaced as `superdoc.fonts.unmap()`.
+   */
+  unmapFonts(families: string | string[]): void {
+    this.#fontController.unmap(families);
+  }
+
+  /**
+   * Register custom physical font faces for THIS document via the document font controller, then
+   * reflow so a newly-registered face the document already uses is awaited and applied. Surfaced
+   * as `superdoc.fonts.add()`.
+   */
+  addFonts(families: FontFamilyConfig[]): void {
+    this.#fontController.add(families);
+  }
+
+  /**
+   * Proactively load the physical faces for the given logical families (resolved through this
+   * document's resolver) so they are ready before use. Async. Surfaced as `superdoc.fonts.preload()`.
+   */
+  async preloadFonts(families: string[]): Promise<void> {
+    await this.#fontController.preload(families);
+  }
+
+  /**
+   * Register the current document's embedded fonts (from the converter) as document-owned registry
+   * faces, so the resolver's `registered_face` rung renders the real embedded font instead of the
+   * bundled substitute. Runs at config time - initial load and after a document swap - BEFORE the
+   * first font plan; the controller skips non-embeddable faces and releases these on the next swap
+   * (`reset`) / teardown (`dispose`). `getEmbeddedFontFaces` is not on the converter's typed surface,
+   * so it is read through a narrow structural cast (same pattern as `getDocumentFonts`).
+   */
+  #applyEmbeddedDocumentFonts(): void {
+    const converter = (this.#editor as Editor & { converter?: { getEmbeddedFontFaces?: () => EmbeddedFontFace[] } })
+      .converter;
+    this.#fontController.applyEmbeddedFaces(converter?.getEmbeddedFontFaces?.());
+  }
+
+  /**
+   * Drop this editor's cached blocks + measures and schedule a full document re-layout. The
+   * font-readiness gate calls this (via its requestReflow option) for both a late font load and a
+   * document font config change: incremental layout reuses previousMeasures for unchanged blocks,
+   * so clearing them is what forces the re-measure; the pending-change flag routes through the
+   * document re-layout path (not the selection-only render).
+   */
+  #requestFontReflow(): void {
+    this.#layoutState = { ...this.#layoutState, blocks: [], measures: [], layout: null };
+    // SD-3432: font metrics changed; the footnote fixed point is stale (the
+    // seed's fontSignature guard would reject it anyway).
+    this.#footnoteReserveSeed = null;
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
   }
 
   /**
@@ -2993,10 +3262,27 @@ export class PresentationEditor extends EventEmitter {
           .sort()
           .join(',')
       : '';
-    const key = `${version}|${statusKey}`;
+    // Include the render plan's effectiveSignature so a face-set change (e.g. Regular -> add Bold, or
+    // a fonts.add() that flips a face from fallback to substitute) emits even when the rolled-up
+    // family status stays 'loaded'.
+    const key = `${version}|${this.#fontPlan?.effectiveSignature ?? ''}|${statusKey}`;
     if (key === this.#lastFontsChangedKey) return;
     const isInitial = this.#lastFontsChangedKey === null;
+    // The epoch (gate.fontConfigVersion) bumps on a late load and on a config mutation, but NOT on
+    // ordinary editing - so an unchanged epoch with a changed key means the rendered face set changed
+    // from editing (e.g. the first Bold of a family), not a font load.
+    const epochBumped = !isInitial && version !== this.#lastFontsChangedVersion;
     this.#lastFontsChangedKey = key;
+    this.#lastFontsChangedVersion = version;
+    // Consume the pending source flag: a runtime mapping change (set by the font controller) is a
+    // 'config-change'. The FIRST emit is always 'initial'. Otherwise an epoch bump is a font
+    // 'late-load'; a key change with NO epoch bump is a 'render-change' (face-set delta from editing),
+    // not a late load - consumers filtering on 'late-load' must not see spurious load signals on typing.
+    const pendingSource = this.#nextFontsChangedSource;
+    this.#nextFontsChangedSource = null;
+    const source: FontsChangedPayload['source'] = isInitial
+      ? 'initial'
+      : (pendingSource ?? (epochBumped ? 'late-load' : 'render-change'));
 
     let resolutions: FontResolutionRecord[];
     try {
@@ -3005,11 +3291,11 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
     const payload: FontsChangedPayload = {
-      documentFonts: resolutions.map((record) => record.logicalFamily),
+      documentFonts: [...new Set(resolutions.map((record) => record.logicalFamily))],
       resolutions,
-      missingFonts: resolutions.filter((record) => record.missing).map((record) => record.logicalFamily),
+      missingFonts: [...new Set(resolutions.filter((record) => record.missing).map((record) => record.logicalFamily))],
       loadSummary: summary ?? { loaded: 0, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
-      source: isInitial ? 'initial' : 'late-load',
+      source,
       version,
     };
     this.#lastFontsChangedPayload = payload;
@@ -3028,6 +3314,25 @@ export class PresentationEditor extends EventEmitter {
    */
   getLastFontsChangedPayload(): FontsChangedPayload | null {
     return this.#lastFontsChangedPayload;
+  }
+
+  /**
+   * Clear per-document `fonts-changed` report state on a document swap (same editor, new document).
+   * Without this the new document could inherit the prior document's pending config-change source,
+   * replay its last payload to a late subscriber, or - if it happens to share the prior
+   * version|statusKey - have its first report SKIPPED by the dedup. Cleared so the new document
+   * re-emits from scratch (its first report is `initial`). Pairs with the gate + resolver resets
+   * at this same lifecycle boundary.
+   */
+  #resetFontReportStateForDocumentChange(): void {
+    this.#nextFontsChangedSource = null;
+    this.#lastFontsChangedKey = null;
+    this.#lastFontsChangedVersion = -1;
+    this.#lastFontsChangedPayload = null;
+    // Drop the prior document's render plan so getReport() cannot leak its used-face rows before the
+    // next render rebuilds the plan.
+    this.#fontPlan = null;
+    this.#fontPlanBlocks = null;
   }
 
   /**
@@ -3278,6 +3583,8 @@ export class PresentationEditor extends EventEmitter {
       flowMode: this.#layoutOptions.flowMode ?? 'paginated',
       blocks,
       measures,
+      fontSignature: this.#layoutFontSignature,
+      bookmarks: this.#layoutState.bookmarks,
     });
 
     const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
@@ -3366,6 +3673,18 @@ export class PresentationEditor extends EventEmitter {
       const localX = normalized.x - context.region.localX;
       const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
       const localY = pageLocalY - context.region.localY;
+
+      // Try DOM hit first — handles page-relative behindDoc fragments that are positioned
+      // outside the H/F region's local coordinate band and would fail the bounds check.
+      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
+      if (domHit) {
+        const doc = this.getActiveEditor().state?.doc;
+        return {
+          ...domHit,
+          pos: doc ? Math.max(0, Math.min(domHit.pos, doc.content.size)) : domHit.pos,
+        };
+      }
+
       if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
         return null;
       }
@@ -3375,8 +3694,7 @@ export class PresentationEditor extends EventEmitter {
       };
       const geometryHit =
         clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
-      const hit = domHit ?? geometryHit;
+      const hit = geometryHit;
       if (!hit) {
         return null;
       }
@@ -4489,6 +4807,7 @@ export class PresentationEditor extends EventEmitter {
     this.#postPaintPipeline.destroy();
     this.#proofingManager?.dispose();
     this.#proofingManager = null;
+    this.#fontController.dispose();
     this.#fontGate?.dispose();
     this.#fontGate = null;
 
@@ -4894,7 +5213,7 @@ export class PresentationEditor extends EventEmitter {
         this.#editorInputManager?.clearCellAnchor();
       }
     };
-    const handleSelection = () => {
+    const handleSelection = ({ transaction }: { transaction?: Transaction } = {}) => {
       // User-initiated selection change — scroll caret/head into view once, except during
       // pointer drag: EditorInputManager edge auto-scroll must not fight #scrollActiveEndIntoView.
       if (!this.#editorInputManager?.isDragging) {
@@ -4906,7 +5225,13 @@ export class PresentationEditor extends EventEmitter {
       // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
       // if layout is updating (due to a concurrent doc change), flushNow()
       // is a no-op and the render will be picked up after layout completes.
-      this.#scheduleSelectionUpdate({ immediate: true });
+      //
+      // SD-3400: NOT safe for doc-changing transactions. 'selectionUpdate'
+      // fires BEFORE 'update', so the epoch/layout gates are not armed yet
+      // and an immediate flush renders the caret against the PRE-change
+      // paint (visibly stale caret on every Enter/Backspace). Defer those to
+      // the post-paint flush.
+      this.#scheduleSelectionUpdate({ immediate: !transaction?.docChanged });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
@@ -5084,10 +5409,23 @@ export class PresentationEditor extends EventEmitter {
     // header/footer descriptors against the new converter and rerender so the
     // importer tab matches the collaborator tab without waiting for an edit.
     const handleDocumentReplaced = () => {
-      // A new document reuses this gate, so drop the old document's pending late-load reflow
-      // and required-face state - otherwise a flush armed under the old document fires a
-      // spurious full reflow against the new one.
+      // A new document reuses this gate AND this resolver, so drop the old document's pending
+      // late-load reflow + required-face state and its runtime font mappings, then reapply the
+      // instance-level fonts config before the rerender.
       this.#fontGate?.resetForDocumentChange();
+      this.#fontController.reset();
+      // Reset the layout signature too: the prior document's value must not gate the new document's
+      // previous-measure reuse. Benign if left stale (it only over-invalidates reuse), but resetting
+      // here states the intent and starts the swap from a clean signature.
+      this.#layoutFontSignature = '';
+      // SD-3432: the prior document's footnote fixed point is meaningless for
+      // the new one (validation would discard it anyway; reset states intent).
+      this.#footnoteReserveSeed = null;
+      this.#fontController.applyInitialConfig(this.#options.fontAssets);
+      // Register the NEW document's embedded fonts (the swap's `reset()` released the old ones), before
+      // the rerender below runs the first font plan for this document.
+      this.#applyEmbeddedDocumentFonts();
+      this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };
     this.#editor.on('documentReplaced', handleDocumentReplaced);
@@ -5532,6 +5870,7 @@ export class PresentationEditor extends EventEmitter {
           pageIndex: session.pageIndex,
           pageNumber: session.pageNumber,
         });
+        this.#refreshEditorDomAugmentations();
         this.#updateAwarenessSession();
       },
       onEditingContext: (data) => {
@@ -6766,6 +7105,24 @@ export class PresentationEditor extends EventEmitter {
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
       const previousMeasures = this.#layoutState.measures;
+      // Per-document font context for this render: a FACE-aware resolver bound into the measure
+      // callback (measurement uses THIS document's physical substitute per weight/style), and the
+      // render plan's effectiveSignature (assigned below, after the plan is built) as the measure-cache
+      // key. previousFontSignature is the signature the prior measures were produced with - if it
+      // differs, incrementalLayout must not reuse them (the reuse fast path bypasses the cache key).
+      const resolvePhysical: ResolvePhysicalFamily = (css, face) =>
+        this.#fontResolver.resolvePhysicalFamilyForFace(css, face, this.#hasFace);
+      // Cache identity is the render plan's effectiveSignature (face-aware), assigned once the plan is
+      // built below - NOT resolver.signature (family map only), which would miss a fonts.add() that
+      // changes a face's resolution without changing the map. The single context object (resolver +
+      // signature) is built AFTER the plan so the measure callback and cache signature can never
+      // drift - both come from `fontMeasureContext`.
+      let fontSignature = '';
+      const previousFontSignature = this.#layoutFontSignature;
+      // Declared here (outer scope) so the incrementalLayout call below can see it; REBUILT after the
+      // plan with the face-aware effectiveSignature. Initialized with '' so it is always defined even
+      // if font planning throws (the readiness try/catch swallows errors and must not break layout).
+      let fontMeasureContext = { resolvePhysical, fontSignature };
 
       let layout: Layout;
       let measures: Measure[];
@@ -6792,7 +7149,7 @@ export class PresentationEditor extends EventEmitter {
         // used faces: body + notes (blocksForLayout), header/footer blocks, and - in paginated
         // mode - footnote blocks (measured via layoutOptions.footnotes, NOT in blocksForLayout;
         // semantic mode already folds footnotes into blocksForLayout). One planner input;
-        // planRequiredFontFaces dedups, so any overlap is harmless.
+        // planFontFaces dedups, so any overlap is harmless.
         this.#fontPlanBlocks = [
           ...blocksForLayout,
           ...(headerFooterInput ? this.#collectHeaderFooterFaceBlocks(headerFooterInput) : []),
@@ -6800,6 +7157,15 @@ export class PresentationEditor extends EventEmitter {
             ? [...footnotesLayoutInput.blocksById.values()].flat()
             : []),
         ];
+        // ONE render font plan from this walk (the single source): the gate awaits its requiredFaces,
+        // the report uses its usedFaces, and its effectiveSignature is the measure/paint cache identity.
+        // Built before the gate runs so load, report, resolution, and cache identity all agree.
+        this.#fontPlan = planFontFaces(this.#fontPlanBlocks, this.#fontResolver, this.#hasFace);
+        fontSignature = this.#fontPlan.effectiveSignature;
+        // Rebuild with the face-aware effectiveSignature now the plan exists, so the measure callback
+        // and the cache signature can never drift: both the face-aware resolver and the fontSignature
+        // passed to incrementalLayout come from this one object.
+        fontMeasureContext = { resolvePhysical, fontSignature };
         const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
         // Now that the gate has settled, the font report reflects real load status. Emit
         // the authoritative `fonts-changed` once the picture first resolves and whenever it
@@ -6816,10 +7182,18 @@ export class PresentationEditor extends EventEmitter {
           previousLayout,
           blocksForLayout,
           layoutOptions,
-          (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
+          (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) =>
+            measureBlock(block, constraints, fontMeasureContext),
           headerFooterInput ?? undefined,
           previousMeasures,
+          // Same context object the measure callback uses, so the cache signature and the resolver
+          // cannot drift (the two-channel split is retired here).
+          { fontContext: fontMeasureContext, previousFontSignature },
+          // SD-3432: warm-start the footnote convergence with the previous
+          // render's fixed point; the layout run re-validates it in full.
+          { footnoteReserveSeed: this.#footnoteReserveSeed },
         );
+        this.#footnoteReserveSeed = result?.footnoteReserveSeed ?? null;
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
@@ -6858,6 +7232,8 @@ export class PresentationEditor extends EventEmitter {
           flowMode: this.#layoutOptions.flowMode ?? 'paginated',
           blocks: bodyBlocksForPaint,
           measures: bodyMeasuresForPaint,
+          fontSignature,
+          bookmarks,
         });
 
         headerLayouts = result.headers;
@@ -6886,6 +7262,9 @@ export class PresentationEditor extends EventEmitter {
       }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
       this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
+      // Record the signature these measures were produced with, so the next render can gate
+      // previous-measure reuse on whether the mapping changed (see #layoutFontSignature).
+      this.#layoutFontSignature = fontSignature;
       this.#layoutLookupBlocks = resolveBlocks;
       this.#layoutLookupMeasures = resolveMeasures;
 
@@ -6984,6 +7363,10 @@ export class PresentationEditor extends EventEmitter {
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
 
+      // SD-3400: fragments are rebuilt on every paint — re-apply the active
+      // note highlight and complete any pending scroll-to-note.
+      this.#noteSessionCoordinator?.onPaint();
+
       // Emit fresh comment positions after layout completes.
       // Always emit — even when empty — so the store can clear stale positions
       // (e.g. when undo removes the last tracked-change mark).
@@ -7030,6 +7413,10 @@ export class PresentationEditor extends EventEmitter {
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
       contentControlsChrome: this.#layoutOptions.contentControlsChrome ?? 'default',
+      // Paint each run in THIS document's physical substitute - the same family measurement used -
+      // so two editors that map a logical family differently never paint each other's font.
+      resolvePhysical: (css: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }): string =>
+        this.#fontResolver.resolvePhysicalFamilyForFace(css, face, this.#hasFace),
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale
@@ -7282,94 +7669,75 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedStructuredContentBlockClass(elements, id);
   }
 
-  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`);
+  /**
+   * Build the SDT and TOC hover coordinators. Called once after painterHost
+   * and painterAdapter are ready. The two groups differ only in the entry
+   * selector, id key, element lookup, and (for TOC) the gap-fill side effect
+   * — everything else (mouseover/mouseout, cross-fragment retain, after-paint
+   * reapply) lives in HoverGroupCoordinator.
+   */
+  #initializeHoverCoordinators(): void {
+    if (this.#sdtHoverCoordinator || this.#tocHoverCoordinator) return;
 
-    if (!block || !(block instanceof HTMLElement)) return;
-
-    // Don't show hover effect if already selected
-    if (block.classList.contains('ProseMirror-selectednode')) return;
-
-    const rawId = block.dataset.sdtId;
-    if (!rawId) return;
-
-    this.#setHoveredStructuredContentBlockClass(rawId);
-  };
-
-  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const block = target.closest(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
-
-    if (!block) return;
-
-    const relatedTarget = event.relatedTarget as HTMLElement | null;
-    if (relatedTarget && block.dataset.sdtId) {
-      const escapedCheckId =
-        typeof CSS !== 'undefined' && CSS.escape
-          ? CSS.escape(block.dataset.sdtId)
-          : block.dataset.sdtId.replace(/"/g, '\\"');
-      if (relatedTarget.closest(buildSdtBlockSelector(escapedCheckId))) {
-        return;
-      }
-    }
-
-    this.#clearHoveredStructuredContentBlockClass();
-  };
-
-  #clearHoveredStructuredContentBlockClass() {
-    if (!this.#lastHoveredStructuredContentBlock) return;
-    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
-      element.classList.remove(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
-    });
-    this.#lastHoveredStructuredContentBlock = null;
-  }
-
-  #setHoveredStructuredContentBlockClass(id: string) {
-    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
-
-    this.#clearHoveredStructuredContentBlockClass();
-
-    if (!this.#painterHost) return;
-
-    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
-
-    if (elements.length === 0) return;
-
-    elements.forEach((element) => {
-      if (!element.classList.contains('ProseMirror-selectednode')) {
-        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
-      }
+    this.#sdtHoverCoordinator = new HoverGroupCoordinator({
+      entrySelector: `.${DOM_CLASS_NAMES.BLOCK_SDT}`,
+      getId: (entry) => entry.dataset.sdtId,
+      queryGroup: (id) => this.#painterAdapter.getStructuredContentBlockElementsById(id),
+      hoverClass: DOM_CLASS_NAMES.SDT_GROUP_HOVER,
+      // PM-selected SDTs render with their selection style — leave it alone
+      // so the hover greying doesn't mask the selection feedback.
+      shouldApplyTo: (element) => !element.classList.contains('ProseMirror-selectednode'),
     });
 
-    this.#lastHoveredStructuredContentBlock = { id, elements };
+    this.#tocHoverCoordinator = new HoverGroupCoordinator({
+      entrySelector: `.${DOM_CLASS_NAMES.TOC_ENTRY}`,
+      getId: (entry) => entry.dataset.tocId,
+      queryGroup: (id) => this.#queryTocEntryElementsById(id),
+      hoverClass: DOM_CLASS_NAMES.TOC_GROUP_HOVER,
+      onApply: (elements) => this.#applyTocGapFill(elements),
+      onClear: (element) => element.style.removeProperty('--toc-gap-below'),
+    });
   }
 
   /**
-   * Re-applies the sdt-group-hover class after a paint cycle.
-   * DOM elements are rebuilt during repaint, so the hover class added by
-   * mouse events is lost. This restores hover state from the cached state.
+   * Each TOC entry is its own absolutely-positioned paragraph fragment, so
+   * paragraph spacing leaves an unbacked strip between them. Write the gap to
+   * `--toc-gap-below` and let the `::after` rule in styles.ts paint it.
+   * Cross-page gaps are skipped so the strip doesn't draw over page breaks.
    */
-  #reapplySdtGroupHover(): void {
-    if (!this.#lastHoveredStructuredContentBlock || !this.#painterHost) return;
+  #applyTocGapFill(elements: HTMLElement[]): void {
+    if (elements.length < 2) return;
 
-    const { id } = this.#lastHoveredStructuredContentBlock;
-    if (!id) return;
+    const measured = elements
+      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+      .sort((a, b) => a.rect.top - b.rect.top);
 
-    const elements = this.#painterAdapter.getStructuredContentBlockElementsById(id);
+    for (let i = 0; i < measured.length - 1; i++) {
+      const current = measured[i];
+      const next = measured[i + 1];
 
-    if (elements.length === 0) {
-      this.#lastHoveredStructuredContentBlock = null;
-      return;
-    }
+      const currentPage = current.element.closest('[data-page-index]');
+      if (!currentPage || currentPage !== next.element.closest('[data-page-index]')) continue;
 
-    elements.forEach((element) => {
-      if (!element.classList.contains('ProseMirror-selectednode')) {
-        element.classList.add(DOM_CLASS_NAMES.SDT_GROUP_HOVER);
+      // Divide by the painter's zoom transform so the strip matches the
+      // fragment's untransformed CSS-pixel height. Pad by 1px to cover
+      // sub-pixel rounding; the overlap falls on the next (also grey) entry.
+      const rawGap = next.rect.top - current.rect.bottom;
+      const scaleY =
+        current.rect.height && current.element.offsetHeight ? current.rect.height / current.element.offsetHeight : 1;
+      const gap = scaleY > 0 ? rawGap / scaleY : rawGap;
+      if (gap > 0) {
+        current.element.style.setProperty('--toc-gap-below', `${gap + 1}px`);
       }
-    });
+    }
+  }
 
-    this.#lastHoveredStructuredContentBlock = { id, elements };
+  #queryTocEntryElementsById(id: string): HTMLElement[] {
+    if (!this.#painterHost) return [];
+    const escapedId = escapeAttrValue(id);
+    return Array.from(
+      this.#painterHost.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.TOC_ENTRY}[data-toc-id="${escapedId}"]`),
+    );
   }
 
   /**
@@ -7391,11 +7759,13 @@ export class PresentationEditor extends EventEmitter {
   #refreshEditorDomAugmentations(): void {
     this.#postPaintPipeline.refreshAfterPaint({
       layoutEpoch: this.#layoutEpoch,
+      activeHeaderFooterMode: this.#headerFooterSession?.session?.mode ?? 'body',
       editorState: this.#editor?.view?.state,
       domPositionIndex: this.#domPositionIndex,
       proofingAnnotations: this.#buildProofingAnnotations(),
       rebuildDomPositionIndex: () => this.#rebuildDomPositionIndex(),
-      reapplyStructuredContentHover: () => this.#reapplySdtGroupHover(),
+      reapplyStructuredContentHover: () => this.#sdtHoverCoordinator?.reapply(),
+      reapplyTocGroupHover: () => this.#tocHoverCoordinator?.reapply(),
     });
   }
 
@@ -7991,7 +8361,7 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Flatten a header/footer layout input into the FlowBlocks it will measure, so the font
    * planner can include header/footer faces. getBatch variants and getBlocksByRId can cover
-   * the same content; planRequiredFontFaces dedups by face, so the overlap is harmless.
+   * the same content; planFontFaces dedups by face, so the overlap is harmless.
    */
   #collectHeaderFooterFaceBlocks(input: {
     headerBlocks?: Partial<Record<string, FlowBlock[]>>;
@@ -8178,7 +8548,14 @@ export class PresentationEditor extends EventEmitter {
     sectionMetadata: SectionMetadata[],
   ): Promise<void> {
     if (this.#headerFooterSession) {
-      await this.#headerFooterSession.layoutPerRId(headerFooterInput, layout, sectionMetadata);
+      await this.#headerFooterSession.layoutPerRId(
+        headerFooterInput,
+        layout,
+        sectionMetadata,
+        this.#fontResolver,
+        this.#hasFace,
+        this.#fontPlan?.effectiveSignature ?? '',
+      );
     }
   }
 
@@ -8664,7 +9041,7 @@ export class PresentationEditor extends EventEmitter {
 
   #activateRenderedNoteSession(
     target: RenderedNoteTarget,
-    options: { clientX: number; clientY: number; pageIndex?: number },
+    options: { clientX?: number; clientY?: number; pageIndex?: number },
   ): boolean {
     if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
       this.#headerFooterSession?.exitMode();
@@ -8700,22 +9077,52 @@ export class PresentationEditor extends EventEmitter {
       },
     );
 
-    const hit = this.hitTest(options.clientX, options.clientY);
     const doc = session.editor.state?.doc;
-    if (hit && doc) {
-      try {
-        const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
-        const tr = session.editor.state.tr.setSelection(selection);
-        session.editor.view?.dispatch(tr);
-      } catch {
-        // Ignore stale pointer hits during activation races.
+    // SD-3400: pointer activation places the caret at the click position;
+    // programmatic activation (no coords, e.g. insert-footnote focus) leaves the
+    // caret at the note's default start so the user can type from the beginning.
+    if (typeof options.clientX === 'number' && typeof options.clientY === 'number' && doc) {
+      const hit = this.hitTest(options.clientX, options.clientY);
+      if (hit) {
+        try {
+          const selection = this.#createCollapsedSelectionNearInlineContent(doc, hit.pos);
+          const tr = session.editor.state.tr.setSelection(selection);
+          session.editor.view?.dispatch(tr);
+        } catch {
+          // Ignore stale pointer hits during activation races.
+        }
       }
     }
 
     session.editor.view?.focus();
     this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate({ immediate: true });
+
+    // SD-3400: highlight the note, watch for the user emptying it, and bring
+    // it into view (see NoteSessionCoordinator for the full UX contract).
+    this.#ensureNoteSessionCoordinator().onActivated(target, session);
     return true;
+  }
+
+  #ensureNoteSessionCoordinator(): NoteSessionCoordinator {
+    if (!this.#noteSessionCoordinator) {
+      this.#noteSessionCoordinator = new NoteSessionCoordinator({
+        getHost: () => this.#painterHost ?? this.#visibleHost,
+        getScrollContainer: () => this.#scrollContainer,
+        hasActiveSession: () => Boolean(this.#getActiveStorySession()),
+        exitActiveSession: () => this.#exitActiveStorySession(),
+      });
+    }
+    return this.#noteSessionCoordinator;
+  }
+  /**
+   * SD-3400: programmatically open a footnote/endnote note session without a
+   * pointer. Focuses the note and scrolls it into view with the caret at the
+   * note's start. Used by insert-footnote (and any non-pointer navigation) so
+   * the user can immediately type in the new note.
+   */
+  activateNoteSession(target: RenderedNoteTarget): boolean {
+    return this.#activateRenderedNoteSession(target, {});
   }
 
   #exitActiveStorySession(): void {
@@ -8723,6 +9130,8 @@ export class PresentationEditor extends EventEmitter {
     if (!session) {
       return;
     }
+
+    this.#noteSessionCoordinator?.onExit();
 
     this.#storySessionManager?.exit();
     this.#pendingDocChange = true;
@@ -8925,17 +9334,23 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const head = Math.max(0, Math.min(mappedHead.pos, doc.content.size));
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, mode);
+    const extended = this.#calculateExtendedSelection(anchor, head, mode);
+    const stabilized = stabilizeTextSelectionAcrossTableCells(doc, extended.selAnchor, extended.selHead);
+    if (!stabilized) {
+      return;
+    }
 
     const current = this.#editor.state.selection;
-    const desiredFrom = Math.min(selAnchor, selHead);
-    const desiredTo = Math.max(selAnchor, selHead);
+    const desiredFrom = Math.min(stabilized.selAnchor, stabilized.selHead);
+    const desiredTo = Math.max(stabilized.selAnchor, stabilized.selHead);
     if (current.from === desiredFrom && current.to === desiredTo) {
       return;
     }
 
     try {
-      const tr = this.#editor.state.tr.setSelection(TextSelection.create(this.#editor.state.doc, selAnchor, selHead));
+      const tr = this.#editor.state.tr.setSelection(
+        TextSelection.create(this.#editor.state.doc, stabilized.selAnchor, stabilized.selHead),
+      );
       this.#editor.view?.dispatch(tr);
       this.#scheduleSelectionUpdate();
     } catch {
@@ -9917,14 +10332,36 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
-    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
-    if (startOffset == null || endOffset == null) {
+    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
+    if (!noteFragments.length) {
       return null;
     }
 
-    const noteFragments = this.#getRenderedNoteFragmentElements(this.#collectNoteBlockIds(context));
-    if (!noteFragments.length) {
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Same block-anchored pm-first strategy as #computeNoteDomCaretRect (SD-3400).
+    const pmRects = computeSelectionRectsFromPmRangeFromHelper(geometryOptions, from, to, {
+      from: this.#resolveNoteBlockAnchor(from),
+      to: this.#resolveNoteBlockAnchor(to),
+    });
+    if (pmRects != null) {
+      return pmRects;
+    }
+
+    // Same in-flight-rerender guard as #computeNoteDomCaretRect (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
+    }
+
+    const startOffset = this.#measureActiveEditorVisibleTextOffset(Math.min(from, to));
+    const endOffset = this.#measureActiveEditorVisibleTextOffset(Math.max(from, to));
+    if (startOffset == null || endOffset == null) {
       return null;
     }
 
@@ -9932,12 +10369,7 @@ export class PresentationEditor extends EventEmitter {
     const renderedEndOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, endOffset);
 
     return computeSelectionRectsFromVisibleTextOffsetsFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
+      geometryOptions,
       renderedStartOffset,
       renderedEndOffset,
     );
@@ -9958,6 +10390,46 @@ export class PresentationEditor extends EventEmitter {
     return selectionToRects(layout, context.blocks, context.measures, from, to, this.#pageGeometryHelper ?? undefined);
   }
 
+  /**
+   * Anchors a session position to its paragraph block for stale-tolerant
+   * caret resolution (SD-3400): painted pm ranges of unchanged note
+   * paragraphs drift after edits, but block identity (sdBlockId) plus the
+   * block's current first-leaf position let the geometry helper translate
+   * into the fragment's coordinate space.
+   */
+  #resolveNoteBlockAnchor(pos: number): { sdBlockId: string; currentStart: number } | null {
+    const doc = this.getActiveEditor()?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return null;
+    try {
+      const clamped = Math.max(0, Math.min(pos, doc.content.size));
+      const $pos = doc.resolve(clamped);
+      let blockDepth = 0;
+      for (let depth = $pos.depth; depth >= 1; depth -= 1) {
+        if ($pos.node(depth).isBlock) blockDepth = depth;
+      }
+      if (!blockDepth) return null;
+      const blockNode = $pos.node(blockDepth);
+      const sdBlockId = blockNode.attrs?.sdBlockId;
+      if (typeof sdBlockId !== 'string' || !sdBlockId) return null;
+      const blockPos = $pos.before(blockDepth);
+      let currentStart: number | null = null;
+      doc.nodesBetween(blockPos, blockPos + blockNode.nodeSize, (node, nodePos) => {
+        if (currentStart != null) return false;
+        if (node.isInline && (node.isLeaf || node.isText)) {
+          currentStart = nodePos;
+          return false;
+        }
+        return true;
+      });
+      // Empty paragraph: no inline leaf exists, its only caret position is
+      // the block's content start. The painted placeholder line anchors there.
+      if (currentStart == null) currentStart = blockPos + 1;
+      return { sdBlockId, currentStart };
+    } catch {
+      return null;
+    }
+  }
+
   #computeNoteDomCaretRect(context: NoteLayoutContext, pos: number): LayoutRect | null {
     const layout = this.#layoutState.layout;
     if (!layout) {
@@ -9969,27 +10441,48 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
-    if (textOffset == null) {
-      return null;
-    }
-
     const noteFragments = this.#getRenderedNoteFragmentElements(noteBlockIds);
     if (!noteFragments.length) {
       return null;
     }
 
+    const geometryOptions = {
+      containers: noteFragments,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageHeight: this.#getBodyPageHeight(),
+      pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
+    };
+
+    // Resolve by block identity first (stale-tolerant), then by global pm
+    // ranges. Painted pm ranges of unchanged note paragraphs drift after
+    // edits, so absolute resolution alone picks wrong lines (SD-3400).
+    const anchor = this.#resolveNoteBlockAnchor(pos);
+    const anchoredRect = anchor ? computeCaretRectFromPmPositionFromHelper(geometryOptions, pos, anchor) : null;
+    if (anchoredRect) {
+      return anchoredRect;
+    }
+    const pmRect = computeCaretRectFromPmPositionFromHelper(geometryOptions, pos);
+    if (pmRect) {
+      return pmRect;
+    }
+
+    // Position not painted yet (fresh paragraph) while a rerender is in
+    // flight: bridging now would measure STALE paint and the wrong caret
+    // would stick until the next selection change. Defer to the post-paint
+    // flush instead (SD-3400).
+    if (this.#renderScheduled || this.#isRerendering || this.#pendingDocChange) {
+      this.#scheduleSelectionUpdate({ immediate: false });
+      return null;
+    }
+
+    const textOffset = this.#measureActiveEditorVisibleTextOffset(pos);
+    if (textOffset == null) {
+      return null;
+    }
+
     const renderedTextOffset = this.#toRenderedNoteVisibleTextOffset(noteFragments, textOffset);
 
-    return computeCaretRectFromVisibleTextOffsetFromHelper(
-      {
-        containers: noteFragments,
-        zoom: this.#layoutOptions.zoom ?? 1,
-        pageHeight: this.#getBodyPageHeight(),
-        pageGap: layout.pageGap ?? this.#getEffectivePageGap(),
-      },
-      renderedTextOffset,
-    );
+    return computeCaretRectFromVisibleTextOffsetFromHelper(geometryOptions, renderedTextOffset);
   }
 
   #computeNoteCaretRect(pos: number): LayoutRect | null {
@@ -10597,6 +11090,8 @@ export class PresentationEditor extends EventEmitter {
   #handleLayoutError(phase: LayoutError['phase'], error: Error) {
     console.error('[PresentationEditor] Layout error', error);
     this.#layoutError = { phase, error, timestamp: Date.now() };
+    // SD-3432: a failed render leaves no trustworthy footnote fixed point.
+    this.#footnoteReserveSeed = null;
 
     // Update error state based on phase
     if (phase === 'initialization') {

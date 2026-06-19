@@ -467,6 +467,9 @@ modules: {
     <ParamField path="replaceEnabled" type="boolean" default="true">
       Whether replace actions are available. Set to `false` for a find-only popover.
     </ParamField>
+    <ParamField path="includeDeletedText" type="boolean" default="false">
+      When `true`, search includes text from pending tracked deletions. By default, deleted tracked-change text is excluded (Word-compatible behavior).
+    </ParamField>
     <ParamField path="component" type="Vue Component">
       Custom Vue component rendered inside the floating surface shell. Receives a `findReplace` prop. Mutually exclusive with `render`.
     </ParamField>

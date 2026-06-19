@@ -7,6 +7,7 @@
  * by the notes-part-descriptor's `afterCommit` hook.
  */
 
+import { Selection } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import type {
   FootnoteListInput,
@@ -35,15 +36,15 @@ import { getRevision, checkRevision } from './revision-tracker.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { mutatePart } from '../../core/parts/mutation/mutate-part.js';
+import { mutatePart, closeUndoGroup } from '../../core/parts/mutation/mutate-part.js';
 import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
 import {
   getNotesConfig,
   addNoteElement,
   updateNoteElement,
-  removeNoteElement,
   bootstrapNotesPart,
   getNoteElements,
+  markSessionManagedNoteId,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
 import type { NoteEntry } from '../../core/parts/adapters/notes-part-descriptor.js';
 
@@ -192,10 +193,49 @@ export function footnotesInsertWrapper(
   rejectTrackedMode('footnotes.insert', options);
   checkRevision(editor, options?.expectedRevision);
 
+  // §17.11.14: a footnote reference inside a footnote or endnote makes the
+  // document non-conformant (and Word also forbids footnotes in headers and
+  // footers). Story editors carry options.parentEditor — reject insertion
+  // there so toolbar actions wired to the ACTIVE editor cannot write a
+  // footnoteReference into a note story; callers must use the host editor.
+  if ((editor.options as { parentEditor?: unknown } | undefined)?.parentEditor) {
+    return footnoteFailure(
+      'INVALID_TARGET',
+      'footnotes.insert: footnotes can only be inserted into the document body, not inside a footnote, endnote, header, or footer.',
+    );
+  }
+
+  // SD-3400: the default "insert at the current cursor" path (no explicit `at`)
+  // writes the marker into the BODY at the body selection head. When the host
+  // editor is the target but the user is actively editing a non-body story
+  // (header/footer/footnote/endnote session), getActiveStoryLocator() is
+  // non-null and the body selection head is NOT where the user is — inserting
+  // there silently drops a marker into the body. Reject it, mirroring
+  // canInsertNoteAtCursor() for the host-editor path. An explicit `at` targets
+  // a caller-chosen body position, so its semantics are preserved untouched.
+  if (input.at === undefined) {
+    const activeStoryLocator = (
+      editor as unknown as { presentationEditor?: { getActiveStoryLocator?: () => unknown } }
+    ).presentationEditor?.getActiveStoryLocator?.();
+    if (activeStoryLocator != null) {
+      return footnoteFailure(
+        'INVALID_TARGET',
+        'footnotes.insert: cannot insert at the cursor while a header, footer, footnote, or endnote is being edited. Exit the active story or pass an explicit "at" target.',
+      );
+    }
+  }
+
   const converter = getConverter(editor);
   const notesConfig = getNotesConfig(input.type);
   const noteId = allocateNextNoteId(editor, converter, input.type);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId };
+
+  if (input.body !== undefined) {
+    return footnoteFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'footnotes.insert structured body content is only available on v2-backed sessions.',
+    );
+  }
 
   if (options?.dryRun) {
     return footnoteSuccess(address);
@@ -210,7 +250,11 @@ export function footnotesInsertWrapper(
     );
   }
 
-  const resolved = resolveInlineInsertPosition(editor, input.at, 'footnotes.insert');
+  // SD-3400: omitting `at` inserts at the current selection head — the natural
+  // target for toolbar actions ("place a marker at the current cursor location").
+  const resolved = input.at
+    ? resolveInlineInsertPosition(editor, input.at, 'footnotes.insert')
+    : { from: editor.state.selection.head, to: editor.state.selection.head };
 
   const { success } = compoundMutation({
     editor,
@@ -239,6 +283,9 @@ export function footnotesInsertWrapper(
       tr.insert(resolved.from, node);
       editor.dispatch(tr);
 
+      // Session-managed: if undo later removes this marker, export prunes
+      // the now-unreferenced element (SD-3400 tombstone symmetry).
+      markSessionManagedNoteId(editor, input.type, noteId);
       clearIndexCache(editor);
       return true;
     },
@@ -267,6 +314,13 @@ export function footnotesUpdateWrapper(
   const resolved = resolveFootnoteTarget(editor.state.doc, input.target);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: resolved.noteId };
 
+  if (input.patch.body !== undefined) {
+    return footnoteFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'footnotes.update structured body content is only available on v2-backed sessions.',
+    );
+  }
+
   if (options?.dryRun || input.patch.content === undefined) {
     return footnoteSuccess(address);
   }
@@ -290,9 +344,9 @@ export function footnotesUpdateWrapper(
 /**
  * Remove a footnote/endnote.
  *
- * Uses `compoundMutation` because it touches both:
- * 1. The PM document (delete the footnoteReference/endnoteReference node)
- * 2. The OOXML notes part (remove <w:footnote> element if no more references)
+ * Tombstone semantics (SD-3400): only the PM reference node is deleted; the
+ * `w:footnote` element stays in the part so undo restores the note text.
+ * Export prunes session-managed ids with no surviving reference.
  */
 export function footnotesRemoveWrapper(
   editor: Editor,
@@ -309,38 +363,119 @@ export function footnotesRemoveWrapper(
     return footnoteSuccess(address);
   }
 
-  const notesConfig = getNotesConfig(resolved.type);
+  const removed = removeNoteReferenceAt(editor, {
+    pos: resolved.pos,
+    noteId: resolved.noteId,
+    type: resolved.type,
+  });
+
+  if (!removed) {
+    return footnoteFailure('NO_OP', 'Remove operation produced no change.');
+  }
+
+  return footnoteSuccess(address);
+}
+
+/**
+ * Remove the single note reference at an exact document position, tombstoning
+ * the note: only the PM marker delete happens (history-recorded), while the
+ * `w:footnote`/`w:endnote` element stays in the part so undo restores the
+ * note text. The id is registered as session-managed; export prunes
+ * registered ids with no surviving reference (SD-3400 undo fidelity).
+ *
+ * Position-addressed (not id-addressed) so callers that already hold the node
+ * — the staged Backspace/Delete on a selected marker (SD-3400) — remove
+ * exactly that reference even when the same id appears multiple times.
+ * {@link footnotesRemoveWrapper} delegates here after resolving its target.
+ */
+export function removeNoteReferenceAt(
+  editor: Editor,
+  ref: { pos: number; noteId: string; type: 'footnote' | 'endnote' },
+): boolean {
+  const notesConfig = getNotesConfig(ref.type);
 
   const { success } = compoundMutation({
     editor,
-    source: `footnotes.remove:${resolved.type}`,
+    source: `footnotes.remove:${ref.type}`,
     affectedParts: [notesConfig.partId],
     execute: () => {
-      // 1. Delete the reference node from the PM document
+      // Delete the reference node from the PM document. The body doc is the
+      // source of truth for note liveness: band painting, numbering, and the
+      // read API all resolve from live markers, so no part write is needed.
       const { tr } = editor.state;
-      const node = tr.doc.nodeAt(resolved.pos);
+      const node = tr.doc.nodeAt(ref.pos);
       if (!node) return false;
 
-      tr.delete(resolved.pos, resolved.pos + node.nodeSize);
+      tr.delete(ref.pos, ref.pos + node.nodeSize);
       editor.dispatch(tr);
 
-      // 2. Remove from the OOXML part if no other references remain
-      const stillReferenced = findAllFootnotes(editor.state.doc, resolved.type).some(
-        (f) => f.noteId === resolved.noteId,
-      );
+      markSessionManagedNoteId(editor, ref.type, ref.noteId);
+      clearIndexCache(editor);
+      return true;
+    },
+  });
 
-      if (!stillReferenced) {
-        mutatePart({
-          editor,
-          partId: notesConfig.partId,
-          operation: 'mutate',
-          source: `footnotes.remove:${resolved.type}`,
-          mutate({ part }) {
-            removeNoteElement(part, notesConfig, resolved.noteId);
-          },
+  // The dropped part mutation used to seal the undo group as a side effect;
+  // preserve that grouping so the marker delete never merges with later edits.
+  if (success) closeUndoGroup(editor);
+
+  return success;
+}
+
+/**
+ * SD-3400: remove a note and EVERY body reference to it ("remove on both
+ * sides"). Used by the note-area emptied-note commit, where the whole footnote
+ * ceases to exist — including multi-reference notes, whose surviving markers
+ * would otherwise keep the old (un-emptied) content. The `w:footnote` element
+ * is tombstoned (kept in the part) so a single undo restores the whole note;
+ * export prunes it while no reference exists.
+ *
+ * Type-aware: footnote and endnote ids are independent OOXML namespaces, so
+ * resolution filters by note type — emptying endnote "2" must never touch
+ * footnote "2". The address-based {@link footnotesRemoveWrapper} keeps its
+ * single-reference semantics for the document API.
+ */
+export function removeNoteEverywhere(
+  editor: Editor,
+  input: { noteId: string; type: 'footnote' | 'endnote' },
+): FootnoteMutationResult {
+  const refs = findAllFootnotes(editor.state.doc, input.type).filter((f) => f.noteId === input.noteId);
+  if (refs.length === 0) {
+    return footnoteFailure('NO_OP', `No ${input.type} reference with id "${input.noteId}" found.`);
+  }
+
+  const notesConfig = getNotesConfig(input.type);
+  const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: input.noteId };
+
+  const { success } = compoundMutation({
+    editor,
+    source: `footnotes.removeEverywhere:${input.type}`,
+    affectedParts: [notesConfig.partId],
+    execute: () => {
+      const { tr } = editor.state;
+      // Descending positions keep earlier offsets valid as later refs go.
+      [...refs]
+        .sort((a, b) => b.pos - a.pos)
+        .forEach((ref) => {
+          const node = tr.doc.nodeAt(ref.pos);
+          if (node) tr.delete(ref.pos, ref.pos + node.nodeSize);
         });
+      // Park the caret where the FIRST marker stood (SD-3400 note-area
+      // boundary): the emptied-note exit refocuses the body, and without
+      // parking the stale pre-session selection silently eats body text on
+      // continued Backspace. In-transaction selection is mutation semantics
+      // (PM's own delete commands do the same), so every caller gets Word
+      // body-side caret placement for free.
+      try {
+        tr.setSelection(Selection.near(tr.doc.resolve(Math.min(refs[0].pos, tr.doc.content.size)), 1));
+      } catch {
+        // Position resolution can fail on exotic docs; parking is best-effort.
       }
+      editor.dispatch(tr);
 
+      // Tombstone: the note element stays in the part so undo restores the
+      // whole note; export prunes registered ids with no surviving reference.
+      markSessionManagedNoteId(editor, input.type, input.noteId);
       clearIndexCache(editor);
       return true;
     },
@@ -349,6 +484,9 @@ export function footnotesRemoveWrapper(
   if (!success) {
     return footnoteFailure('NO_OP', 'Remove operation produced no change.');
   }
+
+  // Preserve the undo-group seal the dropped part mutation used to provide.
+  closeUndoGroup(editor);
 
   return footnoteSuccess(address);
 }

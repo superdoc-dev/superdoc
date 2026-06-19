@@ -101,6 +101,8 @@ const currentZoom = ref(1);
  */
 let zoomChangeHandler = null;
 let documentModeChangeHandler = null;
+let headerFooterModeChangeHandler = null;
+const activeHeaderFooterMode = ref('body');
 
 // Watch for changes in options.rulers with deep option to catch nested changes
 watch(
@@ -655,6 +657,16 @@ const onTableResizeEnd = () => {
   tableResizeState.tableElement = null;
 };
 
+const getBehindDocSection = (element: Element | null): string | null => {
+  return element?.closest?.('[data-behind-doc-section]')?.getAttribute('data-behind-doc-section') ?? null;
+};
+
+const canInteractWithHeaderFooterOwnedMedia = (element: Element | null): boolean => {
+  const section = getBehindDocSection(element);
+  if (!section) return true;
+  return section === activeHeaderFooterMode.value;
+};
+
 /**
  * Update image resize overlay visibility based on mouse position.
  * Shows overlay when hovering over images with data-image-metadata attribute.
@@ -699,6 +711,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
 
     // Check for standalone image fragments (ImageBlock)
     if (target.classList?.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) && target.hasAttribute('data-image-metadata')) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-sd-block-id');
@@ -710,6 +726,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
       target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER) &&
       target.querySelector?.('[data-image-metadata]')
     ) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-pm-start');
@@ -718,6 +738,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
     // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
     // use the wrapper so the resizer works on the cropped portion's box.
     if (target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE) && target.hasAttribute('data-image-metadata')) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       const wrapper = target.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
       imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
@@ -770,6 +794,12 @@ const setSelectedImage = (element, blockId, pmStart) => {
     return;
   }
 
+  if (element && !canInteractWithHeaderFooterOwnedMedia(element)) {
+    clearSelectedImage();
+    hideImageResizeOverlay();
+    return;
+  }
+
   // Remove selection from the previously selected element
   if (selectedImageState.element && selectedImageState.element !== element) {
     selectedImageState.element.classList.remove('superdoc-image-selected');
@@ -781,6 +811,15 @@ const setSelectedImage = (element, blockId, pmStart) => {
     selectedImageState.blockId = blockId ?? null;
     selectedImageState.pmStart = typeof pmStart === 'number' ? pmStart : null;
   } else {
+    clearSelectedImage();
+  }
+};
+
+const cleanupInactiveHeaderFooterOwnedImageUi = () => {
+  if (imageResizeState.imageElement && !canInteractWithHeaderFooterOwnedMedia(imageResizeState.imageElement)) {
+    hideImageResizeOverlay();
+  }
+  if (selectedImageState.element && !canInteractWithHeaderFooterOwnedMedia(selectedImageState.element)) {
     clearSelectedImage();
   }
 };
@@ -1034,6 +1073,11 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     presentationEditor.on('imageDeselected', () => {
       clearSelectedImage();
     });
+    headerFooterModeChangeHandler = ({ mode } = {}) => {
+      activeHeaderFooterMode.value = mode ?? 'body';
+      cleanupInactiveHeaderFooterOwnedImageUi();
+    };
+    presentationEditor.on('headerFooterModeChanged', headerFooterModeChangeHandler);
 
     layoutUpdatedHandler = () => {
       if (imageResizeState.visible && imageResizeState.blockId) {
@@ -1047,7 +1091,11 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
           newElement = editorElem.value?.querySelector(buildInlineImagePmSelector(escapedBlockId));
         }
         if (newElement) {
-          imageResizeState.imageElement = newElement as HTMLElement;
+          if (canInteractWithHeaderFooterOwnedMedia(newElement)) {
+            imageResizeState.imageElement = newElement as HTMLElement;
+          } else {
+            hideImageResizeOverlay();
+          }
         } else {
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
@@ -1274,6 +1322,10 @@ onBeforeUnmount(() => {
   if (editor.value instanceof PresentationEditor && zoomChangeHandler) {
     editor.value.off('zoomChange', zoomChangeHandler);
     zoomChangeHandler = null;
+  }
+  if (editor.value instanceof PresentationEditor && headerFooterModeChangeHandler) {
+    editor.value.off('headerFooterModeChanged', headerFooterModeChangeHandler);
+    headerFooterModeChangeHandler = null;
   }
   if (editor.value instanceof PresentationEditor && layoutUpdatedHandler) {
     editor.value.off('layoutUpdated', layoutUpdatedHandler);

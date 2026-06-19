@@ -11,5 +11,5 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3333',
   },
-  projects: [{ name: 'chromium', use: { channel: 'chrome' } }],
+  projects: [{ name: 'chromium' }],
 });

@@ -1,20 +1,20 @@
 ---
 title: footnotes.insert
 sidebarTitle: footnotes.insert
-description: Insert a new footnote or endnote at a target location.
+description: "Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Insert a new footnote or endnote at a target location.
+Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is currently available on v2-backed sessions only; v1-backed sessions return `CAPABILITY_UNAVAILABLE` for those shapes.
 
 - Operation ID: `footnotes.insert`
 - API member path: `editor.doc.footnotes.insert(...)`
 - Mutates document: `yes`
 - Idempotency: `non-idempotent`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -24,13 +24,26 @@ Returns a FootnoteMutationResult indicating success with the footnote address or
 
 ## Input fields
 
+### Variant 1 (at.kind="text")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | TextTarget | yes | TextTarget |
-| `at.kind` | `"text"` | yes | Constant: `"text"` |
-| `at.segments` | TextSegment[] | yes |  |
+| `at` | TextTarget | no | TextTarget |
+| `at.kind` | `"text"` | no | Constant: `"text"` |
+| `at.segments` | TextSegment[] | no |  |
 | `at.story` | StoryLocator | no | StoryLocator |
 | `content` | string | yes |  |
+| `type` | enum | yes | `"footnote"`, `"endnote"` |
+
+### Variant 2 (at.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | no | TextTarget |
+| `at.kind` | `"text"` | no | Constant: `"text"` |
+| `at.segments` | TextSegment[] | no |  |
+| `at.story` | StoryLocator | no | StoryLocator |
+| `body` | object \| object[] | yes | One of: object, object[] |
 | `type` | enum | yes | `"footnote"`, `"endnote"` |
 
 ### Example request
@@ -102,34 +115,71 @@ Returns a FootnoteMutationResult indicating success with the footnote address or
 
 ## Non-applied failure codes
 
-- None
+- `INVALID_FRAGMENT`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "at": {
-      "$ref": "#/$defs/TextTarget"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/TextTarget"
+        },
+        "content": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "footnote",
+            "endnote"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "content"
+      ],
+      "type": "object"
     },
-    "content": {
-      "type": "string"
-    },
-    "type": {
-      "enum": [
-        "footnote",
-        "endnote"
-      ]
+    {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/TextTarget"
+        },
+        "body": {
+          "description": "Structured SDM/1 note body.",
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "footnote",
+            "endnote"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "body"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "at",
-    "type",
-    "content"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

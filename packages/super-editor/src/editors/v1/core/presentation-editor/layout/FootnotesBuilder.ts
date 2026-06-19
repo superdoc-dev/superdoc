@@ -135,6 +135,7 @@ export function buildFootnotesInput(
 
   // Build blocks for each footnote
   const blocksById = new Map<string, FlowBlock[]>();
+  const docDefaultRunProps = resolveDocDefaultRunProps(converterContext);
 
   idsInUse.forEach((id) => {
     try {
@@ -154,7 +155,7 @@ export function buildFootnotesInput(
         if (!customMarkIds.has(id)) {
           // §17.11.11 — per-id format from section override wins over document default.
           const numFmtForId = footnoteFormatById?.[id] ?? footnoteNumberFormat;
-          ensureFootnoteMarker(result.blocks, id, footnoteNumberById, numFmtForId);
+          ensureFootnoteMarker(result.blocks, id, footnoteNumberById, numFmtForId, docDefaultRunProps);
         }
         blocksById.set(id, result.blocks);
       }
@@ -203,11 +204,31 @@ function resolveDisplayNumber(id: string, footnoteNumberById: Record<string, num
   return 1;
 }
 
-function resolveMarkerFontFamily(firstTextRun: Run | undefined): string {
-  return typeof firstTextRun?.fontFamily === 'string' ? firstTextRun.fontFamily : DEFAULT_MARKER_FONT_FAMILY;
+/**
+ * Document default run properties (w:docDefaults), the middle layer of the
+ * marker font fallback chain: explicit first-run value → document default →
+ * constant. Keeps the marker sized with the document when the note's first
+ * paragraph has no sized run yet (e.g., freshly emptied or inserted notes),
+ * so font changes resize the marker predictably instead of snapping to the
+ * constant.
+ */
+type DocDefaultRunProps = {
+  fontSize?: number;
+  fontFamily?: { ascii?: string };
+};
+
+function resolveDocDefaultRunProps(converterContext: ConverterContext | undefined): DocDefaultRunProps | undefined {
+  return converterContext?.translatedLinkedStyles?.docDefaults?.runProperties as DocDefaultRunProps | undefined;
 }
 
-function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
+function resolveMarkerFontFamily(firstTextRun: Run | undefined, docDefaults: DocDefaultRunProps | undefined): string {
+  if (typeof firstTextRun?.fontFamily === 'string') return firstTextRun.fontFamily;
+  const ascii = docDefaults?.fontFamily?.ascii;
+  if (typeof ascii === 'string' && ascii.length > 0) return ascii;
+  return DEFAULT_MARKER_FONT_FAMILY;
+}
+
+function resolveMarkerBaseFontSize(firstTextRun: Run | undefined, docDefaults: DocDefaultRunProps | undefined): number {
   if (
     typeof firstTextRun?.fontSize === 'number' &&
     Number.isFinite(firstTextRun.fontSize) &&
@@ -216,10 +237,20 @@ function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
     return firstTextRun.fontSize;
   }
 
+  // docDefaults fontSize is in half-points; runs use px (1pt = 1/0.75 px).
+  const halfPoints = docDefaults?.fontSize;
+  if (typeof halfPoints === 'number' && Number.isFinite(halfPoints) && halfPoints > 0) {
+    return halfPoints / 2 / 0.75;
+  }
+
   return DEFAULT_MARKER_FONT_SIZE;
 }
 
-function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run {
+function buildMarkerRun(
+  markerText: string,
+  firstTextRun: Run | undefined,
+  docDefaults: DocDefaultRunProps | undefined,
+): Run {
   // Word renders the FootnoteReference rStyle as a plain superscript, independent
   // of the following run's formatting. Inheriting bold/italic/letterSpacing from
   // the first body text run would render "³**NTD**" with a bold marker — visibly
@@ -229,8 +260,8 @@ function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run 
     kind: 'text',
     text: `${markerText}\u00A0`,
     dataAttrs: { [FOOTNOTE_MARKER_DATA_ATTR]: 'true' },
-    fontFamily: resolveMarkerFontFamily(firstTextRun),
-    fontSize: resolveMarkerBaseFontSize(firstTextRun) * SUBSCRIPT_SUPERSCRIPT_SCALE,
+    fontFamily: resolveMarkerFontFamily(firstTextRun, docDefaults),
+    fontSize: resolveMarkerBaseFontSize(firstTextRun, docDefaults) * SUBSCRIPT_SUPERSCRIPT_SCALE,
     vertAlign: 'superscript',
   };
 
@@ -304,6 +335,7 @@ function ensureFootnoteMarker(
   id: string,
   footnoteNumberById: Record<string, number> | undefined,
   footnoteNumberFormat: string | undefined,
+  docDefaults: DocDefaultRunProps | undefined,
 ): void {
   const firstParagraph = blocks.find((b) => b?.kind === 'paragraph') as ParagraphBlock | undefined;
   if (!firstParagraph) return;
@@ -314,7 +346,7 @@ function ensureFootnoteMarker(
   // leading marker matches the inline reference (single source of truth).
   const markerText = formatFootnoteCardinal(displayNumber, footnoteNumberFormat);
   const firstTextRun = runs.find((run) => typeof run.text === 'string' && !isFootnoteMarker(run));
-  const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun);
+  const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun, docDefaults);
 
   // Check if marker already exists
   const existingMarker = runs.find(isFootnoteMarker);

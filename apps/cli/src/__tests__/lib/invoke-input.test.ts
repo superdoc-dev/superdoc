@@ -60,6 +60,42 @@ describe('extractInvokeInput', () => {
     });
   });
 
+  test('keeps trackChanges.decide expectedRevision as an API input alias', () => {
+    const input = extractInvokeInput('trackChanges.decide', {
+      sessionId: 's1',
+      expectedRevision: 'stale-revision-stamp',
+      decision: 'accept',
+      target: { kind: 'all' },
+    }) as Record<string, unknown>;
+
+    expect(input).toEqual({
+      expectedRevision: 'stale-revision-stamp',
+      decision: 'accept',
+      target: { kind: 'all' },
+    });
+  });
+
+  test('strips expectedRevision from generic mutation API input', () => {
+    const input = extractInvokeInput('replace', {
+      expectedRevision: 3,
+      text: 'Updated',
+      target: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 1 },
+      },
+    }) as Record<string, unknown>;
+
+    expect(input).toEqual({
+      text: 'Updated',
+      target: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 1 },
+      },
+    });
+  });
+
   test('rejects collapsed legacy text ranges for format operations', () => {
     expect(() =>
       extractInvokeInput('format.bold', {
@@ -67,6 +103,41 @@ describe('extractInvokeInput', () => {
           kind: 'text',
           blockId: 'p1',
           range: { start: 2, end: 2 },
+        },
+      }),
+    ).toThrow(CliError);
+  });
+
+  test('converts paragraph format --block-id shortcuts into paragraph block targets', () => {
+    const input = extractInvokeInput('format.paragraph.setMarkRunProps', {
+      blockId: 'p1',
+      markRunProps: {
+        bold: true,
+        color: { model: 'rgb', value: 'FF0000' },
+      },
+    }) as Record<string, unknown>;
+
+    expect(input).toEqual({
+      target: {
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'p1',
+      },
+      markRunProps: {
+        bold: true,
+        color: { model: 'rgb', value: 'FF0000' },
+      },
+    });
+  });
+
+  test('rejects text-range shortcuts for paragraph format operations', () => {
+    expect(() =>
+      extractInvokeInput('format.paragraph.setMarkRunProps', {
+        blockId: 'p1',
+        start: 0,
+        end: 5,
+        markRunProps: {
+          bold: true,
         },
       }),
     ).toThrow(CliError);

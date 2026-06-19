@@ -40,6 +40,7 @@ Returns a HyperlinkMutationResult with the created hyperlink address on success,
 | `target.range` | Range | yes | Range |
 | `target.range.end` | integer | yes |  |
 | `target.range.start` | integer | yes |  |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -59,6 +60,10 @@ Returns a HyperlinkMutationResult with the created hyperlink address on success,
     "range": {
       "end": 10,
       "start": 0
+    },
+    "story": {
+      "kind": "story",
+      "storyType": "body"
     }
   }
 }

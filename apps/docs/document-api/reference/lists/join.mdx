@@ -31,6 +31,7 @@ Returns a ListsJoinResult with the resulting listId of the merged sequence.
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -40,7 +41,11 @@ Returns a ListsJoinResult with the resulting listId of the merged sequence.
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```

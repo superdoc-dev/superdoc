@@ -5,8 +5,21 @@ import type {
   FontLoadResult,
   FontLoadStatus,
   RegisteredFace,
+  RegisterFaceResult,
   RequiredFace,
 } from './types';
+import { BUNDLED_MANIFEST } from './bundled-manifest';
+
+/**
+ * Physical family NAMES SuperDoc ships as bundled substitutes (Carlito, Liberation Sans, ...). When a
+ * face under one of these fails to load, it is almost always the bundled `.woff2` not being served - a
+ * setup problem with one clear fix - so we route it to the actionable "install @superdoc-dev/fonts / set
+ * assetBaseUrl" warning. This is a NAME match, not true provenance: a customer `fonts.add` face that
+ * happens to be named e.g. "Carlito" would route here too. That collision is rare and the guidance is
+ * still reasonable, so the simpler name check is preferred over threading a provenance flag through
+ * registration.
+ */
+const BUNDLED_SUBSTITUTE_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
 
 /**
  * Default per-font budget the gate waits before treating a face as `timed_out`
@@ -25,6 +38,8 @@ const DEFAULT_PROBE_SIZE = '16px';
  */
 export interface FontSetLike {
   add(face: FontFaceLike): void;
+  /** Remove a managed face (DOM `FontFaceSet.delete`). Optional: some sets (domless/tests) omit it. */
+  delete?(face: FontFaceLike): boolean;
   load(font: string, text?: string): Promise<FontFaceLike[]>;
   check(font: string, text?: string): boolean;
 }
@@ -42,6 +57,19 @@ export type FontFaceCtor = new (
   source: string | ArrayBuffer | ArrayBufferView,
   descriptors?: FontFaceDescriptors,
 ) => FontFaceLike;
+
+/**
+ * A document-owned font face registered from raw bytes (a deobfuscated DOCX-embedded font), the input
+ * to {@link FontRegistry.registerOwnedFace}. Carries the bytes plus the OS/2-derived face axis so the
+ * face registers under the document's family name with the correct weight/style and flows through the
+ * resolver's `registered_face` rung. `weight`/`style` are already canonical (no normalization needed).
+ */
+export interface OwnedFaceDescriptor {
+  family: string;
+  source: ArrayBuffer | ArrayBufferView;
+  weight: '400' | '700';
+  style: 'normal' | 'italic';
+}
 
 export interface FontRegistryOptions {
   /** The font set to drive. Defaults to the ambient `document.fonts`. */
@@ -61,6 +89,24 @@ export interface FontRegistryOptions {
  */
 function quoteFamily(family: string): string {
   return `"${family.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Canonicalize a CSS `url(...)` font source so callers that quote it differently register the
+ * SAME face once instead of as conflicting sources. The bundled pack emits `url(/x.woff2)` while
+ * the public `fonts.add` path JSON.stringify-quotes to `url("/x.woff2")`; both name the same file,
+ * so the registry must treat them as one source (otherwise re-adding a bundled face throws as a
+ * "different source"). Only a lone `url(...)` token is normalized; anything else (a bare string,
+ * `url(...) format(...)`, a `local(...)`) is returned unchanged so this stays conservative.
+ */
+function canonicalizeFontSource(source: string): string {
+  const match = /^\s*url\(\s*([\s\S]*?)\s*\)\s*$/i.exec(source);
+  if (!match) return source;
+  let inner = match[1].trim();
+  if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+    inner = inner.slice(1, -1);
+  }
+  return `url(${JSON.stringify(inner)})`;
 }
 
 /** Normalize a family name for keying: trim, strip surrounding quotes, lowercase. */
@@ -121,14 +167,25 @@ export class FontRegistry {
   readonly #scheduleTimeout: (cb: () => void, ms: number) => unknown;
   readonly #cancelTimeout: (handle: unknown) => void;
 
-  /** Faces the registry created, keyed by family. */
+  /** Faces the registry created, keyed by family. Probed only via `isManaged` (the VALUE is never
+   *  read), so a stale entry between multi-owner releases is harmless. */
   readonly #managed = new Map<string, FontFaceLike>();
+  /**
+   * Every managed FontFace object, grouped by face key (family|weight|style). A SET because the
+   * registry is shared per FontFaceSet across editors, so two documents can each register their own
+   * embedded face for the same key; `hasFace` stays true while >=1 remains. A document-owned face is
+   * released by its exact handle ({@link registerOwnedFace}), and the key collapses only when its
+   * last face is gone - so one document's swap never drops another's (or a `fonts.add`) face.
+   */
+  readonly #facesByKey = new Map<string, Set<FontFaceLike>>();
   /** Last known load status per family. */
   readonly #status = new Map<string, FontLoadStatus>();
   /** Registered `url(...)` source(s) per family, to name the failing URL on a load error. */
   readonly #sources = new Map<string, string[]>();
   /** Families already warned about a load failure, so the warning fires at most once each. */
   readonly #warnedFailures = new Set<string>();
+  /** Whether the single actionable "bundled fonts aren't being served" warning has fired (once per registry). */
+  #warnedBundledSubstituteFailure = false;
   /** In-flight family loads, so concurrent awaits of one family share a single probe. */
   readonly #inflight = new Map<string, Promise<FontLoadResult>>();
 
@@ -141,8 +198,17 @@ export class FontRegistry {
   readonly #faceInflight = new Map<string, Promise<FontFaceLoadResult>>();
   /** Registered `url(...)` source per face key, to name the failing URL on a face load error. */
   readonly #faceSources = new Map<string, string>();
-  /** Face keys seen per normalized family, for the family-level status rollup. */
+  /** Face keys seen per normalized family, for the family-level status rollup. Populated by BOTH
+   *  registration AND awaiting (so getStatus rolls up the status of an awaited pass-through face). */
   readonly #facesByFamily = new Map<string, Set<string>>();
+  /**
+   * Face keys this registry actually REGISTERED as a provider (a bundled clone or a `fonts.add`/
+   * embedded face) - NOT faces that were merely awaited. This is the oracle {@link hasFace} consults:
+   * the resolver's provider-precedence ladder must answer "is there a registered face for this
+   * family|weight|style?", which is distinct from `#facesByFamily`'s "have we ever seen/awaited it?".
+   * Mixing the two would let a once-awaited `as_requested` family masquerade as a registered face.
+   */
+  readonly #providerFaceKeys = new Set<string>();
   /** Faces already warned about a load failure, so the warning fires at most once each. */
   readonly #warnedFaceFailures = new Set<string>();
 
@@ -161,12 +227,40 @@ export class FontRegistry {
    * constructor: the family is recorded as `unloaded` and will resolve to
    * `fallback_used` when awaited.
    */
-  register(descriptor: FontFaceDescriptor): RegisteredFace {
+  register(descriptor: FontFaceDescriptor): RegisterFaceResult {
     const { family, source, descriptors } = descriptor;
+    // Identity source for the duplicate-face guard: canonicalize url(...) quoting so the SAME file
+    // registered by the bundled pack (`url(/x)`) and by `fonts.add` (`url("/x")`) compares equal
+    // instead of throwing as a "different source". The raw source is still what we hand the
+    // FontFace and store in #sources, so served URLs and diagnostics are unchanged.
+    const identitySource = typeof source === 'string' ? canonicalizeFontSource(source) : source;
+    // A face's identity is family|weight|style; a bare register (no descriptors) is 400/normal.
+    const weight = normalizeWeight(descriptors?.weight as string | undefined);
+    const style = normalizeStyle(descriptors?.style as string | undefined);
+    const key = faceKeyOf(family, weight, style);
+    // Duplicate-face guard (the registry is the central registrar for bundled AND customer faces):
+    // re-registering the IDENTICAL string source is idempotent - return without adding a second
+    // FontFace - but a DIFFERENT source for the same face is rejected. Silently overwriting a
+    // user-provided font source would make rendering depend on registration order. Binary sources
+    // have no comparable identity here and are not de-duped.
+    if (typeof identitySource === 'string') {
+      const existingSource = this.#faceSources.get(key);
+      if (existingSource === identitySource) return { family, status: this.getStatus(family), changed: false };
+      if (existingSource !== undefined) {
+        throw new Error(
+          `[superdoc] font face "${key}" is already registered from a different source ` +
+            `("${existingSource}"); a registered face's source cannot be replaced`,
+        );
+      }
+    }
     if (this.#FontFaceCtor && this.#fontSet) {
-      const face = new this.#FontFaceCtor(family, source, descriptors);
+      // Build the FontFace with the BUCKETED weight/style the key uses, not the raw descriptor. The
+      // face key is family|<400|700>|<normal|italic>, so an off-bucket descriptor (e.g. weight 500)
+      // would answer hasFace for the 400 key yet render at 500 - the run model is binary, so clamp the
+      // rendered face to the same bucket. Other descriptors (stretch, unicodeRange, display) pass through.
+      const face = new this.#FontFaceCtor(family, source, { ...descriptors, weight, style });
       this.#fontSet.add(face);
-      this.#managed.set(family, face);
+      this.#addManagedFace(family, key, face);
     }
     if (typeof source === 'string') {
       const list = this.#sources.get(family) ?? [];
@@ -174,15 +268,13 @@ export class FontRegistry {
       this.#sources.set(family, list);
     }
     if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
-    // Seed face-level status so the gate can await this exact weight/style. A bare
-    // register (no weight/style descriptors) seeds the 400/normal face.
-    const weight = normalizeWeight(descriptors?.weight as string | undefined);
-    const style = normalizeStyle(descriptors?.style as string | undefined);
-    const key = faceKeyOf(family, weight, style);
+    // Record this as a PROVIDER face (the hasFace oracle), distinct from the await-tracking below.
+    this.#providerFaceKeys.add(key);
+    // Seed face-level status so the gate can await this exact weight/style.
     this.#trackFace(family, key);
     if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
-    if (typeof source === 'string' && !this.#faceSources.has(key)) this.#faceSources.set(key, source);
-    return { family, status: this.getStatus(family) };
+    if (typeof identitySource === 'string' && !this.#faceSources.has(key)) this.#faceSources.set(key, identitySource);
+    return { family, status: this.getStatus(family), changed: true };
   }
 
   /** Record a face key under its normalized family for the family-status rollup. */
@@ -196,6 +288,85 @@ export class FontRegistry {
   /** True if this registry created a managed face for the family. */
   isManaged(family: string): boolean {
     return this.#managed.has(family);
+  }
+
+  /**
+   * Register a DOCUMENT-OWNED face from raw bytes (a deobfuscated DOCX-embedded font) and return a
+   * disposer that releases EXACTLY this face. Unlike {@link register} - the shared registrar for
+   * bundled and `fonts.add` faces, idempotent by URL source - every call here creates a distinct
+   * managed face, because the registry is shared per FontFaceSet across editors and two documents can
+   * embed the same family|weight|style with different (subset) bytes. Calling the returned disposer
+   * (on a document swap or editor teardown) removes only this face; the key's `hasFace` stays true
+   * while any other owner's face remains, so one document's cleanup never drops another document's or
+   * a customer's face. The face participates in `hasFace`/await like any managed face while it lives.
+   *
+   * Returns null where there is no DOM `FontFace` constructor / font set: embedded bytes cannot render
+   * without one, so the resolver correctly falls through to the bundled substitute. The disposer is
+   * idempotent (a second call returns false).
+   */
+  registerOwnedFace(descriptor: OwnedFaceDescriptor): (() => boolean) | null {
+    const { family, source, weight, style } = descriptor;
+    if (!this.#FontFaceCtor || !this.#fontSet) return null;
+    const key = faceKeyOf(family, weight, style);
+    const face = new this.#FontFaceCtor(family, source, { weight, style });
+    this.#fontSet.add(face);
+    this.#addManagedFace(family, key, face);
+    // Seed provider and status state so the resolver can see this face and the gate can await it.
+    // Binary faces have no `#faceSources`, but otherwise mirror the bookkeeping `register` does.
+    this.#providerFaceKeys.add(key);
+    if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
+    this.#trackFace(family, key);
+    if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
+    let released = false;
+    return () => {
+      if (released) return false;
+      released = true;
+      return this.#removeManagedFace(family, key, face);
+    };
+  }
+
+  /** Track a created FontFace under its family (`#managed`, last-wins) and its face key
+   *  (`#facesByKey`, all owners). Shared by {@link register} and {@link registerOwnedFace}. */
+  #addManagedFace(family: string, key: string, face: FontFaceLike): void {
+    this.#managed.set(family, face);
+    let set = this.#facesByKey.get(key);
+    if (!set) {
+      set = new Set<FontFaceLike>();
+      this.#facesByKey.set(key, set);
+    }
+    set.add(face);
+  }
+
+  /**
+   * Remove one specific managed face. Drops it from the FontFaceSet and its face-key group; when that
+   * was the LAST face for the key, clears the key's per-face state and removes the key from its
+   * family - and when the family then has no keys left, clears its family-level state too. Returns
+   * false if the face was not tracked under that key (already released / never ours), leaving
+   * everything untouched.
+   */
+  #removeManagedFace(family: string, key: string, face: FontFaceLike): boolean {
+    const set = this.#facesByKey.get(key);
+    if (!set || !set.delete(face)) return false;
+    if (typeof this.#fontSet?.delete === 'function') this.#fontSet.delete(face);
+    if (set.size > 0) return true; // another owner still provides this face; keep key/family state
+    this.#facesByKey.delete(key);
+    this.#providerFaceKeys.delete(key);
+    this.#faceStatus.delete(key);
+    this.#faceSources.delete(key);
+    const fam = normalizeFamilyKey(family);
+    const keys = this.#facesByFamily.get(fam);
+    if (keys) {
+      keys.delete(key);
+      if (keys.size === 0) {
+        // The family has no managed faces left: drop its family-level state and the `#managed` entry
+        // so `isManaged`/`getStatus` no longer report a now-removed family.
+        this.#facesByFamily.delete(fam);
+        this.#managed.delete(family);
+        this.#status.delete(family);
+        this.#sources.delete(family);
+      }
+    }
+    return true;
   }
 
   /**
@@ -221,6 +392,30 @@ export class FontRegistry {
     const priority: FontLoadStatus[] = ['failed', 'timed_out', 'fallback_used', 'loaded', 'loading', 'unloaded'];
     for (const s of priority) if (statuses.includes(s)) return s;
     return 'unloaded';
+  }
+
+  /**
+   * Is a face (family + weight + style) provided by a REGISTERED face that has not terminally failed
+   * to load? The face-availability oracle the face-aware resolver consults to answer "does the
+   * physical family actually provide this face?" - so a single-face substitute is never mapped onto a
+   * weight/style it lacks (which the painter would faux-synthesize). Covers bundled faces (registered
+   * by `installBundledSubstitutes`) and customer `fonts.add()` faces alike, because both register
+   * through {@link register}.
+   *
+   * Two deliberate exclusions:
+   *  - A merely-AWAITED face is not a provider. The oracle reads {@link #providerFaceKeys} (registration
+   *    only), NOT `#facesByFamily` (which the await path also populates for the status rollup), so an
+   *    `as_requested` family the gate once awaited does not masquerade as a registered face on the next
+   *    resolve.
+   *  - A face whose asset terminally FAILED to load is dropped, so the ladder steps down to the bundled
+   *    clone instead of committing forever to a broken registered face. `timed_out` is NOT excluded -
+   *    the late-load reflow still recovers a slow face, and demoting it would strand the real font.
+   *
+   * Distinct from {@link isAvailable}, which asks whether a face is LOADED right now.
+   */
+  hasFace(family: string, weight: '400' | '700', style: 'normal' | 'italic'): boolean {
+    const key = faceKeyOf(family, weight, style);
+    return this.#providerFaceKeys.has(key) && this.#faceStatus.get(key) !== 'failed';
   }
 
   /**
@@ -365,6 +560,13 @@ export class FontRegistry {
 
   /** Warn once per face when its asset fails to load, naming the attempted URL. */
   #warnFaceFailureOnce(request: FontFaceRequest, key: string): void {
+    // A bundled substitute that fails to load is a setup problem (the .woff2 are not served),
+    // not a one-off per-face issue - route it to the single actionable warning instead of N
+    // per-face lines.
+    if (BUNDLED_SUBSTITUTE_FAMILIES.has(request.family)) {
+      this.#warnBundledSubstituteFailureOnce(request.family);
+      return;
+    }
     if (this.#warnedFaceFailures.has(key)) return;
     this.#warnedFaceFailures.add(key);
     const src = this.#faceSources.get(key);
@@ -420,6 +622,10 @@ export class FontRegistry {
    * is never silent - the report also flags it (`missing: true`, `loadStatus: 'failed'`).
    */
   #warnLoadFailureOnce(family: string): void {
+    if (BUNDLED_SUBSTITUTE_FAMILIES.has(family)) {
+      this.#warnBundledSubstituteFailureOnce(family);
+      return;
+    }
     if (this.#warnedFailures.has(family)) return;
     this.#warnedFailures.add(family);
     const sources = this.#sources.get(family);
@@ -428,6 +634,27 @@ export class FontRegistry {
     console.warn(
       `[superdoc] font asset failed to load for "${family}"${detail}. ` +
         `Check fonts.assetBaseUrl / fonts.resolveAssetUrl so the bundled .woff2 are served.`,
+    );
+  }
+
+  /**
+   * Fire a single actionable warning (once per registry) when a BUNDLED substitute face fails to
+   * load - i.e. the reviewed fallback `.woff2` are not being served. This is almost always a setup
+   * problem in an npm/bundler app: the font files sit in `node_modules` but are never exposed at a
+   * URL, so substitution silently falls back to the logical font name and text looks unchanged on
+   * machines that lack the original font. Name the two concrete fixes instead of leaving it silent.
+   */
+  #warnBundledSubstituteFailureOnce(family: string): void {
+    if (this.#warnedBundledSubstituteFailure) return;
+    this.#warnedBundledSubstituteFailure = true;
+    console.warn(
+      `[superdoc] Bundled fallback fonts failed to load (e.g. "${family}"). Text will render with ` +
+        `system fallbacks, so some fonts may look unchanged on machines that lack them. Fix one of:\n` +
+        `  - install @superdoc-dev/fonts and pass it:\n` +
+        `      import { superdocFonts } from '@superdoc-dev/fonts';\n` +
+        `      new SuperDoc({ /* ... */ fonts: superdocFonts });\n` +
+        `  - or set fonts.assetBaseUrl / fonts.resolveAssetUrl to where the bundled .woff2 are served.\n` +
+        `Docs: https://docs.superdoc.dev/getting-started/fonts`,
     );
   }
 }

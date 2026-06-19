@@ -227,21 +227,20 @@ function cloneBlockWithResolvedTokens(
     // Check if this run has a page token
     if ('token' in run && run.token) {
       if (run.token === 'pageNumber') {
-        const resolvedText =
-          run.pageNumberFieldFormat
-            ? formatChapterPageNumberText({
-                pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat),
+        const resolvedText = run.pageNumberFieldFormat
+          ? formatChapterPageNumberText({
+              pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat),
+              chapterNumberText: displayPageInfo.chapterNumberText,
+              chapterSeparator: displayPageInfo.chapterSeparator,
+            })
+          : displayPageInfo.chapterNumberText
+            ? formatSectionPageNumberText({
+                displayNumber: displayPageInfo.displayNumber,
+                pageFormat: displayPageInfo.pageFormat ?? 'decimal',
                 chapterNumberText: displayPageInfo.chapterNumberText,
                 chapterSeparator: displayPageInfo.chapterSeparator,
               })
-            : displayPageInfo.chapterNumberText
-              ? formatSectionPageNumberText({
-                  displayNumber: displayPageInfo.displayNumber,
-                  pageFormat: displayPageInfo.pageFormat ?? 'decimal',
-                  chapterNumberText: displayPageInfo.chapterNumberText,
-                  chapterSeparator: displayPageInfo.chapterSeparator,
-                })
-              : displayPageInfo.displayText;
+            : displayPageInfo.displayText;
         changed ||= run.text !== resolvedText;
         return {
           ...run,
@@ -336,9 +335,12 @@ export function resolveTokensInBlock(block: ParagraphBlock, pageNumber: number, 
         blockModified = true;
       } else if (run.token === 'totalPageCount') {
         // Replace placeholder text with total page count
-        run.text = totalPagesStr;
+        run.text = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+          : totalPagesStr;
         // Clear token metadata to treat as normal text after resolution
         delete run.token;
+        delete run.pageNumberFieldFormat;
         blockModified = true;
       }
       // Note: pageReference tokens are handled by resolvePageRefs.ts

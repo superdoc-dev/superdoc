@@ -96,6 +96,20 @@ describe('image converter', () => {
       expect(result.title).toBe('Image title');
     });
 
+    it('includes DrawingML fixed alpha adjustment when provided', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          alphaModFix: { amt: 9000 },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.alphaModFix).toEqual({ amt: 9000 });
+    });
+
     it('sets display to inline when inline attribute is true', () => {
       const node: PMNode = {
         type: 'image',
@@ -239,6 +253,27 @@ describe('image converter', () => {
 
         expect(result.objectFit).toBe('fill');
       });
+    });
+
+    it('fills wrap distances from padding when wrap attrs omit them', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          padding: { top: 0, bottom: 0, left: 12, right: 15 },
+          wrap: {
+            type: 'Square',
+            attrs: {
+              wrapText: 'bothSides',
+            },
+          },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.wrap?.distLeft).toBe(12);
+      expect(result.wrap?.distRight).toBe(15);
     });
 
     it('handles wrap configuration', () => {

@@ -1,3 +1,4 @@
+// DEV ONLY — plain HTTP/WS, no TLS. Never expose outside localhost.
 import { createServer } from 'node:http';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,11 @@ import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 
 const PORT = 8081;
 const BASE_PATH = '/v1/collaboration';
+const DOCUMENT_ID_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+
+function isValidDevDocumentId(value: string): boolean {
+  return value.length > 0 && value.length <= 200 && !DOCUMENT_ID_CONTROL_CHARS.test(value);
+}
 
 const collaboration = new CollaborationBuilder()
   .withName('superdoc-dev-collab')
@@ -34,7 +40,7 @@ export function validateUpgradePath(pathname: string): UpgradeValidationResult {
 
   try {
     const documentId = decodeURIComponent(encodedDocumentId);
-    if (!documentId) {
+    if (!isValidDevDocumentId(documentId)) {
       return { ok: false, statusCode: 400 };
     }
     return { ok: true, documentId };

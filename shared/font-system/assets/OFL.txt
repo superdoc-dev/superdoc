@@ -1,9 +1,105 @@
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 
 This is the license text covering the OFL-1.1 fonts bundled in this directory
-(Carlito, Liberation Sans, Liberation Serif, Liberation Mono). Per-font copyright
-and Reserved Font Name statements are in LICENSES.md. Official text:
-https://openfontlicense.org/open-font-license-official-text/
+(Carlito, Liberation Sans, Liberation Serif, Liberation Mono, Caprasimo,
+Bacasime Antique, Oregano Italic, Gelasio, Cardo, Comic Relief, Noto Sans,
+Selawik, Noto Sans Mono, Inconsolata SemiExpanded, PT Sans, Archivo Black, PT
+Sans Narrow). Copyright notices and any Reserved Font Name statements for those fonts
+are reproduced verbatim below, taken from the fonts' own name tables, so they
+travel with this license text. LICENSES.md restates them for convenience.
+Official OFL text: https://openfontlicense.org/open-font-license-official-text/
+
+-----------------------------------------------------------
+COPYRIGHT NOTICES (the "above copyright notice" required by condition 2)
+
+Carlito:
+    Copyright (c) 2010-2013 by tyPoland Lukasz Dziedzic
+    (http://www.typoland.com/) with Reserved Font Name "Carlito".
+    Licensed under the SIL Open Font License, Version 1.1.
+
+Liberation Sans, Liberation Serif, Liberation Mono:
+    Digitized data copyright (c) 2010 Google Corporation.
+    Copyright (c) 2012 Red Hat, Inc.
+    Licensed under the SIL Open Font License, Version 1.1.
+    ("Liberation" is a registered trademark of Red Hat, Inc.; these v2.1.5
+    files declare no OFL Reserved Font Name.)
+
+Caprasimo:
+    Copyright 2023 The Caprasimo Project Authors
+    (https://github.com/docrepair-fonts/caprasimo-fonts).
+    Licensed under the SIL Open Font License, Version 1.1.
+    (This v1.001 file declares no OFL Reserved Font Name.)
+
+Archivo Black:
+    Copyright 2017 The Archivo Black Project Authors
+    (https://github.com/Omnibus-Type/ArchivoBlack).
+    Licensed under the SIL Open Font License, Version 1.1.
+    (This v1.006 file declares no OFL Reserved Font Name.)
+
+Bacasime Antique:
+    Copyright 2023 The Bacasime Antique Project Authors
+    (https://github.com/docrepair-fonts/bacasime-antique-fonts), with Reserved
+    Font Name "Playfair".
+    Licensed under the SIL Open Font License, Version 1.1.
+
+Oregano Italic:
+    Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI)
+    (astigma@astigmatic.com), with Reserved Font Name "Oregano Italic".
+    Licensed under the SIL Open Font License, Version 1.1.
+
+Gelasio:
+    Copyright 2022 The Gelasio Project Authors
+    (https://github.com/SorkinType/Gelasio)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These v1.008 files declare no OFL Reserved Font Name.)
+
+Cardo:
+    Copyright (c) 2002-2011, David J. Perry
+    (hospes02@scholarsfonts.net)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These files declare no OFL Reserved Font Name.)
+
+Comic Relief:
+    Copyright 2013 The Comic Relief Project Authors
+    (https://github.com/loudifier/Comic-Relief)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These v1.200 files declare no OFL Reserved Font Name.)
+
+Noto Sans:
+    Copyright 2022 The Noto Project Authors
+    (https://github.com/notofonts/latin-greek-cyrillic)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These v2.015 files declare no OFL Reserved Font Name.)
+
+Selawik:
+    © 2015 Microsoft Corporation (www.microsoft.com), with Reserved Font Name
+    "Selawik". Selawik is a trademark of Microsoft Corporation in the United
+    States and/or other countries.
+    Licensed under the SIL Open Font License, Version 1.1.
+
+Noto Sans Mono:
+    Copyright 2022 The Noto Project Authors
+    (https://github.com/notofonts/latin-greek-cyrillic)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These v2.014 files declare no OFL Reserved Font Name.)
+
+Inconsolata SemiExpanded:
+    Copyright 2006 The Inconsolata Project Authors
+    (https://github.com/cyrealtype/Inconsolata)
+    Licensed under the SIL Open Font License, Version 1.1.
+    (These v3.001 files declare no OFL Reserved Font Name.)
+
+PT Sans:
+    Copyright (c) 2010, ParaType Ltd.
+    (http://www.paratype.com/public), with Reserved Font Names "PT Sans",
+    "PT Serif" and "ParaType".
+    Licensed under the SIL Open Font License, Version 1.1.
+
+PT Sans Narrow:
+    Copyright (c) 2010, ParaType Ltd.
+    (http://www.paratype.com/public), with Reserved Font Names "PT Sans",
+    "PT Serif" and "ParaType".
+    Licensed under the SIL Open Font License, Version 1.1.
 
 -----------------------------------------------------------
 PREAMBLE

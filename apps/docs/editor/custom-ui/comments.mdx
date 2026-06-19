@@ -126,6 +126,36 @@ export function CommentComposer({ onPosted }: { onPosted(): void }) {
 
 See the [selection capture example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/selection-capture) for a runnable vanilla version: open a composer, move focus to a textarea, and post against the original selection.
 
+### When the built-in bubble opens your composer
+
+If you keep the built-in floating comment bubble but render your own composer, listen for the pending comment event. The event carries `pendingSelection`, captured before SuperDoc inserts the pending mark, so you do not need to continuously cache the last non-empty selection.
+
+```tsx
+import { useEffect, useState } from 'react';
+import type { SuperDocCommentsUpdatePayload } from 'superdoc';
+import type { SelectionInfo } from 'superdoc/ui';
+
+const [pendingSelection, setPendingSelection] = useState<SelectionInfo | null>(null);
+
+useEffect(() => {
+  if (!superdoc) return;
+
+  const handleCommentsUpdate = ({ type, pendingSelection }: SuperDocCommentsUpdatePayload) => {
+    if (type === 'pending') setPendingSelection(pendingSelection ?? null);
+  };
+
+  superdoc.on('comments-update', handleCommentsUpdate);
+  return () => superdoc.off('comments-update', handleCommentsUpdate);
+}, [superdoc]);
+
+function postComment(text: string) {
+  if (!ui || !pendingSelection) return;
+  return ui.comments.createFromCapture(pendingSelection, { text: text.trim() });
+}
+```
+
+`pendingSelection` is a Document API selection snapshot. It has the `target` that `createFromCapture` needs, but it can be `null` for PDF selections, mismatched documents, or selections with no text anchor.
+
 ## Resolve and reopen
 
 ```tsx
@@ -135,6 +165,17 @@ ui.comments.delete(commentId);
 ```
 
 All three return a Document API receipt. The next snapshot from `useSuperDocComments()` reflects the change.
+
+## Activate a comment highlight without scrolling
+
+Use `setActive` when your UI handles scrolling and only needs SuperDoc to highlight the comment.
+
+```tsx
+scrollYourSidebarOrEditor(commentId);
+const activated = ui.comments.setActive(commentId);
+```
+
+Pass `null` to clear the highlight. Reply ids activate their anchored thread root, unknown ids return `false`, and a later editor selection change can clear the highlight because `setActive` does not move the caret.
 
 ## Scroll to a comment
 

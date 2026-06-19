@@ -1,26 +1,26 @@
 ---
 title: images.move
 sidebarTitle: images.move
-description: Move an image to a new location in the document.
+description: "Move an image to a new location in the document. Tracked-mode authoring supports safe sole inline-image body paragraphs and emits paired `<w:moveFrom>` / `<w:moveTo>` wrappers with explicit move range marker identity."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Move an image to a new location in the document.
+Move an image to a new location in the document. Tracked-mode authoring supports safe sole inline-image body paragraphs and emits paired `<w:moveFrom>` / `<w:moveTo>` wrappers with explicit move range marker identity.
 
 - Operation ID: `images.move`
 - API member path: `editor.doc.images.move(...)`
 - Mutates document: `yes`
 - Idempotency: `non-idempotent`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns an ImagesMutationResult indicating success or failure.
+Returns an ImagesMutationResult indicating success or failure. Tracked-mode results include `trackedChangeRefs` pointing at the paired move review entity.
 
 ## Input fields
 
@@ -67,6 +67,8 @@ Returns an ImagesMutationResult indicating success or failure.
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
+- `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 

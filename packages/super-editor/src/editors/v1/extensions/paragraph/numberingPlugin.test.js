@@ -158,6 +158,50 @@ describe('numberingPlugin', () => {
     expect(editor.off).toHaveBeenCalledWith('destroy', destroyHandler);
   });
 
+  it('skips recompute entirely for block-node metadata rounds (SD-3432)', () => {
+    const editor = createEditor();
+    const plugin = createNumberingPlugin(editor);
+    const { appendTransaction } = plugin.spec;
+
+    const listParagraph = {
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+    };
+    const doc = makeDoc([{ node: listParagraph, pos: 5 }]);
+    ListHelpers.getListDefinitionDetails.mockReturnValue({
+      lvlText: '%1.',
+      listNumberingType: 'decimal',
+      suffix: '.',
+      justification: 'left',
+      abstractId: 'abstract1',
+    });
+    generateOrderedListIndex.mockReturnValue('1.');
+
+    // First call clears the constructor's forceFullRecompute so the steady
+    // state gates are active.
+    appendTransaction(
+      [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }],
+      {},
+      { doc, tr: createTransaction() },
+    );
+    ListHelpers.getListDefinitionDetails.mockClear();
+
+    // A block-node metadata round: setNodeMarkup steps rewriting only
+    // sdBlockId/sdBlockRev, flagged with blockNodeMetadataUpdate. Without
+    // the gate this paid two full-document diffs per keystroke.
+    const metadataTr = {
+      docChanged: true,
+      getMeta: vi.fn((key) => key === 'blockNodeMetadataUpdate'),
+    };
+
+    const result = appendTransaction([metadataTr], {}, { doc, tr: createTransaction() });
+
+    expect(result).toBeNull();
+    // The gate exits before any definition lookup or doc walk.
+    expect(ListHelpers.getListDefinitionDetails).not.toHaveBeenCalled();
+    expect(numberingManager.enableCache).not.toHaveBeenCalledTimes(2);
+  });
+
   it('updates list rendering data for ordered lists when the doc changes', () => {
     const editor = createEditor();
     const plugin = createNumberingPlugin(editor);

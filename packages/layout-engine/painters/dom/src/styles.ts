@@ -15,6 +15,7 @@ export const CLASS_NAMES = {
   spread: 'superdoc-spread',
   pageHeader: 'superdoc-page-header',
   pageFooter: 'superdoc-page-footer',
+  textRun: 'superdoc-text-run',
 };
 
 export type PageStyles = {
@@ -22,6 +23,7 @@ export type PageStyles = {
   boxShadow?: string;
   border?: string;
   margin?: string;
+  color?: string;
 };
 
 export const DEFAULT_PAGE_STYLES: Required<PageStyles> = {
@@ -29,6 +31,7 @@ export const DEFAULT_PAGE_STYLES: Required<PageStyles> = {
   boxShadow: 'var(--sd-layout-page-shadow, 0 4px 20px rgba(15, 23, 42, 0.08))',
   border: '1px solid rgba(15, 23, 42, 0.08)',
   margin: '0 auto',
+  color: 'var(--sd-layout-page-color, #000000)',
 };
 
 export const containerStyles: Partial<CSSStyleDeclaration> = {
@@ -78,6 +81,7 @@ export const pageStyles = (width: number, height: number, overrides?: PageStyles
     boxShadow: merged.boxShadow,
     border: merged.border,
     margin: merged.margin,
+    color: merged.color,
     overflow: 'hidden',
   };
 };
@@ -87,6 +91,7 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   whiteSpace: 'pre',
   overflow: 'visible',
   boxSizing: 'border-box',
+  color: 'inherit',
 };
 
 /**
@@ -106,6 +111,7 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // elements that don't (empty-run, math wrapper, field annotation wrapper)
   // are patched individually in renderer.ts.
   fontSize: '0',
+  color: 'inherit',
   position: 'relative',
   display: 'block',
   whiteSpace: 'pre',
@@ -129,6 +135,34 @@ const PRINT_STYLES = `
     box-shadow: none;
     page-break-after: always;
   }
+}
+`;
+
+const DOCUMENT_SURFACE_STYLES = `
+/* Document paint isolation.
+ *
+ * The rendered page is document content, not host chrome. Establish a page
+ * foreground and force painter-owned wrappers/text runs to inherit from that
+ * page so common host CSS such as :root/body/span/body * color rules cannot
+ * recolor unresolved/auto document text. This deliberately avoids priority flags:
+ * real run colors applied as inline styles and painter feature states still win.
+ */
+.${CLASS_NAMES.container} {
+  color: var(--sd-layout-page-color, #000000);
+}
+
+.${CLASS_NAMES.container} .${CLASS_NAMES.page},
+.${CLASS_NAMES.container} .${CLASS_NAMES.pageHeader},
+.${CLASS_NAMES.container} .${CLASS_NAMES.pageFooter},
+.${CLASS_NAMES.container} .${CLASS_NAMES.fragment},
+.${CLASS_NAMES.container} .${CLASS_NAMES.line},
+.${CLASS_NAMES.container} .superdoc-list-content,
+.${CLASS_NAMES.container} .${DOM_CLASS_NAMES.LIST_MARKER} {
+  color: inherit;
+}
+
+.${CLASS_NAMES.container} .${CLASS_NAMES.page} .${CLASS_NAMES.textRun}:not([data-bookmark-marker]) {
+  color: inherit;
 }
 `;
 
@@ -203,8 +237,8 @@ const LINK_AND_TOC_STYLES = `
  * visual treatment: subtle gray, non-selectable so users can't accidentally
  * include the brackets in copied text. The bookmark name is surfaced via
  * the native title tooltip on the opening bracket. */
-[data-bookmark-marker="start"],
-[data-bookmark-marker="end"] {
+.${CLASS_NAMES.container} [data-bookmark-marker="start"],
+.${CLASS_NAMES.container} [data-bookmark-marker="end"] {
   color: #8b8b8b;
   user-select: none;
   cursor: default;
@@ -241,6 +275,9 @@ const LINK_AND_TOC_STYLES = `
   color: inherit !important;
   text-decoration: none !important;
   cursor: default;
+  /* Disable native link drag so our pointer loop can run text-selection. */
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 .superdoc-toc-entry .superdoc-link:hover {
@@ -250,6 +287,31 @@ const LINK_AND_TOC_STYLES = `
 /* Override focus styles for TOC links (they're not interactive) */
 .superdoc-toc-entry .superdoc-link:focus-visible {
   outline: none;
+}
+
+/* TOC hover. .toc-group-hover is set by PresentationEditor on every entry
+   sharing a data-toc-id so the whole TOC greys out together. The ::after
+   stripe (height set via --toc-gap-below) fills the paragraph-spacing gap
+   between adjacent entries so the hover reads as one continuous block. */
+.superdoc-toc-entry:hover,
+.superdoc-toc-entry.toc-group-hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
+}
+
+/* Pointer-events stay on (default) so the stripe extends the parent entry's
+   hit-test area through the paragraph-spacing gap. Without this, moving the
+   cursor between two adjacent entries fires mouseout on the upper entry with
+   relatedTarget = the page (not a TOC entry), the coordinator drops the
+   group-hover class, and the grey disappears for a frame before the next
+   entry's mouseover restores it — visible as a flicker. */
+.superdoc-toc-entry.toc-group-hover::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--toc-gap-below, 0px);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
 /* Remove focus outlines from layout engine elements */
@@ -338,6 +400,45 @@ const TRACK_CHANGE_STYLES = `
 
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
+}
+
+/*
+ * Structural row-level tracked changes (inserted/deleted whole rows).
+ *
+ * The painter renders a row as absolutely-positioned cell <div>s (no <tr>), so
+ * each cell of a tracked row carries the same base class (track-insert-dec /
+ * track-delete-dec) + modifier (highlighted / hidden) as inline runs, plus the
+ * block-context marker class track-row-cell-dec. These rules reuse the same
+ * --sd-tracked-changes-insert-* / --sd-tracked-changes-delete-* CSS variables so
+ * the per-author color flows through identically to the inline path.
+ *
+ * 'hidden' mode collapses the cell (and therefore the row) via the existing
+ * .track-insert-dec.hidden / .track-delete-dec.hidden { display: none } rule
+ * above: an inserted row in 'original' mode and a deleted row in 'final' mode
+ * disappear, matching inline behavior.
+ */
+.superdoc-layout .track-row-cell-dec.track-insert-dec.highlighted {
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+  border-top: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: var(--sd-tracked-changes-insert-border-width, 2px) solid
+    var(--sd-tracked-changes-insert-border, #00853d);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted {
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
+  border-top: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-bottom: var(--sd-tracked-changes-delete-border-width, 2px) solid
+    var(--sd-tracked-changes-delete-border, #cb0e47);
+}
+
+.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted .superdoc-line {
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px);
 }
 `;
 
@@ -1087,67 +1188,98 @@ menclose::after {
 }
 `;
 
-let printStylesInjected = false;
-let linkStylesInjected = false;
-let trackChangeStylesInjected = false;
-let formattingMarksStylesInjected = false;
-let sdtContainerStylesInjected = false;
-let fieldAnnotationStylesInjected = false;
-let imageSelectionStylesInjected = false;
-let mathMencloseStylesInjected = false;
+/**
+ * SD-3400: footnote/endnote note content uses a text (I-beam) cursor like body
+ * text, not the default arrow. Note fragments are painted as generic
+ * `.superdoc-fragment` elements distinguished only by their block-id prefix
+ * (footnote-/endnote-/__sd_semantic_footnote-/__sd_semantic_endnote-), so the
+ * cursor rule keys off `data-block-id`. The renderer marks these fragments
+ * contenteditable=false, so without this rule the browser shows a default arrow
+ * over editable note text.
+ */
+const FOOTNOTE_STYLES = `
+[data-block-id^="footnote-"],
+[data-block-id^="endnote-"],
+[data-block-id^="__sd_semantic_footnote-"],
+[data-block-id^="__sd_semantic_endnote-"] {
+  cursor: text;
+}
+/* SD-3400: body reference markers are interactive (double-click opens the
+ * note). Pointer cursor + a hover pill signal clickability without affecting
+ * layout (background/box-shadow are paint-only). */
+[data-note-reference] {
+  cursor: pointer;
+  border-radius: 2px;
+  position: relative;
+}
+/* The painted digit is ~6x11px — far too small to hover or double-click
+ * reliably. An invisible pseudo-element halo expands the interactive target
+ * (hover, cursor, clicks all hit the marker span) without moving any text. */
+[data-note-reference]::after {
+  content: '';
+  position: absolute;
+  inset: -4px -5px;
+}
+[data-note-reference]:hover {
+  background-color: var(--sd-content-controls-block-hover-bg, #d3e3fd);
+  box-shadow: 0 0 0 2px var(--sd-content-controls-block-hover-bg, #d3e3fd);
+}
+
+/* SD-3400: while a note session is open, highlight the note's fragments at the
+ * page bottom so the focus change is visible. Applied by PresentationEditor on
+ * activation, re-applied after each paint, removed on session exit. The pulse
+ * draws the eye when focus jumps from the body reference to the note. */
+.sd-note-session-active {
+  background-color: rgba(98, 155, 231, 0.07);
+  /* Thin accent bar with breathing room: the first shadow masks a 3px gap with
+   * the page background, the second paints a 1px bar beyond it. Box-shadows
+   * paint outside the box, so the note line itself is untouched. */
+  box-shadow:
+    -3px 0 0 0 var(--sd-page-bg, #ffffff),
+    -4px 0 0 0 rgba(98, 155, 231, 0.55);
+  animation: sd-note-activate-pulse 0.6s ease-out 1;
+}
+@keyframes sd-note-activate-pulse {
+  0% { background-color: rgba(98, 155, 231, 0.22); }
+  100% { background-color: rgba(98, 155, 231, 0.07); }
+}
+`;
+
+const ensureStyleElement = (doc: Document | null | undefined, markerAttribute: string, cssText: string) => {
+  if (!doc?.head) return;
+  if (doc.head.querySelector(`[${markerAttribute}="true"]`)) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute(markerAttribute, 'true');
+  styleEl.textContent = cssText;
+  doc.head.appendChild(styleEl);
+};
 
 export const ensurePrintStyles = (doc: Document | null | undefined) => {
-  if (printStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-print-styles', 'true');
-  styleEl.textContent = PRINT_STYLES;
-  doc.head?.appendChild(styleEl);
-  printStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-print-styles', PRINT_STYLES);
+};
+
+export const ensureDocumentSurfaceStyles = (doc: Document | null | undefined) => {
+  ensureStyleElement(doc, 'data-superdoc-document-surface-styles', DOCUMENT_SURFACE_STYLES);
 };
 
 export const ensureLinkStyles = (doc: Document | null | undefined) => {
-  if (linkStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-link-styles', 'true');
-  styleEl.textContent = LINK_AND_TOC_STYLES;
-  doc.head?.appendChild(styleEl);
-  linkStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-link-styles', LINK_AND_TOC_STYLES);
 };
 
 export const ensureTrackChangeStyles = (doc: Document | null | undefined) => {
-  if (trackChangeStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-track-change-styles', 'true');
-  styleEl.textContent = TRACK_CHANGE_STYLES;
-  doc.head?.appendChild(styleEl);
-  trackChangeStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-track-change-styles', TRACK_CHANGE_STYLES);
 };
 
 export const ensureFormattingMarksStyles = (doc: Document | null | undefined) => {
-  if (formattingMarksStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-formatting-marks-styles', 'true');
-  styleEl.textContent = FORMATTING_MARKS_STYLES;
-  doc.head?.appendChild(styleEl);
-  formattingMarksStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-formatting-marks-styles', FORMATTING_MARKS_STYLES);
 };
 
 export const ensureSdtContainerStyles = (doc: Document | null | undefined) => {
-  if (sdtContainerStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-sdt-container-styles', 'true');
-  styleEl.textContent = SDT_CONTAINER_STYLES;
-  doc.head?.appendChild(styleEl);
-  sdtContainerStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-sdt-container-styles', SDT_CONTAINER_STYLES);
 };
 
 export const ensureFieldAnnotationStyles = (doc: Document | null | undefined) => {
-  if (fieldAnnotationStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-field-annotation-styles', 'true');
-  styleEl.textContent = FIELD_ANNOTATION_STYLES;
-  doc.head?.appendChild(styleEl);
-  fieldAnnotationStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-field-annotation-styles', FIELD_ANNOTATION_STYLES);
 };
 
 /**
@@ -1157,12 +1289,7 @@ export const ensureFieldAnnotationStyles = (doc: Document | null | undefined) =>
  * @returns {void}
  */
 export const ensureImageSelectionStyles = (doc: Document | null | undefined) => {
-  if (imageSelectionStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-image-selection-styles', 'true');
-  styleEl.textContent = IMAGE_SELECTION_STYLES;
-  doc.head?.appendChild(styleEl);
-  imageSelectionStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-image-selection-styles', IMAGE_SELECTION_STYLES);
 };
 
 /**
@@ -1171,10 +1298,13 @@ export const ensureImageSelectionStyles = (doc: Document | null | undefined) => 
  * MATH_MENCLOSE_STYLES for the full rationale.
  */
 export const ensureMathMencloseStyles = (doc: Document | null | undefined) => {
-  if (mathMencloseStylesInjected || !doc) return;
-  const styleEl = doc.createElement('style');
-  styleEl.setAttribute('data-superdoc-math-menclose-styles', 'true');
-  styleEl.textContent = MATH_MENCLOSE_STYLES;
-  doc.head?.appendChild(styleEl);
-  mathMencloseStylesInjected = true;
+  ensureStyleElement(doc, 'data-superdoc-math-menclose-styles', MATH_MENCLOSE_STYLES);
+};
+
+/**
+ * Injects footnote/endnote interaction styles (text cursor over note content)
+ * into the document head. Injected once per document lifecycle. (SD-3400)
+ */
+export const ensureFootnoteStyles = (doc: Document | null | undefined) => {
+  ensureStyleElement(doc, 'data-superdoc-footnote-styles', FOOTNOTE_STYLES);
 };

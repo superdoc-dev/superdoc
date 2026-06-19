@@ -65,6 +65,7 @@ export const BUILT_IN_COMMAND_IDS = [
   'ruler',
   'formatting-marks',
   'zoom',
+  'zoom-fit-width',
   'document-mode',
   'clear-formatting',
   'copy-format',
@@ -119,6 +120,7 @@ export type ToolbarPayloadMap = {
   ruler: never;
   'formatting-marks': never;
   zoom: number;
+  'zoom-fit-width': never;
   'document-mode': 'editing' | 'suggesting' | 'viewing';
   'clear-formatting': never;
   'copy-format': never;
@@ -168,6 +170,7 @@ export type ToolbarValueMap = {
   ruler: undefined;
   'formatting-marks': undefined;
   zoom: number;
+  'zoom-fit-width': undefined;
   'document-mode': string;
   'clear-formatting': undefined;
   'copy-format': undefined;
@@ -236,6 +239,37 @@ export type ToolbarContext = {
 };
 
 /**
+ * Active-editor shape accepted at the SuperDoc host boundary.
+ *
+ * A real SuperDoc can expose either the v1 Editor projection or a narrow v2
+ * facade through `activeEditor`. The toolbar resolver only builds a command
+ * context for v1-command-capable editors; v2 facades are accepted here so
+ * `createHeadlessToolbar({ superdoc })` remains assignable during the v2
+ * transition without pretending the facade is a full v1 Editor.
+ */
+export type HeadlessToolbarActiveEditor = {
+  editorVersion?: 1 | 2;
+  options?: {
+    isHeaderOrFooter?: boolean;
+    headerFooterType?: string;
+    documentId?: string | null;
+    documentMode?: string;
+  };
+  commands?: Record<string, (...args: unknown[]) => unknown> | null;
+  doc?: DocumentApi;
+  state?: {
+    selection?: {
+      empty?: boolean;
+    };
+  } | null;
+  isEditable?: boolean;
+  focus?: () => unknown;
+  setHighContrastMode?: (isHighContrast: boolean) => unknown;
+  presentationEditor?: PresentationEditor | null;
+  _presentationEditor?: PresentationEditor | null;
+};
+
+/**
  * Typed command states — each command ID maps to its specific value type.
  * Use this instead of `Record<PublicToolbarItemId, ToolbarCommandState>`
  * for type-safe access to snapshot values.
@@ -282,7 +316,7 @@ export type ToolbarExecuteFn = (id: PublicToolbarItemId, payload?: unknown) => b
  * duplication.
  */
 type HeadlessToolbarSuperdocHostBase = {
-  activeEditor?: Editor | null;
+  activeEditor?: HeadlessToolbarActiveEditor | null;
   config?: {
     layoutEngineOptions?: {
       showFormattingMarks?: boolean;

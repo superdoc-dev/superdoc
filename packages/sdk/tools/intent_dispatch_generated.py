@@ -149,6 +149,8 @@ def dispatch_intent_tool(
             return execute('doc.tables.insertRow', rest)
         elif action == 'delete_row':
             return execute('doc.tables.deleteRow', rest)
+        elif action == 'move_row':
+            return execute('doc.tables.moveRow', rest)
         elif action == 'set_row':
             return execute('doc.tables.setRowHeight', rest)
         elif action == 'set_row_options':

@@ -23,7 +23,7 @@ Returns the setter the editor mount component calls in `onReady`. Most component
 
 ```tsx
 const setSuperDoc = useSetSuperDoc();
-<SuperDocEditor onReady={({ superdoc }) => setSuperDoc(superdoc)} />
+<SuperDocEditor onReady={({ superdoc }) => setSuperDoc(superdoc)} />;
 ```
 
 ### `useSuperDocUI()`
@@ -86,15 +86,34 @@ const toolbar = useSuperDocToolbar();
 // { context, commands: Record<string, UIToolbarCommandState> }
 ```
 
+### `useSuperDocFontOptions()`
+
+Returns font-family picker options for custom toolbar UIs. The list includes the built-in defaults plus fonts used by the active document, sorted alphabetically.
+
+```ts
+const options = useSuperDocFontOptions();
+// [{ label: 'Calibri', value: 'Calibri', previewFamily: 'Carlito' }, ...]
+```
+
+Use `option.value` with `ui.toolbar.execute('font-family', option.value)`. Use `option.previewFamily` only to render the row preview.
+
+### `useSuperDocFontSizeOptions()`
+
+Returns the default font-size picker options for custom toolbar UIs.
+
+```ts
+const sizes = useSuperDocFontSizeOptions();
+// [{ label: '8', value: '8pt' }, { label: '9', value: '9pt' }, ...]
+```
+
+Use `option.value` with `ui.toolbar.execute('font-size', option.value)`.
+
 ### `useSuperDocSlice(picker, initial)`
 
 Subscribe to any slice from `ui.select(...)`. Use when the typed hooks above don't cover what you need.
 
 ```ts
-const documentMode = useSuperDocSlice(
-  (ui) => ui.select((state) => state.documentMode, Object.is),
-  null,
-);
+const documentMode = useSuperDocSlice((ui) => ui.select((state) => state.documentMode, Object.is), null);
 ```
 
 ### `useSuperDocHost()`
@@ -148,7 +167,7 @@ items[0]?.invoke?.();
 Live snapshot, mutations, navigation.
 
 ```ts
-ui.comments.getSnapshot();                   // sync read
+ui.comments.getSnapshot(); // sync read
 ui.comments.subscribe(({ snapshot }) => {});
 ui.comments.createFromSelection({ text });
 ui.comments.createFromCapture(capture, { text });
@@ -156,6 +175,8 @@ ui.comments.reply(parentCommentId, { text });
 ui.comments.resolve(commentId);
 ui.comments.reopen(commentId);
 ui.comments.delete(commentId);
+ui.comments.setActive(commentId); // highlight without scrolling or moving selection
+ui.comments.setActive(null); // clear active highlight
 ui.comments.scrollTo(commentId);
 ```
 
@@ -180,12 +201,25 @@ ui.trackChanges.scrollTo(changeId);
 Mode, export, replace.
 
 ```ts
-ui.document.getSnapshot();                   // { ready, mode, dirty }
+ui.document.getSnapshot(); // { ready, mode, dirty }
 ui.document.subscribe(({ snapshot }) => {});
 ui.document.setMode('suggesting');
 await ui.document.export({ exportType: ['docx'], commentsType: 'external', triggerDownload: true });
 await ui.document.replaceFile(file);
 ```
+
+### `ui.zoom`
+
+Zoom state, viewport metrics, and the two mutations. The snapshot updates on value changes, mode-only transitions, and viewport metric updates.
+
+```ts
+ui.zoom.getSnapshot(); // { mode, value, fitZoom, min, max, metrics }
+ui.zoom.observe((snapshot) => {});
+ui.zoom.set(125); // numeric zoom; switches the host to manual mode
+ui.zoom.setMode('fit-width'); // continuous fit to the available width
+```
+
+In React, `useSuperDocZoom()` returns the same snapshot plus bound `set` / `setMode` actions. The toolbar registry also exposes a `zoom-fit-width` toggle command for custom toolbars.
 
 ### `ui.selection`
 
@@ -194,12 +228,12 @@ Live slice, capture, restore, painted geometry.
 ```ts
 ui.selection.getSnapshot();
 ui.selection.subscribe(({ snapshot }) => {});
-const captured = ui.selection.capture();              // frozen, holds across focus changes
-const restore = ui.selection.restore(captured);       // { success, reason? }
+const captured = ui.selection.capture(); // frozen, holds across focus changes
+const restore = ui.selection.restore(captured); // { success, reason? }
 
-ui.selection.getRects();                              // ViewportRect[]
-ui.selection.getRects(captured);                      // rects of a captured selection
-ui.selection.getAnchorRect({ placement: 'start' });   // single rect for popovers
+ui.selection.getRects(); // ViewportRect[]
+ui.selection.getRects(captured); // rects of a captured selection
+ui.selection.getAnchorRect({ placement: 'start' }); // single rect for popovers
 ui.selection.getAnchorRect({ placement: 'union' }, captured);
 ```
 
@@ -210,11 +244,13 @@ Geometry. Browser-only.
 ```ts
 ui.viewport.getRect({ target: { kind: 'entity', entityType: 'comment', entityId } });
 await ui.viewport.scrollIntoView({ target, block: 'center', behavior: 'smooth' });
+ui.viewport.observe(({ reason }) => {});
 
-ui.viewport.getHost();                                // painted host element | null
-ui.viewport.entityAt({ x, y });                       // ViewportEntityHit[]
-ui.viewport.positionAt({ x, y });                     // ViewportPositionHit | null
-ui.viewport.contextAt({ x, y });                      // ViewportContext (always returns)
+ui.viewport.getHost(); // painted host element | null
+ui.viewport.getScrollContainer(); // scroll element | null
+ui.viewport.entityAt({ x, y }); // ViewportEntityHit[]
+ui.viewport.positionAt({ x, y }); // ViewportPositionHit | null
+ui.viewport.contextAt({ x, y }); // ViewportContext (always returns)
 ```
 
 ### `ui.toolbar`
@@ -224,11 +260,23 @@ Aggregate toolbar surface. Mirrors the headless-toolbar shape.
 ```ts
 ui.toolbar.getSnapshot();
 ui.toolbar.subscribe(({ snapshot }) => {});
-ui.toolbar.execute(id);                  // built-ins that take no payload
-ui.toolbar.execute(id, payload);         // built-ins that take a payload
+ui.toolbar.execute(id); // built-ins that take no payload
+ui.toolbar.execute(id, payload); // built-ins that take a payload
 ```
 
 `payload` is optional. Pass it for built-ins like `font-size`, `font-family`, and `link` that accept a value; omit it for togglable built-ins like `bold` or `italic`.
+
+### `ui.fonts`
+
+Read-only font picker options for custom toolbar UIs.
+
+```ts
+ui.fonts.getOptions();
+ui.fonts.getSizeOptions();
+ui.fonts.observe((snapshot) => {});
+```
+
+Family options have `{ label, value, previewFamily }`. Apply `value` through the `font-family` command. Size options have `{ label, value }`. Apply `value` through the `font-size` command.
 
 ### `ui.select(selector, equality?)`
 
@@ -247,29 +295,33 @@ Tears down every subscription. The provider calls this on unmount.
 
 Imported from `superdoc/ui`.
 
-| Type | Shape |
-|---|---|
-| `SuperDocUI` | The controller. |
-| `SuperDocUIState` | The unified state model. |
-| `SelectionSlice` | `useSuperDocSelection()` return shape. |
-| `SelectionCapture` | Output of `ui.selection.capture()`. |
-| `CommentsSlice` | `useSuperDocComments()` return shape. |
-| `TrackChangesSlice` | `useSuperDocTrackChanges()` return shape. |
-| `TrackChangesItem` | `{ id, change }`. |
-| `DocumentSlice` | `useSuperDocDocument()` return shape. |
-| `ToolbarSnapshotSlice` | `useSuperDocToolbar()` return shape. |
-| `UIToolbarCommandState` | Per-command state shape. |
-| `CustomCommandRegistration` | Input to `ui.commands.register`. |
-| `CustomCommandRegistrationResult` | Return from `ui.commands.register`. |
-| `ContextMenuContribution` | The `contextMenu` field on a registration. |
-| `ContextMenuWhenInput` | Argument to `contextMenu.when({ entities, selection, point?, position?, insideSelection? })`. |
-| `ContextMenuItem` | Item returned from `ui.commands.getContextMenuItems(input)`. Carries `invoke()` when produced from a `ViewportContext` bundle. |
-| `SelectionAnchorRectOptions` | `{ placement: 'start' \| 'end' \| 'union' }`. |
-| `SelectionRestoreResult` | `{ success: true } \| { success: false, reason }`. |
-| `ScrollIntoViewInput` | Input to `ui.viewport.scrollIntoView`. |
-| `ViewportRect` | Plain value rectangle. |
-| `ViewportEntityHit` | `{ type: 'comment' \| 'trackedChange', id }`. |
-| `ViewportPositionHit` | `{ point: SelectionPoint, target: SelectionTarget }`. |
-| `ViewportContext` | Bundle returned from `ui.viewport.contextAt({ x, y })`. |
+| Type                              | Shape                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `SuperDocUI`                      | The controller.                                                                                                                |
+| `SuperDocUIState`                 | The unified state model.                                                                                                       |
+| `SelectionSlice`                  | `useSuperDocSelection()` return shape.                                                                                         |
+| `SelectionCapture`                | Output of `ui.selection.capture()`.                                                                                            |
+| `CommentsSlice`                   | `useSuperDocComments()` return shape.                                                                                          |
+| `TrackChangesSlice`               | `useSuperDocTrackChanges()` return shape.                                                                                      |
+| `TrackChangesItem`                | `{ id, change }`.                                                                                                              |
+| `DocumentSlice`                   | `useSuperDocDocument()` return shape.                                                                                          |
+| `ToolbarSnapshotSlice`            | `useSuperDocToolbar()` return shape.                                                                                           |
+| `FontsHandle`                     | `ui.fonts` handle shape.                                                                                                       |
+| `FontsSlice`                      | `ui.fonts` snapshot shape.                                                                                                     |
+| `FontFamilyOption`                | `{ label, value, previewFamily }`.                                                                                             |
+| `FontSizeOption`                  | `{ label, value }`.                                                                                                            |
+| `UIToolbarCommandState`           | Per-command state shape.                                                                                                       |
+| `CustomCommandRegistration`       | Input to `ui.commands.register`.                                                                                               |
+| `CustomCommandRegistrationResult` | Return from `ui.commands.register`.                                                                                            |
+| `ContextMenuContribution`         | The `contextMenu` field on a registration.                                                                                     |
+| `ContextMenuWhenInput`            | Argument to `contextMenu.when({ entities, selection, point?, position?, insideSelection? })`.                                  |
+| `ContextMenuItem`                 | Item returned from `ui.commands.getContextMenuItems(input)`. Carries `invoke()` when produced from a `ViewportContext` bundle. |
+| `SelectionAnchorRectOptions`      | `{ placement: 'start' \| 'end' \| 'union' }`.                                                                                  |
+| `SelectionRestoreResult`          | `{ success: true } \| { success: false, reason }`.                                                                             |
+| `ScrollIntoViewInput`             | Input to `ui.viewport.scrollIntoView`.                                                                                         |
+| `ViewportRect`                    | Plain value rectangle.                                                                                                         |
+| `ViewportEntityHit`               | `{ type: 'comment' \| 'trackedChange', id }`.                                                                                  |
+| `ViewportPositionHit`             | `{ point: SelectionPoint, target: SelectionTarget }`.                                                                          |
+| `ViewportContext`                 | Bundle returned from `ui.viewport.contextAt({ x, y })`.                                                                        |
 
 For the source of truth, the types ship with the `superdoc` package and are exported alongside the runtime values.

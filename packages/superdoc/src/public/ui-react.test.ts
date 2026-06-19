@@ -4,6 +4,9 @@ import {
   useSuperDocUI,
   useSuperDocSelection,
   useSuperDocComments,
+  useSuperDocFontOptions,
+  useSuperDocFontSizeOptions,
+  useSuperDocZoom,
   useSetSuperDoc,
 } from './ui-react.js';
 
@@ -25,6 +28,9 @@ describe('public facade (ui-react)', () => {
   it('re-exports domain hooks as functions', () => {
     expect(typeof useSuperDocSelection).toBe('function');
     expect(typeof useSuperDocComments).toBe('function');
+    expect(typeof useSuperDocFontOptions).toBe('function');
+    expect(typeof useSuperDocFontSizeOptions).toBe('function');
+    expect(typeof useSuperDocZoom).toBe('function');
     expect(typeof useSetSuperDoc).toBe('function');
   });
 });

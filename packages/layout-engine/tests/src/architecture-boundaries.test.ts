@@ -294,8 +294,10 @@ describe('architecture boundaries', () => {
     // future Phase 3 plan needs to ship a v2 type through this boundary, that
     // belongs in the v2 layer, not in the shared layout-engine packages.
     const FORBIDDEN_V2_PACKAGES = [
-      '@superdoc/super-editor-v2',
-      '@superdoc/document-api-v2',
+      '@superdoc/editor-core',
+      '@superdoc/headless',
+      '@superdoc/v2-host',
+      '@superdoc/v2-layout-adapter',
       '@superdoc/document-api-v2-adapter',
     ];
     const PREP_001_RUNTIME_DIRS = [

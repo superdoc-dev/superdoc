@@ -16,12 +16,13 @@
  *   These three share artifacts (SDK packages CLI native binaries; MCP
  *   imports SDK + engine code), so they must release in this order.
  *
- * Core chain (superdoc -> react -> vscode-ext):
- *   superdoc is the npm core; react consumes it; vscode-ext bundles the
- *   editor and ships a .vsix to the VS Code Marketplace. They release in
- *   order so downstream packages are never published against an older
- *   superdoc than what just shipped. docs-stable promotion is keyed off
- *   superdoc's v* tag and lives in this workflow as a result.
+ * Core chain (fonts -> superdoc -> react -> vscode-ext):
+ *   fonts ships the optional bundled substitutes; superdoc is the npm core;
+ *   react consumes it; vscode-ext bundles the editor and ships a .vsix to the
+ *   VS Code Marketplace. They release in order so downstream packages are
+ *   never published against an older upstream package than what just shipped.
+ *   docs-stable promotion is keyed off superdoc's v* tag and lives in this
+ *   workflow as a result.
  *
  * Per-package adapters live on the descriptor (resumePublish,
  * preparePythonSnapshot). The recovery engine is generic; new packages
@@ -85,6 +86,7 @@ const SDK_PYPI_ENABLED = true;
 // Both must be present at the released version for the publish to count
 // as complete - see scripts/publish-superdoc.cjs.
 const SUPERDOC_NPM_PACKAGES = ['superdoc', '@harbour-enterprises/superdoc'];
+const FONTS_NPM_PACKAGES = ['@superdoc-dev/fonts'];
 
 function runInWorkspace(workspaceRoot, command, args, options = {}) {
   const { capture = false, env = process.env } = options;
@@ -730,6 +732,15 @@ function resumeReactPublish(workspaceRoot, distTag, options = {}) {
   ]);
 }
 
+function resumeFontsPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  const args = [join(workspaceRoot, 'scripts/publish-fonts.cjs'), '--dist-tag', distTag];
+  if (skipBuild) {
+    args.push('--skip-build');
+  }
+  runInWorkspace(workspaceRoot, 'node', args);
+}
+
 function resumeSuperdocPublish(workspaceRoot, distTag, options = {}) {
   const { skipBuild = workspaceRoot === REPO_ROOT } = options;
   const args = [join(workspaceRoot, 'scripts/publish-superdoc.cjs'), '--dist-tag', distTag];
@@ -923,6 +934,15 @@ const packages = [
     tagPattern: 'mcp-v*',
     npmPackages: ['@superdoc-dev/mcp'],
     resumePublish: resumeMcpPublish,
+  },
+  {
+    name: 'fonts',
+    chain: 'core',
+    packageCwd: 'packages/fonts',
+    tagPrefix: 'fonts-v',
+    tagPattern: 'fonts-v*',
+    npmPackages: FONTS_NPM_PACKAGES,
+    resumePublish: resumeFontsPublish,
   },
   {
     name: 'superdoc',

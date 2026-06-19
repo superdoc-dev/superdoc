@@ -55,6 +55,7 @@ async function main() {
     stdout: () => {},
     stderr: () => {},
     readStdinBytes: async () => new Uint8Array(),
+    now: () => Date.now(),
   };
 
   let opened: { dispose(): void } | undefined;

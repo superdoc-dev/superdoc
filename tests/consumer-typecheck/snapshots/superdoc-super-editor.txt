@@ -30,6 +30,7 @@ ContextMenu
 CoreCommandMap
 CreateHeadlessToolbarOptions
 DocumentApi
+DocumentFontOption
 DocumentProtectionState
 DocxEncryptionError
 DocxEncryptionErrorCode
@@ -57,6 +58,8 @@ FlowMode
 FontAssetUrlContext
 FontAssetUrlResolver
 FontConfig
+FontFaceConfig
+FontFamilyConfig
 FontLoadStatus
 FontLoadSummary
 FontResolutionReason

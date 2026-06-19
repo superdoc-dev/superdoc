@@ -18,6 +18,10 @@ const props = defineProps({
     type: Number,
     default: 100,
   },
+  autoHideDuration: {
+    type: Number,
+    default: 0,
+  },
   disabled: {
     type: Boolean,
     default: false,
@@ -37,6 +41,7 @@ const position = ref({ top: '0px', left: '0px' });
 
 let closeTimeout = null;
 let openTimeout = null;
+let autoHideTimeout = null;
 
 const mergedContentClass = computed(() => ['sd-tooltip-content', attrs.class]);
 const contentStyle = computed(() => ({
@@ -60,6 +65,22 @@ const clearOpenTimeout = () => {
     window.clearTimeout(openTimeout);
     openTimeout = null;
   }
+};
+
+const clearAutoHideTimeout = () => {
+  if (autoHideTimeout) {
+    window.clearTimeout(autoHideTimeout);
+    autoHideTimeout = null;
+  }
+};
+
+const scheduleAutoHide = () => {
+  clearAutoHideTimeout();
+  if (props.autoHideDuration <= 0) return;
+  autoHideTimeout = window.setTimeout(() => {
+    autoHideTimeout = null;
+    close();
+  }, props.autoHideDuration);
 };
 
 const updatePosition = () => {
@@ -88,11 +109,13 @@ const open = async () => {
   isOpen.value = true;
   await nextTick();
   updatePosition();
+  scheduleAutoHide();
 };
 
 const close = () => {
   clearOpenTimeout();
   clearCloseTimeout();
+  clearAutoHideTimeout();
   if (!isOpen.value) return;
   isOpen.value = false;
 };
@@ -169,6 +192,7 @@ watch(isOpen, (openState) => {
 onBeforeUnmount(() => {
   clearOpenTimeout();
   clearCloseTimeout();
+  clearAutoHideTimeout();
   window.removeEventListener('resize', updatePosition);
   window.removeEventListener('scroll', updatePosition, true);
   document.removeEventListener('keydown', handleEscape, true);

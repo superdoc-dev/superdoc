@@ -14,6 +14,7 @@ import {
   normalizeZIndex,
   resolveFloatingZIndex,
   readImageHyperlink,
+  mergeWrapDistancesFromPadding,
 } from '../utilities.js';
 
 // ============================================================================
@@ -254,6 +255,9 @@ export function imageNodeToBlock(
 
   const explicitDisplay = typeof attrs.display === 'string' ? (attrs.display as string) : undefined;
   const normalizedWrap = normalizeWrap(attrs.wrap);
+  if (normalizedWrap) {
+    mergeWrapDistancesFromPadding(normalizedWrap, toBoxSpacing(attrs.padding as Record<string, unknown> | undefined));
+  }
   let anchor = normalizeAnchorData(attrs.anchorData, attrs, normalizedWrap?.behindDoc);
   if (!anchor && normalizedWrap) {
     anchor = { isAnchored: true };
@@ -271,6 +275,8 @@ export function imageNodeToBlock(
   const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
   const lumBright = pickNumber(lum?.bright);
   const lumContrast = pickNumber(lum?.contrast);
+  const alphaModFix = isPlainObject(attrs.alphaModFix) ? attrs.alphaModFix : undefined;
+  const alphaModFixAmt = pickNumber(alphaModFix?.amt);
 
   const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
@@ -321,6 +327,7 @@ export function imageNodeToBlock(
             ...(lumContrast != null ? { contrast: lumContrast } : {}),
           }
         : undefined,
+    alphaModFix: alphaModFixAmt != null ? { amt: alphaModFixAmt } : undefined,
     // Image transformations from OOXML a:xfrm
     ...(rotation !== undefined && { rotation }),
     ...(flipH !== undefined && { flipH }),

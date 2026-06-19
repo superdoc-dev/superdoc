@@ -4,7 +4,7 @@ import type { Mark, MarkType } from 'prosemirror-model';
 
 vi.mock('@superdoc/url-validation', () => ({
   sanitizeHref: vi.fn((href: string) => {
-    if (href.startsWith('javascript:')) return null;
+    if (href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('vbscript:')) return null;
     return { href };
   }),
 }));
@@ -86,6 +86,26 @@ describe('sanitizeHrefOrThrow', () => {
   it('throws INVALID_INPUT for blocked protocols', () => {
     try {
       sanitizeHrefOrThrow('javascript:alert(1)');
+      expect.fail('Should have thrown');
+    } catch (err) {
+      expect((err as Error).message).toContain('Blocked or invalid href');
+      expect((err as { code: string }).code).toBe('INVALID_INPUT');
+    }
+  });
+
+  it('throws INVALID_INPUT for data: scheme', () => {
+    try {
+      sanitizeHrefOrThrow('data:text/html,<script>alert(1)</script>');
+      expect.fail('Should have thrown');
+    } catch (err) {
+      expect((err as Error).message).toContain('Blocked or invalid href');
+      expect((err as { code: string }).code).toBe('INVALID_INPUT');
+    }
+  });
+
+  it('throws INVALID_INPUT for vbscript: scheme', () => {
+    try {
+      sanitizeHrefOrThrow('vbscript:MsgBox(1)');
       expect.fail('Should have thrown');
     } catch (err) {
       expect((err as Error).message).toContain('Blocked or invalid href');

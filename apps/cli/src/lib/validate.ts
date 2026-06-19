@@ -28,6 +28,7 @@ const BLOCK_NODE_TYPES = new Set<BlockNodeType>(DOCUMENT_API_BLOCK_NODE_TYPES);
 const NODE_KINDS = new Set<NodeKind>(DOCUMENT_API_NODE_KINDS);
 const LIST_KINDS = new Set<ListKind>(DOCUMENT_API_LIST_KINDS);
 const LIST_INSERT_POSITIONS = new Set<string>(DOCUMENT_API_LIST_INSERT_POSITIONS);
+type CreateParagraphBlockTarget = Extract<NonNullable<CreateParagraphInput['at']>, { target: unknown }>['target'];
 
 function expectRecord(value: unknown, path: string): Record<string, unknown> {
   if (!isRecord(value)) {
@@ -263,12 +264,7 @@ function validateCreateParagraphLocation(value: unknown, path: string): NonNulla
     if (obj.target == null) {
       throw new CliError('VALIDATION_ERROR', `${path} must include a "target" BlockNodeAddress.`);
     }
-    const target = validateNodeAddress(obj.target, `${path}.target`);
-    if (target.kind !== 'block') {
-      throw new CliError('VALIDATION_ERROR', `${path}.target.kind must be "block".`);
-    }
-
-    return { kind, target };
+    return { kind, target: validateCreateParagraphBlockTarget(obj.target, `${path}.target`) };
   }
 
   throw new CliError('VALIDATION_ERROR', `${path}.kind must be one of: documentStart, documentEnd, before, after.`);
@@ -277,6 +273,10 @@ function validateCreateParagraphLocation(value: unknown, path: string): NonNulla
 export function validateCreateParagraphInput(value: unknown, path = 'input'): CreateParagraphInput {
   const obj = expectRecord(value, path);
   const input: CreateParagraphInput = {};
+
+  if (obj.in != null) {
+    input.in = expectRecord(obj.in, `${path}.in`) as unknown as CreateParagraphInput['in'];
+  }
 
   if (obj.at != null) {
     input.at = validateCreateParagraphLocation(obj.at, `${path}.at`);
@@ -290,6 +290,20 @@ export function validateCreateParagraphInput(value: unknown, path = 'input'): Cr
   }
 
   return input;
+}
+
+function validateCreateParagraphBlockTarget(value: unknown, path: string): CreateParagraphBlockTarget {
+  const target = validateNodeAddress(value, path);
+  if (target.kind !== 'block') {
+    throw new CliError('VALIDATION_ERROR', `${path}.kind must be "block".`);
+  }
+  if (isRecord(value) && value.story != null) {
+    return {
+      ...target,
+      story: expectRecord(value.story, `${path}.story`) as unknown as CreateParagraphBlockTarget['story'],
+    };
+  }
+  return target;
 }
 
 function validateQuerySelect(value: unknown, path: string): Query['select'] {

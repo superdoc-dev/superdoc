@@ -16,8 +16,8 @@
 //     them, but must never interpret them. Adapters keep non-serializable
 //     internals in adapter-private maps keyed by `tokenId`.
 //
-// Outcome semantics are modeled to preserve the current v2 editor host posture
-// (see `components/V2SuperEditor/host/create-v2-editor-host.ts`): commit,
+// Outcome semantics are modeled to preserve the current v2 editor host posture:
+// commit,
 // history-commit, history-noop, receipt-failure, and named rejection  -  not a
 // boolean success/failure collapse. The shared contract defines NEUTRAL codes;
 // concrete v1/v2 adapters map their own codes onto these.
@@ -44,6 +44,9 @@ export type EditorRuntimeKind = 'v1' | 'v2';
 
 /** Opaque, registry-unique identifier for a mounted runtime. */
 export type EditorRuntimeId = string;
+
+/** Shell-owned document mode shared across editor runtimes. */
+export type EditorRuntimeDocumentMode = 'editing' | 'suggesting' | 'viewing';
 
 /**
  * Shell-level lifecycle state. Mirrors the current v2 editor host state machine
@@ -242,6 +245,7 @@ export interface EditorRuntimeSnapshot {
   readonly kind: EditorRuntimeKind;
   readonly documentId: string;
   readonly state: EditorRuntimeState;
+  readonly documentMode: EditorRuntimeDocumentMode;
   /** Stable reason string when `state` is `blocked` or `failed`. */
   readonly reason?: string;
   readonly capabilities: EditorRuntimeCapabilities;
@@ -423,6 +427,8 @@ export interface EditorRuntime {
 
   getCapabilities(): EditorRuntimeCapabilities;
   getSnapshot(): EditorRuntimeSnapshot;
+  setDocumentMode(mode: EditorRuntimeDocumentMode): void;
+  getDocumentMode(): EditorRuntimeDocumentMode;
 
   /**
    * Temporary compatibility path backing `SuperDoc.activeEditor`,

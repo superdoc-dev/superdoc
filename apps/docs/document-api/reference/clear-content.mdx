@@ -38,9 +38,15 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
+| `id` | string | no |  |
 | `inserted` | EntityAddress[] | no |  |
+| `invalidatedRefs` | AffectedRef[] | no |  |
+| `remappedRefs` | AffectedRefRemapping[] | no |  |
 | `removed` | EntityAddress[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
 | `updated` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -57,6 +63,7 @@ _No fields._
 
 ```json
 {
+  "id": "id-001",
   "inserted": [
     {
       "entityId": "entity-789",
@@ -64,14 +71,7 @@ _No fields._
       "kind": "entity"
     }
   ],
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ]
+  "success": true
 }
 ```
 

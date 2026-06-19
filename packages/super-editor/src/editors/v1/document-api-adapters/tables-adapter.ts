@@ -13,6 +13,7 @@ import type {
   TableOrRowAddress,
   TableLocator,
   TableMutationResult,
+  TablePreferredWidthType,
   TablesMoveInput,
   TablesSetLayoutInput,
   TablesSetAltTextInput,
@@ -121,6 +122,35 @@ const POINTS_TO_TWIPS = 20;
 const PIXELS_TO_TWIPS = 1440 / 96;
 const DEFAULT_TABLE_GRID_WIDTH_TWIPS = 1500;
 const SETTINGS_PART: PartId = 'word/settings.xml';
+
+type TableWidthMeasurement = { value: number; type: TablePreferredWidthType };
+type CellWidthMeasurement = { value: number; type: TablePreferredWidthType };
+
+function normalizePreferredWidthType(value: TablePreferredWidthType | undefined): TablePreferredWidthType {
+  return value ?? 'dxa';
+}
+
+function buildTablePreferredWidth(
+  preferredWidth: number | undefined,
+  preferredWidthType: TablePreferredWidthType | undefined,
+): TableWidthMeasurement | undefined {
+  const widthType = normalizePreferredWidthType(preferredWidthType);
+  if (widthType === 'auto') return { value: 0, type: 'auto' };
+  if (preferredWidth === undefined) return undefined;
+  return { value: Math.round(preferredWidth), type: widthType };
+}
+
+function buildCellPreferredWidth(
+  preferredWidthPt: number | undefined,
+  preferredWidthType: TablePreferredWidthType | undefined,
+): CellWidthMeasurement | undefined {
+  const widthType = normalizePreferredWidthType(preferredWidthType);
+  if (widthType === 'auto') return { value: 0, type: 'auto' };
+  if (preferredWidthPt === undefined) return undefined;
+  const widthValue =
+    widthType === 'dxa' ? Math.round(preferredWidthPt * POINTS_TO_TWIPS) : Math.round(preferredWidthPt);
+  return { value: widthValue, type: widthType };
+}
 
 function createSeparatorParagraph(schema: Editor['state']['schema']): import('prosemirror-model').Node | null {
   const paragraphType = schema.nodes.paragraph;
@@ -1206,8 +1236,9 @@ export function tablesSetLayoutAdapter(
 
     const updatedTableProps = { ...currentTableProps };
 
-    if (input.preferredWidth !== undefined) {
-      updatedTableProps.tableWidth = { value: input.preferredWidth, type: 'dxa' };
+    const preferredWidth = buildTablePreferredWidth(input.preferredWidth, input.preferredWidthType);
+    if (preferredWidth) {
+      updatedTableProps.tableWidth = preferredWidth;
     }
     if (input.alignment !== undefined) {
       updatedTableProps.justification = input.alignment;
@@ -2886,13 +2917,23 @@ export function tablesSetCellPropertiesAdapter(
 
     const attrUpdates: Record<string, unknown> = {};
     const cellPropUpdates: Record<string, unknown> = {};
+    const preferredWidthType = (
+      input as TablesSetCellPropertiesInput & {
+        preferredWidthType?: TablePreferredWidthType;
+      }
+    ).preferredWidthType;
 
-    if (input.preferredWidthPt !== undefined) {
-      const widthPx = Math.round(input.preferredWidthPt * (96 / 72));
+    const preferredWidth = buildCellPreferredWidth(input.preferredWidthPt, preferredWidthType);
+    if (preferredWidth) {
       const colspan = (currentAttrs.colspan as number) || 1;
-      const colwidth = Array(colspan).fill(widthPx) as number[];
-      attrUpdates.colwidth = colwidth;
-      cellPropUpdates.cellWidth = { w: Math.round(input.preferredWidthPt * 20), type: 'dxa' };
+      if (preferredWidth.type === 'dxa' && input.preferredWidthPt !== undefined) {
+        const widthPx = Math.round(input.preferredWidthPt * (96 / 72));
+        const colwidth = Array(colspan).fill(widthPx) as number[];
+        attrUpdates.colwidth = colwidth;
+      } else {
+        attrUpdates.colwidth = null;
+      }
+      cellPropUpdates.cellWidth = preferredWidth;
     }
 
     if (input.verticalAlign !== undefined) {
@@ -2916,7 +2957,7 @@ export function tablesSetCellPropertiesAdapter(
 
     tr.setNodeMarkup(cellPos, null, newAttrs);
 
-    if (input.preferredWidthPt !== undefined) {
+    if (preferredWidth) {
       const tableAttrs = table.candidate.node.attrs as Record<string, unknown>;
       tr.setNodeMarkup(table.candidate.pos, null, buildWidthAuthoringTableAttrs(tableAttrs));
     }
@@ -3772,19 +3813,24 @@ export function tablesSetCellPaddingAdapter(
     const currentCellProps = { ...((currentAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
 
     // Update both the PM-level cellMargins attr and the OOXML tcMar property.
-    const cellMargins = {
-      top: Math.round(input.topPt * (96 / 72)),
-      right: Math.round(input.rightPt * (96 / 72)),
-      bottom: Math.round(input.bottomPt * (96 / 72)),
-      left: Math.round(input.leftPt * (96 / 72)),
-    };
+    const cellMargins = { ...(asRecord(currentAttrs.cellMargins) ?? {}) };
+    const ooxmlCellMargins = { ...(asRecord(currentCellProps.cellMargins) ?? {}) };
+    const sideInputs = [
+      ['top', input.topPt],
+      ['right', input.rightPt],
+      ['bottom', input.bottomPt],
+      ['left', input.leftPt],
+    ] as const;
+    for (const [side, value] of sideInputs) {
+      if (value === undefined) continue;
+      cellMargins[side] = Math.round(value * POINTS_TO_PIXELS);
+      ooxmlCellMargins[side] = {
+        value: Math.round(value * POINTS_TO_TWIPS),
+        type: 'dxa',
+      };
+    }
 
-    currentCellProps.cellMargins = {
-      top: { w: Math.round(input.topPt * 20), type: 'dxa' },
-      right: { w: Math.round(input.rightPt * 20), type: 'dxa' },
-      bottom: { w: Math.round(input.bottomPt * 20), type: 'dxa' },
-      left: { w: Math.round(input.leftPt * 20), type: 'dxa' },
-    };
+    currentCellProps.cellMargins = ooxmlCellMargins;
 
     tr.setNodeMarkup(cellPos, null, {
       ...currentAttrs,

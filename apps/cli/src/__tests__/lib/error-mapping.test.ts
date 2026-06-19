@@ -3,6 +3,67 @@ import { mapInvokeError, mapFailedReceipt } from '../../lib/error-mapping';
 import { CliError } from '../../lib/errors';
 
 describe('mapInvokeError', () => {
+  test('preserves trackChanges.decide INVALID_INPUT validation errors', () => {
+    const error = Object.assign(new Error('structural partial decisions fail closed'), {
+      code: 'INVALID_INPUT',
+      details: { field: 'target.range' },
+    });
+
+    const mapped = mapInvokeError('trackChanges.decide', error);
+    expect(mapped.code).toBe('INVALID_INPUT');
+    expect(mapped.details).toEqual({ operationId: 'trackChanges.decide', details: { field: 'target.range' } });
+  });
+
+  test('maps trackChanges.get TARGET_NOT_FOUND errors to TRACK_CHANGE_NOT_FOUND', () => {
+    const error = Object.assign(new Error('missing tracked change'), {
+      code: 'TARGET_NOT_FOUND',
+      details: { id: 'tc-missing' },
+    });
+
+    const mapped = mapInvokeError('trackChanges.get', error);
+    expect(mapped.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(mapped.details).toEqual({ operationId: 'trackChanges.get', details: { id: 'tc-missing' } });
+  });
+
+  test('preserves trackChanges.decide INVALID_TARGET validation errors', () => {
+    const error = Object.assign(new Error('track-changes decide:target.kind is required.'), {
+      code: 'INVALID_TARGET',
+      details: { field: 'target.kind' },
+    });
+
+    const mapped = mapInvokeError('trackChanges.decide', error);
+    expect(mapped.code).toBe('INVALID_TARGET');
+    expect(mapped.details).toEqual({ operationId: 'trackChanges.decide', details: { field: 'target.kind' } });
+  });
+
+  test('preserves comments.create INVALID_TARGET validation errors', () => {
+    const error = Object.assign(new Error('comments.create requires a target for root comments.'), {
+      code: 'INVALID_TARGET',
+      details: { field: 'target' },
+    });
+
+    const mapped = mapInvokeError('comments.create' as any, error);
+    expect(mapped.code).toBe('INVALID_TARGET');
+    expect(mapped.details).toEqual({ operationId: 'comments.create', details: { field: 'target' } });
+  });
+
+  test('preserves comments.patch INVALID_INPUT atomicity errors', () => {
+    const error = Object.assign(
+      new Error('comments.patch accepts exactly one mutation field per call, got 2: text, status.'),
+      {
+        code: 'INVALID_INPUT',
+        details: { providedFields: ['text', 'status'] },
+      },
+    );
+
+    const mapped = mapInvokeError('comments.patch' as any, error);
+    expect(mapped.code).toBe('INVALID_INPUT');
+    expect(mapped.details).toEqual({
+      operationId: 'comments.patch',
+      details: { providedFields: ['text', 'status'] },
+    });
+  });
+
   test('maps blocks.delete INVALID_INPUT errors to INVALID_ARGUMENT', () => {
     const error = Object.assign(new Error('blocks.delete requires a target.'), {
       code: 'INVALID_INPUT',
@@ -13,6 +74,39 @@ describe('mapInvokeError', () => {
     expect(mapped.code).toBe('INVALID_ARGUMENT');
     expect(mapped.message).toBe('blocks.delete requires a target.');
     expect(mapped.details).toEqual({ operationId: 'blocks.delete', details: { field: 'target' } });
+  });
+
+  test('maps query.match AMBIGUOUS_MATCH errors to COMMAND_FAILED with the ambiguity marker in the message', () => {
+    const error = Object.assign(new Error('selector matched 5 nodes, expected exactly one.'), {
+      code: 'AMBIGUOUS_MATCH',
+      details: { selectorType: 'node', nodeType: 'paragraph', total: 5 },
+    });
+
+    const mapped = mapInvokeError('query.match', error);
+    expect(mapped.code).toBe('COMMAND_FAILED');
+    expect(mapped.message).toContain('AMBIGUOUS_MATCH');
+    expect(mapped.message).toContain('selector matched 5 nodes');
+    expect(mapped.details).toEqual({
+      operationId: 'query.match',
+      details: { selectorType: 'node', nodeType: 'paragraph', total: 5 },
+    });
+  });
+
+  test('preserves nested NO_OP failure details for images.removeCaption command failures', () => {
+    const error = Object.assign(new Error('No caption to remove.'), {
+      code: 'COMMAND_FAILED',
+      details: {
+        operationId: 'images.removeCaption',
+        failure: { code: 'NO_OP', message: 'No caption to remove.' },
+      },
+    });
+
+    const mapped = mapInvokeError('images.removeCaption' as any, error);
+    expect(mapped.code).toBe('COMMAND_FAILED');
+    expect(mapped.details).toMatchObject({
+      operationId: 'images.removeCaption',
+      failure: { code: 'NO_OP', message: 'No caption to remove.' },
+    });
   });
 
   test('preserves TARGET_NOT_FOUND for trackChanges.decide stale ids', () => {
@@ -26,7 +120,7 @@ describe('mapInvokeError', () => {
     expect(mapped.details).toEqual({ operationId: 'trackChanges.decide', details: { id: 'tc-1' } });
   });
 
-  test('keeps track-changes accept/reject helper missing ids backward compatible', () => {
+  test('maps track-changes accept/reject helper missing ids to TRACK_CHANGE_NOT_FOUND', () => {
     const error = Object.assign(new Error('Tracked change "tc-1" was not found.'), {
       code: 'TARGET_NOT_FOUND',
       details: { id: 'tc-1' },
@@ -39,6 +133,21 @@ describe('mapInvokeError', () => {
     expect(accept.code).toBe('TRACK_CHANGE_NOT_FOUND');
     expect(reject.code).toBe('TRACK_CHANGE_NOT_FOUND');
     expect(canonical.code).toBe('TARGET_NOT_FOUND');
+  });
+
+  test.each([
+    'blocks.split',
+    'lists.apply',
+    'format.paragraph.setMarkRunProps',
+    'tables.moveRow',
+    'fields.insert',
+  ] as const)('%s preserves CAPABILITY_UNAVAILABLE for unsupported v1/v2-gated paths', (operationId) => {
+    const error = Object.assign(new Error(`${operationId} is only available on v2-backed sessions.`), {
+      code: 'CAPABILITY_UNAVAILABLE',
+    });
+
+    const mapped = mapInvokeError(operationId as any, error);
+    expect(mapped.code).toBe('CAPABILITY_UNAVAILABLE');
   });
 });
 
@@ -268,6 +377,61 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     });
   });
 
+  test('trackChanges TARGET_NOT_FOUND receipt failures map to TRACK_CHANGE_NOT_FOUND for get', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'TARGET_NOT_FOUND',
+        message: 'No tracked change with id "missing".',
+        details: { id: 'missing' },
+      },
+    };
+
+    const result = mapFailedReceipt('trackChanges.get' as any, receipt);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('TRACK_CHANGE_NOT_FOUND');
+    expect(result!.details).toMatchObject({
+      operationId: 'trackChanges.get',
+      failure: { code: 'TARGET_NOT_FOUND', details: { id: 'missing' } },
+    });
+  });
+
+  test('comments.patch INVALID_INPUT receipt failures stay INVALID_INPUT', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'INVALID_INPUT',
+        message: 'comments.patch accepts exactly one mutation field per call, got 2: text, status.',
+        details: { providedFields: ['text', 'status'] },
+      },
+    };
+
+    const result = mapFailedReceipt('comments.patch' as any, receipt);
+    expect(result!.code).toBe('INVALID_INPUT');
+    expect(result!.details).toMatchObject({
+      operationId: 'comments.patch',
+      failure: { code: 'INVALID_INPUT', details: { providedFields: ['text', 'status'] } },
+    });
+  });
+
+  test('comments.create INVALID_TARGET receipt failures stay INVALID_TARGET', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'INVALID_TARGET',
+        message: 'comments.create requires a target for root comments.',
+        details: { field: 'target' },
+      },
+    };
+
+    const result = mapFailedReceipt('comments.create' as any, receipt);
+    expect(result!.code).toBe('INVALID_TARGET');
+    expect(result!.details).toMatchObject({
+      operationId: 'comments.create',
+      failure: { code: 'INVALID_TARGET', details: { field: 'target' } },
+    });
+  });
+
   test('plan-engine code PRECONDITION_FAILED passes through', () => {
     const receipt = {
       success: false,
@@ -295,16 +459,15 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     });
   });
 
-  test('non-plan-engine failure codes go through per-family normalization', () => {
+  test('NO_OP failure codes pass through for expected no-op receipts', () => {
     const receipt = {
       success: false,
       failure: { code: 'NO_OP', message: 'no change' },
     };
 
     const result = mapFailedReceipt(operationId, receipt);
-    // NO_OP is not a plan-engine passthrough code, so it normalizes
     expect(result).toBeInstanceOf(CliError);
-    expect(result!.code).not.toBe('NO_OP');
+    expect(result!.code).toBe('NO_OP');
   });
 
   test('paragraph mutation receipt maps INVALID_TARGET to INVALID_ARGUMENT', () => {
@@ -316,6 +479,68 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     const result = mapFailedReceipt('format.paragraph.setAlignment' as any, receipt);
     expect(result).toBeInstanceOf(CliError);
     expect(result!.code).toBe('INVALID_ARGUMENT');
+  });
+
+  test('text-mutation receipts preserve TARGET_NOT_FOUND', () => {
+    const receipt = {
+      success: false,
+      failure: { code: 'TARGET_NOT_FOUND', message: 'selection target was not found.' },
+    };
+
+    const result = mapFailedReceipt('format.bold' as any, receipt);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('TARGET_NOT_FOUND');
+  });
+
+  test('image receipts preserve INVALID_INPUT for payload validation failures', () => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'INVALID_INPUT',
+        message: 'Image dimensions could not be determined.',
+      },
+    };
+
+    const result = mapFailedReceipt('create.image' as any, receipt);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('INVALID_INPUT');
+  });
+
+  test.each(['images.setSize', 'images.setZOrder'] as const)(
+    'image mutation receipts fail closed to COMMAND_FAILED for %s INVALID_INPUT validation',
+    (operationId) => {
+      const receipt = {
+        success: false,
+        failure: {
+          code: 'INVALID_INPUT',
+          message: `${operationId} validation failed.`,
+        },
+      };
+
+      const result = mapFailedReceipt(operationId as any, receipt);
+      expect(result).toBeInstanceOf(CliError);
+      expect(result!.code).toBe('COMMAND_FAILED');
+    },
+  );
+
+  test.each([
+    'blocks.split',
+    'lists.apply',
+    'format.paragraph.setMarkRunProps',
+    'tables.moveRow',
+    'footnotes.insert',
+  ] as const)('%s failed receipts preserve CAPABILITY_UNAVAILABLE', (operationId) => {
+    const receipt = {
+      success: false,
+      failure: {
+        code: 'CAPABILITY_UNAVAILABLE',
+        message: `${operationId} is only available on v2-backed sessions.`,
+      },
+    };
+
+    const result = mapFailedReceipt(operationId as any, receipt);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('CAPABILITY_UNAVAILABLE');
   });
 });
 
@@ -342,6 +567,44 @@ describe('mapInvokeError: textMutation INVALID_INPUT ordering', () => {
       details: { stepIndex: 0, operation: 'text.rewrite' },
     });
   });
+});
+
+describe('mapInvokeError: create INVALID_INPUT', () => {
+  test('preserves INVALID_INPUT for create.image payload validation failures', () => {
+    const error = Object.assign(new Error('Image dimensions could not be determined.'), {
+      code: 'INVALID_INPUT',
+      details: { source: 'decodeImageSource' },
+    });
+
+    const result = mapInvokeError('create.image' as any, error);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result.code).toBe('INVALID_INPUT');
+    expect(result.message).toBe('Image dimensions could not be determined.');
+    expect(result.details).toMatchObject({
+      operationId: 'create.image',
+      details: { source: 'decodeImageSource' },
+    });
+  });
+});
+
+describe('mapInvokeError: images INVALID_INPUT fail-closed mappings', () => {
+  test.each(['images.setSize', 'images.setZOrder'] as const)(
+    'maps %s INVALID_INPUT failures to COMMAND_FAILED',
+    (operationId) => {
+      const error = Object.assign(new Error(`${operationId} validation failed.`), {
+        code: 'INVALID_INPUT',
+        details: { field: operationId === 'images.setSize' ? 'size' : 'zOrder' },
+      });
+
+      const result = mapInvokeError(operationId as any, error);
+      expect(result).toBeInstanceOf(CliError);
+      expect(result.code).toBe('COMMAND_FAILED');
+      expect(result.details).toMatchObject({
+        operationId,
+        details: { field: operationId === 'images.setSize' ? 'size' : 'zOrder' },
+      });
+    },
+  );
 });
 
 describe('templates.apply error mapping', () => {

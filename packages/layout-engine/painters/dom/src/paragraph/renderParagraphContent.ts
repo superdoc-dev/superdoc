@@ -17,6 +17,7 @@ import {
   sliceRunsForLine,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
+import { resolvePhysicalFamily, type ResolvePhysicalFamily } from '@superdoc/font-system';
 import {
   applySdtContainerChrome,
   getSdtContainerMetadata,
@@ -100,6 +101,12 @@ export type RenderParagraphContentParams = {
   applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   renderLine: ParagraphRenderLine;
   renderDropCap?: ParagraphRenderDropCap;
+  /**
+   * Per-document logical->physical font resolver for list markers. Threaded from the renderer's
+   * per-document resolver so a marker paints the same physical family it was measured in. Undefined
+   * (or omitted) falls back to the global resolver, matching text runs and field annotations.
+   */
+  resolvePhysical?: ResolvePhysicalFamily;
   captureLineSnapshot?: (
     lineEl: HTMLElement,
     options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement; sourceAnchor?: SourceAnchor },
@@ -472,6 +479,7 @@ const renderResolvedLines = (
     convertFinalParagraphMark,
     lineTopOffset = 0,
     sourceAnchor,
+    resolvePhysical = (css) => resolvePhysicalFamily(css),
   } = params;
   const renderedLines: RenderedParagraphLineInfo[] = [];
   const resolvedMarker = content.marker;
@@ -505,7 +513,14 @@ const renderResolvedLines = (
       lineEl.style.paddingRight = `${resolvedLine.paddingRightPx}px`;
     }
     if (resolvedLine.isListFirstLine && resolvedMarker) {
-      renderResolvedListMarker({ doc: params.doc, lineEl, marker: resolvedMarker, isRtl, sourceAnchor });
+      renderResolvedListMarker({
+        doc: params.doc,
+        lineEl,
+        marker: resolvedMarker,
+        isRtl,
+        sourceAnchor,
+        resolvePhysical,
+      });
     }
     if (convertFinalParagraphMark && index === content.lines.length - 1 && !content.continuesOnNext) {
       convertParagraphMarkToCellMark(lineEl);
@@ -548,6 +563,7 @@ const renderMeasuredLines = (
     convertFinalParagraphMark,
     lineTopOffset = 0,
     sourceAnchor,
+    resolvePhysical = (css) => resolvePhysicalFamily(css),
   } = params;
   const lines = linesOverride ?? measure.lines ?? [];
   const paraIndent = block.attrs?.indent;
@@ -647,6 +663,7 @@ const renderMeasuredLines = (
         firstLineIndentPx: markerFirstLine,
         isRtl,
         sourceAnchor,
+        resolvePhysical,
       });
     } else {
       applyParagraphLineIndentation({

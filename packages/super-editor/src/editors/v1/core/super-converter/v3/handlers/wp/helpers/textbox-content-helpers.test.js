@@ -54,6 +54,26 @@ vi.mock('@converter/SuperConverter.js', () => ({
   },
 }));
 
+function extractLineTokens(paragraph) {
+  const tokens = [];
+  const visit = (nodes = []) => {
+    nodes.forEach((node) => {
+      if (node?.name === 'w:pPr' || node?.name === 'w:tabs') return;
+      if (node?.name === 'w:t') {
+        tokens.push(node.elements?.[0]?.text ?? '');
+        return;
+      }
+      if (node?.name === 'w:tab') {
+        tokens.push('\t');
+        return;
+      }
+      visit(node?.elements);
+    });
+  };
+  visit(paragraph.elements);
+  return tokens;
+}
+
 describe('textbox-content-helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -154,6 +174,212 @@ describe('textbox-content-helpers', () => {
       ];
       const result = collectTextBoxParagraphs(nodes);
       expect(result).toHaveLength(0);
+    });
+
+    it('should flatten textbox tables into visual rows with shifted tab stops', () => {
+      const p = (elements, pPrElements = []) => ({
+        name: 'w:p',
+        elements: pPrElements.length ? [{ name: 'w:pPr', elements: pPrElements }, ...elements] : elements,
+      });
+      const runText = (text) => ({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text }] }] });
+      const runTab = () => ({ name: 'w:r', elements: [{ name: 'w:tab' }] });
+      const runBreak = () => ({ name: 'w:r', elements: [{ name: 'w:br' }] });
+      const spacing = { name: 'w:spacing', attributes: { 'w:line': '240' } };
+      const rightTabs = {
+        name: 'w:tabs',
+        elements: [{ name: 'w:tab', attributes: { 'w:val': 'left', 'w:pos': '1420' } }],
+      };
+      const table = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblGrid',
+            elements: [
+              { name: 'w:gridCol', attributes: { 'w:w': '4253' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '3124' } },
+            ],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:tc',
+                elements: [
+                  p([runText('Test Name'), runBreak(), runText('Stadsplateau 23B')], [spacing]),
+                  p([runText('3521 AZ Utrecht')], [spacing]),
+                  p([runText('Nederland')], [spacing]),
+                ],
+              },
+              {
+                name: 'w:tc',
+                elements: [
+                  p(
+                    [
+                      runText('KvK'),
+                      runTab(),
+                      runText('KvK_number'),
+                      runBreak(),
+                      runText('IBAN'),
+                      runTab(),
+                      runText('DE123456789'),
+                      runBreak(),
+                      runText('BIC'),
+                      runTab(),
+                      runText('ABCDEFG'),
+                      runBreak(),
+                    ],
+                    [spacing, rightTabs],
+                  ),
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = collectTextBoxParagraphs([table]);
+
+      expect(result).toHaveLength(4);
+      expect(extractLineTokens(result[0])).toEqual(['Test Name', '\t', 'KvK', '\t', 'KvK_number']);
+      expect(extractLineTokens(result[1])).toEqual(['Stadsplateau 23B', '\t', 'IBAN', '\t', 'DE123456789']);
+      expect(extractLineTokens(result[2])).toEqual(['3521 AZ Utrecht', '\t', 'BIC', '\t', 'ABCDEFG']);
+      expect(extractLineTokens(result[3])).toEqual(['Nederland']);
+
+      const firstLineTabs = result[0].elements
+        .find((node) => node.name === 'w:pPr')
+        .elements.find((node) => node.name === 'w:tabs').elements;
+      expect(firstLineTabs.map((tab) => tab.attributes['w:pos'])).toEqual(['4253', '5673']);
+    });
+
+    it('should synthesize internal tab stops for textbox table cells without explicit tabs', () => {
+      const p = (elements, pPrElements = []) => ({
+        name: 'w:p',
+        elements: pPrElements.length ? [{ name: 'w:pPr', elements: pPrElements }, ...elements] : elements,
+      });
+      const runText = (text) => ({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text }] }] });
+      const runTab = () => ({ name: 'w:r', elements: [{ name: 'w:tab' }] });
+      const runBreak = () => ({ name: 'w:r', elements: [{ name: 'w:br' }] });
+      const spacing = { name: 'w:spacing', attributes: { 'w:line': '240' } };
+      const table = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblGrid',
+            elements: [
+              { name: 'w:gridCol', attributes: { 'w:w': '4253' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '3124' } },
+            ],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:tc',
+                elements: [
+                  p([runText('Test '), runText('Name'), runBreak(), runText('Stadsplateau 23B')], [spacing]),
+                  p([runText('3521 AZ Utrecht')], [spacing]),
+                  p([runText('Nederland')], [spacing]),
+                ],
+              },
+              {
+                name: 'w:tc',
+                elements: [
+                  p(
+                    [
+                      runText('KvK'),
+                      runTab(),
+                      runText('KvK_number'),
+                      runBreak(),
+                      runText('IBAN'),
+                      runTab(),
+                      runText('DE123456789'),
+                      runBreak(),
+                      runText('BIC'),
+                      runTab(),
+                      runText('ABCDEFG'),
+                    ],
+                    [spacing],
+                  ),
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = collectTextBoxParagraphs([table]);
+
+      expect(result).toHaveLength(4);
+      expect(extractLineTokens(result[0])).toEqual(['Test ', 'Name', '\t', 'KvK', '\t', 'KvK_number']);
+      expect(extractLineTokens(result[1])).toEqual(['Stadsplateau 23B', '\t', 'IBAN', '\t', 'DE123456789']);
+      expect(extractLineTokens(result[2])).toEqual(['3521 AZ Utrecht', '\t', 'BIC', '\t', 'ABCDEFG']);
+      expect(extractLineTokens(result[3])).toEqual(['Nederland']);
+
+      const tabPositions = result.slice(0, 3).map((paragraph) =>
+        paragraph.elements
+          .find((node) => node.name === 'w:pPr')
+          .elements.find((node) => node.name === 'w:tabs')
+          .elements.map((tab) => tab.attributes['w:pos']),
+      );
+      expect(tabPositions).toEqual([
+        ['4253', '4973'],
+        ['4253', '4973'],
+        ['4253', '4973'],
+      ]);
+    });
+
+    it('should advance textbox table column starts by merged cell grid spans', () => {
+      const p = (elements) => ({ name: 'w:p', elements });
+      const runText = (text) => ({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text }] }] });
+      const runTab = () => ({ name: 'w:r', elements: [{ name: 'w:tab' }] });
+      const table = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblGrid',
+            elements: [
+              { name: 'w:gridCol', attributes: { 'w:w': '1000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '2000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '3000' } },
+              { name: 'w:gridCol', attributes: { 'w:w': '4000' } },
+            ],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:tc',
+                elements: [
+                  {
+                    name: 'w:tcPr',
+                    elements: [{ name: 'w:gridSpan', attributes: { 'w:val': '2' } }],
+                  },
+                  p([runText('Merged')]),
+                ],
+              },
+              {
+                name: 'w:tc',
+                elements: [p([runText('Next'), runTab(), runText('Value')])],
+              },
+              {
+                name: 'w:tc',
+                elements: [p([runText('Last')])],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = collectTextBoxParagraphs([table]);
+
+      expect(result).toHaveLength(1);
+      expect(extractLineTokens(result[0])).toEqual(['Merged', '\t', 'Next', '\t', 'Value', '\t', 'Last']);
+
+      const tabPositions = result[0].elements
+        .find((node) => node.name === 'w:pPr')
+        .elements.find((node) => node.name === 'w:tabs')
+        .elements.map((tab) => tab.attributes['w:pos']);
+      expect(tabPositions).toEqual(['3000', '3720', '6000']);
     });
   });
 

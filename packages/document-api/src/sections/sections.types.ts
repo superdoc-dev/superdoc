@@ -167,6 +167,11 @@ export type DocumentMutationResult = DocumentMutationSuccessResult | SectionMuta
 export interface CreateSectionBreakSuccessResult {
   success: true;
   section: SectionAddress;
+  /**
+   * Present only when the break is represented as a dedicated paragraph.
+   * Attached breaks omit this field because the boundary is carried by the
+   * preceding paragraph's sectPr rather than a new blank block.
+   */
   breakParagraph?: BlockNodeAddress;
 }
 
@@ -183,11 +188,20 @@ export type SectionBreakCreateLocation =
   | { kind: 'before'; target: BlockNodeAddress }
   | { kind: 'after'; target: BlockNodeAddress };
 
+export type SectionBreakRepresentation = 'asNewParagraph' | 'attachToPreviousParagraph';
+
 export interface CreateSectionBreakInput {
   at?: SectionBreakCreateLocation;
   breakType?: SectionBreakType;
   pageMargins?: SectionPageMargins;
   headerFooterMargins?: SectionHeaderFooterMargins;
+  /**
+   * Controls how the section break materializes in OOXML.
+   *
+   * - `asNewParagraph` (default): emit a dedicated carrier `<w:p><w:pPr><w:sectPr/></w:pPr></w:p>` just before the existing final body section.
+   * - `attachToPreviousParagraph`: inline the new `<w:sectPr>` into the previous paragraph's `<w:pPr>` so that paragraph becomes the last paragraph of the new section.
+   */
+  representation?: SectionBreakRepresentation;
 }
 
 export interface SectionsSetBreakTypeInput extends SectionTargetInput {

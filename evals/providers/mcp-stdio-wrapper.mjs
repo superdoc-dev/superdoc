@@ -34,7 +34,9 @@ const clientToServer = createWriteStream(resolve(logDir, 'mcp-client-to-server.l
 const serverToClient = createWriteStream(resolve(logDir, 'mcp-server-to-client.log'));
 const serverStderr = createWriteStream(resolve(logDir, 'mcp-server-stderr.log'));
 
-// Spawn the real MCP server
+// Spawn the real MCP server. shell: false is intentional — arguments are passed
+// as an array and never interpreted by a shell, so there is no injection surface.
+// The caller is trusted to supply a valid server command (dev/eval context only).
 const child = spawn(serverCmd, serverArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
   env: {

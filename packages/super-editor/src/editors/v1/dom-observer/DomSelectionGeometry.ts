@@ -280,16 +280,25 @@ export function computeSelectionRectsFromDom(
           }
         }
       }
-      if (missingEntries && missingEntries.length > 0) {
+      // SD-3328: A single DOM Range spanning multiple visual lines is unreliable here
+      // because each `.superdoc-line` is absolutely positioned, and some Chrome builds
+      // return incomplete `getClientRects()` for a range crossing those positioned boxes
+      // (interior lines collapse to a few stray sliver rects while first/last lines render
+      // fully). The `intersectsNode` guard does not catch this — the entries still report
+      // as intersected. So whenever the slice spans more than one line we compute rects
+      // per line instead, which keeps each measuring range inside a single positioned box.
+      const spansMultipleLines = countDistinctLines(pageEntries) > 1;
+      if (spansMultipleLines || (missingEntries && missingEntries.length > 0)) {
         if (isVerbose) {
           debugLog(
             'verbose',
-            `DOM selection rects: range missing entries ${JSON.stringify({
+            `DOM selection rects: switching to per-line rects ${JSON.stringify({
               pageIndex,
               sliceFrom,
               sliceTo,
-              missingCount: missingEntries.length,
-              missingPreview: missingEntries.slice(0, 20).map(entryDebugInfo),
+              spansMultipleLines,
+              missingCount: missingEntries?.length ?? 0,
+              missingPreview: (missingEntries ?? []).slice(0, 20).map(entryDebugInfo),
             })}`,
           );
         }
@@ -410,16 +419,28 @@ function collectClientRectsByLine(
     }
   }
 
-  for (const [, lineEntries] of lineMap) {
+  for (const [lineEl, lineEntries] of lineMap) {
     lineEntries.sort((a, b) => (a.pmStart - b.pmStart !== 0 ? a.pmStart - b.pmStart : a.pmEnd - b.pmEnd));
     const linePmStart = lineEntries[0]?.pmStart ?? Infinity;
     const linePmEnd = lineEntries[lineEntries.length - 1]?.pmEnd ?? -Infinity;
+    // SD-3328: For a strictly interior line (the selection both starts on an earlier line and
+    // ends on a later one), use the line element's own box instead of a measuring range. This
+    // keeps full-width highlights for regular interior lines and also covers empty lines whose
+    // leaf spans have zero-width PM ranges.
+    const lineIsInterior = sliceFrom < linePmStart && linePmEnd < sliceTo && lineEl.isConnected;
+    if (lineIsInterior) {
+      const boxRect = lineEl.getBoundingClientRect();
+      if (boxRect.width > 0 && boxRect.height > 0) {
+        rects.push(boxRect);
+        continue;
+      }
+    }
+
     if (!Number.isFinite(linePmStart) || !Number.isFinite(linePmEnd) || linePmEnd <= linePmStart) continue;
 
     const lineFrom = Math.max(sliceFrom, linePmStart);
     const lineTo = Math.min(sliceTo, linePmEnd);
     if (lineFrom >= lineTo) continue;
-
     const startEntry =
       lineEntries.find((entry) => lineFrom >= entry.pmStart && lineFrom <= entry.pmEnd) ?? lineEntries[0]!;
     const endEntry =
@@ -452,6 +473,29 @@ function collectClientRectsByLine(
   }
 
   return rects;
+}
+
+/**
+ * Counts how many distinct `.superdoc-line` elements the given entries belong to.
+ *
+ * Used to decide whether a selection slice spans more than one visual line. Entries
+ * without a `.superdoc-line` ancestor (loose entries) are counted once collectively so
+ * a slice made up only of loose entries still reports at least one line.
+ *
+ * @internal
+ */
+function countDistinctLines(entries: DomPositionIndexEntry[]): number {
+  const lines = new Set<HTMLElement>();
+  let hasLoose = false;
+  for (const entry of entries) {
+    const lineEl = entry.el.closest('.superdoc-line') as HTMLElement | null;
+    if (lineEl) {
+      lines.add(lineEl);
+    } else {
+      hasLoose = true;
+    }
+  }
+  return lines.size + (hasLoose ? 1 : 0);
 }
 
 /**
@@ -576,6 +620,31 @@ export function computeDomCaretPageLocal(
   const boundary = resolveTextBoundaryInElement(targetEl, pos, entry.pmStart, entry.pmEnd, 'forward');
   if (!boundary) {
     const elRect = targetEl.getBoundingClientRect();
+
+    if (targetEl.classList.contains('superdoc-line')) {
+      const paddingLeft = parseFloat(targetEl.style.paddingLeft) || 0;
+      const paddingRight = parseFloat(targetEl.style.paddingRight) || 0;
+      const lineLeft = (elRect.left - pageRect.left) / zoom + paddingLeft;
+      const lineRight = (elRect.right - pageRect.left) / zoom - paddingRight;
+      // AIDEV-NOTE: DomPainter resolves OOXML start/end and RTL defaults to physical
+      // left/right textAlign on .superdoc-line. If painter emits CSS logical values,
+      // update this branch to resolve them before choosing x.
+      const textAlign = targetEl.style.textAlign;
+      let x: number;
+      if (textAlign === 'center') {
+        x = (lineLeft + lineRight) / 2;
+      } else if (textAlign === 'right') {
+        x = lineRight;
+      } else {
+        x = lineLeft;
+      }
+      return {
+        pageIndex: Number(page.dataset.pageIndex ?? '0'),
+        x,
+        y: (elRect.top - pageRect.top) / zoom,
+      };
+    }
+
     // For non-text elements (images, math), position caret at the right edge
     // when pos matches pmEnd (cursor after the element)
     const isEmptySdtPlaceholder =
@@ -583,7 +652,8 @@ export function computeDomCaretPageLocal(
       targetEl.classList.contains('superdoc-empty-inline-sdt-placeholder') ||
       targetEl.classList.contains('superdoc-empty-block-sdt-placeholder');
     const atEnd = isEmptySdtPlaceholder ? pos > entry.pmEnd : pos >= entry.pmEnd;
-    const lineEl = isEmptySdtPlaceholder ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
+    const useLineTopForY = isEmptySdtPlaceholder || targetEl.classList.contains('superdoc-tab');
+    const lineEl = useLineTopForY ? (targetEl.closest('.superdoc-line') as HTMLElement | null) : null;
     const yRect = lineEl?.getBoundingClientRect() ?? elRect;
     return {
       pageIndex: Number(page.dataset.pageIndex ?? '0'),

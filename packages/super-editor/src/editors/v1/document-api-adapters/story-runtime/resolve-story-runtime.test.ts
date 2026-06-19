@@ -135,6 +135,19 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('resolveStoryRuntime — cache invalidation on part change', () => {
+  it('rejects textbox stories before attempting cache lookup or story-key resolution', () => {
+    const hostEditor = makeHostEditor();
+
+    expect(() =>
+      resolveStoryRuntime(hostEditor, {
+        kind: 'story',
+        storyType: 'textbox',
+        textboxId: 'textbox-1',
+      }),
+    ).toThrow('Textbox stories are not supported by the v1 document-api runtime.');
+    expect(mocks.buildStoryKey).not.toHaveBeenCalled();
+  });
+
   it('invalidates footnote runtimes when notes-part-changed fires', () => {
     const hostEditor = makeHostEditor();
     const runtime = makeNoteRuntime('fn:1');

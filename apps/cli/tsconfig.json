@@ -3,6 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": "../..",
     "strict": true,
     "skipLibCheck": true,
     "types": ["bun"]

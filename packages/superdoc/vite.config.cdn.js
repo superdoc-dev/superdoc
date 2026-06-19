@@ -5,7 +5,6 @@ import { defineConfig } from 'vite';
 import { version } from './package.json';
 import { getAliases } from './vite.config.js';
 import layeredCssPlugin from './vite-plugin-layered-css.mjs';
-import bundledFontsPlugin from './vite-plugin-bundled-fonts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // CDN-only alias: this IIFE build inlines superdoc's own modules, and cdn-entry.js
@@ -24,7 +23,7 @@ const fontSystemAliases = [
 // ESM-only and can't be loaded as globals. Only pdfjs-dist stays external
 // because of its size; PDF viewing requires the ESM + import-map path.
 export default defineConfig(({ command }) => {
-  const plugins = [vue(), layeredCssPlugin(), bundledFontsPlugin()];
+  const plugins = [vue(), layeredCssPlugin()];
   const isDev = command === 'serve';
 
   return {

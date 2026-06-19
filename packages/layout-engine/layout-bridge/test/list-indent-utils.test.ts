@@ -309,7 +309,7 @@ describe('list-indent-utils', () => {
         expect(result).toBe(56);
       });
 
-      it('should use marker.textStartX when textStartPx is missing', () => {
+      it('should use rendered tab stop when textStartPx is missing', () => {
         const result = calculateTextStartIndent({
           isFirstLine: true,
           isListItem: true,
@@ -324,7 +324,7 @@ describe('list-indent-utils', () => {
             },
           },
         });
-        expect(result).toBe(60);
+        expect(result).toBe(36);
       });
 
       it('should use paraIndentLeft when firstLineIndentMode has no explicit text start', () => {

@@ -67,6 +67,7 @@ Use these values in `steps[].op` when authoring mutation plans.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setLayout</code></span> | Set table layout mode. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-layout"><code>tables.setLayout</code></a></span> |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertRow</code></span> | Insert a row into the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-row"><code>tables.insertRow</code></a></span> |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteRow</code></span> | Delete a row from the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-row"><code>tables.deleteRow</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.moveRow</code></span> | Move a row to a new position within the same table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/move-row"><code>tables.moveRow</code></a></span> |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowHeight</code></span> | Set row height in the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-height"><code>tables.setRowHeight</code></a></span> |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.distributeRows</code></span> | Distribute row heights evenly. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-rows"><code>tables.distributeRows</code></a></span> |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowOptions</code></span> | Set row-level options (header repeat, page break, etc.). | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-options"><code>tables.setRowOptions</code></a></span> |
@@ -149,7 +150,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
         "within": {
           "kind": "block",
           "nodeId": "node-def456",
-          "nodeType": "paragraph"
+          "nodeType": "paragraph",
+          "story": {
+            "kind": "story",
+            "storyType": "body"
+          }
         }
       }
     }
@@ -426,19 +431,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 "type": "boolean"
                               },
                               "mode": {
-                                "description": "Match mode: 'contains' (substring) or 'regex'.",
+                                "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
-                                "description": "Text or regex pattern to match.",
+                                "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
                                 "type": "string"
                               },
                               "type": {
                                 "const": "text",
                                 "description": "Must be 'text' for text pattern search."
+                              },
+                              "wholeWord": {
+                                "description": "Require word-boundary matches. Default: false.",
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -709,19 +718,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 "type": "boolean"
                               },
                               "mode": {
-                                "description": "Match mode: 'contains' (substring) or 'regex'.",
+                                "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
-                                "description": "Text or regex pattern to match.",
+                                "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
                                 "type": "string"
                               },
                               "type": {
                                 "const": "text",
                                 "description": "Must be 'text' for text pattern search."
+                              },
+                              "wholeWord": {
+                                "description": "Require word-boundary matches. Default: false.",
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -914,19 +927,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 "type": "boolean"
                               },
                               "mode": {
-                                "description": "Match mode: 'contains' (substring) or 'regex'.",
+                                "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
-                                "description": "Text or regex pattern to match.",
+                                "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
                                 "type": "string"
                               },
                               "type": {
                                 "const": "text",
                                 "description": "Must be 'text' for text pattern search."
+                              },
+                              "wholeWord": {
+                                "description": "Require word-boundary matches. Default: false.",
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -1944,19 +1961,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 "type": "boolean"
                               },
                               "mode": {
-                                "description": "Match mode: 'contains' (substring) or 'regex'.",
+                                "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
-                                "description": "Text or regex pattern to match.",
+                                "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
                                 "type": "string"
                               },
                               "type": {
                                 "const": "text",
                                 "description": "Must be 'text' for text pattern search."
+                              },
+                              "wholeWord": {
+                                "description": "Require word-boundary matches. Default: false.",
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -2143,19 +2164,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "type": "boolean"
                           },
                           "mode": {
-                            "description": "Match mode: 'contains' (substring) or 'regex'.",
+                            "description": "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
                             "enum": [
                               "contains",
                               "regex"
                             ]
                           },
                           "pattern": {
-                            "description": "Text or regex pattern to match.",
+                            "description": "Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.",
                             "type": "string"
                           },
                           "type": {
                             "const": "text",
                             "description": "Must be 'text' for text pattern search."
+                          },
+                          "wholeWord": {
+                            "description": "Require word-boundary matches. Default: false.",
+                            "type": "boolean"
                           }
                         },
                         "required": [

@@ -8,10 +8,7 @@ import { getStarterExtensions } from '@extensions/index.js';
 import { initTestEditor } from '../helpers/helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_PATH = path.resolve(
-  __dirname,
-  '../../../../../../../tests/behavior/tests/comments/fixtures/sd-1960-word-replacement-no-comments.docx',
-);
+const FIXTURE_PATH = path.resolve(__dirname, '../data/behavior-fixtures/sd-1960-word-replacement-no-comments.docx');
 
 const collectTrackedSegments = (doc) => {
   const segments = [];

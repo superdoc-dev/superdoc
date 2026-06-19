@@ -1329,7 +1329,7 @@ describe('remeasureParagraph', () => {
       expect(measure.lines.length).toBeGreaterThan(1);
     });
 
-    it('falls back to wordLayout.marker.textStartX when wordLayout.textStartPx is missing', () => {
+    it('uses rendered first-line tab stop when wordLayout.textStartPx is missing', () => {
       const block = createBlock([textRun('A'.repeat(60))], {
         indent: { left: 10 },
         wordLayout: { firstLineIndentMode: true, marker: { textStartX: 50 } },
@@ -1337,11 +1337,11 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, 100);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(50);
+      expect(measure.lines[0].maxWidth).toBe(52);
       expect(measure.lines[1].maxWidth).toBe(90);
     });
 
-    it('prefers shared resolved text start over top-level textStartPx when both exist', () => {
+    it('uses rendered first-line tab stop over stale textStart targets when both exist', () => {
       const block = createBlock([textRun('A'.repeat(60))], {
         indent: { left: 10 },
         wordLayout: {
@@ -1353,8 +1353,29 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, 100);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(50);
+      expect(measure.lines[0].maxWidth).toBe(52);
       expect(measure.lines[1].maxWidth).toBe(90);
+    });
+
+    it('remeasures SD-3426 first-line list tabs from the rendered tab stop', () => {
+      const block = createBlock([textRun('A'.repeat(60))], {
+        indent: { left: 0, firstLine: 48 },
+        wordLayout: {
+          firstLineIndentMode: true,
+          marker: {
+            markerX: 48,
+            glyphWidthPx: 18.65625,
+            textStartX: 66,
+            gutterWidthPx: 8,
+            justification: 'left',
+            suffix: 'tab',
+          },
+        },
+      });
+      const measure = remeasureParagraph(block, 624);
+
+      expect(measure.lines[0].maxWidth).toBeCloseTo(528, 5);
+      expect(measure.marker?.markerTextWidth).toBeCloseTo(18.65625, 5);
     });
 
     it('handles hanging indent with left indent for list formatting', () => {

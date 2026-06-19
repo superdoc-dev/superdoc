@@ -29,6 +29,7 @@ import type {
   TableBlock,
   TableFragment,
   TableMeasure,
+  TextboxDrawing,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -43,13 +44,17 @@ import type {
   ListBlock,
 } from '@superdoc/contracts';
 import {
+  computeLinePmRange,
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
   formatPageNumber,
   formatSectionPageNumberText,
   getCellSpacingPx,
+  getColumnGeometry,
+  getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   normalizeColumnLayout,
+  resolveColumnMode,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -60,7 +65,9 @@ import {
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
+  ensureDocumentSurfaceStyles,
   ensureFieldAnnotationStyles,
+  ensureFootnoteStyles,
   ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
@@ -131,7 +138,7 @@ type EffectExtent = {
   bottom: number;
 };
 
-type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
+type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
 };
@@ -248,6 +255,8 @@ type PainterOptions = {
   showFormattingMarks?: boolean;
   /** Built-in SDT chrome rendering mode. */
   contentControlsChrome?: 'default' | 'none';
+  /** Per-document logical->physical font resolver (face-aware); see DomPainterOptions.resolvePhysical. */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
 };
 
 type FragmentDomState = {
@@ -331,7 +340,7 @@ function hasPageContextTokenInBlock(block: FlowBlock | undefined): boolean {
     }
   } else if (block.kind === 'drawing') {
     const drawing = block as DrawingBlock;
-    if (drawing.drawingKind === 'vectorShape') {
+    if (drawing.drawingKind === 'vectorShape' || drawing.drawingKind === 'textboxShape') {
       return hasPageContextTokenInShapeText(drawing.textContent);
     }
     if (drawing.drawingKind === 'shapeGroup') {
@@ -1288,6 +1297,7 @@ export class DomPainter {
     }
 
     ensurePrintStyles(doc);
+    ensureDocumentSurfaceStyles(doc);
     ensureLinkStyles(doc);
     ensureTrackChangeStyles(doc);
     ensureFormattingMarksStyles(doc);
@@ -1295,6 +1305,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureMathMencloseStyles(doc);
+    ensureFootnoteStyles(doc);
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
@@ -1499,6 +1510,28 @@ export class DomPainter {
       };
       win.addEventListener('resize', this.onResizeHandler);
     }
+  }
+
+  private releaseVirtualizationHandlers(): void {
+    if (this.mount && this.onScrollHandler) {
+      try {
+        this.mount.removeEventListener('scroll', this.onScrollHandler);
+      } catch {}
+    }
+    const win = this.doc?.defaultView;
+    if (win && this.onWindowScrollHandler) {
+      try {
+        win.removeEventListener('scroll', this.onWindowScrollHandler);
+      } catch {}
+    }
+    if (win && this.onResizeHandler) {
+      try {
+        win.removeEventListener('resize', this.onResizeHandler);
+      } catch {}
+    }
+    this.onScrollHandler = null;
+    this.onWindowScrollHandler = null;
+    this.onResizeHandler = null;
   }
 
   private computeVirtualMetrics(): void {
@@ -1997,37 +2030,23 @@ export class DomPainter {
   }
 
   private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
-    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
-
-    if (!hasExplicitWidths) {
-      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+    // SD-2629: separator positions come from the one resolved column geometry (the same source as
+    // fill count and column widths), not a re-derivation here. The caller has already gated on
+    // withSeparator and count > 1.
+    const normalized = normalizeColumnLayout(columns, contentWidth);
+    // Equal mode: skip when the evenly-divided column is too narrow for a 1px line. This must be
+    // checked PRE-geometry because normalize floors fabricated widths at 1 (and falls back to the
+    // full content width when the gap overflows the content area), so the geometry width alone would
+    // not reveal the overflow. Keyed on resolveColumnMode (not the presence of a widths array) so a
+    // raw equalWidth:true config carrying stray widths still takes the equal-mode guard. Legacy guard.
+    if (resolveColumnMode(columns) === 'equal') {
+      const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
       if (equalWidth <= 1) return [];
-
-      const separatorPositions: number[] = [];
-      for (let index = 0; index < columns.count - 1; index += 1) {
-        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
-      }
-      return separatorPositions;
     }
-
-    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
-    if (normalizedColumns.count <= 1) return [];
-
-    const columnWidths =
-      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
-    // A 1px separator only makes sense when every participating column is wider than the separator itself.
-    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
-
-    const separatorPositions: number[] = [];
-    let cursorX = leftMargin;
-
-    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
-      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
-      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
-      cursorX += currentColumnWidth + normalizedColumns.gap;
-    }
-
-    return separatorPositions;
+    const geometry = getColumnGeometry(normalized);
+    if (geometry.length <= 1) return [];
+    if (geometry.some((column) => column.width <= 1)) return [];
+    return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);
   }
   private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;
@@ -2115,6 +2134,22 @@ export class DomPainter {
     const container = (existing as HTMLElement) ?? this.doc.createElement('div');
     container.className = className;
     container.innerHTML = '';
+    // Stamp a stable header/footer STORY REF ID
+    // (and resolved variant) on the decoration container so host-visible DOM
+    // readback can associate the painted region with its header/footer story.
+    // The payload already carries `headerFooterRefId` — no upstream import is
+    // introduced and the painter boundary is preserved.
+    if (typeof data.headerFooterRefId === 'string' && data.headerFooterRefId.length > 0) {
+      container.setAttribute('data-sd-headerfooter-ref-id', data.headerFooterRefId);
+    } else {
+      container.removeAttribute('data-sd-headerfooter-ref-id');
+    }
+    if (typeof data.sectionType === 'string' && data.sectionType.length > 0) {
+      container.setAttribute('data-sd-headerfooter-variant', data.sectionType);
+    } else {
+      container.removeAttribute('data-sd-headerfooter-variant');
+    }
+    container.setAttribute('data-sd-headerfooter-kind', kind);
     const baseOffset = data.offset;
     const marginLeft = data.marginLeft ?? 0;
     const pageMargins = page.margins;
@@ -2257,7 +2292,7 @@ export class DomPainter {
       }
 
       fragEl.style.top = `${pageY}px`;
-      fragEl.style.left = `${marginLeft + fragment.x}px`;
+      fragEl.style.left = `${isPageRelative ? fragment.x : marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
       fragEl.dataset.behindDocSection = kind; // Track for cleanup on re-render
       // Insert at beginning of page so it renders behind body content due to DOM order
@@ -2299,21 +2334,7 @@ export class DomPainter {
 
   private resetState(): void {
     if (this.mount) {
-      if (this.onScrollHandler) {
-        try {
-          this.mount.removeEventListener('scroll', this.onScrollHandler);
-        } catch {}
-      }
-      if (this.onWindowScrollHandler && this.doc?.defaultView) {
-        try {
-          this.doc.defaultView.removeEventListener('scroll', this.onWindowScrollHandler);
-        } catch {}
-      }
-      if (this.onResizeHandler && this.doc?.defaultView) {
-        try {
-          this.doc.defaultView.removeEventListener('resize', this.onResizeHandler);
-        } catch {}
-      }
+      this.releaseVirtualizationHandlers();
       this.mount.innerHTML = '';
     }
     this.pageStates = [];
@@ -2322,15 +2343,48 @@ export class DomPainter {
     this.topSpacerEl = null;
     this.bottomSpacerEl = null;
     this.virtualPagesEl = null;
-    this.onScrollHandler = null;
-    this.onWindowScrollHandler = null;
-    this.onResizeHandler = null;
     this.scrollContainerMountOffset = null;
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
     this.paintSnapshotBuilder = null;
     this.lastPaintSnapshot = null;
     this.mountedPageIndices = [];
+  }
+
+  public dispose(): void {
+    this.releaseVirtualizationHandlers();
+    if (this.mount) {
+      this.mount.innerHTML = '';
+    }
+    this.pageStates = [];
+    this.currentLayout = null;
+    this.changedBlocks.clear();
+    this.sectionPageCounts.clear();
+    this.sdtLabelsRendered.clear();
+    this.clearGapSpacers();
+    this.topSpacerEl = null;
+    this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
+    this.virtualPinnedPages = [];
+    this.virtualMountedKey = '';
+    this.pageIndexToState.clear();
+    this.virtualHeights = [];
+    this.virtualOffsets = [];
+    this.virtualStart = 0;
+    this.virtualEnd = -1;
+    this.scrollContainer = null;
+    this.scrollContainerMountOffset = null;
+    this.layoutVersion = 0;
+    this.layoutEpoch = 0;
+    this.processedLayoutVersion = -1;
+    this.currentMapping = null;
+    this.paintSnapshotBuilder = null;
+    this.lastPaintSnapshot = null;
+    this.mountedPageIndices = [];
+    this.resolvedLayout = null;
+    this.totalPages = 0;
+    this.mount = null;
+    this.doc = null;
   }
 
   private getSectionPageCount(page: ResolvedPage): number {
@@ -2448,6 +2502,14 @@ export class DomPainter {
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = resolvedSig;
+        } else if (isNonBodyStoryBlockId(fragment.blockId)) {
+          // Story fragments (notes, headers/footers) use story-local positions:
+          // the body transaction mapping does not apply, but the resolved item
+          // carries FRESH story positions every paint. Shift the painted
+          // attributes by the fresh-vs-painted delta so reused fragments never
+          // serve stale positions (SD-3400: stale note ranges broke caret,
+          // selection, and arrow navigation downstream).
+          this.updateStoryPositionAttributes(current.element, resolvedItem);
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2495,6 +2557,64 @@ export class DomPainter {
    * using the transaction's mapping. Skips header/footer content (separate PM coordinate space).
    * Also skips fragments that end before the edit point (their positions don't change).
    */
+  /**
+   * Refreshes data-pm-start/data-pm-end on a REUSED story fragment from the
+   * fresh resolved item. Story positions are local to their story document,
+   * so the body transaction mapping cannot update them; instead the uniform
+   * shift between the fresh first position and the painted one is applied.
+   * Exact for unchanged blocks (positions inside one block shift uniformly).
+   */
+  private updateStoryPositionAttributes(fragmentEl: HTMLElement, resolvedItem: ResolvedPaintItem | undefined): void {
+    if (!resolvedItem || resolvedItem.kind !== 'fragment') return;
+
+    // Fragment-scoped fresh landmark: the pm start of THIS fragment's first
+    // line (matches what render-line stamps as the first painted attribute,
+    // including continuation fragments that start mid-block).
+    let freshStart: number | undefined;
+    const block = 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const firstLine = 'content' in resolvedItem ? resolvedItem.content?.lines?.[0]?.line : undefined;
+    if (block && firstLine) {
+      const range = computeLinePmRange(block, firstLine);
+      if (typeof range.pmStart === 'number' && Number.isFinite(range.pmStart)) {
+        freshStart = range.pmStart;
+      }
+    }
+    if (freshStart == null && block) {
+      const runs = (block as { runs?: Array<{ pmStart?: number | null }> }).runs;
+      if (Array.isArray(runs)) {
+        for (const run of runs) {
+          if (typeof run?.pmStart === 'number' && Number.isFinite(run.pmStart)) {
+            freshStart = run.pmStart;
+            break;
+          }
+        }
+      }
+    }
+    if (freshStart == null || !Number.isFinite(freshStart)) return;
+
+    const elements = [fragmentEl, ...Array.from(fragmentEl.querySelectorAll<HTMLElement>('[data-pm-start], [data-pm-end]'))];
+    let paintedStart = Infinity;
+    for (const el of elements) {
+      const start = Number(el.dataset.pmStart);
+      if (Number.isFinite(start)) paintedStart = Math.min(paintedStart, start);
+    }
+    if (!Number.isFinite(paintedStart)) return;
+
+    const delta = freshStart - paintedStart;
+    if (delta === 0) return;
+
+    for (const el of elements) {
+      const start = Number(el.dataset.pmStart);
+      if (el.dataset.pmStart !== undefined && el.dataset.pmStart !== '' && Number.isFinite(start)) {
+        el.dataset.pmStart = String(start + delta);
+      }
+      const end = Number(el.dataset.pmEnd);
+      if (el.dataset.pmEnd !== undefined && el.dataset.pmEnd !== '' && Number.isFinite(end)) {
+        el.dataset.pmEnd = String(end + delta);
+      }
+    }
+  }
+
   private updatePositionAttributes(fragmentEl: HTMLElement, mapping: PositionMapping): void {
     // Skip header/footer elements (they use a separate PM coordinate space)
     if (fragmentEl.closest('.superdoc-page-header, .superdoc-page-footer')) {
@@ -2693,6 +2813,9 @@ export class DomPainter {
         this.applyFragmentFrame(el, paraFragment, context.section, context.story),
       applySdtDataset,
       applyContainerSdtDataset,
+      // Per-document font resolver so list markers and drop caps paint the same physical family
+      // they were measured in (undefined => the renderers fall back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       renderLine: ({
         block,
         line,
@@ -2875,8 +2998,8 @@ export class DomPainter {
     if (block.drawingKind === 'image') {
       return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
-    if (block.drawingKind === 'vectorShape') {
-      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
+    if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
+      return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context, fragment);
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
@@ -2888,15 +3011,19 @@ export class DomPainter {
   }
 
   private createVectorShapeElement(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
     applyTransforms = false,
     groupScaleX = 1,
     groupScaleY = 1,
     context?: FragmentRenderContext,
+    fragment?: DrawingFragment,
   ): HTMLElement {
     const container = this.doc!.createElement('div');
     container.classList.add('superdoc-vector-shape');
+    if (block.drawingKind === 'textboxShape') {
+      container.classList.add('superdoc-textbox-shape');
+    }
     container.style.width = '100%';
     container.style.height = '100%';
     container.style.position = 'relative';
@@ -2939,15 +3066,11 @@ export class DomPainter {
         this.applyLineEnds(svgElement, block);
         contentContainer.appendChild(svgElement);
 
-        if (this.hasShapeTextContent(block.textContent)) {
-          const textElement = this.createShapeTextElement(
-            block,
-            innerWidth,
-            innerHeight,
-            groupScaleX,
-            groupScaleY,
-            context,
-          );
+        if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+          const textElement =
+            block.drawingKind === 'textboxShape'
+              ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+              : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
           contentContainer.appendChild(textElement);
         }
 
@@ -2959,15 +3082,11 @@ export class DomPainter {
     // Fallback rendering when no preset shape SVG is available
     this.applyFallbackShapeStyle(contentContainer, block);
 
-    if (this.hasShapeTextContent(block.textContent)) {
-      const textElement = this.createShapeTextElement(
-        block,
-        innerWidth,
-        innerHeight,
-        groupScaleX,
-        groupScaleY,
-        context,
-      );
+    if (block.drawingKind === 'textboxShape' || this.hasShapeTextContent(block.textContent)) {
+      const textElement =
+        block.drawingKind === 'textboxShape'
+          ? this.createTextboxContentElement(block, fragment, innerWidth, innerHeight, context)
+          : this.createShapeTextElement(block, innerWidth, innerHeight, groupScaleX, groupScaleY, context);
       contentContainer.appendChild(textElement);
     }
 
@@ -2978,7 +3097,7 @@ export class DomPainter {
   /**
    * Apply fill and stroke styles to a fallback shape container
    */
-  private applyFallbackShapeStyle(container: HTMLElement, block: VectorShapeDrawing): void {
+  private applyFallbackShapeStyle(container: HTMLElement, block: ShapeTextDrawingWithEffects): void {
     // Handle fill color
     if (block.fillColor === null) {
       container.style.background = 'none';
@@ -3015,7 +3134,7 @@ export class DomPainter {
   }
 
   private createShapeTextElement(
-    block: VectorShapeDrawing,
+    block: VectorShapeDrawing | TextboxDrawing,
     width: number,
     height: number,
     groupScaleX = 1,
@@ -3049,7 +3168,60 @@ export class DomPainter {
     );
   }
 
-  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing): boolean {
+  private createTextboxContentElement(
+    block: TextboxDrawing,
+    fragment: DrawingFragment | undefined,
+    width: number,
+    height: number,
+    context?: FragmentRenderContext,
+  ): Element {
+    const contentMeasures = fragment?.contentMeasures ?? block.contentMeasures;
+    if (!Array.isArray(contentMeasures) || contentMeasures.length === 0) {
+      return this.hasShapeTextContent(block.textContent)
+        ? this.createShapeTextElement(block, width, height, 1, 1, context)
+        : this.doc!.createElement('div');
+    }
+
+    const contentRoot = this.doc!.createElement('div');
+    contentRoot.style.position = 'absolute';
+    contentRoot.style.top = '0';
+    contentRoot.style.left = '0';
+    contentRoot.style.width = '100%';
+    contentRoot.style.height = '100%';
+    contentRoot.style.display = 'flex';
+    contentRoot.style.flexDirection = 'column';
+    contentRoot.style.boxSizing = 'border-box';
+    contentRoot.style.overflow = 'hidden';
+
+    const insets = block.textInsets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    contentRoot.style.padding = `${insets.top}px ${insets.right}px ${insets.bottom}px ${insets.left}px`;
+
+    const verticalAlign = block.textVerticalAlign ?? 'top';
+    contentRoot.style.justifyContent =
+      verticalAlign === 'bottom' ? 'flex-end' : verticalAlign === 'center' ? 'center' : 'flex-start';
+
+    const linesHost = this.doc!.createElement('div');
+    linesHost.style.display = 'flex';
+    linesHost.style.flexDirection = 'column';
+    linesHost.style.minWidth = '0';
+    linesHost.style.width = '100%';
+
+    const renderContext = context ?? this.defaultFragmentRenderContext();
+    const availableWidth = Math.max(1, width - insets.left - insets.right);
+
+    block.contentBlocks.forEach((paragraphBlock, paragraphIndex) => {
+      const measure = contentMeasures[paragraphIndex];
+      if (!measure?.lines) return;
+      measure.lines.forEach((line, lineIndex) => {
+        linesHost.appendChild(this.renderLine(paragraphBlock, line, renderContext, availableWidth, lineIndex));
+      });
+    });
+
+    contentRoot.appendChild(linesHost);
+    return contentRoot;
+  }
+
+  private shouldUseWordArtTextRenderer(block: VectorShapeDrawing | TextboxDrawing): boolean {
     return block.attrs?.isWordArt === true && this.hasShapeTextContent(block.textContent);
   }
 
@@ -3153,7 +3325,8 @@ export class DomPainter {
       return context?.pageNumberText ?? String(context?.pageNumber ?? 1);
     }
     if (part.fieldType === 'NUMPAGES') {
-      return String(context?.totalPages ?? 1);
+      const totalPages = context?.totalPages ?? 1;
+      return part.pageNumberFormat ? formatPageNumber(totalPages, part.pageNumberFormat) : String(totalPages);
     }
     if (part.fieldType === 'SECTIONPAGES') {
       if (context?.sectionPageCount == null) return part.text ?? '1';
@@ -3339,7 +3512,7 @@ export class DomPainter {
   }
 
   private tryCreatePresetSvg(
-    block: VectorShapeDrawing,
+    block: ShapeTextDrawingWithEffects,
     widthOverride?: number,
     heightOverride?: number,
   ): string | null {
@@ -3390,7 +3563,7 @@ export class DomPainter {
    * Each path in the custom geometry has its own coordinate space (w × h) which is
    * mapped to the shape's actual dimensions via the SVG viewBox.
    */
-  private tryCreateCustomGeometrySvg(block: VectorShapeDrawing, width: number, height: number): string | null {
+  private tryCreateCustomGeometrySvg(block: ShapeTextDrawingWithEffects, width: number, height: number): string | null {
     const custGeom = block.customGeometry;
     if (!custGeom?.paths?.length) return null;
 
@@ -3481,7 +3654,7 @@ export class DomPainter {
   }
 
   private getEffectExtentMetrics(
-    block: VectorShapeDrawingWithEffects,
+    block: ShapeTextDrawingWithEffects,
     geometry?: DrawingGeometry,
   ): {
     offsetX: number;
@@ -3501,7 +3674,7 @@ export class DomPainter {
     return { offsetX: left, offsetY: top, innerWidth, innerHeight };
   }
 
-  private applyLineEnds(svgElement: SVGElement, block: VectorShapeDrawingWithEffects): void {
+  private applyLineEnds(svgElement: SVGElement, block: ShapeTextDrawingWithEffects): void {
     const lineEnds = block.lineEnds;
     if (!lineEnds) return;
     if (block.strokeColor === null) return;
@@ -3741,7 +3914,7 @@ export class DomPainter {
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
-      const vectorChild: VectorShapeDrawingWithEffects = {
+      const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
         id: `${attrs.shapeId ?? child.shapeType}`,
@@ -3877,7 +4050,7 @@ export class DomPainter {
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);
         }
-        if (block.drawingKind === 'vectorShape') {
+        if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
           return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
         }
         if (block.drawingKind === 'chart') {
@@ -3911,6 +4084,9 @@ export class DomPainter {
         applySdtDataset,
         applyContainerSdtDataset,
         applyStyles,
+        // Per-document font resolver so in-cell list markers and drop caps paint the same physical
+        // family they were measured in (undefined => the renderers fall back to the global default).
+        resolvePhysical: this.options.resolvePhysical,
       });
 
       // Override outer wrapper positioning with resolved data when available.
@@ -3972,6 +4148,8 @@ export class DomPainter {
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
       contentControlsChrome: this.contentControlsChrome,
+      // Per-document font resolver (undefined => applyRunStyles falls back to the global default).
+      resolvePhysical: this.options.resolvePhysical,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
       applySdtDataset,
@@ -3986,6 +4164,14 @@ export class DomPainter {
       expandSdtWrapperPmRange,
     };
     return runContext;
+  }
+
+  private defaultFragmentRenderContext(): FragmentRenderContext {
+    return {
+      pageNumber: 1,
+      totalPages: 1,
+      section: 'body',
+    };
   }
 
   /**

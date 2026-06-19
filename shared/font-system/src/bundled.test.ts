@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  installBundledSubstitutes,
   BUNDLED_MANIFEST,
-  setBundledFontAssetBase,
   DEFAULT_BUNDLED_FONT_BASE,
+  installBundledSubstitutes,
+  setBundledFontAssetBase,
 } from './bundled';
 import type { FontRegistry } from './registry';
 
@@ -33,12 +33,74 @@ describe('installBundledSubstitutes URL resolution', () => {
     expect(reg.registered).toHaveLength(FACE_COUNT);
     expect(reg.sourcesFor('Carlito')).toContain('url(/fonts/Carlito-Regular.woff2)');
     expect(reg.sourcesFor('Liberation Sans')).toContain('url(/fonts/LiberationSans-Bold.woff2)');
+    expect(reg.sourcesFor('Liberation Sans Narrow')).toContain('url(/fonts/LiberationSansNarrow-BoldItalic.woff2)');
+    expect(reg.sourcesFor('C059')).toContain('url(/fonts/C059-BdIta.woff2)');
+    expect(reg.sourcesFor('URW Gothic')).toContain('url(/fonts/URWGothic-DemiOblique.woff2)');
+    expect(reg.sourcesFor('Caprasimo')).toEqual(['url(/fonts/Caprasimo-Regular.woff2)']);
+    expect(reg.sourcesFor('Archivo Black')).toEqual(['url(/fonts/ArchivoBlack-Regular.woff2)']);
+    expect(reg.sourcesFor('Bacasime Antique')).toEqual(['url(/fonts/BacasimeAntique-Regular.woff2)']);
+    expect(reg.sourcesFor('Oregano Italic')).toEqual(['url(/fonts/OreganoItalic-Regular.woff2)']);
+    expect(reg.sourcesFor('Gelasio')).toContain('url(/fonts/Gelasio-BoldItalic.woff2)');
+    expect(reg.sourcesFor('Cardo')).toEqual([
+      'url(/fonts/Cardo-Regular.woff2)',
+      'url(/fonts/Cardo-Bold.woff2)',
+      'url(/fonts/Cardo-Italic.woff2)',
+    ]);
+    expect(reg.sourcesFor('Comic Relief')).toEqual([
+      'url(/fonts/ComicRelief-Regular.woff2)',
+      'url(/fonts/ComicRelief-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('Selawik')).toEqual(['url(/fonts/Selawik-Regular.woff2)', 'url(/fonts/Selawik-Bold.woff2)']);
+    expect(reg.sourcesFor('Noto Sans Mono')).toEqual([
+      'url(/fonts/NotoSansMono-Regular.woff2)',
+      'url(/fonts/NotoSansMono-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('PT Sans Narrow')).toEqual([
+      'url(/fonts/PTSansNarrow-Regular.woff2)',
+      'url(/fonts/PTSansNarrow-Bold.woff2)',
+    ]);
+    expect(reg.sourcesFor('TeX Gyre Bonum')).toEqual([
+      'url(/fonts/TeXGyreBonum-Regular.woff2)',
+      'url(/fonts/TeXGyreBonum-Bold.woff2)',
+      'url(/fonts/TeXGyreBonum-Italic.woff2)',
+      'url(/fonts/TeXGyreBonum-BoldItalic.woff2)',
+    ]);
   });
 
   it('uses assetBaseUrl and normalizes a missing trailing slash', () => {
     const reg = new CaptureRegistry();
     installBundledSubstitutes(reg.asRegistry(), { assetBaseUrl: 'https://cdn.example.com/superdoc-fonts/v1' });
     expect(reg.sourcesFor('Carlito')).toContain('url(https://cdn.example.com/superdoc-fonts/v1/Carlito-Regular.woff2)');
+  });
+
+  it('ignores a non-function resolveAssetUrl (raw misconfig), warns, and falls back to assetBaseUrl', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reg = new CaptureRegistry();
+    // A hand-written `fonts.resolveAssetUrl` may be a string; calling it would throw at init. It must
+    // be ignored (warned once) and fall back to the base-URL resolver instead of crashing.
+    expect(() =>
+      installBundledSubstitutes(reg.asRegistry(), {
+        resolveAssetUrl: '/cdn/' as unknown as () => string,
+        assetBaseUrl: 'https://cdn.example.com/fonts/',
+      }),
+    ).not.toThrow();
+    expect(reg.sourcesFor('Carlito')).toContain('url(https://cdn.example.com/fonts/Carlito-Regular.woff2)');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/resolveAssetUrl must be a function/));
+    warn.mockRestore();
+  });
+
+  it('warns about a non-function resolveAssetUrl once per document, not on every install call', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reg = new CaptureRegistry();
+    const handle = reg.asRegistry();
+    const opts = {
+      resolveAssetUrl: '/cdn/' as unknown as () => string,
+      assetBaseUrl: 'https://cdn.example.com/fonts/',
+    };
+    installBundledSubstitutes(handle, opts);
+    installBundledSubstitutes(handle, opts); // idempotent for the same registry: must not re-warn
+    expect(warn.mock.calls.filter((c) => /resolveAssetUrl must be a function/.test(String(c[0])))).toHaveLength(1);
+    warn.mockRestore();
   });
 
   it('resolveAssetUrl wins over assetBaseUrl and receives per-face context', () => {
@@ -62,12 +124,12 @@ describe('installBundledSubstitutes URL resolution', () => {
     });
   });
 
-  it('setBundledFontAssetBase overrides the default base (CDN script-relative)', () => {
-    setBundledFontAssetBase('https://cdn.jsdelivr.net/npm/superdoc@1/dist/fonts/');
+  it('setBundledFontAssetBase overrides the default base', () => {
+    setBundledFontAssetBase('https://cdn.jsdelivr.net/npm/@superdoc-dev/fonts@1/assets/');
     const reg = new CaptureRegistry();
     installBundledSubstitutes(reg.asRegistry());
     expect(reg.sourcesFor('Caladea')).toContain(
-      'url(https://cdn.jsdelivr.net/npm/superdoc@1/dist/fonts/Caladea-Regular.woff2)',
+      'url(https://cdn.jsdelivr.net/npm/@superdoc-dev/fonts@1/assets/Caladea-Regular.woff2)',
     );
   });
 

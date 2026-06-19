@@ -5,6 +5,7 @@ import { TABLE_COLOR_PATTERN as TABLE_BORDER_COLOR_PATTERN } from './color-forma
 import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
+  TablesSetLayoutInput,
   TablesSetTableOptionsInput,
   TableBorderSpec,
   TableStyleOptionsPatch,
@@ -50,6 +51,31 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
       field: 'nodeId',
       value: input.nodeId,
     });
+  }
+}
+
+function validateTablesSetLayoutInput(input: TablesSetLayoutInput): void {
+  validateTableLocator(input, 'tables.setLayout');
+
+  if (
+    input.preferredWidthType !== undefined &&
+    input.preferredWidthType !== 'dxa' &&
+    input.preferredWidthType !== 'auto' &&
+    input.preferredWidthType !== 'pct'
+  ) {
+    throw new DocumentApiValidationError(
+      'INVALID_ARGUMENT',
+      `tables.setLayout: preferredWidthType must be one of "dxa", "auto", or "pct"; received ${String(input.preferredWidthType)}.`,
+      { field: 'preferredWidthType', value: input.preferredWidthType },
+    );
+  }
+
+  if (input.preferredWidthType === 'auto' && input.preferredWidth !== undefined && input.preferredWidth !== 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_ARGUMENT',
+      'tables.setLayout: preferredWidth must be omitted or 0 when preferredWidthType is "auto".',
+      { fields: ['preferredWidth', 'preferredWidthType'] },
+    );
   }
 }
 
@@ -212,6 +238,15 @@ export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?
   options?: MutationOptions,
 ): TResult {
   validateTableLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+export function executeTablesSetLayoutOp<TResult>(
+  adapter: (input: TablesSetLayoutInput, options?: MutationOptions) => TResult,
+  input: TablesSetLayoutInput,
+  options?: MutationOptions,
+): TResult {
+  validateTablesSetLayoutInput(input);
   return adapter(input, normalizeMutationOptions(options));
 }
 

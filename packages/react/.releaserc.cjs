@@ -36,6 +36,10 @@ const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === br
 // stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
 // Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
 const shouldCommentOnRelease = !isPrerelease;
+// Linear release comments are the shipped-version breadcrumb inside Linear
+// itself, so keep them on for prereleases even while GitHub PR comments stay
+// gated separately.
+const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
 const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
@@ -74,8 +78,8 @@ if (!isPrerelease) {
 
 // Linear integration - labels issues with version on release
 config.plugins.push([
-  'semantic-release-linear-app',
-  { teamKeys: ['SD'], addComment: shouldCommentOnRelease, packageName: 'react' },
+  '../../scripts/semantic-release/linear-commit-sync.cjs',
+  { teamKeys: ['SD'], addComment: shouldCommentOnLinearRelease, packageName: 'react' },
 ]);
 
 config.plugins.push([

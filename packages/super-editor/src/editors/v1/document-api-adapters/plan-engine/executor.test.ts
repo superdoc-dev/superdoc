@@ -1789,6 +1789,36 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     expect(assertFailures).toHaveLength(1);
   });
 
+  it('treats unsafe assert regex as zero text matches', () => {
+    const { editor, tr } = makeEditor('aaaaaaaaaaaaaaaaaaaaaaaa');
+    // Assert execution builds an index before falling back to whole-document text for no `within`.
+    (tr as any).doc.descendants = vi.fn();
+    (editor as any).state.tr = tr;
+
+    const assertStep: AssertStep = {
+      id: 'assert-unsafe',
+      op: 'assert',
+      where: {
+        by: 'select',
+        select: { type: 'text', pattern: '^(a+)+$', mode: 'regex' },
+      },
+      args: { expectCount: 1 },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [],
+      assertSteps: [assertStep],
+      compiledRevision: '0',
+    };
+
+    const { stepOutcomes } = runMutationsOnTransaction(editor, tr as any, compiled, { throwOnAssertFailure: false });
+    const assertOutcome = stepOutcomes.find((o) => o.stepId === 'assert-unsafe');
+
+    expect(assertOutcome).toBeDefined();
+    expect(assertOutcome!.effect).toBe('assert_failed');
+    expect((assertOutcome!.data as any).actualCount).toBe(0);
+  });
+
   it('counts listItem nodes correctly via mapBlockNodeType', () => {
     const nodes = [
       { type: { name: 'paragraph' }, isBlock: true, attrs: {} },

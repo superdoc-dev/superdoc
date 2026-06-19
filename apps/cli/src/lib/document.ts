@@ -50,7 +50,7 @@ export interface OpenedRuntimeDocument {
   meta: DocumentSourceMeta;
   exportBytes(options?: RuntimeExportOptions): Promise<Uint8Array> | Uint8Array;
   exportToPath(outputPath: string, force?: boolean, options?: RuntimeExportOptions): Promise<RuntimeFileExportMeta>;
-  dispose(): void;
+  dispose(): void | Promise<void>;
 }
 
 export type RuntimeExportMode = 'review-preserving' | 'final' | 'original';
@@ -479,12 +479,11 @@ export async function openCollaborativeDocument(
     };
     return {
       ...opened,
-      dispose() {
-        try {
-          opened.dispose();
-        } finally {
-          runtime.dispose();
-        }
+      async dispose() {
+        // Wait for pending Y.js updates to be sent before disconnecting.
+        await runtime.waitForFinalFlush();
+        opened.dispose();
+        runtime.dispose();
       },
       bootstrap,
     };

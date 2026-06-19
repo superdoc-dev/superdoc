@@ -192,6 +192,31 @@ describe('style formatting read helpers', () => {
     expect(fmt).toHaveProperty('fontSizePt');
     expect(fmt).toHaveProperty('colorHex');
   });
+
+  it('captures style-resolved formatting when the selection has no direct marks', () => {
+    // Put the cursor in a paragraph, make it Heading1 (which clears direct marks),
+    // and give Heading1 a distinctive look. The cursor now has NO direct marks, so
+    // the visible formatting comes entirely from the named style.
+    let pos = null;
+    editor.state.doc.descendants((node, p) => {
+      if (pos == null && node.type.name === 'paragraph') pos = p + 1;
+      return pos == null;
+    });
+    editor.commands.setTextSelection(pos);
+    editor.commands.setStyleById('Heading1');
+    editor.commands.updateLinkedStyle('Heading1', {
+      bold: true,
+      italic: false,
+      underline: false,
+      fontSizePt: 21,
+      fontFamily: 'Georgia',
+      colorHex: '112233',
+    });
+
+    const fmt = editor.helpers.linkedStyles.getEffectiveFormattingAtSelection();
+    // Must reflect the style, not empty/false (the bug: marks-only read wiped it).
+    expect(fmt).toMatchObject({ bold: true, fontSizePt: 21, fontFamily: 'Georgia', colorHex: '112233' });
+  });
 });
 
 describe('export representations (characterization)', () => {

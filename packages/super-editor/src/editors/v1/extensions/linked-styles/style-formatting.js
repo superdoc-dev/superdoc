@@ -47,13 +47,16 @@ export function parseFontSizePt(value) {
  * @param {CapturedFormatting} captured
  */
 export function applyToDefinitionStyles(styles, captured) {
-  const setPresence = (key, on) => {
-    if (on) styles[key] = styles[key] ?? {};
-    else delete styles[key];
+  // On => presence ({}); off => explicit { value: '0' } rather than removing the
+  // key, so a redefined style overrides (not inherits) a basedOn boolean.
+  // generateLinkedStyleString reads value '0'/false as off (and a present key
+  // blocks basedOn inheritance).
+  const setBool = (key, on) => {
+    styles[key] = on ? {} : { value: '0' };
   };
-  setPresence('bold', captured.bold);
-  setPresence('italic', captured.italic);
-  setPresence('underline', captured.underline);
+  setBool('bold', captured.bold);
+  setBool('italic', captured.italic);
+  setBool('underline', captured.underline);
 
   if (captured.fontSizePt != null) styles['font-size'] = `${captured.fontSizePt}pt`;
   else delete styles['font-size'];
@@ -70,10 +73,17 @@ export function applyToDefinitionStyles(styles, captured) {
  */
 export function definitionStylesToFormatting(styles) {
   const s = styles || {};
+  // A boolean is on when its key is present and not an explicit off ('0'/false);
+  // absent or explicit-off both read as false.
+  const boolOn = (v) => {
+    if (v == null) return false;
+    const val = typeof v === 'object' ? v.value : v;
+    return val !== '0' && val !== false;
+  };
   return {
-    bold: 'bold' in s,
-    italic: 'italic' in s,
-    underline: 'underline' in s,
+    bold: boolOn(s.bold),
+    italic: boolOn(s.italic),
+    underline: boolOn(s.underline),
     fontSizePt: parseFontSizePt(s['font-size']),
     fontFamily: typeof s['font-family'] === 'string' ? s['font-family'] : null,
     colorHex: normaliseHex(s.color),
@@ -134,10 +144,14 @@ function removeChild(parent, name) {
   parent.elements = parent.elements.filter((el) => el.name !== name);
 }
 
-/** @param {XmlElement} rpr @param {string} name @param {boolean} on */
+/**
+ * Set an OOXML run-property toggle. On => present with no val (`<w:b/>`);
+ * off => explicit `<w:b w:val="0"/>` so a basedOn style's value is overridden
+ * rather than inherited (absent would inherit).
+ * @param {XmlElement} rpr @param {string} name @param {boolean} on
+ */
 function setBooleanProp(rpr, name, on) {
-  if (on) ensureChild(rpr, name).attributes = {};
-  else removeChild(rpr, name);
+  ensureChild(rpr, name).attributes = on ? {} : { 'w:val': '0' };
 }
 
 /**
@@ -150,8 +164,9 @@ export function patchStyleXmlElement(styleEl, captured) {
   const rpr = ensureChild(styleEl, 'w:rPr');
   setBooleanProp(rpr, 'w:b', captured.bold);
   setBooleanProp(rpr, 'w:i', captured.italic);
-  if (captured.underline) ensureChild(rpr, 'w:u').attributes = { 'w:val': 'single' };
-  else removeChild(rpr, 'w:u');
+  // Underline off is explicit (w:val="none") for the same reason as w:b/w:i:
+  // an absent w:u would inherit a basedOn underline.
+  ensureChild(rpr, 'w:u').attributes = captured.underline ? { 'w:val': 'single' } : { 'w:val': 'none' };
 
   if (captured.fontSizePt != null) {
     const halfPoints = String(Math.round(captured.fontSizePt * 2));

@@ -1,8 +1,10 @@
 // @ts-check
+import { getLinkedStyle } from './helpers.js';
 import { LinkedStylesPluginKey } from './plugin.js';
 import {
   applyToDefinitionStyles,
   applyToTranslatedStyle,
+  definitionStylesToFormatting,
   findStyleXmlElement,
   parseFontSizePt,
   patchStyleXmlElement,
@@ -96,13 +98,61 @@ export function updateLinkedStyleDefinition(editor, styleId, formatting) {
   }
 }
 
+/** The paragraph styleId applied at the current selection, or null. */
+function getParagraphStyleIdAtSelection(editor) {
+  try {
+    const $from = editor?.state?.selection?.$from;
+    if (!$from) return null;
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth);
+      if (node?.type?.name === 'paragraph') {
+        return node.attrs?.paragraphProperties?.styleId ?? null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Read the run formatting at the current selection from editor marks.
- * Never throws; returns a complete CapturedFormatting.
+ * Resolve the run formatting the selection's paragraph style contributes
+ * (the named style merged over its basedOn parent), or null when unstyled.
+ * @param {Object} editor
+ * @returns {import('./style-formatting.js').CapturedFormatting|null}
+ */
+function resolveStyleRunFormatting(editor) {
+  try {
+    const styleId = getParagraphStyleIdAtSelection(editor);
+    if (!styleId) return null;
+    const styles = editor?.converter?.linkedStyles ?? [];
+    const { linkedStyle, basedOnStyle } = getLinkedStyle(styleId, styles);
+    if (!linkedStyle?.definition?.styles) return null;
+    const merged = { ...(basedOnStyle?.definition?.styles ?? {}), ...linkedStyle.definition.styles };
+    return definitionStylesToFormatting(merged);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the EFFECTIVE run formatting at the current selection: the formatting the
+ * paragraph's named style resolves to, with any direct marks layered on top.
+ * This is what "update to match" must capture — formatting that comes purely from
+ * a named style (the common .docx case) has no direct marks, so a marks-only read
+ * would capture nothing and wipe the style. Never throws.
  * @param {Object} editor
  * @returns {import('./style-formatting.js').CapturedFormatting}
  */
 export function readEffectiveRunFormatting(editor) {
+  const base = resolveStyleRunFormatting(editor) ?? {
+    bold: false,
+    italic: false,
+    underline: false,
+    fontSizePt: null,
+    fontFamily: null,
+    colorHex: null,
+  };
   const isActive = (name) => {
     try {
       return Boolean(editor.isActive?.(name));
@@ -116,12 +166,14 @@ export function readEffectiveRunFormatting(editor) {
   } catch {
     /* noop */
   }
+  const markFamily = typeof textStyle.fontFamily === 'string' ? textStyle.fontFamily : null;
+  // Direct marks win where present; otherwise fall back to the resolved style.
   return {
-    bold: isActive('bold'),
-    italic: isActive('italic'),
-    underline: isActive('underline'),
-    fontSizePt: parseFontSizePt(textStyle.fontSize),
-    fontFamily: typeof textStyle.fontFamily === 'string' ? textStyle.fontFamily : null,
-    colorHex: normaliseHex(textStyle.color),
+    bold: isActive('bold') || base.bold,
+    italic: isActive('italic') || base.italic,
+    underline: isActive('underline') || base.underline,
+    fontSizePt: parseFontSizePt(textStyle.fontSize) ?? base.fontSizePt,
+    fontFamily: markFamily ?? base.fontFamily,
+    colorHex: normaliseHex(textStyle.color) ?? base.colorHex,
   };
 }

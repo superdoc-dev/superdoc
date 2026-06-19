@@ -23,7 +23,7 @@ describe('style-formatting (pure)', () => {
     expect(parseFontSizePt(undefined)).toBeNull();
   });
 
-  it('applyToDefinitionStyles writes run-level keys and removes cleared ones', () => {
+  it('applyToDefinitionStyles writes run-level keys and sets explicit-off for cleared booleans', () => {
     const styles = { bold: {} };
     applyToDefinitionStyles(styles, {
       bold: false,
@@ -33,11 +33,21 @@ describe('style-formatting (pure)', () => {
       fontFamily: 'Arial',
       colorHex: 'FF0000',
     });
-    expect(styles.bold).toBeUndefined();
+    // Cleared booleans become explicit off ({ value: '0' }) so they override an
+    // inherited basedOn value instead of falling back to it.
+    expect(styles.bold).toEqual({ value: '0' });
+    expect(styles.underline).toEqual({ value: '0' });
     expect(styles.italic).toEqual({});
     expect(styles['font-size']).toBe('18pt');
     expect(styles['font-family']).toBe('Arial');
     expect(styles.color).toBe('#FF0000');
+  });
+
+  it('definitionStylesToFormatting reads explicit-off booleans as false', () => {
+    expect(definitionStylesToFormatting({ bold: { value: '0' }, italic: {} })).toMatchObject({
+      bold: false,
+      italic: true,
+    });
   });
 
   it('applyToDefinitionStyles leaves block-level keys untouched', () => {
@@ -102,7 +112,7 @@ describe('styles.xml patch (pure)', () => {
     expect(rpr.elements.find((e) => e.name === 'w:color')?.attributes['w:val']).toBe('FF0000');
   });
 
-  it('removes cleared boolean props from w:rPr', () => {
+  it('writes explicit-off (w:val="0") for cleared booleans so basedOn is not inherited', () => {
     const styleEl = {
       type: 'element',
       name: 'w:style',
@@ -111,7 +121,7 @@ describe('styles.xml patch (pure)', () => {
     };
     patchStyleXmlElement(styleEl, fmt({ bold: false }));
     const rpr = styleEl.elements.find((e) => e.name === 'w:rPr');
-    expect(rpr.elements.find((e) => e.name === 'w:b')).toBeFalsy();
+    expect(rpr.elements.find((e) => e.name === 'w:b')?.attributes['w:val']).toBe('0');
   });
 
   it('findStyleXmlElement locates a style by w:styleId', () => {

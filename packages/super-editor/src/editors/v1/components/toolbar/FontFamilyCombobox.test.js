@@ -58,16 +58,29 @@ afterEach(() => {
 });
 
 describe('FontFamilyCombobox', () => {
-  it('focuses and selects the input without opening the list', async () => {
+  it('opens the list when the main font field is clicked', async () => {
     const { input } = mountCombobox();
 
     await input.trigger('mousedown');
     await nextTick();
 
-    expect(document.body.querySelector('[role="listbox"]')).toBeNull();
-    expect(input.attributes('aria-expanded')).toBe('false');
+    expect(document.body.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(input.attributes('aria-expanded')).toBe('true');
     expect(input.element.selectionStart).toBe(0);
     expect(input.element.selectionEnd).toBe('Arial'.length);
+  });
+
+  it('opens from a focused edit without replacing the typed font value', async () => {
+    const { input } = mountCombobox();
+
+    input.element.focus();
+    await input.trigger('focus');
+    await input.setValue('Brand Sans');
+    await input.trigger('mousedown');
+    await nextTick();
+
+    expect(document.body.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(input.element.value).toBe('Brand Sans');
   });
 
   it('opens the list from the caret control', async () => {

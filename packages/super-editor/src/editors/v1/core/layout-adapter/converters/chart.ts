@@ -4,7 +4,7 @@
  * Converts ProseMirror chart nodes to DrawingBlocks with drawingKind: 'chart'.
  */
 
-import type { ChartDrawing, DrawingGeometry, BoxSpacing, ImageAnchor, SourceAnchor } from '@superdoc/contracts';
+import type { ChartDrawing, DrawingGeometry, BoxSpacing, SourceAnchor } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import {
   pickNumber,
@@ -16,6 +16,7 @@ import {
   normalizeZIndex,
   resolveFloatingZIndex,
 } from '../utilities.js';
+import { normalizeGraphicAnchor } from '../graphic-placement.js';
 
 // ============================================================================
 // Constants
@@ -23,9 +24,6 @@ import {
 
 const WRAP_TYPES = new Set(['None', 'Square', 'Tight', 'Through', 'TopAndBottom', 'Inline']);
 const WRAP_TEXT_VALUES = new Set(['bothSides', 'left', 'right', 'largest']);
-const H_RELATIVE_VALUES = new Set(['column', 'page', 'margin']);
-const V_RELATIVE_VALUES = new Set(['paragraph', 'page', 'margin']);
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -59,47 +57,6 @@ const normalizeWrap = (value: unknown): ChartDrawing['wrap'] | undefined => {
   if (behindDoc != null) wrap.behindDoc = behindDoc;
 
   return wrap;
-};
-
-const normalizeAnchor = (
-  value: unknown,
-  attrs: Record<string, unknown>,
-  wrapBehindDoc?: boolean,
-): ImageAnchor | undefined => {
-  const raw = isPlainObject(value) ? value : undefined;
-  const marginOffset = isPlainObject(attrs.marginOffset) ? attrs.marginOffset : undefined;
-  const simplePos = isPlainObject(attrs.simplePos) ? attrs.simplePos : undefined;
-  const isAnchored = attrs.isAnchor === true || Boolean(raw);
-
-  const anchor: ImageAnchor = {};
-  if (isAnchored) anchor.isAnchored = true;
-
-  const hRelative =
-    typeof raw?.hRelativeFrom === 'string' && H_RELATIVE_VALUES.has(raw.hRelativeFrom) ? raw.hRelativeFrom : undefined;
-  if (hRelative) anchor.hRelativeFrom = hRelative as ImageAnchor['hRelativeFrom'];
-
-  const vRelative =
-    typeof raw?.vRelativeFrom === 'string' && V_RELATIVE_VALUES.has(raw.vRelativeFrom) ? raw.vRelativeFrom : undefined;
-  if (vRelative) anchor.vRelativeFrom = vRelative as ImageAnchor['vRelativeFrom'];
-
-  const offsetH = pickNumber(marginOffset?.horizontal ?? marginOffset?.left ?? raw?.offsetH ?? simplePos?.x);
-  if (offsetH != null) anchor.offsetH = offsetH;
-
-  const offsetV = pickNumber(marginOffset?.top ?? marginOffset?.vertical ?? raw?.offsetV ?? simplePos?.y);
-  if (offsetV != null) anchor.offsetV = offsetV;
-
-  const behindDoc = toBoolean(raw?.behindDoc ?? wrapBehindDoc);
-  if (behindDoc != null) anchor.behindDoc = behindDoc;
-
-  const hasData =
-    anchor.isAnchored ||
-    anchor.hRelativeFrom != null ||
-    anchor.vRelativeFrom != null ||
-    anchor.offsetH != null ||
-    anchor.offsetV != null ||
-    anchor.behindDoc != null;
-
-  return hasData ? anchor : undefined;
 };
 
 // ============================================================================
@@ -146,7 +103,11 @@ export function chartNodeToDrawingBlock(
 
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
   const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
-  const anchor = normalizeAnchor(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
+  const anchor = normalizeGraphicAnchor({
+    anchorData: rawAttrs.anchorData,
+    attrs: rawAttrs,
+    wrapBehindDoc: normalizedWrap?.behindDoc,
+  });
 
   const pos = positions.get(node);
   const attrsWithPm: Record<string, unknown> = { ...rawAttrs };

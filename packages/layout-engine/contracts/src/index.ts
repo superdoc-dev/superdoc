@@ -967,7 +967,7 @@ export type ImageBlock = {
   display?: 'inline' | 'block';
   padding?: BoxSpacing;
   margin?: BoxSpacing;
-  anchor?: ImageAnchor;
+  anchor?: GraphicPlacement;
   wrap?: ImageWrap;
   /** Stacking order from OOXML relativeHeight (same formula as editor: Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE)) */
   zIndex?: number;
@@ -1188,7 +1188,7 @@ export type DrawingBlockBase = {
   drawingKind: DrawingKind;
   margin?: BoxSpacing;
   padding?: BoxSpacing;
-  anchor?: ImageAnchor;
+  anchor?: GraphicPlacement;
   wrap?: ImageWrap;
   zIndex?: number;
   drawingContentId?: string;
@@ -1436,8 +1436,8 @@ export type ColumnBreakBlock = {
   attrs?: Record<string, unknown>;
 };
 
-/** Positioning for anchored images (offsets in CSS px). */
-export type ImageAnchor = {
+/** Shared positioning for anchored graphics: images, shapes, shape groups, textboxes, and charts. */
+export type GraphicPlacement = {
   isAnchored?: boolean;
   hRelativeFrom?: 'column' | 'page' | 'margin';
   vRelativeFrom?: 'paragraph' | 'page' | 'margin';
@@ -1449,6 +1449,9 @@ export type ImageAnchor = {
   padding?: BoxSpacing | undefined;
   margin?: BoxSpacing | undefined;
 };
+
+/** @deprecated Use GraphicPlacement for image, shape, and chart placement data. */
+export type ImageAnchor = GraphicPlacement;
 
 /** Text wrapping for floating images (distances in px). */
 export type ImageWrap = {

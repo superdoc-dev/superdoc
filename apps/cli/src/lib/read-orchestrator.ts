@@ -43,8 +43,12 @@ function invokeOpenedDocumentOperation(
 ): unknown {
   const apiInput = extractInvokeInput(operationId, input);
   const invoke = (request: { operationId: string; input?: unknown; options?: unknown }) => opened.doc.invoke(request);
+  // AIDEV-NOTE: Key per-document hook state by the stable opened.doc handle, not
+  // the per-call `invoke` closure, so reads and mutations in the same host
+  // session share one scope. See mutation-orchestrator.ts for the full rationale.
+  const hookContext = { invoke, editor: { doc: opened.doc } };
   const preHook = PRE_INVOKE_HOOKS[operationId];
-  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { invoke }) : apiInput;
+  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, hookContext) : apiInput;
 
   let result: unknown;
   try {
@@ -57,7 +61,7 @@ function invokeOpenedDocumentOperation(
   }
 
   const postHook = POST_INVOKE_HOOKS[operationId];
-  return postHook ? postHook(result, { invoke, apiInput: transformedInput }) : result;
+  return postHook ? postHook(result, { ...hookContext, apiInput: transformedInput }) : result;
 }
 
 /**

@@ -72,7 +72,7 @@ function deriveCommandName(operationId: CliExposedOperationId): string {
   return cliCommandTokens(`doc.${operationId}` as `doc.${CliExposedOperationId}`).join(' ');
 }
 
-async function invokeOpenedDocumentOperation(
+export async function invokeOpenedDocumentOperation(
   opened: OpenedRuntimeDocument,
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
@@ -82,8 +82,16 @@ async function invokeOpenedDocumentOperation(
 ): Promise<OperationInvocationResult> {
   const apiInput = extractInvokeInput(operationId, input);
   const invoke = (request: { operationId: string; input?: unknown; options?: unknown }) => opened.doc.invoke(request);
+  // AIDEV-NOTE: Pass the stable opened.doc handle so special-handlers.ts keys
+  // per-document hook state (resolved track-change ids) by the document, never
+  // by the per-call `invoke` closure below. In host mode the session pool hands
+  // every operation the SAME opened.doc (session-pool.ts createLease:
+  // `lease.doc = pooled.doc`), so this is what lets that state persist across
+  // calls in a session. Drop editor.doc here and already-resolved NO_OP
+  // detection silently breaks: a repeat decide surfaces TARGET_NOT_FOUND.
+  const hookContext = { invoke, editor: { doc: opened.doc } };
   const preHook = PRE_INVOKE_HOOKS[operationId];
-  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { invoke }) : apiInput;
+  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, hookContext) : apiInput;
 
   let result: unknown;
   try {
@@ -109,7 +117,7 @@ async function invokeOpenedDocumentOperation(
 
   const postHook = POST_INVOKE_HOOKS[operationId];
   return {
-    result: postHook ? postHook(result, { invoke, apiInput: transformedInput }) : result,
+    result: postHook ? postHook(result, { ...hookContext, apiInput: transformedInput }) : result,
     failedReceipt,
   };
 }

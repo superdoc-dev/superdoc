@@ -139,6 +139,45 @@ export default function App() {
     setDropdownOpen(false);
   };
 
+  const applySdtToSelection = () => {
+    const editor = getEditor();
+    const doc = editor?.doc;
+
+    if (!doc?.create?.contentControl) {
+      console.error('Content control API not available');
+      setSdtMessage('Error: API not available');
+      return;
+    }
+
+    // Check if there's a selection
+    const { from, to } = editor?.state?.selection || {};
+    if (from === undefined || to === undefined || from === to) {
+      setSdtMessage('Select text first');
+      return;
+    }
+
+    try {
+      const result = doc.create.contentControl({
+        kind: 'block',
+        controlType: 'text',
+        tag: 'annotation',
+        alias: 'Block Content Control',
+        lockMode: 'unlocked',
+      });
+
+      if (result.success) {
+        console.log('Applied block SDT to selection with tag: annotation');
+        setSdtMessage('Applied block annotation SDT');
+      } else {
+        console.error('Failed to apply SDT:', result.failure?.message);
+        setSdtMessage(`Error: ${result.failure?.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error applying SDT:', err);
+      setSdtMessage(`Error: ${err.message}`);
+    }
+  };
+
   const toggleSdtStyles = () => {
     setSdtStylesHidden(!sdtStylesHidden);
   };
@@ -181,6 +220,9 @@ export default function App() {
             </button>
           </div>
         </div>
+        <button className="btn btn-secondary" onClick={applySdtToSelection}>
+          Apply SDT to selection
+        </button>
         <button className="btn btn-secondary" onClick={toggleSdtStyles}>
           {sdtStylesHidden ? 'Show styles' : 'Hide styles'}
         </button>

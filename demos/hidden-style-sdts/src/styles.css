@@ -1,0 +1,174 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f5;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-right: auto;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn:hover {
+  background: #f8f8f8;
+  border-color: #bbb;
+}
+
+.btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  border-color: #d0d0d0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e8e8e8;
+}
+
+.file-input {
+  display: none;
+}
+
+#toolbar {
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+#editor {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  background: #f5f5f5;
+}
+
+#editor > .superdoc {
+  max-width: 816px;
+  width: 100%;
+}
+
+.version {
+  font-size: 12px;
+  color: #888;
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.separator {
+  width: 1px;
+  height: 24px;
+  background: #e0e0e0;
+}
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 140px;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.dropdown.open .dropdown-content {
+  display: block;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.sdt-id-display {
+  font-size: 12px;
+  color: #666;
+  padding: 4px 8px;
+  background: #e8f4e8;
+  border-radius: 4px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hide annotation SDT styles when toggled */
+#editor.sdt-styles-hidden [data-sdt-tag="annotation"] {
+  --sd-content-controls-block-border: transparent;
+  --sd-content-controls-block-hover-border: transparent;
+  --sd-content-controls-block-hover-bg: transparent;
+  --sd-content-controls-inline-border: transparent;
+  --sd-content-controls-inline-hover-border: transparent;
+  --sd-content-controls-inline-hover-bg: transparent;
+  --sd-content-controls-label-border: transparent;
+  --sd-content-controls-label-bg: transparent;
+  --sd-content-controls-label-text: transparent;
+  --sd-content-controls-lock-hover-bg: transparent;
+  border-color: transparent !important;
+  background-color: transparent !important;
+}

@@ -46,6 +46,24 @@ body {
 .app-header .subtitle {
   font-size: 13px;
   color: var(--text-muted);
+  flex: 1;
+}
+
+.mode-toggle {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-toggle:hover {
+  background: var(--accent);
+  color: white;
 }
 
 .editor-wrapper {
@@ -194,4 +212,23 @@ body {
 
 .context-menu-item-with-submenu:hover .context-submenu {
   display: block;
+}
+
+/* ============================================================
+   Built-in SuperDoc Context Menu Styling
+   These CSS variables customize the built-in menu to match
+   our custom component's appearance.
+   ============================================================ */
+
+:root {
+  /* Override SuperDoc's context menu variables to match our design */
+  --sd-ui-menu-bg: var(--bg);
+  --sd-ui-menu-text: var(--text);
+  --sd-ui-menu-font-size: 13px;
+  --sd-ui-menu-radius: 8px;
+  --sd-ui-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
+  --sd-ui-menu-border: var(--border);
+  --sd-ui-menu-item-hover-bg: var(--bg-muted);
+  --sd-ui-menu-item-active-bg: var(--bg-muted);
+  --sd-ui-menu-item-active-text: var(--accent);
 }

@@ -6,6 +6,8 @@ export type ContextMenuCommand = 'bold' | 'italic' | 'underline' | 'strikethroug
 
 interface ContextMenuProps {
   onCommand: (command: ContextMenuCommand) => void;
+  /** When false, this component does nothing and lets SuperDoc's built-in menu handle events */
+  enabled: boolean;
 }
 
 type MenuItem = {
@@ -27,19 +29,26 @@ const LIST_ITEMS: MenuItem[] = [
   { cmd: 'numbered-list', label: 'Numbered list', icon: 'numberedList' },
 ];
 
-export function ContextMenu({ onCommand }: ContextMenuProps) {
+export function ContextMenu({ onCommand, enabled }: ContextMenuProps) {
   const ui = useSuperDocUI();
   const menuRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
+  // Close menu when disabled
   useEffect(() => {
-    if (!ui) return;
+    if (!enabled) setState(null);
+  }, [enabled]);
+
+  useEffect(() => {
+    // Don't attach listeners if disabled or no ui
+    if (!ui || !enabled) return;
 
     const onContext = (e: MouseEvent) => {
       const host = ui.viewport.getHost();
       if (!host?.contains(e.target as Node)) return;
       e.preventDefault();
+      e.stopPropagation(); // Prevent SuperDoc's built-in menu from also handling
       const sel = window.getSelection();
       setState({ x: e.clientX, y: e.clientY, hasSelection: !!sel?.toString().trim() });
     };
@@ -49,13 +58,14 @@ export function ContextMenu({ onCommand }: ContextMenuProps) {
       setState(null);
     };
 
-    document.addEventListener('contextmenu', onContext);
+    // Use capture phase to intercept before SuperDoc's listener
+    document.addEventListener('contextmenu', onContext, true);
     document.addEventListener('pointerdown', onDown);
     return () => {
-      document.removeEventListener('contextmenu', onContext);
+      document.removeEventListener('contextmenu', onContext, true);
       document.removeEventListener('pointerdown', onDown);
     };
-  }, [ui]);
+  }, [ui, enabled]);
 
   useLayoutEffect(() => {
     if (!state || !menuRef.current) return setPos(null);

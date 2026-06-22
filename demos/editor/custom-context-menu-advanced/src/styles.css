@@ -1,0 +1,197 @@
+/* Custom Context Menu Advanced Demo
+   Demonstrates: custom icons, keyboard shortcuts, custom padding */
+
+:root {
+  --bg: #ffffff;
+  --bg-muted: #f7f7f8;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --accent: #2563eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.app-header .subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.editor-wrapper {
+  flex: 1;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Center the SuperDoc document */
+.superdoc--contained {
+  justify-content: center;
+}
+
+/* Custom context menu with icons, shortcuts, and custom padding */
+
+.context-menu {
+  /* Customize these variables to adjust density/padding */
+  --ctx-padding-x: 12px;
+  --ctx-padding-y: 8px;
+  --ctx-icon-size: 16px;
+  --ctx-icon-gap: 12px;
+  --ctx-shortcut-gap: 24px;
+
+  z-index: 100;
+  min-width: 220px;
+  padding: 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
+  overflow: visible;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ctx-icon-gap);
+  width: 100%;
+  padding: var(--ctx-padding-y) var(--ctx-padding-x);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--bg-muted);
+}
+
+.context-menu-item:focus {
+  outline: none;
+  background: var(--bg-muted);
+}
+
+.context-menu-item.disabled,
+.context-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.context-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctx-icon-size);
+  height: var(--ctx-icon-size);
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.context-menu-item:hover:not(:disabled) .context-menu-icon {
+  color: var(--text);
+}
+
+.context-menu-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu-shortcut {
+  flex-shrink: 0;
+  margin-left: var(--ctx-shortcut-gap);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border);
+}
+
+/* Sub-menu styles */
+.context-menu-item-wrapper {
+  position: relative;
+  overflow: visible;
+}
+
+.context-menu-item-with-submenu {
+  position: relative;
+  overflow: visible;
+}
+
+.context-menu-item.has-submenu {
+  padding-right: 8px;
+}
+
+.context-menu-chevron {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--text-muted);
+}
+
+.context-menu-item:hover .context-menu-chevron {
+  color: var(--text);
+}
+
+.context-submenu {
+  position: absolute;
+  left: 100%;
+  top: -6px;
+  min-width: 180px;
+  padding: 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
+  z-index: 9999;
+}
+
+.context-menu-item-with-submenu:hover > .context-menu-item {
+  background: var(--bg-muted);
+}
+
+/* CSS-only hover for submenu visibility */
+.context-menu-item-with-submenu .context-submenu {
+  display: none;
+}
+
+.context-menu-item-with-submenu:hover .context-submenu {
+  display: block;
+}

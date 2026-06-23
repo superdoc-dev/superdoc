@@ -1,5 +1,11 @@
 // @ts-expect-error - preset-geometry package may not have type definitions
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
+import {
+  applyNonScalingStrokeToConnector,
+  createConnectorPresetSvg,
+  formatSvgNumber,
+  isConnectorPresetShape,
+} from '@superdoc/preset-geometry/connectors';
 import { inchesToPixels } from '@converter/helpers.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 import {
@@ -8,12 +14,8 @@ import {
   applyGradientToSVG,
   applyAlphaToSVG,
   generateTransforms,
-  applyNonScalingStrokeToConnector,
-  createConnectorPresetSvg,
   createLineEndMarker,
   createPictureFillPattern,
-  formatSvgNumber,
-  isConnectorPresetShape,
 } from '../shared/svg-utils.js';
 
 export class VectorShapeView {

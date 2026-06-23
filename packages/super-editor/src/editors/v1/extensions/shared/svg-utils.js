@@ -1,25 +1,8 @@
 import { formatChapterPageNumberText, formatPageNumber } from '@superdoc/contracts';
 import {
-  applyNonScalingStrokeToConnector,
-  applyNonScalingStrokeToConnectorTarget,
-  createConnectorPresetSvg,
   createLineEndMarker as createLineEndMarkerWithDocument,
   createLineEndShape as createLineEndShapeWithDocument,
-  formatSvgNumber,
-  getConnectorPresetPath,
-  getConnectorStrokePadding,
-  isConnectorPresetShape,
 } from '@superdoc/preset-geometry/connectors';
-
-export {
-  applyNonScalingStrokeToConnector,
-  applyNonScalingStrokeToConnectorTarget,
-  createConnectorPresetSvg,
-  formatSvgNumber,
-  getConnectorPresetPath,
-  getConnectorStrokePadding,
-  isConnectorPresetShape,
-};
 
 export function createLineEndShape(type, strokeColor, isStart) {
   return createLineEndShapeWithDocument(document, type, strokeColor, isStart);

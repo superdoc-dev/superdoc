@@ -3,11 +3,13 @@ import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import {
   applyNonScalingStrokeToConnectorTarget,
   createConnectorPresetSvg,
+  isConnectorPresetShape,
+} from '@superdoc/preset-geometry/connectors';
+import {
   createGradient,
   createLineEndMarker,
   createPictureFillPattern,
   createTextElement,
-  isConnectorPresetShape,
 } from '../shared/svg-utils.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 

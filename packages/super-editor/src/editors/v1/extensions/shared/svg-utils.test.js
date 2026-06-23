@@ -2,14 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  createTextElement,
-  createGradient,
-  createPictureFillPattern,
-  generateTransforms,
-  getConnectorPresetPath,
-  createConnectorPresetSvg,
-} from './svg-utils.js';
+import { getConnectorPresetPath, createConnectorPresetSvg } from '@superdoc/preset-geometry/connectors';
+import { createTextElement, createGradient, createPictureFillPattern, generateTransforms } from './svg-utils.js';
 
 describe('svg-utils', () => {
   describe('createPictureFillPattern', () => {

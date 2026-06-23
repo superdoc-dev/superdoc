@@ -18,7 +18,6 @@ import { createDropcapPlugin } from './dropcapPlugin.js';
 import { createListBoundaryNavigationPlugin } from './listBoundaryNavigationPlugin.js';
 import { shouldSkipNodeView } from '../../utils/headless-helpers.js';
 import { parseAttrs } from './helpers/parseAttrs.js';
-import { blockTrackedChangeAttrSpec } from '../track-changes/blockTrackedChangeAttr.js';
 
 /**
  * Whether a paragraph's only inline leaf content is break placeholders
@@ -133,11 +132,6 @@ export const Paragraph = OxmlNode.create({
 
   addAttributes() {
     return {
-      // Block-level tracked-change revision on the paragraph (whole-paragraph
-      // insert/delete). Mirrors tableRow; lets a paragraph deletion be a
-      // reviewable structural change instead of an inline text-only delete that
-      // leaves the empty paragraph (and its list bullet) behind.
-      ...blockTrackedChangeAttrSpec,
       paraId: { rendered: false, keepOnSplit: false },
       textId: { rendered: false, keepOnSplit: false },
       rsidR: { rendered: false },

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { StructuralTrackChanges } from './structural-track-changes.js';
-import { getBlockTrackedChanges } from '../track-changes/trackChangesHelpers/getBlockTrackedChanges.js';
+import { enumerateStructuralRowChanges } from '../track-changes/trackChangesHelpers/structuralRowChanges.js';
 
 describe('StructuralTrackChanges extension', () => {
   let editor;
@@ -15,47 +15,16 @@ describe('StructuralTrackChanges extension', () => {
   });
   afterEach(() => editor?.destroy());
 
-  it('setStructuralDiff stamps trackChange on every row of the matching table', () => {
+  it('setStructuralDiff stamps every row of the targeted table as rowDelete via stampTableRows', () => {
     const table = editor.state.doc.firstChild;
     const ok = editor.commands.setStructuralDiff([
       { kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize },
     ]);
     expect(ok).toBe(true);
-    const block = getBlockTrackedChanges(editor.state);
-    expect(block.length).toBeGreaterThanOrEqual(1);
-    block.forEach((b) => {
-      expect(b.kind).toBe('delete');
-    });
-  });
-
-  it('acceptStructuralChange removes the table when a remove hunk is staged and accepted', () => {
-    const table = editor.state.doc.firstChild;
-    editor.commands.setStructuralDiff([{ kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize }]);
-    expect(editor.commands.acceptStructuralChange('t1')).toBe(true);
-    let hasTable = false;
-    editor.state.doc.descendants((n) => {
-      if (n.type.name === 'table') hasTable = true;
-    });
-    expect(hasTable).toBe(false);
-  });
-
-  it('rejectStructuralChange clears the trackChange attrs and keeps the table', () => {
-    const table = editor.state.doc.firstChild;
-    editor.commands.setStructuralDiff([{ kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize }]);
-    expect(editor.commands.rejectStructuralChange('t1')).toBe(true);
-    expect(getBlockTrackedChanges(editor.state)).toHaveLength(0);
-    let hasTable = false;
-    editor.state.doc.descendants((n) => {
-      if (n.type.name === 'table') hasTable = true;
-    });
-    expect(hasTable).toBe(true);
-  });
-
-  it('acceptAllStructuralChanges resolves every staged hunk', () => {
-    const table = editor.state.doc.firstChild;
-    editor.commands.setStructuralDiff([{ kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize }]);
-    expect(editor.commands.acceptAllStructuralChanges()).toBe(true);
-    expect(getBlockTrackedChanges(editor.state)).toHaveLength(0);
+    const changes = enumerateStructuralRowChanges(editor.state);
+    expect(changes).toHaveLength(1);
+    expect(changes[0].subtype).toBe('table-delete');
+    expect(changes[0].wholeTable).toBe(true);
   });
 
   it('is registered in default starter extensions', () => {
@@ -63,10 +32,10 @@ describe('StructuralTrackChanges extension', () => {
     expect(names).toContain('structuralTrackChanges');
   });
 
-  it('acceptAllTrackedChanges resolves block-level row tracked changes (table + shell gone)', () => {
-    // Consumers like al-pmo only call acceptAllTrackedChanges; without
-    // block-level handling, cell contents would clear but the table shell
-    // would remain.
+  it('acceptAllTrackedChanges resolves a staged table deletion (table + shell gone)', () => {
+    // Consumers like al-pmo only call acceptAllTrackedChanges; routing through
+    // the review-model decision engine (via the structural-row review-graph
+    // projection) handles whole-table accept without any block-level fallback.
     const table = editor.state.doc.firstChild;
     editor.commands.setStructuralDiff([{ kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize }]);
     editor.commands.acceptAllTrackedChanges();
@@ -75,10 +44,10 @@ describe('StructuralTrackChanges extension', () => {
       if (n.type.name === 'table') hasTable = true;
     });
     expect(hasTable).toBe(false);
-    expect(getBlockTrackedChanges(editor.state)).toHaveLength(0);
+    expect(enumerateStructuralRowChanges(editor.state)).toHaveLength(0);
   });
 
-  it('rejectAllTrackedChanges clears block-level trackChange attrs and keeps the table', () => {
+  it('rejectAllTrackedChanges clears the structural trackChange attrs and keeps the table', () => {
     const table = editor.state.doc.firstChild;
     editor.commands.setStructuralDiff([{ kind: 'remove', changeId: 't1', basePos: 0, baseNodeSize: table.nodeSize }]);
     editor.commands.rejectAllTrackedChanges();
@@ -87,6 +56,6 @@ describe('StructuralTrackChanges extension', () => {
       if (n.type.name === 'table') hasTable = true;
     });
     expect(hasTable).toBe(true);
-    expect(getBlockTrackedChanges(editor.state)).toHaveLength(0);
+    expect(enumerateStructuralRowChanges(editor.state)).toHaveLength(0);
   });
 });

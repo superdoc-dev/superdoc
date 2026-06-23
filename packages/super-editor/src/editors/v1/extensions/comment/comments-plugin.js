@@ -18,7 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
 import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
-import { getBlockTrackedChanges } from '../track-changes/trackChangesHelpers/getBlockTrackedChanges.js';
+import { enumerateStructuralRowChanges } from '../track-changes/trackChangesHelpers/structuralRowChanges.js';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
 
 const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
@@ -489,17 +489,12 @@ export const CommentsPlugin = Extension.create({
           const trackedChanges = {};
           let hasBlockChanges = false;
           if (editorState?.doc) {
-            const blockEntries = getBlockTrackedChanges(editorState);
-            const seenOperations = new Set();
-            for (const entry of blockEntries) {
-              const key = entry.operationId || entry.id;
-              if (entry.operationId) {
-                if (seenOperations.has(entry.operationId)) continue;
-                seenOperations.add(entry.operationId);
-              }
-              trackedChanges[key] = {
-                type: entry.kind === 'insert' ? 'trackedInsert' : 'trackedDelete',
-                range: { from: entry.from, to: entry.to },
+            // `enumerateStructuralRowChanges` returns one entry per
+            // whole-table tracked change (already grouped per table + side).
+            for (const entry of enumerateStructuralRowChanges(editorState)) {
+              trackedChanges[entry.id] = {
+                type: entry.side === 'insertion' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.tableFrom, to: entry.tableTo },
                 isBlockLevel: true,
               };
               hasBlockChanges = true;
@@ -586,26 +581,20 @@ export const CommentsPlugin = Extension.create({
           const shouldWalkBlock =
             (tr.docChanged || trackedChangeMeta) && (pluginState.hasBlockChanges || isBlockStampingTr);
           if (shouldWalkBlock) {
-            const blockEntries = getBlockTrackedChanges(newEditorState);
             const blockTracked = {};
-            const seenOperations = new Set();
-            for (const entry of blockEntries) {
-              const key = entry.operationId || entry.id;
-              if (entry.operationId) {
-                if (seenOperations.has(entry.operationId)) continue;
-                seenOperations.add(entry.operationId);
-              }
-              blockTracked[key] = {
-                type: entry.kind === 'insert' ? 'trackedInsert' : 'trackedDelete',
-                range: { from: entry.from, to: entry.to },
+            for (const entry of enumerateStructuralRowChanges(newEditorState)) {
+              blockTracked[entry.id] = {
+                type: entry.side === 'insertion' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.tableFrom, to: entry.tableTo },
                 isBlockLevel: true,
               };
             }
             // Drop stale block-level entries from the previous state first.
-            // getBlockTrackedChanges is the source of truth for block-level
-            // tracking, so anything no longer in the doc (accepted/rejected)
-            // must not leak back via the merge. Inline entries are owned by
-            // handleTrackedChangeTransaction and are kept as-is.
+            // `enumerateStructuralRowChanges` is the source of truth for
+            // block-level tracking, so anything no longer in the doc
+            // (accepted/rejected) must not leak back via the merge. Inline
+            // entries are owned by handleTrackedChangeTransaction and are
+            // kept as-is.
             const previousInline = {};
             for (const [k, v] of Object.entries(nextTrackedChanges || {})) {
               if (!v?.isBlockLevel) previousInline[k] = v;
@@ -802,23 +791,20 @@ export const CommentsPlugin = Extension.create({
                 }
               }
 
-              // Block-level tracked changes (e.g. tableRow with trackChange attr).
-              // Surface the same bubble UX inline tracked changes have. Rows that
-              // share an operationId collapse to one entry (one bubble per
-              // operation, not per row). Accept both the legacy `{kind}` shape
-              // and the upstream OOXML-aligned `{type: 'rowInsert'|'rowDelete'}`
-              // shape.
+              // Block-level tracked changes (tableRow with the native
+              // `trackChange` attr written by `stampTableRows`). Surface the
+              // same bubble UX inline tracked changes have. Rows that share a
+              // `revisionGroupId` collapse to one entry (one bubble per
+              // whole-table change, not per row).
               const blockTrackChange = node?.attrs?.trackChange;
               const blockKind =
-                blockTrackChange?.kind === 'insert' || blockTrackChange?.kind === 'delete'
-                  ? blockTrackChange.kind
-                  : blockTrackChange?.type === 'rowInsert'
-                    ? 'insert'
-                    : blockTrackChange?.type === 'rowDelete'
-                      ? 'delete'
-                      : null;
+                blockTrackChange?.type === 'rowInsert'
+                  ? 'insert'
+                  : blockTrackChange?.type === 'rowDelete'
+                    ? 'delete'
+                    : null;
               if (blockTrackChange && blockKind && blockTrackChange.id) {
-                const threadId = blockTrackChange.operationId || blockTrackChange.id;
+                const threadId = blockTrackChange.revisionGroupId || blockTrackChange.id;
                 if (!onlyActiveThreadChanged) {
                   let currentBounds;
                   try {

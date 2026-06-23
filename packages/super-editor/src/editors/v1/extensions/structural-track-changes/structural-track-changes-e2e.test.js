@@ -3,7 +3,7 @@ import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 import { StructuralTrackChanges, computeStructuralDiff } from './structural-track-changes.js';
-import { getBlockTrackedChanges } from '../track-changes/trackChangesHelpers/getBlockTrackedChanges.js';
+import { enumerateStructuralRowChanges } from '../track-changes/trackChangesHelpers/structuralRowChanges.js';
 
 const editorFromFixture = async (name, user) => {
   const buffer = await getTestDataAsBuffer(`diffing/${name}`);
@@ -31,9 +31,9 @@ describe('StructuralTrackChanges — end-to-end with real docx fixtures', () => 
       const hunks = computeStructuralDiff(baseEditor.state.doc, afterEditor.state.doc);
       expect(hunks.length).toBeGreaterThan(0);
       expect(baseEditor.commands.setStructuralDiff(hunks)).toBe(true);
-      expect(getBlockTrackedChanges(baseEditor.state).length).toBeGreaterThan(0);
-      expect(baseEditor.commands.acceptAllStructuralChanges()).toBe(true);
-      expect(getBlockTrackedChanges(baseEditor.state).length).toBe(0);
+      expect(enumerateStructuralRowChanges(baseEditor.state).length).toBeGreaterThan(0);
+      expect(baseEditor.commands.acceptAllTrackedChanges()).toBe(true);
+      expect(enumerateStructuralRowChanges(baseEditor.state).length).toBe(0);
       let hasTable = false;
       baseEditor.state.doc.descendants((n) => {
         if (n.type.name === 'table') hasTable = true;
@@ -53,8 +53,8 @@ describe('StructuralTrackChanges — end-to-end with real docx fixtures', () => 
       const beforeText = baseEditor.state.doc.textContent;
       const hunks = computeStructuralDiff(baseEditor.state.doc, afterEditor.state.doc);
       baseEditor.commands.setStructuralDiff(hunks);
-      baseEditor.commands.rejectAllStructuralChanges();
-      expect(getBlockTrackedChanges(baseEditor.state).length).toBe(0);
+      baseEditor.commands.rejectAllTrackedChanges();
+      expect(enumerateStructuralRowChanges(baseEditor.state).length).toBe(0);
       let hasTable = false;
       baseEditor.state.doc.descendants((n) => {
         if (n.type.name === 'table') hasTable = true;

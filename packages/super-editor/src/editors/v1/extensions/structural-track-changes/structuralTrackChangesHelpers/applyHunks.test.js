@@ -5,6 +5,8 @@ import { applyHunks } from './applyHunks.js';
 
 describe('applyHunks', () => {
   let editor, schema;
+  const user = { name: 'Tester', email: 'test@example.com' };
+  const date = '2026-06-16T00:00:00.000Z';
   beforeEach(() => {
     ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
     schema = editor.schema;
@@ -20,7 +22,7 @@ describe('applyHunks', () => {
     return schema.nodes.table.create({ sdBlockId: id }, rows);
   };
 
-  it('stamps trackChange.delete on every row of an existing table for a remove hunk', () => {
+  it('stamps rowDelete on every row of an existing table for a remove hunk', () => {
     const table = buildTable('tbl-del', 3);
     const doc = schema.nodes.doc.create(null, [table]);
     const state = EditorState.create({ schema, doc });
@@ -28,22 +30,24 @@ describe('applyHunks', () => {
     const result = applyHunks({
       tr,
       state,
-      hunks: [{ kind: 'remove', changeId: 'tbl-del', basePos: 0, baseNodeSize: table.nodeSize }],
+      user,
+      date,
+      hunks: [{ kind: 'remove', changeId: 'tbl-del', basePos: 0 }],
     });
     expect(result.applied).toBe(1);
     const nextDoc = state.apply(tr).doc;
     const next = nextDoc.firstChild;
     expect(next.type.name).toBe('table');
     expect(next.childCount).toBe(3);
-    const opIds = new Set();
+    const groupIds = new Set();
     next.forEach((row) => {
       expect(row.attrs.trackChange?.type).toBe('rowDelete');
-      opIds.add(row.attrs.trackChange?.operationId);
+      groupIds.add(row.attrs.trackChange?.revisionGroupId);
     });
-    expect(opIds.size).toBe(1);
+    expect(groupIds.size).toBe(1);
   });
 
-  it('inserts a proposal table with trackChange.insert on every row at the anchor position', () => {
+  it('inserts a proposal table with rowInsert on every row at the anchor position', () => {
     const proposalTable = buildTable('tbl-add', 2);
     const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('before'))]);
     const state = EditorState.create({ schema, doc });
@@ -52,6 +56,8 @@ describe('applyHunks', () => {
     const result = applyHunks({
       tr,
       state,
+      user,
+      date,
       hunks: [{ kind: 'insert', changeId: 'tbl-add', proposalNode: proposalTable, anchorBasePos: insertPos }],
     });
     expect(result.applied).toBe(1);
@@ -60,10 +66,12 @@ describe('applyHunks', () => {
     expect(insertedTable.type.name).toBe('table');
     insertedTable.forEach((row) => {
       expect(row.attrs.trackChange?.type).toBe('rowInsert');
+      expect(row.attrs.trackChange?.author).toBe(user.name);
+      expect(row.attrs.trackChange?.date).toBe(date);
     });
   });
 
-  it('rows in one hunk share an operationId but have unique row ids', () => {
+  it('rows of one tracked table share a revisionGroupId but have unique row ids', () => {
     const table = buildTable('tbl-ids', 4);
     const doc = schema.nodes.doc.create(null, [table]);
     const state = EditorState.create({ schema, doc });
@@ -71,16 +79,18 @@ describe('applyHunks', () => {
     applyHunks({
       tr,
       state,
-      hunks: [{ kind: 'remove', changeId: 'tbl-ids', basePos: 0, baseNodeSize: table.nodeSize }],
+      user,
+      date,
+      hunks: [{ kind: 'remove', changeId: 'tbl-ids', basePos: 0 }],
     });
     const ids = new Set();
-    let operationId;
+    let revisionGroupId;
     state.apply(tr).doc.firstChild.forEach((row) => {
       ids.add(row.attrs.trackChange.id);
-      operationId = row.attrs.trackChange.operationId;
+      revisionGroupId = row.attrs.trackChange.revisionGroupId;
     });
     expect(ids.size).toBe(4);
-    expect(typeof operationId).toBe('string');
-    expect(operationId.length).toBeGreaterThan(0);
+    expect(typeof revisionGroupId).toBe('string');
+    expect(revisionGroupId.length).toBeGreaterThan(0);
   });
 });

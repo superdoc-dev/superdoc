@@ -14,8 +14,6 @@ import {
   sliceFromText,
 } from './review-model/edit-intent.js';
 import { decideTrackedChanges, buildDecisionBubbleEvents } from './review-model/decision-engine.js';
-import { getBlockTrackedChanges } from './trackChangesHelpers/getBlockTrackedChanges.js';
-import { applyRowTrackedChangeResolution } from './trackChangesHelpers/acceptRejectRowTrackedChange.js';
 
 /**
  * @typedef {{ code: string, message: string, details?: unknown }} TrackChangesFailure
@@ -335,7 +333,7 @@ export const TrackChanges = Extension.create({
 
       acceptTrackedChangeById:
         (id) =>
-        ({ state, dispatch, editor, commands }) => {
+        ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
@@ -343,39 +341,12 @@ export const TrackChanges = Extension.create({
             decision: 'accept',
             target: { kind: 'id', id },
           });
-          if (reviewDecision.applied) return true;
-
-          // Block-level fallback: the review-model decision engine only
-          // handles inline (mark-based) tracked changes; a row-level
-          // structural change carries its tracked-change id on the
-          // tableRow.attrs.trackChange object, not on an inline mark, so
-          // dispatchReviewDecision returns applied:false for it.
-          // Resolve it via the row-attr path (by row id, then operationId).
-          const blockEntries = getBlockTrackedChanges(state);
-          const byRowId = blockEntries.find((e) => e.id === id);
-          if (byRowId) {
-            const blockTr = state.tr;
-            blockTr.setMeta('inputType', 'acceptReject');
-            const { applied } = applyRowTrackedChangeResolution({
-              tr: blockTr,
-              state,
-              ids: [id],
-              decision: 'accept',
-            });
-            if (applied === 0) return false;
-            if (dispatch) dispatch(blockTr);
-            return true;
-          }
-          const byOperation = blockEntries.filter((e) => e.operationId === id);
-          if (byOperation.length > 0 && commands.acceptTrackedChangeOperation) {
-            return commands.acceptTrackedChangeOperation(id);
-          }
-          return false;
+          return reviewDecision.applied;
         },
 
       acceptAllTrackedChanges:
         () =>
-        ({ state, dispatch, editor, commands }) => {
+        ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
@@ -383,19 +354,12 @@ export const TrackChanges = Extension.create({
             decision: 'accept',
             target: { kind: 'all' },
           });
-          // Block-level row tracked changes live on node attrs, not inline
-          // marks, so dispatchReviewDecision can't touch them. Resolve them
-          // alongside so a single accept-all surface handles both kinds.
-          const blockEntries = getBlockTrackedChanges(state);
-          if (blockEntries.length > 0 && commands.acceptAllStructuralChanges) {
-            commands.acceptAllStructuralChanges();
-          }
           return reviewDecision.applied;
         },
 
       rejectTrackedChangeById:
         (id) =>
-        ({ state, dispatch, editor, commands }) => {
+        ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
@@ -403,29 +367,7 @@ export const TrackChanges = Extension.create({
             decision: 'reject',
             target: { kind: 'id', id },
           });
-          if (reviewDecision.applied) return true;
-
-          // Block-level fallback (see acceptTrackedChangeById for rationale).
-          const blockEntries = getBlockTrackedChanges(state);
-          const byRowId = blockEntries.find((e) => e.id === id);
-          if (byRowId) {
-            const blockTr = state.tr;
-            blockTr.setMeta('inputType', 'acceptReject');
-            const { applied } = applyRowTrackedChangeResolution({
-              tr: blockTr,
-              state,
-              ids: [id],
-              decision: 'reject',
-            });
-            if (applied === 0) return false;
-            if (dispatch) dispatch(blockTr);
-            return true;
-          }
-          const byOperation = blockEntries.filter((e) => e.operationId === id);
-          if (byOperation.length > 0 && commands.rejectTrackedChangeOperation) {
-            return commands.rejectTrackedChangeOperation(id);
-          }
-          return false;
+          return reviewDecision.applied;
         },
 
       rejectTrackedChange:
@@ -478,7 +420,7 @@ export const TrackChanges = Extension.create({
 
       rejectAllTrackedChanges:
         () =>
-        ({ state, dispatch, editor, commands }) => {
+        ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
@@ -486,12 +428,6 @@ export const TrackChanges = Extension.create({
             decision: 'reject',
             target: { kind: 'all' },
           });
-          // Mirror acceptAllTrackedChanges — block-level row tracked changes
-          // live on node attrs and need their own resolver.
-          const blockEntries = getBlockTrackedChanges(state);
-          if (blockEntries.length > 0 && commands.rejectAllStructuralChanges) {
-            commands.rejectAllStructuralChanges();
-          }
           return reviewDecision.applied;
         },
 

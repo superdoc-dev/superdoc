@@ -1,26 +1,27 @@
 import { Extension } from '@core/Extension.js';
 import { applyHunks } from './structuralTrackChangesHelpers/applyHunks.js';
 import { computeStructuralDiff } from './structuralTrackChangesHelpers/computeStructuralDiff.js';
-import { getBlockTrackedChanges } from '../track-changes/trackChangesHelpers/getBlockTrackedChanges.js';
-import { applyRowTrackedChangeResolution } from '../track-changes/trackChangesHelpers/acceptRejectRowTrackedChange.js';
 
 /**
- * StructuralTrackChanges — block-level (table) tracked-change extension.
+ * StructuralTrackChanges — table-level diff replay built on the existing
+ * structural-row tracked-changes pipeline.
  *
- * Pattern: consumer computes `StructuralHunk[]` (e.g. via `computeStructuralDiff`)
- * and dispatches via `editor.commands.setStructuralDiff(hunks)`. The extension
- * stamps a `trackChange` PM attribute on each affected `tableRow` in the
- * OOXML-aligned `{ type: 'rowInsert' | 'rowDelete', id, operationId }` shape.
- * The v1 layout-adapter propagates that to `row.attrs.trackedChange` on the
- * FlowBlock, where the painter reads it and applies the row-cell decoration
- * classes. The review bubble appears via the comments-plugin's block-level walk.
+ * Pattern: consumer (e.g. al-pmo's AI review flow) computes
+ * `StructuralHunk[]` between a base doc and a proposal doc via
+ * `computeStructuralDiff`, then dispatches the result with
+ * `editor.commands.setStructuralDiff(hunks)`. The extension threads the user
+ * + a timestamp into `applyHunks`, which delegates to upstream's
+ * `stampTableRows` so each tracked row carries the same
+ * `tableRow.attrs.trackChange` shape the OOXML importer/exporter, the
+ * row-change enumerator, the review graph, and the decision engine already
+ * use. Accept/reject is then handled by the existing inline pipeline —
+ * `acceptTrackedChangeById` / `acceptAllTrackedChanges` (and their reject
+ * twins) route structural changes through `dispatchReviewDecision` →
+ * review-graph → decision-engine.
  *
- * Accept/reject is identity-agnostic — operates on PM attrs, not an in-memory
- * hunk store. The same `acceptTrackedChangeById` entry point inline tracked
- * changes use is extended in `track-changes.js` to also handle row-attr ids.
- *
- * Not registered in `getStarterExtensions()`; consumers opt in via
- * `editorExtensions: [StructuralTrackChanges]`.
+ * Registered in `getStarterExtensions()` so every editor instance carries the
+ * `setStructuralDiff` command; consumers that don't compute hunks just won't
+ * call it.
  */
 export const StructuralTrackChanges = Extension.create({
   name: 'structuralTrackChanges',
@@ -29,115 +30,13 @@ export const StructuralTrackChanges = Extension.create({
     return {
       setStructuralDiff:
         (hunks) =>
-        ({ state, dispatch }) => {
+        ({ state, dispatch, editor }) => {
           if (!Array.isArray(hunks) || hunks.length === 0) return true;
           const tr = state.tr;
           tr.setMeta('addToHistory', false);
-          const { applied } = applyHunks({ tr, state, hunks });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      acceptStructuralChange:
-        (id) =>
-        ({ state, dispatch }) => {
-          if (!id) return false;
-          const entries = getBlockTrackedChanges(state);
-          const ids = entries.filter((e) => e.id === id || e.operationId === id).map((e) => e.id);
-          if (ids.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({ tr, state, ids, decision: 'accept' });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      rejectStructuralChange:
-        (id) =>
-        ({ state, dispatch }) => {
-          if (!id) return false;
-          const entries = getBlockTrackedChanges(state);
-          const ids = entries.filter((e) => e.id === id || e.operationId === id).map((e) => e.id);
-          if (ids.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({ tr, state, ids, decision: 'reject' });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      acceptAllStructuralChanges:
-        () =>
-        ({ state, dispatch }) => {
-          const entries = getBlockTrackedChanges(state);
-          if (entries.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({
-            tr,
-            state,
-            ids: entries.map((e) => e.id),
-            decision: 'accept',
-          });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      rejectAllStructuralChanges:
-        () =>
-        ({ state, dispatch }) => {
-          const entries = getBlockTrackedChanges(state);
-          if (entries.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({
-            tr,
-            state,
-            ids: entries.map((e) => e.id),
-            decision: 'reject',
-          });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      acceptTrackedChangeOperation:
-        (operationId) =>
-        ({ state, dispatch }) => {
-          if (!operationId) return false;
-          const entries = getBlockTrackedChanges(state).filter((e) => e.operationId === operationId);
-          if (entries.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({
-            tr,
-            state,
-            ids: entries.map((e) => e.id),
-            decision: 'accept',
-          });
-          if (applied === 0) return false;
-          if (dispatch) dispatch(tr);
-          return true;
-        },
-
-      rejectTrackedChangeOperation:
-        (operationId) =>
-        ({ state, dispatch }) => {
-          if (!operationId) return false;
-          const entries = getBlockTrackedChanges(state).filter((e) => e.operationId === operationId);
-          if (entries.length === 0) return false;
-          const tr = state.tr;
-          tr.setMeta('inputType', 'acceptReject');
-          const { applied } = applyRowTrackedChangeResolution({
-            tr,
-            state,
-            ids: entries.map((e) => e.id),
-            decision: 'reject',
-          });
+          const user = editor?.options?.user ?? {};
+          const date = new Date().toISOString();
+          const { applied } = applyHunks({ tr, state, user, date, hunks });
           if (applied === 0) return false;
           if (dispatch) dispatch(tr);
           return true;

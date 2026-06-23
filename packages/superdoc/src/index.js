@@ -37,6 +37,7 @@ import {
   // Structural (block-level) tracked changes
   StructuralTrackChanges,
   computeStructuralDiff,
+  enumerateStructuralRowChanges,
 } from '@superdoc/super-editor';
 import { DOCX, PDF, HTML, getFileObject, compareVersions } from '@superdoc/common';
 // @ts-expect-error Vite resolves DOCX asset URL imports; plain tsc does not.
@@ -306,4 +307,5 @@ export {
   // Structural (block-level) tracked changes
   StructuralTrackChanges,
   computeStructuralDiff,
+  enumerateStructuralRowChanges,
 };

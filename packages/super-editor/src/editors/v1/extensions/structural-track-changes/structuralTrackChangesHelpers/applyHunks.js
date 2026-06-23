@@ -1,6 +1,5 @@
 // @ts-check
-import { Fragment } from 'prosemirror-model';
-import { v4 as uuidv4 } from 'uuid';
+import { stampTableRows } from '../../track-changes/trackChangesHelpers/stampTableRows.js';
 
 /**
  * @typedef {{
@@ -13,35 +12,41 @@ import { v4 as uuidv4 } from 'uuid';
  */
 
 /**
- * Apply structural hunks to a transaction as row-level tracked-change PM attrs.
+ * Apply structural diff hunks to a transaction as upstream-native row-level
+ * tracked changes.
  *
  * For each hunk:
- *   remove → walk to each row of the existing table at basePos,
- *            setNodeMarkup with trackChange.delete (one shared operationId).
- *   insert → reconstruct the proposal table with every row pre-marked
- *            trackChange.insert (one shared operationId), insert at
- *            anchorBasePos.
+ *   remove → stamp the existing table at `basePos` with `rowDelete` (the
+ *            content stays visible, struck-through, until accept/reject).
+ *   insert → insert the proposal table at `anchorBasePos`, then stamp it with
+ *            `rowInsert`.
  *
- * Sets inputType meta so the trackedTransaction interceptor's existing
- * notAllowedMeta short-circuit skips this transaction (the rows already
- * carry block-level metadata; inline wrapping would double-track).
+ * Delegates to `stampTableRows()` so every row of a tracked table carries the
+ * same attribute shape that the OOXML importer/exporter, the row-change
+ * enumerator, the review graph, and the decision engine already understand
+ * (`{ type: 'rowInsert' | 'rowDelete', id, author, authorId, authorEmail,
+ * authorImage, date, revisionGroupId }`). One `revisionGroupId` per table.
+ *
+ * Tables only. Paragraph-level structural revisions use a different OOXML
+ * primitive (`w:rPr/w:ins`) and would belong in a separate change.
  *
  * @param {{
  *   tr: import('prosemirror-state').Transaction,
  *   state: import('prosemirror-state').EditorState,
+ *   user: import('../../../core/types/EditorConfig.js').User,
+ *   date: string,
  *   hunks: StructuralHunk[],
  * }} args
  * @returns {{ applied: number, warnings: string[] }}
  */
-
-export const applyHunks = ({ tr, state, hunks }) => {
+ 
+export const applyHunks = ({ tr, state, user, date, hunks }) => {
+  /** @type {string[]} */
   const warnings = [];
   let applied = 0;
-  tr.setMeta('inputType', 'acceptReject');
 
   for (const hunk of hunks) {
     if (!hunk || !hunk.changeId) continue;
-    const operationId = hunk.changeId;
 
     if (hunk.kind === 'remove') {
       if (typeof hunk.basePos !== 'number') {
@@ -50,40 +55,18 @@ export const applyHunks = ({ tr, state, hunks }) => {
       }
       const livePos = tr.mapping.map(hunk.basePos);
       const node = tr.doc.nodeAt(livePos);
-      if (!node) {
-        warnings.push(`No node at pos ${hunk.basePos} for remove hunk ${hunk.changeId}`);
+      if (!node || node.type.name !== 'table') {
+        warnings.push(`Expected a table at pos ${hunk.basePos} for remove hunk ${hunk.changeId}`);
         continue;
       }
-      if (node.type.name === 'table') {
-        // Tables delete per-row: PM's `tableRow+` content schema can't carry a
-        // table-level trackChange, so every row gets the shared operationId.
-        let rowPos = livePos + 1;
-        for (let i = 0; i < node.childCount; i += 1) {
-          const row = node.child(i);
-          if (row.type.name === 'tableRow') {
-            tr.setNodeMarkup(rowPos, null, {
-              ...row.attrs,
-              trackChange: { type: 'rowDelete', id: uuidv4(), operationId },
-            });
-          }
-          rowPos += row.nodeSize;
-        }
-      } else {
-        // Non-table block (paragraph, heading, …): stamp the block node itself
-        // with the canonical `{ kind }` shape. Accept removes the whole node;
-        // reject strips the attr (see acceptRejectRowTrackedChange).
-        tr.setNodeMarkup(livePos, null, {
-          ...node.attrs,
-          trackChange: { kind: 'delete', id: uuidv4(), operationId },
-        });
+      if (stampTableRows({ type: 'rowDelete', tr, from: livePos, to: livePos + node.nodeSize, user, date })) {
+        applied += 1;
       }
-      applied += 1;
       continue;
     }
 
     if (hunk.kind === 'insert') {
-      const proposal = hunk.proposalNode;
-      if (!proposal) {
+      if (!hunk.proposalNode) {
         warnings.push(`Missing proposalNode for insert hunk ${hunk.changeId}`);
         continue;
       }
@@ -91,34 +74,16 @@ export const applyHunks = ({ tr, state, hunks }) => {
         warnings.push(`Missing anchorBasePos for insert hunk ${hunk.changeId}`);
         continue;
       }
-      let trackedNode;
-      if (proposal.type.name === 'table') {
-        // Tables premark every row (no table-level trackChange slot).
-        const trackedRows = [];
-        proposal.content.forEach((row) => {
-          if (row.type.name !== 'tableRow') {
-            trackedRows.push(row);
-            return;
-          }
-          trackedRows.push(
-            row.type.create(
-              { ...row.attrs, trackChange: { type: 'rowInsert', id: uuidv4(), operationId } },
-              row.content,
-              row.marks,
-            ),
-          );
-        });
-        trackedNode = proposal.type.create(proposal.attrs, Fragment.fromArray(trackedRows), proposal.marks);
-      } else {
-        // Non-table block: stamp the block node itself.
-        trackedNode = proposal.type.create(
-          { ...proposal.attrs, trackChange: { kind: 'insert', id: uuidv4(), operationId } },
-          proposal.content,
-          proposal.marks,
-        );
+      if (hunk.proposalNode.type.name !== 'table') {
+        warnings.push(`Only table inserts are supported (hunk ${hunk.changeId})`);
+        continue;
       }
-      tr.insert(tr.mapping.map(hunk.anchorBasePos), trackedNode);
-      applied += 1;
+      const livePos = tr.mapping.map(hunk.anchorBasePos);
+      const insertedSize = hunk.proposalNode.nodeSize;
+      tr.insert(livePos, hunk.proposalNode);
+      if (stampTableRows({ type: 'rowInsert', tr, from: livePos, to: livePos + insertedSize, user, date })) {
+        applied += 1;
+      }
       continue;
     }
 

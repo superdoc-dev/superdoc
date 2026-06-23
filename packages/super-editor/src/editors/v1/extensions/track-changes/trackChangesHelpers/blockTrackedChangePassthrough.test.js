@@ -23,11 +23,13 @@ describe('trackedTransaction — pass-through for pre-marked block content', () 
 
   const createState = (doc) => EditorState.create({ schema, doc, plugins: basePlugins });
 
-  const buildPreMarkedTable = (operationId, rowCount = 2) => {
+  const buildPreMarkedTable = (revisionGroupId, rowCount = 2) => {
     const cell = schema.nodes.tableCell.create(null, schema.nodes.paragraph.create(null, schema.text('hello')));
     const rows = [];
     for (let i = 0; i < rowCount; i += 1) {
-      rows.push(schema.nodes.tableRow.create({ trackChange: { kind: 'insert', id: `row-${i}`, operationId } }, [cell]));
+      rows.push(
+        schema.nodes.tableRow.create({ trackChange: { type: 'rowInsert', id: `row-${i}`, revisionGroupId } }, [cell]),
+      );
     }
     return schema.nodes.table.create({ sdBlockId: 'tbl-1' }, rows);
   };
@@ -47,7 +49,7 @@ describe('trackedTransaction — pass-through for pre-marked block content', () 
     const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('before'))]);
     const state = createState(doc);
     const tr = state.tr;
-    const preMarkedTable = buildPreMarkedTable('op-1', 2);
+    const preMarkedTable = buildPreMarkedTable('group-1', 2);
     const insertPos = state.doc.content.size;
     tr.step(new ReplaceStep(insertPos, insertPos, new Slice(Fragment.from(preMarkedTable), 0, 0)));
     const result = trackedTransaction({ tr, state, user });
@@ -55,7 +57,7 @@ describe('trackedTransaction — pass-through for pre-marked block content', () 
     const insertedTable = nextDoc.child(nextDoc.childCount - 1);
     expect(insertedTable.type.name).toBe('table');
     insertedTable.forEach((row) => {
-      expect(row.attrs.trackChange?.kind).toBe('insert');
+      expect(row.attrs.trackChange?.type).toBe('rowInsert');
     });
     expect(inlineTrackedMarksOnText(nextDoc)).toBe(0);
   });

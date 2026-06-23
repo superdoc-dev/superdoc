@@ -39,7 +39,7 @@ import { stampTableRows } from '../../track-changes/trackChangesHelpers/stampTab
  * }} args
  * @returns {{ applied: number, warnings: string[] }}
  */
- 
+
 export const applyHunks = ({ tr, state, user, date, hunks }) => {
   /** @type {string[]} */
   const warnings = [];

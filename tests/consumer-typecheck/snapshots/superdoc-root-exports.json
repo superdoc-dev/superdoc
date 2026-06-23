@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-08T11:16:20.709Z",
+  "generatedAt": "2026-06-23T17:41:41.711Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -530,6 +530,7 @@
         "createZip",
         "defineMark",
         "defineNode",
+        "enumerateStructuralRowChanges",
         "fieldAnnotationHelpers",
         "getActiveFormatting",
         "getAllowedImageDimensions",
@@ -579,6 +580,7 @@
         "createZip",
         "defineMark",
         "defineNode",
+        "enumerateStructuralRowChanges",
         "fieldAnnotationHelpers",
         "getActiveFormatting",
         "getAllowedImageDimensions",
@@ -599,9 +601,9 @@
   "counts": {
     "types.import": 237,
     "types.require": 237,
-    "import": 43,
-    "require": 43,
-    "union": 237
+    "import": 44,
+    "require": 44,
+    "union": 240
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -811,7 +813,7 @@
         "ViewingVisibilityConfig",
         "VirtualizationOptions"
       ],
-      "runtimeOnly": []
+      "runtimeOnly": ["StructuralTrackChanges", "computeStructuralDiff", "enumerateStructuralRowChanges"]
     }
   }
 }

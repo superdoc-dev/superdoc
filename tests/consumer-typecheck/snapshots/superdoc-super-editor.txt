@@ -186,6 +186,7 @@ createSuperDocUI
 createZip
 defineMark
 defineNode
+enumerateStructuralRowChanges
 fieldAnnotationHelpers
 getActiveFormatting
 getAllowedImageDimensions

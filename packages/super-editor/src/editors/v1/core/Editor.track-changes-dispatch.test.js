@@ -585,6 +585,48 @@ describe('Editor dispatch tracked-change meta', () => {
     expect(markEntries(editor, TrackInsertMarkName).some(({ text }) => text.includes('PASTE'))).toBe(false);
   });
 
+  it('preserves review marks carried by a pasted slice inside another user tracked insertion while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    // Pasting a SuperDoc slice that already carries its own tracked-review marks
+    // (a copied suggestion) into the interior of another suggestion must keep the
+    // pasted marks. Only the ENCLOSING mark inherited from the neighbour is stripped;
+    // a blanket strip-by-type would silently drop the pasted review metadata.
+    const { schema } = editor;
+    const pastedMark = schema.marks[TrackInsertMarkName].create({
+      id: 'pasted-insert',
+      author: 'Carol Author',
+      authorEmail: 'carol@example.com',
+      date: FIXED_DATE,
+    });
+    const openSlice = new Slice(
+      Fragment.from(
+        schema.nodes.paragraph.create(
+          { sdBlockId: 'paste-src' },
+          schema.nodes.run.create({}, schema.text('COPIED', [pastedMark])),
+        ),
+      ),
+      2,
+      2,
+    );
+
+    const insertPos = findTextRange(editor, INSERTED_TEXT).from + 4;
+    editor.dispatch(
+      editor.state.tr.replaceRange(insertPos, insertPos, openSlice).setMeta('inputType', 'insertFromPaste'),
+    );
+
+    // The pasted suggestion keeps its own review id (it is not the enclosing mark).
+    expect(textForMarkId(editor, TrackInsertMarkName, 'pasted-insert')).toBe('COPIED');
+    // The enclosing foreign insertion did not absorb the pasted text into its id.
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
+  });
+
   it('inserts plain text on direct insert inside another user tracked deletion while local track mode is off', () => {
     ({ editor } = initTestEditor({
       mode: 'text',

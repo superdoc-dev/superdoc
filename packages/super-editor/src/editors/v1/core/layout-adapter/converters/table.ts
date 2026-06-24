@@ -799,12 +799,21 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   // The PM table-row extension has both cantSplit as a top-level attr AND within tableRowProperties
   // For layout engine, we only need to read from tableRowProperties.cantSplit
 
-  return {
+  const row: TableRow = {
     id: context.nextBlockId(`row-${rowIndex}`),
     cells,
     attrs,
     sourceAnchor: sourceAnchorFromNode(rowNode),
   };
+
+  // Row-level tracked changes flow through `row.attrs.trackedChange`, populated
+  // above via `buildRowTrackedChangeMeta` from the OOXML-aligned
+  // `attrs.trackChange.type` shape. The legacy top-level `row.trackedChange`
+  // copy this block used to populate from the old `{ kind }` shape is gone now
+  // that applyHunks writes the OOXML format; the painter and cache layers all
+  // read `row.attrs.trackedChange`.
+
+  return row;
 };
 
 /**

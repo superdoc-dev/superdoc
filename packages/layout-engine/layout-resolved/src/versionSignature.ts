@@ -533,6 +533,20 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     for (const row of rows) {
       if (!row || !Array.isArray(row.cells)) continue;
       hash = hashNumber(hash, row.cells.length);
+      // Row-level tracked change (block-level diff replay sets `trackedChange`
+      // on a tableRow's attrs). Without folding it into the canonical block
+      // version, applyHunks-style transactions that only mutate the row's
+      // `trackChange` attr don't bump the version, so the resolved-layout
+      // pipeline reuses cached entries and the painter never sees the update.
+      // Read from `row.attrs.trackedChange` — the canonical location written
+      // by the v1 layout-adapter from the OOXML-aligned `attrs.trackChange.type`
+      // shape. Mirror of the fixes in renderer.ts and layout-bridge/cache.ts.
+      const rowTC = row.attrs?.trackedChange;
+      if (rowTC) {
+        hash = hashString(hash, rowTC.kind ?? '');
+        hash = hashString(hash, rowTC.id ?? '');
+        hash = hashString(hash, rowTC.operationId ?? '');
+      }
       for (const cell of row.cells) {
         if (!cell) continue;
         const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);

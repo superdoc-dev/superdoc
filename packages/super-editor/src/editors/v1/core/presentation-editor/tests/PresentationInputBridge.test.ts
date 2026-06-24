@@ -264,11 +264,22 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       expect(forwardedEvents).toEqual(['beforeinput']);
     });
 
+    // Wrap a stale ProseMirror editor in a `.sd-editor-scoped` ancestor so
+    // the bridge recognizes it as a SuperDoc editor (matches the production
+    // DOM where every SuperDoc PM editor sits inside .sd-editor-scoped).
+    const makeSuperDocStaleEditor = (): HTMLElement => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'sd-editor-scoped';
+      const editor = document.createElement('div');
+      editor.className = 'ProseMirror';
+      editor.setAttribute('contenteditable', 'true');
+      wrapper.appendChild(editor);
+      document.body.appendChild(wrapper);
+      return editor;
+    };
+
     it('reroutes beforeinput from a stale hidden editor to the active target when window fallback is enabled', () => {
-      const staleBodyEditor = document.createElement('div');
-      staleBodyEditor.className = 'ProseMirror';
-      staleBodyEditor.setAttribute('contenteditable', 'true');
-      document.body.appendChild(staleBodyEditor);
+      const staleBodyEditor = makeSuperDocStaleEditor();
 
       const staleEvent = new InputEvent('beforeinput', {
         data: 'a',
@@ -300,10 +311,7 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
     });
 
     it('reroutes non-text keyboard commands from a stale hidden editor to the active target', () => {
-      const staleBodyEditor = document.createElement('div');
-      staleBodyEditor.className = 'ProseMirror';
-      staleBodyEditor.setAttribute('contenteditable', 'true');
-      document.body.appendChild(staleBodyEditor);
+      const staleBodyEditor = makeSuperDocStaleEditor();
 
       const staleEvent = new KeyboardEvent('keydown', {
         key: 'Backspace',
@@ -330,6 +338,34 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
         }),
       );
       expect(staleEvent.defaultPrevented).toBe(true);
+    });
+
+    it('does NOT reroute keystrokes from a foreign ProseMirror editor (Tiptap, Remirror, etc.)', () => {
+      // Reproduces the al-pmo regression: a sibling editor on the page using
+      // the same .ProseMirror[contenteditable="true"] signature must not have
+      // its keystrokes hijacked by SuperDoc's stale-editor recovery.
+      const foreignEditor = document.createElement('div');
+      foreignEditor.className = 'tiptap ProseMirror';
+      foreignEditor.setAttribute('contenteditable', 'true');
+      document.body.appendChild(foreignEditor);
+
+      const targetFocusSpy = vi.spyOn(targetDom, 'focus').mockImplementation(() => {});
+      const targetDispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+      // Note: foreignEditor is NOT registered with the bridge.
+
+      foreignEditor.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true, cancelable: true }));
+      foreignEditor.dispatchEvent(
+        new InputEvent('beforeinput', { data: 'h', inputType: 'insertText', bubbles: true, cancelable: true }),
+      );
+
+      expect(targetFocusSpy).not.toHaveBeenCalled();
+      expect(targetDispatchSpy).not.toHaveBeenCalled();
     });
 
     it('does not reroute keyboard input from a registered UI surface editor', () => {

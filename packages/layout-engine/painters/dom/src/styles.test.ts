@@ -484,4 +484,23 @@ describe('ensureTrackChangeStyles', () => {
     );
     expect(cssText).not.toMatch(/track-format-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-bottom-width:/);
   });
+
+  it('block-level (row-cell) tracked-change rules are scoped to .superdoc-layout, not bare selectors', () => {
+    ensureTrackChangeStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-track-change-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Scoped row-cell selectors present (upstream replaced the previous
+    // `[data-track-change='...']` attribute selectors with class-based
+    // `.track-row-cell-dec.track-insert-dec.highlighted` etc. that
+    // `applyRowTrackedChangeToCell` adds).
+    expect(cssText).toContain('.superdoc-layout .track-row-cell-dec.track-insert-dec.highlighted');
+    expect(cssText).toContain('.superdoc-layout .track-row-cell-dec.track-delete-dec.highlighted');
+
+    // No bare `.track-row-cell-dec { ... }` selector — would leak the
+    // row-cell decoration outside the painted layout (e.g. into the PM
+    // contenteditable mirror or any host page using the same class name).
+    expect(cssText).not.toMatch(/^\s*\.track-row-cell-dec[.\s{]/m);
+  });
 });

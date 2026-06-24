@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
 import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
+import { enumerateStructuralRowChanges } from '../track-changes/trackChangesHelpers/structuralRowChanges.js';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
 
 const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
@@ -480,8 +481,25 @@ export const CommentsPlugin = Extension.create({
       key: CommentsPluginKey,
 
       state: {
-        init() {
+        init(_config, editorState) {
           const highlightColors = editor.options.comments?.highlightColors || {};
+          // Pick up any block-level tracked changes already present in the
+          // initial doc (e.g. when a docx is loaded with pre-marked rows or
+          // when EditorState is reconstructed via setState during tests).
+          const trackedChanges = {};
+          let hasBlockChanges = false;
+          if (editorState?.doc) {
+            // `enumerateStructuralRowChanges` returns one entry per
+            // whole-table tracked change (already grouped per table + side).
+            for (const entry of enumerateStructuralRowChanges(editorState)) {
+              trackedChanges[entry.id] = {
+                type: entry.side === 'insertion' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.tableFrom, to: entry.tableTo },
+                isBlockLevel: true,
+              };
+              hasBlockChanges = true;
+            }
+          }
           return {
             activeThreadId: null,
             externalColor: highlightColors.external ?? '#B1124B',
@@ -489,7 +507,8 @@ export const CommentsPlugin = Extension.create({
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
-            trackedChanges: {},
+            trackedChanges,
+            hasBlockChanges,
           };
         },
 
@@ -529,19 +548,63 @@ export const CommentsPlugin = Extension.create({
             };
           }
 
-          // If this is a tracked change transaction, handle separately
+          // If this is a tracked change transaction, handle separately.
+          // Compute the next trackedChanges value without mutating prev state;
+          // ProseMirror plugin state must be treated as immutable across apply().
           const trackedChangeMeta = tr.getMeta(TrackChangesBasePluginKey);
-          const currentTrackedChanges = pluginState.trackedChanges;
+          let nextTrackedChanges = pluginState.trackedChanges;
+          let nextHasBlockChanges = pluginState.hasBlockChanges;
           if (trackedChangeMeta) {
-            pluginState.trackedChanges = handleTrackedChangeTransaction(
+            nextTrackedChanges = handleTrackedChangeTransaction(
               trackedChangeMeta,
-              currentTrackedChanges,
+              pluginState.trackedChanges,
               newEditorState,
               editor,
             );
           }
 
+          // Block-level tracked changes don't fire TrackChangesBasePluginKey
+          // meta (they're applied as PM node attrs via setNodeMarkup). When the
+          // doc changes we may need to refresh the block-level entries. But we
+          // only walk the doc when:
+          //   - the previous state already had block changes (so they may have
+          //     been resolved or shifted), or
+          //   - this transaction is a structural change stamping new rows
+          //     (applyHunks / accept-reject row commands set
+          //     inputType='acceptReject').
+          // Skipping the walk on every typing transaction in a doc with no
+          // block-level changes avoids re-creating trackedChanges references
+          // and triggering downstream view rebuilds that can re-sync DOM
+          // selection.
+          const inputTypeMeta = tr.getMeta('inputType');
+          const isBlockStampingTr = inputTypeMeta === 'acceptReject';
+          const shouldWalkBlock =
+            (tr.docChanged || trackedChangeMeta) && (pluginState.hasBlockChanges || isBlockStampingTr);
+          if (shouldWalkBlock) {
+            const blockTracked = {};
+            for (const entry of enumerateStructuralRowChanges(newEditorState)) {
+              blockTracked[entry.id] = {
+                type: entry.side === 'insertion' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.tableFrom, to: entry.tableTo },
+                isBlockLevel: true,
+              };
+            }
+            // Drop stale block-level entries from the previous state first.
+            // `enumerateStructuralRowChanges` is the source of truth for
+            // block-level tracking, so anything no longer in the doc
+            // (accepted/rejected) must not leak back via the merge. Inline
+            // entries are owned by handleTrackedChangeTransaction and are
+            // kept as-is.
+            const previousInline = {};
+            for (const [k, v] of Object.entries(nextTrackedChanges || {})) {
+              if (!v?.isBlockLevel) previousInline[k] = v;
+            }
+            nextTrackedChanges = { ...previousInline, ...blockTracked };
+            nextHasBlockChanges = Object.keys(blockTracked).length > 0;
+          }
+
           // Check for changes in the actively selected comment
+          let nextActiveThreadId = pluginState.activeThreadId;
           if (!tr.docChanged && tr.selectionSet) {
             const { selection } = tr;
 
@@ -569,8 +632,7 @@ export const CommentsPlugin = Extension.create({
             const isNonCollapsedClear =
               currentActiveThread == null && selection && selection.$from.pos !== selection.$to.pos;
             if (previousSelectionId !== currentActiveThread && !isNonCollapsedClear) {
-              // Update both the plugin state and the local variable
-              pluginState.activeThreadId = currentActiveThread;
+              nextActiveThreadId = currentActiveThread;
               const update = {
                 type: comments_module_events.SELECTED,
                 activeCommentId: currentActiveThread ? currentActiveThread : null,
@@ -581,7 +643,12 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return { ...pluginState };
+          return {
+            ...pluginState,
+            trackedChanges: nextTrackedChanges,
+            hasBlockChanges: nextHasBlockChanges,
+            activeThreadId: nextActiveThreadId,
+          };
         },
       },
     };
@@ -721,6 +788,39 @@ export const CommentsPlugin = Extension.create({
                   });
 
                   decorations.push(trackedChangeDeco);
+                }
+              }
+
+              // Block-level tracked changes (tableRow with the native
+              // `trackChange` attr written by `stampTableRows`). Surface the
+              // same bubble UX inline tracked changes have. Rows that share a
+              // `revisionGroupId` collapse to one entry (one bubble per
+              // whole-table change, not per row).
+              const blockTrackChange = node?.attrs?.trackChange;
+              const blockKind =
+                blockTrackChange?.type === 'rowInsert'
+                  ? 'insert'
+                  : blockTrackChange?.type === 'rowDelete'
+                    ? 'delete'
+                    : null;
+              if (blockTrackChange && blockKind && blockTrackChange.id) {
+                const threadId = blockTrackChange.revisionGroupId || blockTrackChange.id;
+                if (!onlyActiveThreadChanged) {
+                  let currentBounds;
+                  try {
+                    currentBounds = view.coordsAtPos(pos);
+                  } catch {
+                    currentBounds = null;
+                  }
+                  if (currentBounds && !allCommentPositions[threadId]) {
+                    updatePosition({
+                      allCommentPositions,
+                      threadId,
+                      pos,
+                      currentBounds,
+                      node,
+                    });
+                  }
                 }
               }
             });

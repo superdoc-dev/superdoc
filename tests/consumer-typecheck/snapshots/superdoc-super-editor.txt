@@ -135,6 +135,7 @@ SelectionSlice
 SelectorFn
 SlashMenu
 StoryLocator
+StructuralTrackChanges
 Subscribable
 SuperConverter
 SuperDocEditorLike
@@ -178,12 +179,14 @@ ViewportRect
 ViewportRectResult
 VirtualizationOptions
 assertNodeType
+computeStructuralDiff
 createHeadlessToolbar
 createOrUpdateTrackedChangeComment
 createSuperDocUI
 createZip
 defineMark
 defineNode
+enumerateStructuralRowChanges
 fieldAnnotationHelpers
 getActiveFormatting
 getAllowedImageDimensions

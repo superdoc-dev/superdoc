@@ -440,6 +440,31 @@ const TRACK_CHANGE_STYLES = `
     var(--sd-tracked-changes-delete-text, #cb0e47)
     var(--sd-tracked-changes-delete-decoration-thickness, 2px);
 }
+
+/*
+ * Block-level (whole-paragraph) structural tracked changes. The paragraph
+ * analogue of the row-cell rules above: the paragraph fragment carries the same
+ * base class (track-insert-dec / track-delete-dec) + modifier (highlighted /
+ * hidden) plus the block-context marker class track-block-dec. 'hidden' mode
+ * collapses the paragraph via the shared .track-*-dec.hidden { display: none }
+ * rule, so an inserted paragraph in 'original' mode and a deleted paragraph in
+ * 'final' mode disappear — matching inline + row behavior.
+ */
+.superdoc-layout .track-block-dec.track-insert-dec.highlighted {
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
+}
+
+.superdoc-layout .track-block-dec.track-delete-dec.highlighted {
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
+}
+
+.superdoc-layout .track-block-dec.track-delete-dec.highlighted .superdoc-line {
+  text-decoration:
+    line-through
+    solid
+    var(--sd-tracked-changes-delete-text, #cb0e47)
+    var(--sd-tracked-changes-delete-decoration-thickness, 2px);
+}
 `;
 
 const FORMATTING_MARKS_STYLES = `

@@ -85,12 +85,44 @@ describe('computeStructuralDiff', () => {
     expect(insert.anchorBasePos).toBe(base.child(0).nodeSize);
   });
 
-  it('insert with no shared base block anchors at 0', () => {
+  it('insert with no shared base block anchors at the unmatched base entry it replaces', () => {
     const base = makeDoc([p('p1', 'only')]);
     const proposal = makeDoc([table('t-new')]);
     const hunks = computeStructuralDiff(base, proposal);
     const insert = hunks.find((h) => h.kind === 'insert');
     expect(insert?.anchorBasePos).toBe(0);
+  });
+
+  it('insert anchors next to the table it replaces, even when it is the first block in the doc', () => {
+    // Regression: when the AI edits the first table (no preceding shared
+    // paragraphs) the proposal table used to anchor at position 0 instead of
+    // next to the original. With multiple tables in the doc, the inserted
+    // copy ended up "near some random table" rather than alongside the
+    // edited one.
+    const base = makeDoc([table('a', 'orig-a'), table('b', 'unchanged-b'), table('c', 'unchanged-c')]);
+    const proposal = makeDoc([table("a'", 'edited-a'), table('b', 'unchanged-b'), table('c', 'unchanged-c')]);
+    const hunks = computeStructuralDiff(base, proposal);
+    const remove = hunks.find((h) => h.kind === 'remove' && h.changeId === tableFingerprint('orig-a'));
+    const insert = hunks.find((h) => h.kind === 'insert' && h.changeId === tableFingerprint('edited-a'));
+    expect(remove).toBeDefined();
+    expect(insert).toBeDefined();
+    expect(insert.anchorBasePos).toBe(remove.basePos);
+  });
+
+  it('insert anchors at the matching unmatched base entry, not the end of the last shared block', () => {
+    // base has [P1, TableA, TableB]; proposal edits TableB. The natural anchor
+    // for the inserted TableB' is TableB's position in base (so the new copy
+    // lands adjacent to the original), not the end of TableA.
+    const base = makeDoc([p('p1', 'intro'), table('a', 'unchanged-a'), table('b', 'orig-b')]);
+    const proposal = makeDoc([p('p1', 'intro'), table('a', 'unchanged-a'), table("b'", 'edited-b')]);
+    const hunks = computeStructuralDiff(base, proposal);
+    const insert = hunks.find((h) => h.kind === 'insert');
+    const baseTableB = base.child(2);
+    let baseTableBPos = 0;
+    base.forEach((node, offset) => {
+      if (node === baseTableB) baseTableBPos = offset;
+    });
+    expect(insert?.anchorBasePos).toBe(baseTableBPos);
   });
 
   it('blockTypes filter (default ["table"]) restricts insert events', () => {

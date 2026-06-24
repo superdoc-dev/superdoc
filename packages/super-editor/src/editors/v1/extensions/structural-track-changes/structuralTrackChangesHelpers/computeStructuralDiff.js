@@ -67,13 +67,12 @@ export const computeStructuralDiff = (baseDoc, proposalDoc, opts = {}) => {
 
   const baseEntries = collectTopLevel(baseDoc);
   const proposalEntries = collectTopLevel(proposalDoc);
-  const baseById = new Map(baseEntries.map((e) => [e.id, e]));
+  const baseIds = new Set(baseEntries.map((e) => e.id));
   const proposalIds = new Set(proposalEntries.map((e) => e.id));
 
   const hunks = [];
-
-  for (const entry of baseEntries) {
-    if (!proposalIds.has(entry.id) && blockTypeSet.has(entry.node.type.name)) {
+  const emitRemove = (entry) => {
+    if (blockTypeSet.has(entry.node.type.name)) {
       hunks.push({
         kind: 'remove',
         changeId: entry.id,
@@ -81,22 +80,41 @@ export const computeStructuralDiff = (baseDoc, proposalDoc, opts = {}) => {
         baseNodeSize: entry.node.nodeSize,
       });
     }
-  }
+  };
 
-  let lastSharedBaseEnd = null;
-  for (const entry of proposalEntries) {
-    const sharedInBase = baseById.get(entry.id);
-    if (sharedInBase) {
-      lastSharedBaseEnd = sharedInBase.end;
+  // Lockstep walk. For each proposal entry: if it matches something downstream
+  // in base, drain unmatched base entries between (emitting removes) and consume
+  // the match. Otherwise it's an insert; anchor at the position of the next
+  // unmatched base entry (the one this insert is logically replacing), falling
+  // back to the end of the last matched base block. Anchoring at the unmatched
+  // base position is what keeps "remove table X" + "insert table X'" visually
+  // adjacent — without it, an edit to the first table inserts the new copy at
+  // position 0 instead of next to the original.
+  let bi = 0;
+  let lastMatchedBaseEnd = 0;
+  for (const pe of proposalEntries) {
+    if (baseIds.has(pe.id)) {
+      while (bi < baseEntries.length && baseEntries[bi].id !== pe.id) {
+        if (!proposalIds.has(baseEntries[bi].id)) emitRemove(baseEntries[bi]);
+        bi += 1;
+      }
+      if (bi < baseEntries.length) {
+        lastMatchedBaseEnd = baseEntries[bi].end;
+        bi += 1;
+      }
       continue;
     }
-    if (!blockTypeSet.has(entry.node.type.name)) continue;
-    hunks.push({
-      kind: 'insert',
-      changeId: entry.id,
-      proposalNode: entry.node,
-      anchorBasePos: lastSharedBaseEnd ?? 0,
-    });
+    if (!blockTypeSet.has(pe.node.type.name)) continue;
+    let anchor = lastMatchedBaseEnd;
+    if (bi < baseEntries.length && !proposalIds.has(baseEntries[bi].id)) {
+      anchor = baseEntries[bi].pos;
+    }
+    hunks.push({ kind: 'insert', changeId: pe.id, proposalNode: pe.node, anchorBasePos: anchor });
+  }
+
+  while (bi < baseEntries.length) {
+    if (!proposalIds.has(baseEntries[bi].id)) emitRemove(baseEntries[bi]);
+    bi += 1;
   }
 
   return hunks;

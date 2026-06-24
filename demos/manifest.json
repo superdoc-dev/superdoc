@@ -180,6 +180,24 @@
     "stackblitz": false
   },
   {
+    "id": "pdf-merge",
+    "section": "solutions",
+    "subsection": "pdf",
+    "kind": "workflow-demo",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "PDF Merge",
+    "description": "Upload multiple PDF and DOCX files, reorder them by dragging, and merge into a single PDF.",
+    "category": "Solutions",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/pdf-merge",
+    "docs": null,
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": true
+  },
+  {
     "id": "fields-live",
     "section": "solutions",
     "subsection": "template-builder",

@@ -1,13 +1,16 @@
 import {
   getCommentDefinition,
   isCommentResolvedInThread,
+  isSyntheticTrackedChangeComment,
   updateCommentsExtendedXml,
   updateCommentsIdsAndExtensible,
   updateCommentsXml,
   prepareCommentsXmlFilesForExport,
   removeCommentsFilesFromConvertedXml,
   toIsoNoFractional,
+  prepareCommentParaIds,
 } from './commentsExporter.js';
+import { buildCommentJsonFromText } from '../../../../utils/comment-content.js';
 
 // --- Shared fixtures ---
 
@@ -649,6 +652,33 @@ describe('updateCommentsExtendedXml', () => {
     expect(childEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
   });
 
+  it('threads a reply to a real comment on tracked text under the word profile (no trackedChange gate)', () => {
+    // A genuine comment anchored to tracked-changed text still carries trackedChange:true.
+    // Synthetic projection rows are removed upstream, so any parent present here is real and a
+    // reply must thread to it. The previous `!parentComment.trackedChange` gate dropped this
+    // paraIdParent for every profile except commentsExtended.
+    const comments = [
+      {
+        commentId: 'real-on-tc',
+        commentParaId: 'PARENT-PARA',
+        trackedChange: true,
+        commentText: 'Authored comment on a tracked insertion',
+        resolvedTime: null,
+      },
+      {
+        commentId: 'reply-1',
+        commentParaId: 'REPLY-PARA',
+        parentCommentId: 'real-on-tc',
+        resolvedTime: null,
+      },
+    ];
+
+    const result = updateCommentsExtendedXml(comments, { elements: [{ elements: [] }] }, 'word');
+    const replyEntry = result.elements[0].elements.find((e) => e.attributes['w15:paraId'] === 'REPLY-PARA');
+
+    expect(replyEntry.attributes['w15:paraIdParent']).toBe('PARENT-PARA');
+  });
+
   it('sets paraIdParent for range-based threads to preserve Word threading', () => {
     const comments = [
       {
@@ -810,5 +840,252 @@ describe('updateCommentsXml', () => {
 
     expect(updatedComment.attributes['w:email']).toBeUndefined();
     expect(updatedComment.attributes['custom:email']).toBe('author@example.com');
+  });
+
+  it('hardens a body-less comment: injects a paragraph, strips w:done/w15:paraId, binds xmlns:custom', () => {
+    // The shape getCommentDefinition produces for an empty-body comment that survived filtering
+    // (e.g. an empty reply): no paragraphs, plus the non-schema w:done / w15:paraId and custom:*
+    // attributes with NO xmlns:custom declaration. The writer must normalize it rather than emit
+    // a bare <w:comment> whose custom: prefix is unbound.
+    const commentDef = {
+      type: 'element',
+      name: 'w:comment',
+      attributes: {
+        'w:id': '0',
+        'w:author': 'Author',
+        'w:date': '2025-01-01T00:00:00Z',
+        'w:initials': 'A',
+        'w:done': '0',
+        'w15:paraId': 'BODYLESS1',
+        'custom:internalId': 'abc',
+        'custom:trackedChange': true,
+      },
+      elements: [],
+    };
+
+    const result = updateCommentsXml([commentDef], { elements: [{ elements: [] }] });
+    const updatedComment = result.elements[0].elements[0];
+    const paragraphs = updatedComment.elements.filter((n) => n.name === 'w:p');
+
+    // A paragraph was injected and carries the w14:paraId the extension parts key on.
+    expect(paragraphs.length).toBeGreaterThan(0);
+    expect(paragraphs[paragraphs.length - 1].attributes['w14:paraId']).toBe('BODYLESS1');
+    // The custom: prefix is bound, so the part stays namespace-well-formed.
+    expect(updatedComment.attributes['xmlns:custom']).toBe(
+      'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    );
+    // Non-schema attributes are dropped from the <w:comment> element.
+    expect(updatedComment.attributes['w:done']).toBeUndefined();
+    expect(updatedComment.attributes['w15:paraId']).toBeUndefined();
+  });
+});
+
+describe('isSyntheticTrackedChangeComment', () => {
+  it('keeps a plain comment that is not linked to a tracked change', () => {
+    expect(isSyntheticTrackedChangeComment(makeComment())).toBe(false);
+  });
+
+  it('drops a body-less synthetic tracked-change projection row', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'tc-1', trackedChange: true })).toBe(true);
+  });
+
+  it('keeps a genuine user comment that is anchored to a tracked change', () => {
+    // The regression: these carry trackedChange:true but have an authored body, so they
+    // must still be exported — otherwise accept-and-comment redline reviews lose them.
+    const linkedComment = makeComment({ commentId: 'c-on-tc', trackedChange: true });
+    expect(isSyntheticTrackedChangeComment(linkedComment)).toBe(false);
+  });
+
+  it.each(['commentText', 'text', 'commentJSON', 'elements'])(
+    'treats a tracked-change comment carrying a "%s" body as a real comment',
+    (bodyKey) => {
+      expect(isSyntheticTrackedChangeComment({ commentId: 'c', trackedChange: true, [bodyKey]: 'x' })).toBe(false);
+    },
+  );
+
+  it('keeps a tracked-change reply (has parentCommentId) even without its own body', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'r', trackedChange: true, parentCommentId: 'p' })).toBe(false);
+  });
+
+  it('keeps the comment whenever trackedChange is falsy or the input is nullish', () => {
+    expect(isSyntheticTrackedChangeComment({ commentId: 'c', trackedChange: false })).toBe(false);
+    expect(isSyntheticTrackedChangeComment({ commentId: 'c' })).toBe(false);
+    expect(isSyntheticTrackedChangeComment(null)).toBe(false);
+  });
+
+  // Regression: the shapes a comment ACTUALLY has at the export layer, after
+  // useComment.getValues() (stamps commentText:'' and parentCommentId) and the export
+  // translators (stamp commentJSON). A key-presence check returned false for all of these,
+  // so it leaked synthetic rows into comments.xml and the extension parts.
+  describe('explicit marker (primary discriminator)', () => {
+    it('drops a row carrying the isSyntheticTrackedChangeProjection marker', () => {
+      expect(
+        isSyntheticTrackedChangeComment({ commentId: 'tc-1', trackedChange: true, isSyntheticTrackedChangeProjection: true }),
+      ).toBe(true);
+    });
+
+    it('drops a marked row even if it inherited sidebar draft text (Claim 1 regression)', () => {
+      // A synthetic projection that picked up currentCommentText would look authored to a
+      // value-only check; the marker drops it regardless of the inherited body.
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'tc-1',
+          trackedChange: true,
+          isSyntheticTrackedChangeProjection: true,
+          commentText: 'leaked draft text',
+          commentJSON: buildCommentJsonFromText('leaked draft text'),
+        }),
+      ).toBe(true);
+    });
+
+    it('keeps a real comment, which is never marked, even on tracked text', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'real',
+          trackedChange: true,
+          commentText: 'Real comment',
+          isSyntheticTrackedChangeProjection: false,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('normalized export shapes', () => {
+    it('drops a synthetic projection normalized via the comments store (commentJSON: [])', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'tc-1',
+          trackedChange: true,
+          commentText: '',
+          commentJSON: [],
+          parentCommentId: undefined,
+          trackedChangeText: 'inserted words',
+        }),
+      ).toBe(true);
+    });
+
+    it('drops a synthetic projection normalized via Editor.exportDocx (empty structured commentJSON)', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'tc-2',
+          trackedChange: true,
+          commentText: '',
+          commentJSON: buildCommentJsonFromText(''),
+          parentCommentId: undefined,
+        }),
+      ).toBe(true);
+    });
+
+    it('does not count the tracked change own text (trackedChangeText/deletedText) as a comment body', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'tc-3',
+          trackedChange: true,
+          commentText: '',
+          commentJSON: [],
+          trackedChangeText: 'was here',
+          deletedText: 'gone',
+        }),
+      ).toBe(true);
+    });
+
+    it('keeps a real comment on tracked text once normalized (authored commentJSON)', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'real-on-tc',
+          trackedChange: true,
+          commentText: 'Real comment',
+          commentJSON: buildCommentJsonFromText('Real comment'),
+          parentCommentId: undefined,
+        }),
+      ).toBe(false);
+    });
+
+    it('keeps a body-less reply once normalized (parentCommentId present)', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'reply-1',
+          trackedChange: true,
+          commentText: '',
+          commentJSON: [],
+          parentCommentId: 'real-on-tc',
+        }),
+      ).toBe(false);
+    });
+
+    it('keeps a body-less reply threaded via threadingParentCommentId', () => {
+      expect(
+        isSyntheticTrackedChangeComment({
+          commentId: 'reply-2',
+          trackedChange: true,
+          commentText: '',
+          commentJSON: [],
+          threadingParentCommentId: 'real-on-tc',
+        }),
+      ).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
+// Exporter-level F1/F2 oracle: synthetic rows must not reach any comment part
+// =============================================================================
+
+describe('synthetic tracked-change rows do not reach comment parts (F1/F2 oracle)', () => {
+  const threadingProfile = {
+    defaultStyle: 'commentsExtended',
+    mixed: false,
+    fileSet: { hasCommentsExtended: true, hasCommentsExtensible: true, hasCommentsIds: true },
+  };
+
+  // F2: native Word emits zero comment parts for a tracked change with no authored comment.
+  it('emits no comment parts or relationships when the only rows are synthetic projections', () => {
+    const comments = [
+      // Real production shape: carries the explicit marker (primary discriminator).
+      { commentId: 'tc-1', trackedChange: true, isSyntheticTrackedChangeProjection: true, commentText: '', commentJSON: [] },
+      // Legacy shape (no marker): dropped by the value-based fallback.
+      {
+        commentId: 'tc-2',
+        trackedChange: true,
+        commentText: '',
+        commentJSON: buildCommentJsonFromText(''),
+        parentCommentId: undefined,
+      },
+    ];
+    const commentsWithParaIds = comments
+      .filter((c) => !isSyntheticTrackedChangeComment(c))
+      .map((c) => prepareCommentParaIds(c));
+    expect(commentsWithParaIds).toEqual([]);
+
+    const result = prepareCommentsXmlFilesForExport({
+      convertedXml: makeConvertedXml(),
+      defs: [],
+      commentsWithParaIds,
+      exportType: 'external',
+      threadingProfile,
+    });
+
+    expect(result.documentXml['word/comments.xml']).toBeUndefined();
+    expect(result.documentXml['word/commentsExtended.xml']).toBeUndefined();
+    expect(result.documentXml['word/commentsIds.xml']).toBeUndefined();
+    expect(result.documentXml['word/commentsExtensible.xml']).toBeUndefined();
+    expect(result.removedTargets).toHaveLength(4);
+    expect(result.relationships).toHaveLength(0);
+  });
+
+  // F1: a real comment anchored to tracked text survives; a co-located synthetic row does not.
+  it('keeps a real comment anchored to tracked text and drops the co-located synthetic row', () => {
+    const comments = [
+      {
+        commentId: 'real-on-tc',
+        trackedChange: true,
+        commentText: 'Real comment',
+        commentJSON: buildCommentJsonFromText('Real comment'),
+      },
+      { commentId: 'tc-1', trackedChange: true, commentText: '', commentJSON: [], parentCommentId: undefined },
+    ];
+    const exportable = comments.filter((c) => !isSyntheticTrackedChangeComment(c));
+    expect(exportable).toHaveLength(1);
+    expect(exportable[0].commentId).toBe('real-on-tc');
   });
 });

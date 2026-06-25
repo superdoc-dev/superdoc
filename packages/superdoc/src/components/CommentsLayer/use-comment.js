@@ -72,6 +72,10 @@ export default function useComment(params) {
   const threadingStyleOverride = params.threadingStyleOverride;
   const threadingParentCommentId = params.threadingParentCommentId;
   const originalXmlStructure = params.originalXmlStructure;
+  // Internal marker: set only on the auto-generated tracked-change projection rows the
+  // sidebar renders. It is the authoritative discriminator the exporter uses to drop these
+  // rows from comments.xml (and the extension parts); see isSyntheticTrackedChangeComment.
+  const isSyntheticTrackedChangeProjection = params.isSyntheticTrackedChangeProjection === true;
 
   const commentText = ref(params.commentText || '');
 
@@ -336,6 +340,7 @@ export default function useComment(params) {
       threadingStyleOverride,
       threadingParentCommentId,
       originalXmlStructure,
+      isSyntheticTrackedChangeProjection,
     };
   };
 
@@ -380,6 +385,7 @@ export default function useComment(params) {
     threadingStyleOverride,
     threadingParentCommentId,
     originalXmlStructure,
+    isSyntheticTrackedChangeProjection,
 
     // Actions
     setText,

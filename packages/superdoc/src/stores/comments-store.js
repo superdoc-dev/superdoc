@@ -794,6 +794,11 @@ export const useCommentsStore = defineStore('comments', () => {
       documentId,
       commentId: changeId,
       trackedChange: true,
+      // Mark this as the synthetic sidebar projection of a tracked change (not an authored
+      // comment), and force an empty body so it never inherits the sidebar draft text from
+      // the shared currentCommentText ref. The exporter drops rows carrying this marker.
+      isSyntheticTrackedChangeProjection: true,
+      commentText: '',
       trackedChangeText,
       trackedChangeType,
       trackedChangeDisplayType,
@@ -1288,6 +1293,26 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const addComment = ({ superdoc, comment, skipEditorUpdate = false, broadcastChanges = true }) => {
+    // Synthetic tracked-change projection rows are sidebar projections of a tracked change, not
+    // authored comments. They must be added to the list (and broadcast) WITHOUT running the
+    // pending-comment lifecycle: no draft text, no pending selection source, no isInternal
+    // inheritance, and crucially no removePendingComment, which would wipe a draft the user is
+    // composing when a tracked change happens to sync. The marker keeps these rows out of export
+    // and entity sync downstream.
+    if (comment.isSyntheticTrackedChangeProjection) {
+      // The projection is created with isInternal:false and an empty body; preserve both. Do not
+      // inherit isInternal from the active comment and do not touch the pending-comment state.
+      const syntheticComment = useComment(comment.getValues());
+      syntheticComment.setText({ text: '', suppressUpdate: true });
+      commentsList.value.push(syntheticComment);
+      if (broadcastChanges) {
+        const event = { type: COMMENT_EVENTS.ADD, comment: syntheticComment.getValues() };
+        syncCommentsToClients(superdoc, event);
+        superdoc.emit('comments-update', event);
+      }
+      return;
+    }
+
     let parentComment = commentsList.value.find((c) => c.commentId === activeComment.value);
     if (!parentComment) parentComment = comment;
 

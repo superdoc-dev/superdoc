@@ -17,6 +17,7 @@ import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 import {
   getCommentDefinition,
+  isSyntheticTrackedChangeComment,
   prepareCommentParaIds,
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
@@ -1245,8 +1246,12 @@ class SuperConverter {
     // Reset export warnings for this export cycle
     this.exportWarnings = [];
 
-    // Filter out synthetic tracked change comments - they shouldn't be exported to comments.xml
-    const exportableComments = comments.filter((c) => !c.trackedChange);
+    // Exclude only SYNTHETIC tracked-change projection rows: the sidebar entries
+    // SuperDoc auto-generates for each tracked change carry `trackedChange: true` but have
+    // no authored body. Genuine user comments anchored to (or overlapping) a tracked change
+    // also carry `trackedChange: true`; those MUST still be exported, otherwise an
+    // accept-and-comment redline review loses every comment placed on a tracked change.
+    const exportableComments = comments.filter((c) => !isSyntheticTrackedChangeComment(c));
     const commentsWithParaIds = exportableComments.map((c) => prepareCommentParaIds(c));
     const commentDefinitions = commentsWithParaIds.map((c, index) =>
       getCommentDefinition(c, index, commentsWithParaIds, editor),

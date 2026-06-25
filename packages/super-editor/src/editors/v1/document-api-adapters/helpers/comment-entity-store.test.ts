@@ -367,6 +367,28 @@ describe('syncCommentEntitiesFromCollaboration (SD-3214)', () => {
     expect(store[0].commentId).toBe('c-1');
   });
 
+  it('skips a marked synthetic projection even when it carries body/parent keys', () => {
+    // The comments store broadcasts synthetic rows through useComment.getValues(), which stamps
+    // commentText/parentCommentId keys (and the row may have picked up sidebar draft text). The
+    // key-presence heuristic would treat this as a real comment; the explicit
+    // isSyntheticTrackedChangeProjection marker must still skip it.
+    const editor = makeEditorWithConverter();
+    syncCommentEntitiesFromCollaboration(editor, [
+      {
+        commentId: 'tc-1',
+        trackedChange: true,
+        isSyntheticTrackedChangeProjection: true,
+        commentText: 'leaked draft text',
+        trackedChangeText: 'inserted',
+        creatorName: 'A',
+      },
+      { commentId: 'c-1', commentText: 'real comment', creatorName: 'B' },
+    ]);
+    const store = getCommentEntityStore(editor);
+    expect(store).toHaveLength(1);
+    expect(store[0].commentId).toBe('c-1');
+  });
+
   it('syncs linked tracked-content comments when they include comment payload', () => {
     const editor = makeEditorWithConverter();
     syncCommentEntitiesFromCollaboration(editor, [

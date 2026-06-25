@@ -1,0 +1,145 @@
+---
+title: Core preset
+description: "The compact three-tool LLM preset: inspect the document, run named recipes, execute code, and get a receipt for every edit"
+keywords: "core preset, llm tools, ai agents, agent_inspect, agent_recipe, execute_code, document automation"
+---
+
+Use the `core` preset when you want a small tool surface for document agents. The model gets three tools. SuperDoc keeps control of document structure, argument validation, edits, verification, and receipts.
+
+```typescript
+import {
+  chooseTools,
+  dispatchSuperDocTool,
+  getSystemPrompt,
+} from '@superdoc-dev/sdk';
+
+// Provider-shaped tool definitions for the core preset.
+const { tools } = await chooseTools({ provider: 'openai', preset: 'core' });
+
+// A system prompt that teaches the model how to use the three tools.
+const system = await getSystemPrompt('core');
+
+// Run a tool call the model produced, scoped to the core preset.
+const result = await dispatchSuperDocTool(doc, toolName, args, { preset: 'core' });
+```
+
+The loop is the same one you wire up for [LLM Tools](/ai/agents/llm-tools): pass `tools` to your model, dispatch each tool call against a bound document handle, feed the result back. The only difference is the tool surface.
+
+## The three tools
+
+A preset packages the tool schemas, system prompt, and dispatcher together. `core` advertises three model-facing tools:
+
+| Tool | Use it to | Mutates |
+| --- | --- | --- |
+| `agent_inspect` | Read document structure: counts, blocks, lists, tables, comments, and more. | No |
+| `agent_recipe` | Run one named edit verb with flat arguments. | Yes |
+| `execute_code` | Run JavaScript against the document when the task needs control flow. | Yes |
+
+The model never edits OOXML. It asks for a read or an edit through a tool. The SDK dispatches that call against a bound document handle, validates the arguments, runs deterministic `doc.*` operations, and returns a structured result.
+
+Prefer `agent_recipe` when the request maps to a named edit: recipes are easier to audit and verify than raw operation JSON. Reach for `execute_code` only when the work needs loops, branching, accumulators, extract-derive-write logic, or one step that drives the next.
+
+Lower-level apply, verify, and operation helpers stay dispatchable for SDK callers and are useful in tests and advanced integrations. They are not advertised to the model.
+
+## Reading the document
+
+`agent_inspect` builds a deterministic `DocumentSnapshot` from the live Document API. It starts with `doc.info()` for counts and revision, then reads only the domains you request.
+
+Common domains:
+
+- `blocks`: ordered paragraphs, headings, list items, and tables with `nodeId`, `nodeType`, text, style, heading level, and numbering metadata.
+- `lists`: list items grouped by `listId`, with level, ordinal, text, and node identity.
+- `tables`: table blocks plus shape. Cell text and cell node ids are enriched through `doc.extract()`.
+- `comments`, `trackedChanges`, `sections`, `headerFooters`, `styles`, `contentControls`, `fields`, `hyperlinks`, `bookmarks`, `permissionRanges`, and `images`.
+
+Selectors resolve against that snapshot. Supported shapes include `nodeId`, `ordinal`, `textSearch`, `tableCell`, `entity`, `placement`, `relative`, and `document`.
+
+Keep reads small with token controls:
+
+- `countsOnly`: return only counts and revision.
+- `includeDomains`: return only specific domains.
+- `blockNodeTypes`: filter blocks by node type.
+- `blockTextLimit`, `listLimit`, `tableLimit`, `commentLimit`, `trackedChangeLimit`: cap large reads.
+
+<Note>
+After any mutation, previous node ids, numbering markers, and counts can be stale. Inspect again before range-sensitive work.
+</Note>
+
+## Recipes
+
+`agent_recipe` runs one high-level document edit. Recipes take the shape `{ recipe: "name", ...flatArgs }`. Each recipe resolves its targets, calls deterministic `doc.*` operations, and returns an `AgentReceipt`.
+
+A single call looks like this:
+
+```typescript
+const result = await dispatchSuperDocTool(
+  doc,
+  'agent_recipe',
+  {
+    recipe: 'replace_text',
+    edits: [{ find: 'ACME Corp', replace: 'NewCo Inc.' }],
+  },
+  { preset: 'core' },
+);
+```
+
+In an agentic loop the model fills in `recipe` and its arguments; you dispatch the call and feed the receipt back.
+
+### Available recipes
+
+| Area | Recipes |
+| --- | --- |
+| Text and structure | `insert_paragraphs`, `insert_heading`, `replace_text`, `delete_text`, `append_list`, `insert_list_items`, `create_table`, `rewrite_block`, `fill_placeholders`, `move_section` |
+| Lists and numbering | `convert_list`, `attach_numbering` |
+| Tables | `set_table_shading`, `insert_table_row`, `insert_table_column`, `delete_table_row`, `delete_table_column`, `split_table` |
+| Comments | `comment_paragraphs`, `add_comment` |
+| Tracked changes | `accept_tracked_changes`, `reject_tracked_changes` |
+| Formatting | `format_text`, `apply_style`, `normalize_body_font_size`, `apply_letter_spacing` |
+| Media and TOC | `insert_toc`, `insert_image_with_caption` |
+| History | `undo_changes` |
+
+A few worth knowing:
+
+- `replace_text` reports edits that applied and edits that were skipped, so the model can see which finds matched.
+- `convert_list` uses list and numbering metadata. It does not rewrite visible markers as plain text.
+- `attach_numbering` makes an existing block join the same numbering scheme as a sibling clause.
+- `set_table_shading` applies cell shading without asking the model to script borders and fills by hand.
+- `undo_changes` walks document history until a requested marker or step count is restored.
+
+## Code execution
+
+`execute_code` runs JavaScript in the host against a synchronous `doc` object. Use it when no single recipe fits and the task needs control flow.
+
+The script receives `doc` and `console`. Console logs come back in the tool result, and the script should return a short summary. It should not call `doc.save()` or `doc.close()`; the host owns the document lifecycle.
+
+Prefer `agent_recipe` when a recipe fits. Code is the escape hatch, not the default.
+
+## Receipts and retries
+
+Mutating tools return an `AgentReceipt`. The receipt is the source of truth for what happened, not the model's narration.
+
+Important fields:
+
+- `status`: `ok`, `partial`, `failed`, or `aborted`.
+- `preSnapshot` and `postSnapshot`: revision and compact counts before and after.
+- `selectedTargets`: selectors and match counts.
+- `executedOperations`: operation ids, rationale, and compact operation results.
+- `verification`: pass/fail checks and details.
+- `saveReopen`: save evidence when requested or required.
+- `errors`: structured `{ code, message, recovery }` entries.
+- `nextStep`, `recovery`, and `revertHint`: instructions the model can use to retry, re-inspect, or revert.
+
+The system prompt tells the model that `failed` and `partial` are unfinished work. The model should read the receipt, adjust the next call, and retry before it reports a blocker. Check the receipt before you tell the user an edit succeeded.
+
+## Logging and tracking
+
+The preset returns structured data. It does not persist logs for you.
+
+Wrap the tool executor or `preset.dispatch()` and record:
+
+- run id, model, provider, preset, user id, document id, and session id;
+- tool name and model arguments after removing reserved `doc` and `sessionId`;
+- the returned receipt or thrown error;
+- timing, token usage, and the final assistant response.
+
+Python transport logging is available with `SUPERDOC_DEBUG=1` or `SUPERDOC_LOG_LEVEL=debug`. It records host request and response ids. It does not record full tool payloads by default.

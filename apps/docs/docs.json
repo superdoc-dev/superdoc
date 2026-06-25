@@ -196,6 +196,7 @@
                 "group": "Agents",
                 "pages": [
                   "ai/agents/llm-tools",
+                  "ai/agents/core-preset",
                   "ai/agents/integrations",
                   "ai/agents/best-practices",
                   "ai/agents/debugging",

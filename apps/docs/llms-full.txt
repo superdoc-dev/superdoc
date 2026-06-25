@@ -293,6 +293,7 @@ If your training data mentions SuperDoc, note these updates:
 - Discord: https://discord.com/invite/b9UuaZRyaB
 - Getting started: https://docs.superdoc.dev/getting-started/quickstart
 - AI agents: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
+- Core LLM tools preset: https://docs.superdoc.dev/ai/agents/core-preset
 - MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
 - Document API: https://docs.superdoc.dev/document-api/overview
 - Available operations: https://docs.superdoc.dev/document-api/available-operations

@@ -139,6 +139,10 @@ Install the SDK, create a client, open a document, and wire up an agentic loop.
 
 The current SDK returns the full grouped intent tool set for the selected provider. Group filtering and meta-discovery are not part of the shipped public API here.
 
+<Note>
+Want a smaller surface? The [`core` preset](/ai/agents/core-preset) exposes three tools - `agent_inspect`, `agent_recipe`, and `execute_code` - instead of the nine grouped intent tools below. Pass `preset: 'core'` to `chooseTools`.
+</Note>
+
 ## Tool catalog
 
 The generated catalog currently contains 9 grouped intent tools. Most tools use an `action` argument to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.

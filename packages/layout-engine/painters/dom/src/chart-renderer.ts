@@ -1650,15 +1650,16 @@ function estimateSvgElements(
 ): number {
   const bars = series.reduce((sum, s) => sum + s.values.length, 0);
   const isHorizontalBar = chart.chartType === 'barChart' && chart.barDirection === 'bar';
-  const categoryLabels = chart.categoryAxis?.deleted === true ? 0 : categories.length;
+  const categoryLabels = categories.length;
   const dataLabels = series.reduce((sum, s) => (s.dataLabels?.showValue ? sum + s.values.length : sum), 0);
   const legend = hasLegend ? series.length * 2 : 0; // swatch + label per series
 
   if (isHorizontalBar) {
+    const horizontalCategoryLabels = chart.categoryAxis?.deleted === true ? 0 : categoryLabels;
     const valueAxisDeleted = chart.valueAxis?.deleted === true;
     const valueLabels = valueAxisDeleted ? 0 : VALUE_TICK_COUNT + 1;
     const gridLines = !valueAxisDeleted && chart.valueAxis?.majorGridlines === true ? VALUE_TICK_COUNT - 1 : 0;
-    return bars + categoryLabels + dataLabels + valueLabels + gridLines + legend;
+    return bars + horizontalCategoryLabels + dataLabels + valueLabels + gridLines + legend;
   }
 
   const axes = 2;

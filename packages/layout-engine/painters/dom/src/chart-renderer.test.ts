@@ -460,6 +460,26 @@ describe('performance guardrails', () => {
     // Should NOT have an SVG — it's a placeholder
     expect(el.querySelector('svg')).toBeNull();
   });
+
+  it('counts vertical category labels in the SVG budget even when the category axis is deleted', () => {
+    // 9 series × 500 points = 4,500 bars. The vertical renderer still paints
+    // 500 category labels, so this must exceed the 5,000 element budget.
+    const categories = Array.from({ length: 500 }, (_, i) => `C${i}`);
+    const series = Array.from({ length: 9 }, (_, i) => ({
+      name: `S${i}`,
+      categories,
+      values: categories.map((_, j) => i + j),
+    }));
+    const chart = makeBarChart({
+      legendPosition: undefined,
+      categoryAxis: { deleted: true },
+      series,
+    });
+    const el = createChartElement(doc, chart, defaultGeometry);
+
+    expect(el.textContent).toContain('too complex');
+    expect(el.querySelector('svg')).toBeNull();
+  });
 });
 
 describe('createChartPlaceholder', () => {

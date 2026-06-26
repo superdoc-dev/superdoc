@@ -5223,6 +5223,7 @@ describe('layoutHeaderFooter', () => {
         offsetH: 0,
         offsetV: 0,
       },
+      wrap: { type: 'None' },
     };
     const imageMeasure: Measure = {
       kind: 'image',

@@ -79,6 +79,25 @@ function isPageRelativeBlock(block: FlowBlock): block is ImageBlock | DrawingBlo
   );
 }
 
+function rendersInNormalHeaderFooterContainer(
+  block: ImageBlock | DrawingBlock,
+  fragment: Fragment,
+  kind: 'header' | 'footer',
+): boolean {
+  const mediaFragment = fragment as { behindDoc?: boolean; zIndex?: number };
+  if (
+    mediaFragment.behindDoc === true ||
+    (mediaFragment.behindDoc == null && mediaFragment.zIndex === 0) ||
+    block.anchor?.behindDoc === true
+  ) {
+    return false;
+  }
+  if (kind === 'header' && block.kind === 'image' && block.attrs?.vmlTextWatermark === true) {
+    return false;
+  }
+  return block.wrap?.type !== 'None';
+}
+
 /**
  * Post-normalize page-relative anchored fragment positions in header/footer layout.
  *
@@ -129,7 +148,7 @@ export function normalizeFragmentsForRegion(
         const marginLeft = Math.max(0, constraints.margins.left ?? 0);
         const marginRight = Math.max(0, constraints.margins.right ?? 0);
         const contentWidth = Math.max(1, pageWidth - (marginLeft + marginRight));
-        fragment.x = resolveAnchoredGraphicX(
+        const physicalX = resolveAnchoredGraphicX(
           block.anchor ?? {},
           0,
           { width: contentWidth, gap: 0, count: 1 },
@@ -137,6 +156,7 @@ export function normalizeFragmentsForRegion(
           { left: marginLeft, right: marginRight },
           pageWidth,
         );
+        fragment.x = rendersInNormalHeaderFooterContainer(block, fragment, _kind) ? physicalX - marginLeft : physicalX;
       }
 
       if (block.anchor?.vRelativeFrom === 'page') {

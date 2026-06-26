@@ -72,6 +72,7 @@ function isAnchoredFragment(fragment: Fragment): boolean {
 }
 
 function isPageRelativeBlock(block: FlowBlock): block is ImageBlock | DrawingBlock {
+  // This is a union-of-axes gate; each normalization branch re-checks its own axis.
   return (
     (block.kind === 'image' || block.kind === 'drawing') &&
     (block.anchor?.hRelativeFrom === 'page' || block.anchor?.vRelativeFrom === 'page')
@@ -121,7 +122,9 @@ export function normalizeFragmentsForRegion(
       const block = blockById.get(fragment.blockId);
       if (!block || !isPageRelativeBlock(block)) continue;
 
-      if (pageWidth != null && block.anchor?.vRelativeFrom === 'page') {
+      // Horizontal and vertical anchors are independent in OOXML. Keep column-relative X
+      // content-local so the painter can add the physical page margin exactly once.
+      if (pageWidth != null && block.anchor?.hRelativeFrom === 'page') {
         const fragmentWidth = (fragment as { width?: number }).width ?? 0;
         const marginLeft = Math.max(0, constraints.margins.left ?? 0);
         const marginRight = Math.max(0, constraints.margins.right ?? 0);

@@ -107,7 +107,7 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
       expect(fragment.x).toBe(24);
     });
 
-    it('normalizes column-relative X using the physical page margin when Y is page-relative', () => {
+    it('does not normalize column-relative X when Y is page-relative', () => {
       const imgWidth = 830;
       const block: FlowBlock = {
         kind: 'image',
@@ -123,11 +123,12 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
         },
       };
       const fragment = makeAnchoredImageFragment('header-column-background', 0, 40, imgWidth);
+      fragment.x = -76;
       const pages = [{ number: 1, fragments: [fragment] }];
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
 
-      expect(fragment.x).toBe(-4);
+      expect(fragment.x).toBe(-76);
       expect(fragment.y).toBe(8);
     });
   });
@@ -207,7 +208,7 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
       expect(fragment.y).toBe(PAGE_HEIGHT - 40 - FOOTER_BAND_ORIGIN);
     });
 
-    it('does not rewrite page-relative X when the vertical anchor is not page-relative', () => {
+    it('normalizes page-relative X when the vertical anchor is not page-relative', () => {
       const block: FlowBlock = {
         kind: 'image',
         id: 'footer-cross-axis',
@@ -226,7 +227,7 @@ describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', ()
 
       normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
 
-      expect(fragment.x).toBe(24);
+      expect(fragment.x).toBe((816 - 120) / 2);
       expect(fragment.y).toBe(12);
     });
 

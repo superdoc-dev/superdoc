@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { MCP_SYSTEM_PROMPT } from './generated/mcp-prompt.js';
-import { SessionManager } from './session-manager.js';
+import { SessionManager, DEFAULT_MCP_USER, type McpUser } from './session-manager.js';
 import { registerAllTools } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -21,6 +21,18 @@ if (!PRESETS_SUPPORTED.has(requestedPreset)) {
   process.exit(2);
 }
 
+// The author that tracked changes and comments are attributed to. Defaults to "MCP Server"
+// (unchanged behaviour); set SUPERDOC_AUTHOR_NAME so an agent records edits under the identity
+// it is acting as (the .docx w:author/comment author), and optionally SUPERDOC_AUTHOR_ID.
+function resolveAuthor(): McpUser {
+  const name = process.env.SUPERDOC_AUTHOR_NAME?.trim();
+  const id = process.env.SUPERDOC_AUTHOR_ID?.trim();
+  return {
+    id: id || DEFAULT_MCP_USER.id,
+    name: name || DEFAULT_MCP_USER.name,
+  };
+}
+
 const server = new McpServer(
   {
     name: 'superdoc',
@@ -31,7 +43,7 @@ const server = new McpServer(
   },
 );
 
-const sessions = new SessionManager();
+const sessions = new SessionManager(resolveAuthor());
 
 registerAllTools(server, sessions);
 

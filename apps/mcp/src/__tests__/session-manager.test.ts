@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { resolve } from 'node:path';
-import { SessionManager } from '../session-manager.js';
+import { SessionManager, DEFAULT_MCP_USER } from '../session-manager.js';
 
 const BLANK_DOCX = resolve(import.meta.dir, '../../../../shared/common/data/blank.docx');
 
@@ -73,5 +73,24 @@ describe('SessionManager', () => {
 
     // Should contain part of the filename
     expect(session.id).toMatch(/^blank-[a-f0-9]{6}$/);
+  });
+
+  it('attributes edits to the default author when none is configured', async () => {
+    const session = await manager.open(BLANK_DOCX);
+
+    // The opened editor carries the author tracked changes/comments are recorded under.
+    expect(session.editor.options.user).toEqual(DEFAULT_MCP_USER);
+    expect(session.editor.options.user.name).toBe('MCP Server');
+  });
+
+  it('attributes edits to a configured author (tracked-change w:author)', async () => {
+    const scoped = new SessionManager({ id: 'agent', name: 'Agent' });
+    try {
+      const session = await scoped.open(BLANK_DOCX);
+      expect(session.editor.options.user).toEqual({ id: 'agent', name: 'Agent' });
+      expect(session.editor.options.user.name).toBe('Agent');
+    } finally {
+      await scoped.closeAll();
+    }
   });
 });

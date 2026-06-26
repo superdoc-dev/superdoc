@@ -14,8 +14,27 @@ export interface Session {
   openedAt: number;
 }
 
+/** The author every tracked change and comment made in a session is attributed to. */
+export interface McpUser {
+  id: string;
+  name: string;
+}
+
+/** Used when no author is configured (preserves the original MCP behaviour). */
+export const DEFAULT_MCP_USER: McpUser = { id: 'mcp', name: 'MCP Server' };
+
 export class SessionManager {
   private sessions = new Map<string, Session>();
+  private readonly user: McpUser;
+
+  /**
+   * @param user The author tracked changes and comments are attributed to. Defaults to
+   * {@link DEFAULT_MCP_USER}. The server wires this from `SUPERDOC_AUTHOR_NAME` /
+   * `SUPERDOC_AUTHOR_ID` so an agent can record edits under the identity it is acting as.
+   */
+  constructor(user: McpUser = DEFAULT_MCP_USER) {
+    this.user = user;
+  }
 
   async open(filePath: string): Promise<Session> {
     const absolutePath = resolve(filePath);
@@ -32,7 +51,7 @@ export class SessionManager {
 
     const editor = await Editor.open(bytes, {
       documentId: absolutePath,
-      user: { id: 'mcp', name: 'MCP Server' },
+      user: this.user,
       telemetry: {
         metadata: {
           source: 'superdoc-mcp',

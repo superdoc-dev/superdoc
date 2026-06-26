@@ -38,7 +38,8 @@ export function registerLifecycleTools(server: McpServer, sessions: SessionManag
     'superdoc_save',
     {
       title: 'Save Document',
-      description: 'Save the document to disk. Writes to the original path unless "out" is specified.',
+      description:
+        'Save the document to disk, writing all edits (including tracked changes and comments) to the .docx. Edits from the other tools are held in memory only until you call this — you MUST call superdoc_save to persist them, and before superdoc_close (which discards unsaved changes). Writes to the original path unless "out" is specified.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         out: z.string().optional().describe('Save to a different file path instead of the original.'),
@@ -64,7 +65,8 @@ export function registerLifecycleTools(server: McpServer, sessions: SessionManag
     'superdoc_close',
     {
       title: 'Close Document',
-      description: 'Close a document session and release memory. Unsaved changes will be lost.',
+      description:
+        'Close a document session and release memory. Unsaved changes are discarded — call superdoc_save FIRST if you want to keep your edits.',
       inputSchema: {
         session_id: z.string().describe('Session ID to close.'),
       },

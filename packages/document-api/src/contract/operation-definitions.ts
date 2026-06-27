@@ -2852,7 +2852,13 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: true,
+      // Row-level structural deletion cannot be represented as a decidable
+      // tracked change in the current review model (only whole-table
+      // insert/delete is decidable; see structuralRowChanges.js). Reported as
+      // unsupported so a tracked call is rejected loudly rather than silently
+      // applied as a direct (untracked) deletion, which would be data loss in
+      // suggesting mode.
+      supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
@@ -2922,7 +2928,11 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
-      supportsTrackedMode: true,
+      // Column structure changes have no structural tracked-change
+      // representation (OOXML tracks rows, not columns, via <w:ins>/<w:del> in
+      // <w:trPr>). Reported as unsupported so a tracked call is rejected loudly
+      // rather than silently applied directly.
+      supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
@@ -2939,7 +2949,11 @@ export const OPERATION_DEFINITIONS = {
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
-      supportsTrackedMode: true,
+      // Column structure changes have no structural tracked-change
+      // representation (OOXML tracks rows, not columns). Reported as
+      // unsupported so a tracked call is rejected loudly rather than silently
+      // applied as a direct (untracked) deletion.
+      supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),

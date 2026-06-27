@@ -2,6 +2,7 @@
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { translator as trTranslator } from '../core/super-converter/v3/handlers/w/tr/tr-translator.js';
 import type { Editor } from '../core/Editor.js';
 import {
   createTableAdapter,
@@ -14,7 +15,9 @@ import {
   tablesApplyBorderPresetAdapter,
   tablesSetShadingAdapter,
   tablesInsertRowAdapter,
+  tablesDeleteRowAdapter,
   tablesInsertColumnAdapter,
+  tablesDeleteColumnAdapter,
   tablesGetCellsAdapter,
   tablesSetCellTextAdapter,
   tablesApplyPresetAdapter,
@@ -38,13 +41,14 @@ describe('SD-2129: table convenience operations', () => {
     editor = undefined;
   });
 
-  function createEditor(): Editor {
+  function createEditor(opts?: { user?: { name: string; email: string } }): Editor {
     const result = initTestEditor({
       content: docData.docx,
       media: docData.media,
       mediaFiles: docData.mediaFiles,
       fonts: docData.fonts,
       useImmediateSetTimeout: false,
+      ...(opts?.user ? { user: opts.user, trackedChanges: {} } : {}),
     });
     editor = result.editor;
     return editor;
@@ -673,6 +677,162 @@ describe('SD-2129: table convenience operations', () => {
       const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
       const colCount = new Set(cells.cells.map((c) => c.columnIndex)).size;
       expect(colCount).toBe(4);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tracked-mode operations
+  // ---------------------------------------------------------------------------
+
+  describe('tracked mode', () => {
+    const TRACKED = { changeMode: 'tracked' as const };
+    const TEST_USER = { name: 'Tester', email: 'tester@example.com' };
+
+    /** Collect the trackChange attrs of all rowInsert-stamped rows in the doc. */
+    const collectStampedRows = (ed: Editor) => {
+      const out: Array<{ node: any; tc: any }> = [];
+      ed.state.doc.descendants((node: any) => {
+        if (node.type.name !== 'tableRow') return;
+        const tc = node.attrs?.trackChange;
+        if (tc && tc.type === 'rowInsert') out.push({ node, tc });
+      });
+      return out;
+    };
+
+    const expectCapabilityUnavailable = (fn: () => unknown, opId: string) => {
+      let code: string | null = null;
+      try {
+        fn();
+      } catch (error) {
+        code = (error as { code?: string }).code ?? null;
+      }
+      expect(code, `${opId} should throw CAPABILITY_UNAVAILABLE in tracked mode`).toBe('CAPABILITY_UNAVAILABLE');
+    };
+
+    it('tables.insertRow with tracked mode stamps rowInsert revision on the new row', () => {
+      const ed = createEditor({ user: TEST_USER });
+      // Enable tracked changes so the dispatch pipeline routes through
+      // trackedTransaction; the adapter stamps the row revision directly.
+      ed.commands.enableTrackChanges();
+
+      const tableId = createTableAndGetId(ed); // 3 rows × 3 columns
+
+      // Insert a row in tracked mode — below row 0.
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId, rowIndex: 0, position: 'below' }, TRACKED);
+      expect(result.success).toBe(true);
+
+      // Exactly one row carries a rowInsert revision — the newly inserted row
+      // at index 1. Its shape mirrors the OOXML importer (row-track-change.js).
+      const stamped = collectStampedRows(ed);
+      expect(stamped.length).toBe(1);
+      const { tc } = stamped[0]!;
+      expect(tc.author).toBe(TEST_USER.name);
+      expect(tc.authorEmail).toBe(TEST_USER.email);
+      expect(typeof tc.id).toBe('string');
+      expect(typeof tc.revisionGroupId).toBe('string');
+      expect(typeof tc.date).toBe('string');
+
+      // The table should now have 4 rows.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertRow') });
+      const rowCount = new Set(cells.cells.map((c) => c.rowIndex)).size;
+      expect(rowCount).toBe(4);
+    });
+
+    it('tables.insertRow tracked mode exports the new row as <w:ins> inside <w:trPr>', () => {
+      // This is the user-visible payoff of tracked mode: the inserted row
+      // round-trips to OOXML as a tracked insertion that Word can accept/reject.
+      const ed = createEditor({ user: TEST_USER });
+      ed.commands.enableTrackChanges();
+      const tableId = createTableAndGetId(ed);
+
+      tablesInsertRowAdapter(ed, { nodeId: tableId, rowIndex: 0, position: 'below' }, TRACKED);
+
+      const stamped = collectStampedRows(ed);
+      expect(stamped.length).toBe(1);
+
+      const decoded = (trTranslator as any).decode({ node: stamped[0]!.node.toJSON() }, {});
+      const trPr = decoded.elements?.find((el: any) => el.name === 'w:trPr');
+      expect(trPr).toBeDefined();
+      const ins = trPr.elements?.find((el: any) => el.name === 'w:ins');
+      expect(ins).toBeDefined();
+      expect(ins.attributes['w:author']).toBe(TEST_USER.name);
+    });
+
+    it('tables.insertRow with tracked mode shares one revisionGroupId across a multi-row insert', () => {
+      const ed = createEditor({ user: TEST_USER });
+      ed.commands.enableTrackChanges();
+
+      const tableId = createTableAndGetId(ed); // 3 rows
+
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId, count: 2, rowIndex: 0, position: 'below' }, TRACKED);
+      expect(result.success).toBe(true);
+
+      const stamped = collectStampedRows(ed);
+      expect(stamped.length).toBe(2);
+      // Word assigns a distinct w:id per row, but rows inserted in one call form
+      // one logical change and therefore share a single revisionGroupId.
+      expect(new Set(stamped.map((r) => r.tc.id)).size).toBe(2);
+      expect(new Set(stamped.map((r) => r.tc.revisionGroupId)).size).toBe(1);
+
+      // Table should now have 5 rows.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertRow') });
+      const rowCount = new Set(cells.cells.map((c) => c.rowIndex)).size;
+      expect(rowCount).toBe(5);
+    });
+
+    it('tables.insertRow with direct mode does NOT stamp trackChange', () => {
+      const ed = createEditor({ user: TEST_USER });
+      ed.commands.enableTrackChanges(); // tracking is ON, but changeMode is direct
+
+      const tableId = createTableAndGetId(ed); // 3 rows
+
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId, rowIndex: 0, position: 'below' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      // No row should have trackChange — direct mode bypasses stamping.
+      expect(collectStampedRows(ed).length).toBe(0);
+    });
+
+    it('tables.insertRow append-at-end shorthand in tracked mode stamps rowInsert', () => {
+      const ed = createEditor({ user: TEST_USER });
+      ed.commands.enableTrackChanges();
+
+      const tableId = createTableAndGetId(ed); // 3 rows
+
+      // Append-at-end shorthand: table-level target, no rowIndex/position.
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId }, TRACKED);
+      expect(result.success).toBe(true);
+
+      expect(collectStampedRows(ed).length).toBe(1);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertRow') });
+      const rowCount = new Set(cells.cells.map((c) => c.rowIndex)).size;
+      expect(rowCount).toBe(4);
+    });
+
+    it('row/column structural ops reject tracked mode with CAPABILITY_UNAVAILABLE', () => {
+      // These ops cannot produce a decidable tracked change, so they must fail
+      // loudly rather than silently apply directly (data loss on the deletes).
+      const ed = createEditor({ user: TEST_USER });
+      ed.commands.enableTrackChanges();
+      const tableId = createTableAndGetId(ed); // 3 rows × 3 columns
+
+      expectCapabilityUnavailable(
+        () => tablesDeleteRowAdapter(ed, { nodeId: tableId, rowIndex: 1 } as any, TRACKED),
+        'tables.deleteRow',
+      );
+      expectCapabilityUnavailable(
+        () => tablesInsertColumnAdapter(ed, { nodeId: tableId, columnIndex: 0, position: 'right' } as any, TRACKED),
+        'tables.insertColumn',
+      );
+      expectCapabilityUnavailable(
+        () => tablesDeleteColumnAdapter(ed, { nodeId: tableId, columnIndex: 1 } as any, TRACKED),
+        'tables.deleteColumn',
+      );
+
+      // The table is untouched — no partial mutation leaked before the throw.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: tableId });
+      expect(new Set(cells.cells.map((c) => c.rowIndex)).size).toBe(3);
     });
   });
 

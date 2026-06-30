@@ -1,36 +1,41 @@
 <style>
-/* Page shadow - uniform on all sides, similar to Microsoft Word */
+
+/*
+ * Page shadow - uniform on all sides, similar to Microsoft Word
+ *
+ * The default SuperDoc shadow is bottom-only. This changes it to a uniform
+ * shadow on all sides for a more Word-like appearance.
+ */
 .superdoc-page {
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.15) !important;
   border: 1px solid #d4d4d4 !important;
 }
 
-/* Font rendering - subpixel antialiasing for crisp text */
+/*
+ * Shadow visibility
+ *
+ * By default, the viewport width is calculated to exactly fit the page width.
+ * This clips horizontal shadows. Setting overflow: visible on these containers
+ * allows the shadow to render outside the layout bounds.
+ *
+ */
+.superdoc-layout,
+.presentation-editor__viewport,
+.super-editor {
+  overflow: visible !important;
+}
+
+/*
+ * Font rendering - subpixel antialiasing for crisp text
+ *
+ * Improves text clarity, especially on high-DPI displays.
+ */
 .superdoc-layout {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
 }
 
-/* ==========================================================================
- * Demo app styles
- * ========================================================================== */
-
-.superdoc-layout {
-  padding: 24px !important;
-  width: auto !important;
-  min-width: auto !important;
-}
-
-.presentation-editor__viewport {
-  width: auto !important;
-  min-width: auto !important;
-  padding: 24px !important;
-}
-
-.super-editor-container {
-  min-width: auto !important;
-}
 
 html, body {
   margin: 0;
@@ -48,77 +53,20 @@ html, body {
   height: 100vh;
 }
 
-.toolbar {
-  padding: 0.75rem 1rem;
-  background: #f3f3f3;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-shrink: 0;
-  border-bottom: 1px solid #d6d6d6;
-}
-
-.open-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 400;
-  color: #242424;
-  background: #ffffff;
-  border: 1px solid #d1d1d1;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.1s, border-color 0.1s;
-}
-
-.open-button:hover {
-  background: #f5f5f5;
-  border-color: #c7c7c7;
-}
-
-.open-button:active {
-  background: #e8e8e8;
-}
-
-.open-icon {
-  width: 16px;
-  height: 16px;
-  color: #616161;
-}
-
+/* Gray background matching Word's default appearance */
 .editor-wrapper {
   flex: 1;
   overflow: auto;
   background-color: #dedede;
   display: flex;
   justify-content: center;
-}
-
-.editor-container {
-  width: fit-content;
+  padding-top: 24px;
 }
 </style>
 
 <template>
   <div class="app">
-    <div class="toolbar">
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".docx"
-        @change="handleFile"
-        style="display: none"
-      />
-      <button class="open-button" @click="openFile">
-        <svg class="open-icon" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-        </svg>
-        Open
-      </button>
-    </div>
+    <div id="toolbar"></div>
     <div class="editor-wrapper">
       <div ref="container" class="editor-container" />
     </div>
@@ -165,6 +113,11 @@ const initEditor = () => {
   superdoc = new SuperDoc({
     selector: container.value,
     document: file.value,
+    modules: {
+      toolbar: {
+        selector: 'toolbar',
+      },
+    },
   });
 };
 

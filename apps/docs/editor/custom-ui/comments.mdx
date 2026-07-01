@@ -228,6 +228,16 @@ function ReplyComposer({ parent }: { parent: { id: string } }) {
 
 The next snapshot from `useSuperDocComments()` includes the reply, threaded under the parent via `parentCommentId`. The reference demo's `ActivitySidebar` ships this pattern with focus management and Ctrl/Cmd+Enter to post.
 
+## Managed comments with Velt
+
+If you want hosted threaded comments, notifications, and a managed comments sidebar instead of building the full comments UI yourself, Velt maintains a SuperDoc comments integration.
+
+The Velt integration disables SuperDoc's built-in comments UI, anchors Velt comment annotations to selected SuperDoc text, and renders Velt comment highlights as overlay elements without writing Velt marks into the DOCX content.
+
+- [SuperDoc setup guide in the Velt docs](https://docs.velt.dev/async-collaboration/comments/setup/superdoc)
+- [Live SuperDoc comments demo](https://sample-apps-superdoc-comments-demo.vercel.app)
+- [Demo source](https://github.com/velt-js/sample-apps/tree/main/apps/react/comments/text-editors/superdoc/superdoc-comments-demo)
+
 ## Theming
 
 Comment cards, body text, timestamps, and active states are themable via `--sd-ui-comments-*` CSS variables. See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.

@@ -217,6 +217,54 @@ const Docs = {
 };
 
 // =============================================================================
+// TC PERMISSIONS - Server-side gating for tracked changes
+// =============================================================================
+
+const TCPermissions = {
+  _allowed: true, // Cached permission state
+
+  /**
+   * Fetch current permission state from server.
+   */
+  async fetch(): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_URL}/tc-permissions`);
+      const data = await response.json();
+      this._allowed = data.allowed;
+      log('tc-permissions-fetched', { allowed: this._allowed });
+      return this._allowed;
+    } catch (e) {
+      log('tc-permissions-error', { error: String(e) });
+      return this._allowed;
+    }
+  },
+
+  /**
+   * Set permission state on server.
+   */
+  async set(allowed: boolean): Promise<void> {
+    const response = await fetch(`${API_URL}/tc-permissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowed }),
+    });
+    const data = await response.json();
+    this._allowed = data.allowed;
+    log('tc-permissions-set', { allowed: this._allowed });
+  },
+
+  /**
+   * Permission resolver callback for SuperDoc.
+   * Called synchronously when user tries to accept/reject a tracked change.
+   */
+  resolver(payload: { permission: string; trackedChange: any }): boolean {
+    const allowed = TCPermissions._allowed;
+    log('tc-permission-check', { permission: payload.permission, allowed });
+    return allowed;
+  },
+};
+
+// =============================================================================
 // Helpers
 // =============================================================================
 
@@ -235,6 +283,7 @@ async function docxToJson(blob: Blob, editor: any): Promise<object> {
     fonts: zipper.fonts,
   });
 
+  // TODO: SUPERDOC V2 MIGRATION - PM INTERNAL
   const documentJson = converter.getSchema(editor);
   if (!documentJson) throw new Error('Failed to convert DOCX');
   return documentJson;
@@ -246,8 +295,11 @@ async function docxToJson(blob: Blob, editor: any): Promise<object> {
  */
 async function replaceEditorContent(editor: any, blob: Blob): Promise<void> {
   const documentJson = await docxToJson(blob, editor);
+  // TODO: SUPERDOC V2 MIGRATION - DEPRECATED
   editor.commands.selectAll();
+  // TODO: SUPERDOC V2 MIGRATION - DEPRECATED
   editor.commands.insertContent(documentJson, { contentType: 'schema' });
+  // TODO: SUPERDOC V2 MIGRATION - DEPRECATED
   setTimeout(() => editor.commands.acceptAllTrackedChanges?.(), 100);
 }
 
@@ -276,6 +328,7 @@ export default function App() {
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
   const [selectedVersionBlob, setSelectedVersionBlob] = useState<Blob | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [tcAllowed, setTcAllowed] = useState(true);
   const [currentUser] = useState<CollaboratorUser>(() => {
     const name = generateUserId();
     return {
@@ -291,6 +344,19 @@ export default function App() {
     if (!documentId) return;
     return Versions.startPolling(documentId, setVersions);
   }, [documentId]);
+
+  // ---------------------------------------------------------------------------
+  // Fetch TC permissions on load
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    TCPermissions.fetch().then(setTcAllowed);
+  }, []);
+
+  const toggleTcPermissions = useCallback(async () => {
+    const newValue = !tcAllowed;
+    await TCPermissions.set(newValue);
+    setTcAllowed(newValue);
+  }, [tcAllowed]);
 
   // ---------------------------------------------------------------------------
   // Register document with backend
@@ -325,6 +391,7 @@ export default function App() {
       log('synced', { roomId: roomId });
 
       // Check if this is a fresh room (no content yet)
+      // TODO: SUPERDOC V2 MIGRATION - PM INTERNAL
       const xmlFragment = ydoc.getXmlFragment('prosemirror');
       const isEmpty = xmlFragment.length === 0;
 
@@ -346,6 +413,8 @@ export default function App() {
         document: initialDoc,
         user: currentUser,
         comments: { visible: false },
+        // Server-side permission gating for tracked changes
+        permissionResolver: TCPermissions.resolver,
         modules: {
           // Provider-agnostic mode: we manage our own Yjs doc and provider
           // (using Hocuspocus here for convenience)
@@ -412,6 +481,7 @@ export default function App() {
       // Save version
       const result = await Versions.save(documentId, docxBlob, `Saved by ${currentUser.name}`);
       log('version-saved', { versionId: result.id });
+      // TODO: SUPERDOC V2 MIGRATION - DEPRECATED
       editor.commands.acceptAllTrackedChanges?.();
     } catch (e) {
       log('save-version-error', { error: String(e) });
@@ -532,6 +602,16 @@ export default function App() {
               </span>
             ))}
           </div>
+          <button
+            onClick={toggleTcPermissions}
+            style={{
+              ...styles.secondaryButton,
+              background: tcAllowed ? '#dcfce7' : '#fee2e2',
+              color: tcAllowed ? '#166534' : '#991b1b',
+            }}
+          >
+            TC: {tcAllowed ? 'Allowed' : 'Blocked'}
+          </button>
           <button
             onClick={saveVersion}
             disabled={!isReady || !documentId}

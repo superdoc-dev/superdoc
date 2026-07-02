@@ -6,10 +6,11 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const BLANK_DOCX = resolve(import.meta.dir, '../../../../shared/common/data/blank.docx');
 const SERVER_ENTRY = resolve(import.meta.dir, '../index.ts');
 
-// 3 lifecycle + 10 intent tools from the generated catalog
+// 4 lifecycle + 10 intent tools from the generated catalog
 const EXPECTED_TOOLS = [
   // Lifecycle
   'superdoc_open',
+  'superdoc_attach',
   'superdoc_save',
   'superdoc_close',
   // Intent tools (from catalog.json)
@@ -77,8 +78,10 @@ describe('MCP protocol integration', () => {
     const { tools } = await client.listTools();
 
     // Multi-action intent tools should have an "action" property with an enum
+    // superdoc_attach, like superdoc_open, is a session-creating lifecycle tool — no action enum.
     const multiActionTools = tools.filter(
-      (t) => !['superdoc_open', 'superdoc_save', 'superdoc_close', 'superdoc_search'].includes(t.name),
+      (t) =>
+        !['superdoc_open', 'superdoc_attach', 'superdoc_save', 'superdoc_close', 'superdoc_search'].includes(t.name),
     );
 
     for (const tool of multiActionTools) {
@@ -93,8 +96,11 @@ describe('MCP protocol integration', () => {
     await ready;
     const { tools } = await client.listTools();
 
-    // All intent tools (not lifecycle open) should require session_id
-    const intentTools = tools.filter((t) => !['superdoc_open', 'superdoc_save', 'superdoc_close'].includes(t.name));
+    // All intent tools (not session-creating lifecycle tools) should require session_id.
+    // superdoc_open and superdoc_attach both produce a session_id rather than consuming one.
+    const intentTools = tools.filter(
+      (t) => !['superdoc_open', 'superdoc_attach', 'superdoc_save', 'superdoc_close'].includes(t.name),
+    );
 
     for (const tool of intentTools) {
       const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };

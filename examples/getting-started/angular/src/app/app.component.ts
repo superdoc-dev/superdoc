@@ -1,6 +1,8 @@
 import { Component, ElementRef, ViewChild, OnDestroy, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SuperDoc } from 'superdoc';
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import * as Y from 'yjs';
 
 @Component({
   selector: 'app-root',
@@ -214,6 +216,8 @@ export class AppComponent implements OnDestroy {
   @ViewChild('editor', { static: true }) editorRef!: ElementRef;
 
   private superdoc: SuperDoc | null = null;
+  private ydoc: Y.Doc | null = null;
+  private provider: HocuspocusProvider | null = null;
   document: File | null = null;
   mode: 'editing' | 'suggesting' | 'viewing' = 'editing';
   isReady = false;
@@ -226,7 +230,16 @@ export class AppComponent implements OnDestroy {
 
     this.document = file;
     this.isReady = false;
-    this.superdoc?.destroy();
+    this.cleanup();
+
+    // Create Y.js document and Hocuspocus provider for collaboration
+    const documentId = `doc-${file.name}-${Date.now()}`;
+    this.ydoc = new Y.Doc();
+    this.provider = new HocuspocusProvider({
+      url: 'ws://localhost:1234',
+      name: documentId,
+      document: this.ydoc,
+    });
 
     this.superdoc = new SuperDoc({
       selector: this.editorRef.nativeElement,
@@ -238,12 +251,27 @@ export class AppComponent implements OnDestroy {
         name: 'John Doe',
         email: 'john@example.com',
       },
+      modules: {
+        collaboration: {
+          ydoc: this.ydoc,
+          provider: this.provider,
+        },
+      },
       onReady: () => {
         this.ngZone.run(() => {
           this.isReady = true;
         });
       },
     });
+  }
+
+  private cleanup() {
+    this.provider?.destroy();
+    this.ydoc?.destroy();
+    this.superdoc?.destroy();
+    this.provider = null;
+    this.ydoc = null;
+    this.superdoc = null;
   }
 
   setMode(mode: 'editing' | 'suggesting' | 'viewing') {
@@ -262,6 +290,6 @@ export class AppComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
-    this.superdoc?.destroy();
+    this.cleanup();
   }
 }

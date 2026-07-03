@@ -1,8 +1,11 @@
 {
   "name": "superdoc-angular-example",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "ng serve",
+    "dev": "concurrently \"npm run server\" \"ng serve\"",
+    "dev:client": "ng serve",
+    "server": "node server.js",
     "build": "ng build"
   },
   "dependencies": {
@@ -11,15 +14,19 @@
     "@angular/core": "^21.1.4",
     "@angular/platform-browser": "^21.1.4",
     "@angular/platform-browser-dynamic": "^21.1.4",
+    "@hocuspocus/provider": "^2.13.6",
     "rxjs": "~7.8.2",
     "superdoc": "^1.43.2",
     "tslib": "^2.8.1",
+    "yjs": "13.6.30",
     "zone.js": "~0.16.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^21.1.4",
     "@angular/cli": "^21.1.4",
     "@angular/compiler-cli": "^21.1.4",
+    "@hocuspocus/server": "^2.13.6",
+    "concurrently": "^8.2.2",
     "typescript": "~5.9.3"
   }
 }

@@ -15,6 +15,7 @@
             "browser": "src/main.ts",
             "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.json",
+            "assets": ["public"],
             "styles": ["node_modules/superdoc/dist/style.css", "src/styles.css"]
           },
           "configurations": {

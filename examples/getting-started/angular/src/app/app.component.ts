@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, OnDestroy, NgZone } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnDestroy, NgZone, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SuperDoc } from 'superdoc';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -11,29 +11,34 @@ import * as Y from 'yjs';
   template: `
     <div class="app">
       <header class="header">
-        <div class="header-actions">
-          <button class="btn outlined" (click)="fileInput.click()">
-            Import
-          </button>
-          <input
-            #fileInput
-            type="file"
-            accept=".docx"
-            (change)="onFileChange($event)"
-            hidden
-          />
-          <button
-            class="btn filled"
-            (click)="exportDocument()"
-          >
-            Export
-          </button>
+        <div class="room-info" *ngIf="roomId">
+          <span class="room-label">Room:</span>
+          <span class="room-id">{{ roomId }}</span>
+          <button class="copy-btn" (click)="copyRoomUrl()">Copy URL</button>
         </div>
-        <div class="mode-switcher">
+        <div class="header-right">
+          <div class="header-actions">
+            <button class="btn outlined" (click)="fileInput.click()">
+              Import
+            </button>
+            <input
+              #fileInput
+              type="file"
+              accept=".docx"
+              (change)="onFileChange($event)"
+              hidden
+            />
+            <button
+              class="btn filled"
+              (click)="exportDocument()"
+            >
+              Export
+            </button>
+          </div>
+          <div class="mode-switcher">
           <button
             class="mode-btn"
             [class.active]="mode === 'editing'"
-            [disabled]="!document"
             (click)="setMode('editing')"
           >
             Edit
@@ -41,7 +46,6 @@ import * as Y from 'yjs';
           <button
             class="mode-btn"
             [class.active]="mode === 'suggesting'"
-            [disabled]="!document"
             (click)="setMode('suggesting')"
           >
             Suggest
@@ -49,11 +53,11 @@ import * as Y from 'yjs';
           <button
             class="mode-btn"
             [class.active]="mode === 'viewing'"
-            [disabled]="!document"
             (click)="setMode('viewing')"
           >
             View
           </button>
+          </div>
         </div>
       </header>
       <main class="editor-area">
@@ -79,8 +83,47 @@ import * as Y from 'yjs';
         color: white;
         display: flex;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
         gap: 1rem;
+      }
+
+      .room-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      .room-label {
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .room-id {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+      }
+
+      .copy-btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+      }
+
+      .copy-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-left: auto;
       }
 
       .header-actions {
@@ -155,7 +198,7 @@ import * as Y from 'yjs';
         border-left: none;
       }
 
-      .mode-btn:hover:not(:disabled) {
+      .mode-btn:hover:not(.active) {
         background: rgba(255, 255, 255, 0.1);
         color: white;
       }
@@ -170,10 +213,6 @@ import * as Y from 'yjs';
         border-left: 1px solid rgba(255, 255, 255, 0.3);
       }
 
-      .mode-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
 
       .editor-area {
         flex: 1;
@@ -212,7 +251,7 @@ import * as Y from 'yjs';
     `,
   ],
 })
-export class AppComponent implements OnDestroy {
+export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('editor', { static: true }) editorRef!: ElementRef;
 
   private superdoc: SuperDoc | null = null;
@@ -221,8 +260,98 @@ export class AppComponent implements OnDestroy {
   document: File | null = null;
   mode: 'editing' | 'suggesting' | 'viewing' = 'editing';
   isReady = false;
+  roomId: string | null = null;
 
   constructor(private ngZone: NgZone) {}
+
+  ngOnInit() {
+    // Read room from URL query params
+    const params = new URLSearchParams(window.location.search);
+    this.roomId = params.get('room');
+
+    // If there's a room in the URL, auto-connect to it
+    if (this.roomId) {
+      this.joinRoom(this.roomId);
+    }
+  }
+
+  private hasSuperDocContent(ydoc: Y.Doc): boolean {
+    return (
+      ydoc.getXmlFragment('supereditor').length > 0 ||
+      ydoc.getMap('parts').size > 0 ||
+      ydoc.getMap('meta').has('docx')
+    );
+  }
+
+  private joinRoom(roomId: string) {
+    this.cleanup();
+
+    // Create Y.js document and Hocuspocus provider for collaboration
+    this.ydoc = new Y.Doc();
+    this.provider = new HocuspocusProvider({
+      url: 'ws://localhost:1234',
+      name: roomId,
+      document: this.ydoc,
+    });
+
+    // Wait for sync before creating SuperDoc
+    const handleSynced = () => {
+      if (this.superdoc) return;
+
+      const hasContent = this.hasSuperDocContent(this.ydoc!);
+
+      this.superdoc = new SuperDoc({
+        selector: this.editorRef.nativeElement,
+        documentMode: this.mode,
+        toolbar: '#superdoc-toolbar',
+        rulers: true,
+        // Only provide a seed document if the room is empty
+        ...(hasContent
+          ? {}
+          : {
+              document: {
+                id: roomId,
+                type: 'docx' as const,
+                url: '/sample.docx',
+                name: 'sample.docx',
+                isNewFile: true,
+              },
+            }),
+        user: {
+          name: 'User ' + Math.random().toString(36).substring(2, 5),
+          email: 'user@example.com',
+        },
+        modules: {
+          collaboration: {
+            ydoc: this.ydoc!,
+            provider: this.provider!,
+          },
+        },
+        onReady: () => {
+          this.ngZone.run(() => {
+            this.isReady = true;
+            this.document = new File([], 'collaborative-doc.docx');
+          });
+        },
+      });
+    };
+
+    this.provider.on('synced', handleSynced);
+  }
+
+  private generateRoomId(): string {
+    return Math.random().toString(36).substring(2, 8);
+  }
+
+  private updateUrlWithRoom(roomId: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', roomId);
+    window.history.replaceState({}, '', url.toString());
+  }
+
+  copyRoomUrl() {
+    navigator.clipboard.writeText(window.location.href);
+  }
 
   onFileChange(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
@@ -232,36 +361,55 @@ export class AppComponent implements OnDestroy {
     this.isReady = false;
     this.cleanup();
 
-    // Create Y.js document and Hocuspocus provider for collaboration
-    const documentId = `doc-${file.name}-${Date.now()}`;
+    // Always generate a new room when importing a document
+    this.roomId = this.generateRoomId();
+    this.updateUrlWithRoom(this.roomId);
+
+    // Create Y.js document and Hocuspocus provider
     this.ydoc = new Y.Doc();
     this.provider = new HocuspocusProvider({
       url: 'ws://localhost:1234',
-      name: documentId,
+      name: this.roomId,
       document: this.ydoc,
     });
 
-    this.superdoc = new SuperDoc({
-      selector: this.editorRef.nativeElement,
-      documentMode: this.mode,
-      document: file,
-      toolbar: '#superdoc-toolbar',
-      rulers: true,
-      user: {
-        name: 'John Doe',
-        email: 'john@example.com',
-      },
-      modules: {
-        collaboration: {
-          ydoc: this.ydoc,
-          provider: this.provider,
+    // Convert file to blob URL for collaboration
+    const fileUrl = URL.createObjectURL(file);
+
+    // Wait for provider to sync, then create SuperDoc
+    this.provider.on('synced', () => {
+      if (this.superdoc) return;
+
+      this.superdoc = new SuperDoc({
+        selector: this.editorRef.nativeElement,
+        documentMode: this.mode,
+        document: {
+          id: this.roomId!,
+          type: 'docx',
+          url: fileUrl,
+          name: file.name,
+          isNewFile: true,
         },
-      },
-      onReady: () => {
-        this.ngZone.run(() => {
-          this.isReady = true;
-        });
-      },
+        toolbar: '#superdoc-toolbar',
+        rulers: true,
+        user: {
+          name: 'John Doe',
+          email: 'john@example.com',
+        },
+        modules: {
+          collaboration: {
+            ydoc: this.ydoc!,
+            provider: this.provider!,
+          },
+        },
+        onReady: () => {
+          this.ngZone.run(() => {
+            this.isReady = true;
+            // Clean up blob URL
+            URL.revokeObjectURL(fileUrl);
+          });
+        },
+      });
     });
   }
 
@@ -275,10 +423,12 @@ export class AppComponent implements OnDestroy {
   }
 
   setMode(mode: 'editing' | 'suggesting' | 'viewing') {
-    this.mode = mode;
-    if (this.superdoc) {
-      this.superdoc.setDocumentMode(mode);
+    if (!this.superdoc) {
+      alert('Please import a document first');
+      return;
     }
+    this.mode = mode;
+    this.superdoc.setDocumentMode(mode);
   }
 
   async exportDocument() {

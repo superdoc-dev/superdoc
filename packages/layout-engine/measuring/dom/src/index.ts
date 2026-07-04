@@ -197,7 +197,7 @@ import { getCellSpacingPx, getBorderBandWidthPx } from '@superdoc/contracts';
 /**
  * Returns the border band width in pixels for a table border value.
  * Delegates to the shared contracts helper so this always matches the painter's
- * rendered width (thick = 2x min 3px, double = 3x per-rule width min 3px). Used for
+ * rendered width (thick = authored width min 1px, double = 3x per-rule width min 3px). Used for
  * outer table dimensions and per-row band reservation.
  */
 function getTableBorderWidthPx(value: TableBorderValue | null | undefined): number {

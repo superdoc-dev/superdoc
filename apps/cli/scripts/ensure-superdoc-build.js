@@ -4,6 +4,8 @@ import { ensureNoUnknownFlags, isDirectExecution, repoRoot, runCommand } from '.
 const allowedFlags = new Set(['--types']);
 const superdocRoot = path.join(repoRoot, 'packages/superdoc');
 const documentApiRoot = path.join(repoRoot, 'packages/document-api');
+const sdkWorkspaceRoot = path.join(repoRoot, 'packages/sdk');
+const nodeSdkRoot = path.join(sdkWorkspaceRoot, 'langs/node');
 const documentApiProject = path.relative(repoRoot, documentApiRoot);
 
 /**
@@ -17,8 +19,24 @@ export function ensureDocumentApiBuild(run = runCommand) {
 }
 
 /**
+ * Ensures the Node SDK package resolves for CLI builds.
+ *
+ * The CLI imports `@superdoc-dev/sdk` for `doc.preset.*`; Bun resolves that
+ * package through its dist export while compiling native binaries. SDK
+ * generation exports the CLI contract first, which builds document-api dist
+ * for clean checkouts.
+ *
+ * @returns {void}
+ */
+export function ensureNodeSdkBuild(run = runCommand) {
+  run('pnpm', ['--prefix', sdkWorkspaceRoot, 'run', 'generate'], 'Generate SDK artifacts for CLI runtime');
+  run('pnpm', ['--prefix', nodeSdkRoot, 'run', 'build'], 'Build Node SDK for CLI runtime');
+}
+
+/**
  * Ensures the CLI's runtime dependencies are freshly built:
- * - document-api contract/catalog dist consumed by CLI + SDK generation
+ * - document-api contract/catalog dist consumed by CLI metadata export
+ * - Node SDK dist consumed by `doc.preset.*`
  * - packaged `superdoc` for the v1 runtime path
  *
  * `--types` performs the full published build so package type exports exist.
@@ -32,7 +50,7 @@ export function ensureSuperdocBuild(options = {}, run = runCommand) {
   const scriptName = includeTypes ? 'build:es' : 'build:dev';
   const label = includeTypes ? 'Build packaged SuperDoc runtime and types' : 'Build packaged SuperDoc runtime';
 
-  ensureDocumentApiBuild(run);
+  ensureNodeSdkBuild(run);
   run('pnpm', ['--prefix', superdocRoot, 'run', scriptName], label);
 }
 

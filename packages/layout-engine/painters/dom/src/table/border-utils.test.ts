@@ -105,7 +105,7 @@ describe('applyBorder', () => {
     expect(element.style.borderTop).toMatch(/1px solid (#000000|rgb\(0,\s*0,\s*0\))/i);
   });
 
-  it('should handle thick border with larger width', () => {
+  it('paints a wider thick border at the authored width', () => {
     const border: BorderSpec = { style: 'thick', width: 3, color: '#000000' };
     applyBorder(element, 'Top', border);
     expect(element.style.borderTop).toMatch(/3px solid (#000000|rgb\(0,\s*0,\s*0\))/i);

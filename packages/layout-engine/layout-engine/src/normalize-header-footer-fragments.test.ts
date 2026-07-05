@@ -10,8 +10,8 @@ function makeParaFragment(blockId: string, y: number): Fragment {
   return { kind: 'para', blockId, x: 0, y, fromLine: 0, toLine: 1 } as Fragment;
 }
 
-function makeAnchoredImageFragment(blockId: string, y: number, height: number): Fragment {
-  return { kind: 'image', blockId, x: 0, y, height, isAnchored: true } as unknown as Fragment;
+function makeAnchoredImageFragment(blockId: string, y: number, height: number, width = 0): Fragment {
+  return { kind: 'image', blockId, x: 0, y, width, height, isAnchored: true } as unknown as Fragment;
 }
 
 function makeDummyMeasure(): Measure {
@@ -23,6 +23,7 @@ const MARGIN_BOTTOM = 72;
 const FOOTER_DISTANCE = 36;
 
 const fullConstraints = {
+  pageWidth: 816,
   pageHeight: PAGE_HEIGHT,
   margins: { left: 72, right: 72, top: 72, bottom: MARGIN_BOTTOM, header: 36, footer: FOOTER_DISTANCE },
 };
@@ -33,7 +34,158 @@ const FOOTER_BAND_ORIGIN = PAGE_HEIGHT - FOOTER_DISTANCE; // 1020
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
+describe('normalizeFragmentsForRegion (header/footer page-relative anchors)', () => {
+  describe('page-relative anchors in header', () => {
+    it('normalizes centered page-relative anchors against the physical page', () => {
+      const imgWidth = 762.24;
+      const imgHeight = 1010.88;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-background',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'page',
+          alignV: 'center',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: { type: 'None' },
+      };
+      const fragment = makeAnchoredImageFragment('header-background', 0, imgHeight, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBeCloseTo((816 - imgWidth) / 2);
+      expect(fragment.y).toBeCloseTo((PAGE_HEIGHT - imgHeight) / 2);
+    });
+
+    it('normalizes right-aligned page-relative anchors against the physical page', () => {
+      const imgWidth = 120;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-logo',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'right',
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetH: 12,
+        },
+        wrap: { type: 'None' },
+      };
+      const fragment = makeAnchoredImageFragment('header-logo', 0, 40, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(816 - imgWidth - 12);
+    });
+
+    it('normalizes left page-relative anchors with explicit offsets', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-left-offset',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'left',
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetH: 24,
+        },
+        wrap: { type: 'None' },
+      };
+      const fragment = makeAnchoredImageFragment('header-left-offset', 0, 40, 120);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(24);
+    });
+
+    it('keeps normal page-relative anchors container-local on the horizontal axis', () => {
+      const imgWidth = 120;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-normal-centered',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetV: 0,
+        },
+        wrap: { type: 'Square' },
+      };
+      const fragment = makeAnchoredImageFragment('header-normal-centered', 0, 40, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe((816 - imgWidth) / 2 - fullConstraints.margins.left);
+      expect(fragment.y).toBe(0);
+    });
+
+    it('keeps legacy zIndex zero page-relative anchors in physical page coordinates', () => {
+      const imgWidth = 120;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-legacy-behind',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetV: 0,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-legacy-behind', 0, 40, imgWidth);
+      (fragment as { behindDoc?: boolean }).behindDoc = undefined;
+      (fragment as { zIndex?: number }).zIndex = 0;
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe((816 - imgWidth) / 2);
+    });
+
+    it('does not normalize column-relative X when Y is page-relative', () => {
+      const imgWidth = 830;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'header-column-background',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          offsetH: -76,
+          vRelativeFrom: 'page',
+          alignV: 'top',
+          offsetV: 8,
+        },
+      };
+      const fragment = makeAnchoredImageFragment('header-column-background', 0, 40, imgWidth);
+      fragment.x = -76;
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'header', fullConstraints);
+
+      expect(fragment.x).toBe(-76);
+      expect(fragment.y).toBe(8);
+    });
+  });
+
   describe('page-relative anchors in footer', () => {
     it('normalizes a top-aligned anchor', () => {
       const block: FlowBlock = {
@@ -83,6 +235,55 @@ describe('normalizeFragmentsForRegion (footer page-relative only)', () => {
 
       // physicalY = (1056 - 40) / 2 = 508, bandOrigin = 1020
       expect(fragment.y).toBe((PAGE_HEIGHT - imgHeight) / 2 - FOOTER_BAND_ORIGIN);
+    });
+
+    it('normalizes footer X when the vertical anchor uses page coordinates', () => {
+      const imgWidth = 120;
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'footer-centered',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'page',
+          alignV: 'bottom',
+          offsetV: 0,
+        },
+        wrap: { type: 'None' },
+      };
+      const fragment = makeAnchoredImageFragment('footer-centered', 0, 40, imgWidth);
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
+
+      expect(fragment.x).toBe((816 - imgWidth) / 2);
+      expect(fragment.y).toBe(PAGE_HEIGHT - 40 - FOOTER_BAND_ORIGIN);
+    });
+
+    it('normalizes page-relative X when the vertical anchor is not page-relative', () => {
+      const block: FlowBlock = {
+        kind: 'image',
+        id: 'footer-cross-axis',
+        src: 'test.png',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          alignH: 'center',
+          vRelativeFrom: 'paragraph',
+          offsetV: 0,
+        },
+        wrap: { type: 'None' },
+      };
+      const fragment = makeAnchoredImageFragment('footer-cross-axis', 12, 40, 120);
+      fragment.x = 24;
+      const pages = [{ number: 1, fragments: [fragment] }];
+
+      normalizeFragmentsForRegion(pages, [block], [makeDummyMeasure()], 'footer', fullConstraints);
+
+      expect(fragment.x).toBe((816 - 120) / 2);
+      expect(fragment.y).toBe(12);
     });
 
     it('applies offsetV correctly', () => {

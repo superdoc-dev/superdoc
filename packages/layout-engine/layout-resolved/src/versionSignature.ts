@@ -57,6 +57,15 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
   return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
 };
 
+const valueVersion = (value: unknown): string => {
+  if (value == null) return '';
+  if (typeof value === 'object') {
+    const serialized = stableSerializeEvidenceValue(value);
+    return `h:${serialized.length}:${hashString(2166136261, serialized).toString(36)}`;
+  }
+  return String(value);
+};
+
 const getTrackedChangeLayers = (run: TextRun): TrackedChangeMeta[] => {
   if (Array.isArray(run.trackedChanges) && run.trackedChanges.length > 0) {
     return run.trackedChanges;
@@ -272,7 +281,7 @@ const hashNumber = (seed: number, value: number | undefined | null): number => {
 // sourceAnchorSignature
 // ---------------------------------------------------------------------------
 
-const stableSerializeEvidenceValue = (value: unknown): string => {
+function stableSerializeEvidenceValue(value: unknown): string {
   if (value === undefined) return '';
   if (value === null) return 'null';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -290,7 +299,7 @@ const stableSerializeEvidenceValue = (value: unknown): string => {
       .join(',')}}`;
   }
   return JSON.stringify(String(value));
-};
+}
 
 /**
  * Stable source/evidence metadata signature for paint cache invalidation.
@@ -478,7 +487,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       return [
         block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
-        vector.fillColor ?? '',
+        valueVersion(vector.fillColor),
         vector.strokeColor ?? '',
         vector.strokeWidth ?? '',
         vector.geometry.width,
@@ -510,10 +519,12 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     if (block.drawingKind === 'chart') {
       return [
         'drawing:chart',
-        block.chartData?.chartType ?? '',
-        block.chartData?.series?.length ?? 0,
+        valueVersion(block.chartData),
         block.geometry.width,
         block.geometry.height,
+        block.geometry.rotation ?? 0,
+        block.geometry.flipH ? 1 : 0,
+        block.geometry.flipV ? 1 : 0,
         block.chartRelId ?? '',
       ].join('|');
     }

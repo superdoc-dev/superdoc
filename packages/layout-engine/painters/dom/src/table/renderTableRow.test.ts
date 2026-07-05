@@ -48,7 +48,6 @@ describe('renderTableRow', () => {
     },
     columnWidths: [100],
     allRowHeights: [20, 20, 20, 20, 20, 20, 20, 20, 20, 20],
-    tableIndent: 0,
     context: { sectionIndex: 0, pageIndex: 0, columnIndex: 0 },
     renderLine: () => doc.createElement('div'),
     applySdtDataset: () => {},

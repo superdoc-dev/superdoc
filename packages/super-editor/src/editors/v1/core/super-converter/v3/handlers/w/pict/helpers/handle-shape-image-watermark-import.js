@@ -1,4 +1,5 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { normalizeTargetPath } from '../../../helpers/media-target-path.js';
 
 /**
  * Handles VML shape elements with v:imagedata (image watermarks).
@@ -132,19 +133,6 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
   }
 
   return imageNode;
-}
-
-/**
- * Normalize a relationship target to a relative media path.
- * @param {string} targetPath
- * @returns {string}
- */
-function normalizeTargetPath(targetPath = '') {
-  if (!targetPath) return targetPath;
-  const trimmed = targetPath.replace(/^\/+/, '');
-  if (trimmed.startsWith('word/')) return trimmed;
-  if (trimmed.startsWith('media/')) return `word/${trimmed}`;
-  return `word/${trimmed}`;
 }
 
 /**

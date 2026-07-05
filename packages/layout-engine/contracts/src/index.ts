@@ -1075,14 +1075,26 @@ export type SolidFillWithAlpha = {
   alpha: number;
 };
 
+/** Picture fill for DrawingML vector shapes. */
+export type PictureFill = {
+  type: 'picture';
+  /** Image source path or hydrated data URI. */
+  src: string;
+  /** Source relationship id from the owning document part. */
+  rId?: string;
+  /** Source image extension, used when resolving media fallbacks. */
+  extension?: string;
+};
+
 /**
  * Fill color for shapes. Can be:
  * - string: Simple hex color (e.g., "#FF0000") for backward compatibility
  * - GradientFill: Linear or radial gradient
  * - SolidFillWithAlpha: Solid color with transparency
+ * - PictureFill: Image fill clipped by the shape geometry
  * - null: No fill
  */
-export type FillColor = string | GradientFill | SolidFillWithAlpha | null;
+export type FillColor = string | GradientFill | SolidFillWithAlpha | PictureFill | null;
 
 /**
  * Stroke color for shapes. Can be:
@@ -1361,12 +1373,23 @@ export type ChartSeriesData = {
   xValues?: number[];
   /** Optional bubble radius/size values for bubble charts. */
   bubbleSizes?: number[];
+  /** Optional data-label settings from c:dLbls. */
+  dataLabels?: ChartDataLabelsConfig;
+};
+
+/** Data-label configuration extracted from c:dLbls. */
+export type ChartDataLabelsConfig = {
+  showValue?: boolean;
+  numberFormat?: string;
+  position?: string;
 };
 
 /** Axis configuration extracted from c:catAx / c:valAx. */
 export type ChartAxisConfig = {
   title?: string;
   orientation?: 'minMax' | 'maxMin';
+  deleted?: boolean;
+  majorGridlines?: boolean;
 };
 
 /** Normalized chart data model parsed from OOXML chart XML. */
@@ -1377,6 +1400,8 @@ export type ChartModel = {
   subType?: string;
   /** Bar direction — 'col' for vertical columns, 'bar' for horizontal bars. */
   barDirection?: 'col' | 'bar';
+  /** Gap width between bar groups as a percentage of bar width. */
+  gapWidth?: number;
   /** Data series in the chart. */
   series: ChartSeriesData[];
   /** Category axis config. */
@@ -1387,6 +1412,8 @@ export type ChartModel = {
   legendPosition?: string;
   /** OOXML chart style ID. */
   styleId?: number;
+  /** Whether the chart area outline should be painted. */
+  chartAreaBorder?: boolean;
 };
 
 /** Chart drawing block. */

@@ -1,4 +1,40 @@
 import { formatChapterPageNumberText, formatPageNumber } from '@superdoc/contracts';
+import {
+  createLineEndMarker as createLineEndMarkerWithDocument,
+  createLineEndShape as createLineEndShapeWithDocument,
+} from '@superdoc/preset-geometry/connectors';
+
+export function createLineEndShape(type, strokeColor, isStart) {
+  return createLineEndShapeWithDocument(document, type, strokeColor, isStart);
+}
+
+export function createLineEndMarker(defs, id, lineEnd, strokeColor, strokeWidth, isStart) {
+  return createLineEndMarkerWithDocument(document, defs, id, lineEnd, strokeColor, strokeWidth, isStart);
+}
+
+export function createPictureFillPattern(defs, pictureFill, prefix = 'picture-fill') {
+  if (!pictureFill?.src) return null;
+
+  const patternId = `${prefix}-${Math.random().toString(36).slice(2, 11)}-${Date.now()}`;
+  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+  pattern.setAttribute('id', patternId);
+  pattern.setAttribute('patternUnits', 'objectBoundingBox');
+  pattern.setAttribute('patternContentUnits', 'objectBoundingBox');
+  pattern.setAttribute('width', '1');
+  pattern.setAttribute('height', '1');
+
+  const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+  image.setAttribute('href', pictureFill.src);
+  image.setAttribute('x', '0');
+  image.setAttribute('y', '0');
+  image.setAttribute('width', '1');
+  image.setAttribute('height', '1');
+  image.setAttribute('preserveAspectRatio', 'none');
+  pattern.appendChild(image);
+  defs.appendChild(pattern);
+
+  return `url(#${patternId})`;
+}
 
 /**
  * Shared utility functions for SVG shape rendering

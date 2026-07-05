@@ -1,5 +1,11 @@
 // @ts-expect-error - preset-geometry package may not have type definitions
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
+import {
+  applyNonScalingStrokeToConnector,
+  createConnectorPresetSvg,
+  formatSvgNumber,
+  isConnectorPresetShape,
+} from '@superdoc/preset-geometry/connectors';
 import { inchesToPixels } from '@converter/helpers.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 import {
@@ -8,6 +14,8 @@ import {
   applyGradientToSVG,
   applyAlphaToSVG,
   generateTransforms,
+  createLineEndMarker,
+  createPictureFillPattern,
 } from '../shared/svg-utils.js';
 
 export class VectorShapeView {
@@ -315,6 +323,8 @@ export class VectorShapeView {
     svg.setAttribute('width', width.toString());
     svg.setAttribute('height', height.toString());
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.style.width = `${width}px`;
+    svg.style.height = `${height}px`;
     svg.style.display = 'block';
 
     // Create defs for gradients if needed
@@ -337,6 +347,8 @@ export class VectorShapeView {
         } else if (fillColor.type === 'solidWithAlpha') {
           fill = fillColor.color;
           fillOpacity = fillColor.alpha;
+        } else if (fillColor.type === 'picture') {
+          fill = createPictureFillPattern(defs, fillColor) ?? 'none';
         }
       } else {
         fill = fillColor;
@@ -388,11 +400,13 @@ export class VectorShapeView {
 
       case 'line':
       case 'straightConnector1':
+        const isHorizontalLine = height <= 1 && width > height;
+        const isVerticalLine = width <= 1 && height > width;
         shapeElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        shapeElement.setAttribute('x1', '0');
-        shapeElement.setAttribute('y1', '0');
-        shapeElement.setAttribute('x2', width.toString());
-        shapeElement.setAttribute('y2', height.toString());
+        shapeElement.setAttribute('x1', isVerticalLine ? (width / 2).toString() : '0');
+        shapeElement.setAttribute('y1', isHorizontalLine ? (height / 2).toString() : '0');
+        shapeElement.setAttribute('x2', isVerticalLine ? (width / 2).toString() : width.toString());
+        shapeElement.setAttribute('y2', isHorizontalLine ? (height / 2).toString() : height.toString());
         break;
 
       default:
@@ -404,6 +418,23 @@ export class VectorShapeView {
             tempDiv.innerHTML = svgTemplate;
             const tempSvg = tempDiv.querySelector('svg');
             if (tempSvg) {
+              if (isConnectorPresetShape(kind)) {
+                applyNonScalingStrokeToConnector(tempSvg);
+              }
+              if (fillColor?.type === 'picture') {
+                const tempDefs =
+                  tempSvg.querySelector('defs') ||
+                  tempSvg.insertBefore(
+                    document.createElementNS('http://www.w3.org/2000/svg', 'defs'),
+                    tempSvg.firstChild,
+                  );
+                const pictureFill = createPictureFillPattern(tempDefs, fillColor);
+                if (pictureFill) {
+                  tempSvg.querySelectorAll('[fill]:not([fill="none"])').forEach((el) => {
+                    el.setAttribute('fill', pictureFill);
+                  });
+                }
+              }
               // Preserve the preset viewBox and scale via width/height
               tempSvg.setAttribute('width', width.toString());
               tempSvg.setAttribute('height', height.toString());
@@ -430,6 +461,11 @@ export class VectorShapeView {
     }
     shapeElement.setAttribute('stroke', stroke);
     shapeElement.setAttribute('stroke-width', strokeW.toString());
+    if (kind === 'line' || kind === 'straightConnector1') {
+      svg.setAttribute('viewBox', `0 0 ${formatSvgNumber(width)} ${formatSvgNumber(height)}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      shapeElement.setAttribute('vector-effect', 'non-scaling-stroke');
+    }
 
     svg.appendChild(shapeElement);
     return svg;
@@ -438,7 +474,7 @@ export class VectorShapeView {
   /**
    * Applies line end markers (arrowheads) to an SVG element.
    * @param {SVGElement} svg - The SVG element to apply markers to
-   * @param {Object} attrs - Shape attributes containing lineEnds, strokeColor, strokeWidth, effectExtent
+   * @param {Object} attrs - Shape attributes containing lineEnds, strokeColor, strokeWidth
    */
   applyLineEnds(svg, attrs) {
     const lineEnds = attrs.lineEnds;
@@ -456,92 +492,17 @@ export class VectorShapeView {
       svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'defs'), svg.firstChild);
     const idBase = `line-end-${Math.random().toString(36).slice(2, 8)}-${Date.now()}`;
 
-    if (lineEnds.tail) {
-      const id = `${idBase}-tail`;
-      this.createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, true, attrs.effectExtent);
+    if (lineEnds.head) {
+      const id = `${idBase}-head`;
+      createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, true);
       target.setAttribute('marker-start', `url(#${id})`);
     }
 
-    if (lineEnds.head) {
-      const id = `${idBase}-head`;
-      this.createLineEndMarker(defs, id, lineEnds.head, strokeColor, strokeWidth, false, attrs.effectExtent);
+    if (lineEnds.tail) {
+      const id = `${idBase}-tail`;
+      createLineEndMarker(defs, id, lineEnds.tail, strokeColor, strokeWidth, false);
       target.setAttribute('marker-end', `url(#${id})`);
     }
-  }
-
-  /**
-   * Creates an SVG marker element for a line end (arrowhead).
-   * @param {SVGDefsElement} defs - The defs element to append the marker to
-   * @param {string} id - Unique ID for the marker
-   * @param {Object} lineEnd - Line end configuration with type, width, length
-   * @param {string} strokeColor - Color to use for the marker fill
-   * @param {number} _strokeWidth - Stroke width (currently unused, reserved for future scaling)
-   * @param {boolean} isStart - Whether this is a start marker (tail) or end marker (head)
-   * @param {Object|null} effectExtent - Effect extent for sizing, or null
-   */
-  createLineEndMarker(defs, id, lineEnd, strokeColor, _strokeWidth, isStart, effectExtent) {
-    if (defs.querySelector(`#${id}`)) return;
-
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', id);
-    marker.setAttribute('viewBox', '0 0 10 10');
-    marker.setAttribute('orient', 'auto');
-
-    const sizeScale = (value) => {
-      if (value === 'sm') return 0.75;
-      if (value === 'lg') return 1.25;
-      return 1;
-    };
-    const effectMax = effectExtent
-      ? Math.max(effectExtent.left || 0, effectExtent.right || 0, effectExtent.top || 0, effectExtent.bottom || 0)
-      : 0;
-    const useEffectExtent = Number.isFinite(effectMax) && effectMax > 0;
-    const markerWidth = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.length);
-    const markerHeight = useEffectExtent ? effectMax * 2 : 4 * sizeScale(lineEnd.width);
-    marker.setAttribute('markerUnits', useEffectExtent ? 'userSpaceOnUse' : 'strokeWidth');
-    marker.setAttribute('markerWidth', markerWidth.toString());
-    marker.setAttribute('markerHeight', markerHeight.toString());
-    marker.setAttribute('refX', isStart ? '0' : '10');
-    marker.setAttribute('refY', '5');
-
-    const shape = this.createLineEndShape(lineEnd.type || 'triangle', strokeColor, isStart);
-    marker.appendChild(shape);
-    defs.appendChild(marker);
-  }
-
-  /**
-   * Creates an SVG shape element for a line end marker.
-   * Supports diamond, oval, and triangle (default) shapes.
-   * @param {string} type - The shape type ('diamond', 'oval', or 'triangle')
-   * @param {string} strokeColor - Color to fill the shape with
-   * @param {boolean} isStart - Whether this is a start marker (affects triangle orientation)
-   * @returns {SVGElement} The created SVG shape element
-   */
-  createLineEndShape(type, strokeColor, isStart) {
-    const normalized = type.toLowerCase();
-    if (normalized === 'diamond') {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', 'M 0 5 L 5 0 L 10 5 L 5 10 Z');
-      path.setAttribute('fill', strokeColor);
-      path.setAttribute('stroke', 'none');
-      return path;
-    }
-    if (normalized === 'oval') {
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', '5');
-      circle.setAttribute('cy', '5');
-      circle.setAttribute('r', '5');
-      circle.setAttribute('fill', strokeColor);
-      circle.setAttribute('stroke', 'none');
-      return circle;
-    }
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const d = isStart ? 'M 10 0 L 0 5 L 10 10 Z' : 'M 0 0 L 10 5 L 0 10 Z';
-    path.setAttribute('d', d);
-    path.setAttribute('fill', strokeColor);
-    path.setAttribute('stroke', 'none');
-    return path;
   }
 
   createGradient(gradientData, gradientId) {
@@ -550,6 +511,10 @@ export class VectorShapeView {
 
   generateSVG({ kind, fillColor, strokeColor, strokeWidth, width, height }) {
     try {
+      if (isConnectorPresetShape(kind)) {
+        return createConnectorPresetSvg({ kind, strokeColor, strokeWidth, width, height });
+      }
+
       // For complex fill types (gradients, alpha), use a placeholder or extract the color
       let fill = fillColor || 'none';
       if (fillColor && typeof fillColor === 'object') {
@@ -557,6 +522,8 @@ export class VectorShapeView {
           fill = '#cccccc'; // Placeholder for gradients
         } else if (fillColor.type === 'solidWithAlpha') {
           fill = fillColor.color; // Use the actual color, alpha will be applied separately
+        } else if (fillColor.type === 'picture') {
+          fill = '#000000'; // Replaced by a pattern after parsing
         }
       }
 

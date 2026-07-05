@@ -604,7 +604,7 @@ describe('renderTableCell', () => {
     expect(renderedLines[0]?.dataset.blockId).toBe('para-after-anchor');
   });
 
-  it('adjusts column-relative anchored images by table indent and cell offset', () => {
+  it('adjusts column-relative anchored images by cell offset after table indent is applied', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
       id: 'para-anchor',
@@ -652,14 +652,13 @@ describe('renderTableCell', () => {
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
       x: 40,
-      tableIndent: 20,
       cellMeasure,
       cell,
     });
 
     const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
     expect(imgEl).toBeTruthy();
-    expect(imgEl?.parentElement?.style.left).toBe('40px');
+    expect(imgEl?.parentElement?.style.left).toBe('60px');
   });
 
   it('absolutely positions anchored drawing blocks inside table cells', () => {

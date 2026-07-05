@@ -7,11 +7,13 @@ import type {
   ImageMeasure,
   DrawingMeasure,
 } from '@superdoc/contracts';
+import { resolveAnchoredGraphicX } from '@superdoc/contracts';
 /**
  * Subset of HeaderFooterConstraints needed for fragment normalization.
  * Defined locally to avoid circular imports with index.ts.
  */
 export type RegionConstraints = {
+  pageWidth?: number;
   pageHeight?: number;
   margins?: {
     left: number;
@@ -58,6 +60,10 @@ function computeFooterBandOrigin(constraints: RegionConstraints): number {
   return Math.max(0, pageHeight - (constraints.margins?.bottom ?? 0));
 }
 
+function computeBandOrigin(kind: 'header' | 'footer', constraints: RegionConstraints): number {
+  return kind === 'footer' ? computeFooterBandOrigin(constraints) : 0;
+}
+
 function isAnchoredFragment(fragment: Fragment): boolean {
   return (
     (fragment.kind === 'image' || fragment.kind === 'drawing') &&
@@ -66,21 +72,46 @@ function isAnchoredFragment(fragment: Fragment): boolean {
 }
 
 function isPageRelativeBlock(block: FlowBlock): block is ImageBlock | DrawingBlock {
-  return (block.kind === 'image' || block.kind === 'drawing') && block.anchor?.vRelativeFrom === 'page';
+  // This is a union-of-axes gate; each normalization branch re-checks its own axis.
+  return (
+    (block.kind === 'image' || block.kind === 'drawing') &&
+    (block.anchor?.hRelativeFrom === 'page' || block.anchor?.vRelativeFrom === 'page')
+  );
+}
+
+function rendersInNormalHeaderFooterContainer(
+  block: ImageBlock | DrawingBlock,
+  fragment: Fragment,
+  kind: 'header' | 'footer',
+): boolean {
+  const mediaFragment = fragment as { behindDoc?: boolean; zIndex?: number };
+  if (
+    mediaFragment.behindDoc === true ||
+    (mediaFragment.behindDoc == null && mediaFragment.zIndex === 0) ||
+    block.anchor?.behindDoc === true
+  ) {
+    return false;
+  }
+  if (kind === 'header' && block.kind === 'image' && block.attrs?.vmlTextWatermark === true) {
+    return false;
+  }
+  return block.wrap?.type !== 'None';
 }
 
 /**
- * Post-normalize page-relative anchored fragment Y positions in footer layout.
+ * Post-normalize page-relative anchored fragment positions in header/footer layout.
  *
  * Problem: The inner `layoutDocument()` uses body content height as its page
- * height. For page-relative anchors with bottom/center alignment, this produces
- * incorrect Y positions because the real physical page is much taller.
+ * height and content width as its page size. For page-relative anchors with
+ * center/right or bottom/center alignment, this produces incorrect positions
+ * because the real physical page is larger.
  *
- * Solution: After layout, rewrite each page-relative anchored fragment's Y
- * using the real physical page height, then convert to footer-band-local
- * coordinates (where y=0 = top of the bottom margin area).
+ * Solution: After layout, rewrite each page-relative anchored fragment using
+ * the real physical page dimensions, then convert Y to the region's local
+ * coordinate system. Headers use page-local Y; footers use footer-band-local Y
+ * where y=0 is the top of the bottom margin area.
  *
- * Only affects `vRelativeFrom === 'page'` anchored image/drawing fragments.
+ * Only affects anchored image/drawing fragments whose anchor is page-relative.
  * Paragraphs, inline images, and margin-relative anchors pass through unchanged.
  */
 export function normalizeFragmentsForRegion(
@@ -95,7 +126,8 @@ export function normalizeFragmentsForRegion(
   }
 
   const pageHeight = constraints.pageHeight;
-  const bandOrigin = computeFooterBandOrigin(constraints);
+  const pageWidth = constraints.pageWidth;
+  const bandOrigin = computeBandOrigin(_kind, constraints);
 
   const blockById = new Map<string, FlowBlock>();
   for (const block of blocks) {
@@ -109,9 +141,29 @@ export function normalizeFragmentsForRegion(
       const block = blockById.get(fragment.blockId);
       if (!block || !isPageRelativeBlock(block)) continue;
 
-      const fragmentHeight = (fragment as { height?: number }).height ?? 0;
-      const physicalY = computePhysicalAnchorY(block, fragmentHeight, pageHeight);
-      fragment.y = physicalY - bandOrigin;
+      // Horizontal and vertical anchors are independent in OOXML. Keep column-relative X
+      // content-local so the painter can add the physical page margin exactly once.
+      if (pageWidth != null && block.anchor?.hRelativeFrom === 'page') {
+        const fragmentWidth = (fragment as { width?: number }).width ?? 0;
+        const marginLeft = Math.max(0, constraints.margins.left ?? 0);
+        const marginRight = Math.max(0, constraints.margins.right ?? 0);
+        const contentWidth = Math.max(1, pageWidth - (marginLeft + marginRight));
+        const physicalX = resolveAnchoredGraphicX(
+          block.anchor ?? {},
+          0,
+          { width: contentWidth, gap: 0, count: 1 },
+          fragmentWidth,
+          { left: marginLeft, right: marginRight },
+          pageWidth,
+        );
+        fragment.x = rendersInNormalHeaderFooterContainer(block, fragment, _kind) ? physicalX - marginLeft : physicalX;
+      }
+
+      if (block.anchor?.vRelativeFrom === 'page') {
+        const fragmentHeight = (fragment as { height?: number }).height ?? 0;
+        const physicalY = computePhysicalAnchorY(block, fragmentHeight, pageHeight);
+        fragment.y = physicalY - bandOrigin;
+      }
     }
   }
 

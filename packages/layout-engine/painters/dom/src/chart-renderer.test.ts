@@ -113,6 +113,20 @@ describe('createChartElement', () => {
     expect(el.querySelector('svg')).not.toBeNull();
   });
 
+  it('draws a chart area border around rendered charts', () => {
+    const el = createChartElement(doc, makeBarChart(), defaultGeometry);
+    expect(el.style.borderWidth).toBe('1px');
+    expect(el.style.borderStyle).toBe('solid');
+    expect(el.style.borderColor).toBe('rgb(191, 191, 191)');
+    expect(el.style.boxSizing).toBe('border-box');
+  });
+
+  it('omits the chart area border when the chart XML disables the outline', () => {
+    const el = createChartElement(doc, makeBarChart({ chartAreaBorder: false }), defaultGeometry);
+    expect(el.style.border).toBe('');
+    expect(el.style.boxSizing).toBe('border-box');
+  });
+
   it('shows placeholder for missing chart data', () => {
     const el = createChartElement(doc, undefined, defaultGeometry);
     expect(el.textContent).toContain('No chart data');
@@ -131,11 +145,166 @@ describe('createChartElement', () => {
   it('renders bars for each series value', () => {
     const el = createChartElement(doc, makeBarChart(), defaultGeometry);
     const rects = el.querySelectorAll('svg rect');
-    // 3 data points = 3 bar rects (no legend swatch for single series with legendPosition)
-    // Wait — with the fix, legend shows for single series too. Let's check:
-    // Series 1 has 3 values → 3 bars
-    // Legend: 1 series with legendPosition → 1 swatch rect
     expect(rects.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('paints vertical bar gridlines behind bars', () => {
+    const el = createChartElement(doc, makeBarChart({ valueAxis: { majorGridlines: true } }), defaultGeometry);
+    const svg = el.querySelector('svg')!;
+    const children = Array.from(svg.children);
+    const firstGridlineIndex = children.findIndex(
+      (child) => child.tagName === 'line' && child.getAttribute('stroke-width') === '0.5',
+    );
+    const firstBarIndex = children.findIndex(
+      (child) => child.tagName === 'rect' && child.getAttribute('fill') === '#4472C4',
+    );
+    const axisLine = Array.from(svg.querySelectorAll('line')).find(
+      (line) => line.getAttribute('stroke-width') === '1',
+    )!;
+    const gridline = children[firstGridlineIndex]!;
+
+    expect(firstGridlineIndex).toBeGreaterThanOrEqual(0);
+    expect(firstGridlineIndex).toBeLessThan(firstBarIndex);
+    expect(gridline.getAttribute('stroke')).toBe(axisLine.getAttribute('stroke'));
+  });
+
+  it('omits vertical bar gridlines when the value axis does not request them', () => {
+    const el = createChartElement(doc, makeBarChart({ valueAxis: undefined }), defaultGeometry);
+    const gridlines = Array.from(el.querySelectorAll('svg line')).filter(
+      (line) => line.getAttribute('stroke-width') === '0.5',
+    );
+
+    expect(gridlines).toHaveLength(0);
+  });
+
+  it('renders right-positioned legends as a column beside vertical bar charts', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        legendPosition: 'r',
+        series: [
+          { name: 'Series 1', categories: ['Q1'], values: [100] },
+          { name: 'Series 2', categories: ['Q1'], values: [80] },
+          { name: 'Series 3', categories: ['Q1'], values: [60] },
+        ],
+      }),
+      defaultGeometry,
+    );
+    const svg = el.querySelector('svg')!;
+    const legendLabels = ['Series 1', 'Series 2', 'Series 3'].map(
+      (name) => Array.from(svg.querySelectorAll('text')).find((text) => text.textContent === name)!,
+    );
+    const xPositions = legendLabels.map((label) => Number(label.getAttribute('x')));
+    const yPositions = legendLabels.map((label) => Number(label.getAttribute('y')));
+    const barRightEdge = Math.max(
+      ...Array.from(svg.querySelectorAll('rect'))
+        .filter((rect) => rect.getAttribute('height') !== '10')
+        .map((rect) => Number(rect.getAttribute('x')) + Number(rect.getAttribute('width'))),
+    );
+
+    expect(new Set(xPositions).size).toBe(1);
+    expect(xPositions[0]).toBeGreaterThan(barRightEdge);
+    expect(yPositions[1] - yPositions[0]).toBeGreaterThan(0);
+    expect(yPositions[2] - yPositions[1]).toBeGreaterThan(0);
+  });
+
+  it('keeps right-positioned non-bar legends on the bottom until their plots reserve right space', () => {
+    const el = createChartElement(doc, makeBubbleChart({ legendPosition: 'r' }), defaultGeometry);
+    const legendLabel = Array.from(el.querySelectorAll('svg text')).find((text) => text.textContent === 'Series 1')!;
+
+    expect(Number(legendLabel.getAttribute('x'))).toBe(74);
+    expect(Number(legendLabel.getAttribute('y'))).toBe(defaultGeometry.height - 12);
+  });
+
+  it('renders horizontal bar charts with category labels and in-bar percentage data labels', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        barDirection: 'bar',
+        gapWidth: 78,
+        legendPosition: undefined,
+        valueAxis: { deleted: true },
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['Skill #5', 'Skill #4', 'Skill #3'],
+            values: [0.5, 1, 0.25],
+            dataLabels: { showValue: true, numberFormat: '0%', position: 'ctr' },
+          },
+        ],
+      }),
+      { width: 394, height: 132, rotation: 0, flipH: false, flipV: false },
+    );
+    const svg = el.querySelector('svg')!;
+    const rects = Array.from(svg.querySelectorAll('rect'));
+    const textNodes = Array.from(svg.querySelectorAll('text'));
+    const texts = textNodes.map((text) => text.textContent);
+    const categoryLabels = textNodes.filter((text) => text.textContent?.startsWith('Skill #'));
+    const orderedCategoryLabels = [...categoryLabels]
+      .sort((a, b) => Number(a.getAttribute('y')) - Number(b.getAttribute('y')))
+      .map((text) => text.textContent);
+    const firstBarHeight = Number(rects[0].getAttribute('height'));
+    const firstBarBottom = Number(rects[0].getAttribute('y')) + firstBarHeight;
+    const nextBarY = Number(rects[1].getAttribute('y'));
+
+    expect(rects).toHaveLength(3);
+    expect(Number(rects[0].getAttribute('width'))).toBeGreaterThan(Number(rects[0].getAttribute('height')));
+    expect(firstBarHeight).toBeGreaterThan(20);
+    expect(nextBarY - firstBarBottom).toBeGreaterThan(8);
+    expect(orderedCategoryLabels).toEqual(['Skill #3', 'Skill #4', 'Skill #5']);
+    expect(texts).toEqual(expect.arrayContaining(['Skill #5', 'Skill #4', 'Skill #3', '50%', '100%', '25%']));
+    expect(texts).not.toContain('0.2');
+    expect(svg.querySelectorAll('line')).toHaveLength(0);
+  });
+
+  it('positions horizontal outEnd data labels outside the bar end', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        barDirection: 'bar',
+        categoryAxis: { orientation: 'maxMin' },
+        legendPosition: undefined,
+        valueAxis: { deleted: true },
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['A', 'B'],
+            values: [0.5, 1],
+            dataLabels: { showValue: true, numberFormat: '0%', position: 'outEnd' },
+          },
+        ],
+      }),
+      { width: 300, height: 120, rotation: 0, flipH: false, flipV: false },
+    );
+    const svg = el.querySelector('svg')!;
+    const firstBar = svg.querySelector('rect')!;
+    const firstLabel = Array.from(svg.querySelectorAll('text')).find((text) => text.textContent === '50%')!;
+    const barEndX = Number(firstBar.getAttribute('x')) + Number(firstBar.getAttribute('width'));
+
+    expect(Number(firstLabel.getAttribute('x'))).toBeGreaterThan(barEndX);
+    expect(firstLabel.getAttribute('text-anchor')).toBe('start');
+  });
+
+  it('renders data labels for vertical bar charts', () => {
+    const el = createChartElement(
+      doc,
+      makeBarChart({
+        legendPosition: undefined,
+        series: [
+          {
+            name: 'Series 1',
+            categories: ['A', 'B', 'C'],
+            values: [3, 7, 11],
+            dataLabels: { showValue: true },
+          },
+        ],
+      }),
+      defaultGeometry,
+    );
+
+    const texts = Array.from(el.querySelectorAll('svg text')).map((text) => text.textContent);
+
+    expect(texts).toEqual(expect.arrayContaining(['3', '7', '11']));
   });
 
   it('renders a pie chart as SVG paths', () => {
@@ -256,6 +425,28 @@ describe('performance guardrails', () => {
     expect(el.textContent).toContain('Data truncated');
   });
 
+  it('preserves data labels when truncating oversized series', () => {
+    const categories = Array.from({ length: 501 }, (_, i) => `C${i}`);
+    const values = Array.from({ length: 501 }, (_, i) => (i + 1) / 100);
+    const chart = makeBarChart({
+      legendPosition: undefined,
+      series: [
+        {
+          name: 'Big',
+          categories,
+          values,
+          dataLabels: { showValue: true, numberFormat: '0%' },
+        },
+      ],
+    });
+    const el = createChartElement(doc, chart, defaultGeometry);
+    const texts = Array.from(el.querySelectorAll('svg text')).map((text) => text.textContent);
+
+    expect(el.textContent).toContain('Data truncated');
+    expect(texts).toEqual(expect.arrayContaining(['1%', '500%']));
+    expect(texts).not.toContain('501%');
+  });
+
   it('falls back to placeholder when estimated SVG elements exceed budget (5000)', () => {
     // 20 series × 500 points = 10,000 bars alone → exceeds 5,000 budget
     const series = Array.from({ length: 20 }, (_, i) => ({
@@ -267,6 +458,26 @@ describe('performance guardrails', () => {
     const el = createChartElement(doc, chart, defaultGeometry);
     expect(el.textContent).toContain('too complex');
     // Should NOT have an SVG — it's a placeholder
+    expect(el.querySelector('svg')).toBeNull();
+  });
+
+  it('counts vertical category labels in the SVG budget even when the category axis is deleted', () => {
+    // 9 series × 500 points = 4,500 bars. The vertical renderer still paints
+    // 500 category labels, so this must exceed the 5,000 element budget.
+    const categories = Array.from({ length: 500 }, (_, i) => `C${i}`);
+    const series = Array.from({ length: 9 }, (_, i) => ({
+      name: `S${i}`,
+      categories,
+      values: categories.map((_, j) => i + j),
+    }));
+    const chart = makeBarChart({
+      legendPosition: undefined,
+      categoryAxis: { deleted: true },
+      series,
+    });
+    const el = createChartElement(doc, chart, defaultGeometry);
+
+    expect(el.textContent).toContain('too complex');
     expect(el.querySelector('svg')).toBeNull();
   });
 });

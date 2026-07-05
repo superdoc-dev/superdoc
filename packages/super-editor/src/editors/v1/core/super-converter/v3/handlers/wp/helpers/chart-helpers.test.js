@@ -287,6 +287,17 @@ describe('chart-helpers', () => {
       expect(result.styleId).toBe(2);
     });
 
+    it('parses a disabled chart area border from chart-space shape properties', () => {
+      const xml = makeBarChartXml();
+      xml.elements.push({
+        name: 'c:spPr',
+        elements: [{ name: 'a:ln', elements: [{ name: 'a:noFill' }] }],
+      });
+
+      const result = parseChartXml(xml);
+      expect(result.chartAreaBorder).toBe(false);
+    });
+
     it('prefers c14 style in mc:AlternateContent when present', () => {
       const result = parseChartXml(makeBarChartXmlWithAlternateContentStyle({ choiceStyle: 102, fallbackStyle: 2 }));
       expect(result.styleId).toBe(102);
@@ -300,6 +311,79 @@ describe('chart-helpers', () => {
     it('parses category axis orientation', () => {
       const result = parseChartXml(makeBarChartXml());
       expect(result.categoryAxis).toEqual({ orientation: 'minMax' });
+    });
+
+    it('parses horizontal bar chart axis deletion and series value labels', () => {
+      const xml = makeBarChartXml();
+      const chart = xml.elements.find((el) => el.name === 'c:chart');
+      const plotArea = chart.elements.find((el) => el.name === 'c:plotArea');
+      const barChart = plotArea.elements[0];
+      const series = barChart.elements.find((el) => el.name === 'c:ser');
+      const valueAxis = plotArea.elements.find((el) => el.name === 'c:valAx');
+
+      barChart.elements.unshift({ name: 'c:barDir', attributes: { val: 'bar' } });
+      barChart.elements.push({ name: 'c:gapWidth', attributes: { val: '78' } });
+      series.elements.push({
+        name: 'c:dLbls',
+        elements: [
+          { name: 'c:numFmt', attributes: { formatCode: '0%', sourceLinked: '0' } },
+          { name: 'c:dLblPos', attributes: { val: 'ctr' } },
+          { name: 'c:showVal', attributes: { val: '1' } },
+        ],
+      });
+      valueAxis.elements.push({ name: 'c:delete', attributes: { val: '1' } });
+
+      const result = parseChartXml(xml);
+
+      expect(result.barDirection).toBe('bar');
+      expect(result.gapWidth).toBe(78);
+      expect(result.valueAxis).toEqual({ deleted: true });
+      expect(result.series[0].dataLabels).toEqual({ showValue: true, numberFormat: '0%', position: 'ctr' });
+    });
+
+    it('merges series data labels over chart-level data labels per field', () => {
+      const xml = makeBarChartXml();
+      const chart = xml.elements.find((el) => el.name === 'c:chart');
+      const plotArea = chart.elements.find((el) => el.name === 'c:plotArea');
+      const barChart = plotArea.elements[0];
+      const series = barChart.elements.find((el) => el.name === 'c:ser');
+
+      barChart.elements.push({
+        name: 'c:dLbls',
+        elements: [
+          { name: 'c:numFmt', attributes: { formatCode: '0%', sourceLinked: '0' } },
+          { name: 'c:showVal', attributes: { val: '1' } },
+        ],
+      });
+      series.elements.push({
+        name: 'c:dLbls',
+        elements: [{ name: 'c:dLblPos', attributes: { val: 'ctr' } }],
+      });
+
+      const result = parseChartXml(xml);
+
+      expect(result.series[0].dataLabels).toEqual({ showValue: true, numberFormat: '0%', position: 'ctr' });
+    });
+
+    it('lets series data labels delete inherited chart-level data labels', () => {
+      const xml = makeBarChartXml();
+      const chart = xml.elements.find((el) => el.name === 'c:chart');
+      const plotArea = chart.elements.find((el) => el.name === 'c:plotArea');
+      const barChart = plotArea.elements[0];
+      const series = barChart.elements.find((el) => el.name === 'c:ser');
+
+      barChart.elements.push({
+        name: 'c:dLbls',
+        elements: [{ name: 'c:showVal', attributes: { val: '1' } }],
+      });
+      series.elements.push({
+        name: 'c:dLbls',
+        elements: [{ name: 'c:delete', attributes: { val: '1' } }],
+      });
+
+      const result = parseChartXml(xml);
+
+      expect(result.series[0].dataLabels).toBeUndefined();
     });
 
     it('returns null for missing chart element', () => {

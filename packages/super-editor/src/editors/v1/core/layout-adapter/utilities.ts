@@ -11,6 +11,7 @@ import type {
   DrawingContentSnapshot,
   ImageBlock,
   ImageHyperlink,
+  PictureFill,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -1179,6 +1180,14 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
     return hasChanges ? hydratedRuns : runs;
   };
 
+  const hydratePictureFill = (fillColor: unknown): PictureFill | undefined => {
+    if (!isPictureFill(fillColor) || fillColor.src.startsWith('data:')) {
+      return undefined;
+    }
+    const resolvedSrc = resolveImageSrc(fillColor.src, fillColor.rId, undefined, fillColor.extension);
+    return resolvedSrc ? { ...fillColor, src: resolvedSrc } : undefined;
+  };
+
   return blocks.map((block) => {
     const hydrateBlock = (blk: FlowBlock): FlowBlock => {
       // Handle ImageBlocks (top-level images)
@@ -1279,6 +1288,8 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
         if (drawingBlock.drawingKind === 'vectorShape' || drawingBlock.drawingKind === 'textboxShape') {
           let blockChanged = false;
           let nextBlock: VectorShapeDrawing | TextboxDrawing = drawingBlock;
+          const hydratedFillColor =
+            drawingBlock.drawingKind === 'vectorShape' ? hydratePictureFill(drawingBlock.fillColor) : undefined;
 
           if (drawingBlock.drawingKind === 'textboxShape') {
             const contentBlocks = drawingBlock.contentBlocks;
@@ -1300,6 +1311,9 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
                 nextBlock = { ...drawingBlock, contentBlocks: hydratedContentBlocks };
               }
             }
+          } else if (hydratedFillColor) {
+            blockChanged = true;
+            nextBlock = { ...drawingBlock, fillColor: hydratedFillColor };
           }
 
           const parts = nextBlock.textContent?.parts;
@@ -1339,6 +1353,18 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
 
         let shapesChanged = false;
         const hydratedShapes = shapeGroupBlock.shapes.map((shape) => {
+          if (shape.shapeType === 'vectorShape') {
+            const hydratedFillColor = hydratePictureFill(shape.attrs.fillColor);
+            if (!hydratedFillColor) {
+              return shape;
+            }
+            shapesChanged = true;
+            return {
+              ...shape,
+              attrs: { ...shape.attrs, fillColor: hydratedFillColor },
+            };
+          }
+
           // Only process image children
           if (shape.shapeType !== 'image') {
             return shape;
@@ -1490,9 +1516,13 @@ export function isSolidFillWithAlpha(value: unknown): value is import('@superdoc
   );
 }
 
+function isPictureFill(value: unknown): value is PictureFill {
+  return isPlainObject(value) && value.type === 'picture' && typeof value.src === 'string';
+}
+
 /**
  * Normalizes a fill color value to a valid FillColor type.
- * Preserves gradient objects, solid with alpha objects, string colors, and null.
+ * Preserves gradient objects, solid with alpha objects, picture fills, string colors, and null.
  *
  * @param value - Raw fill color value from ProseMirror node
  * @returns Normalized FillColor or undefined if invalid
@@ -1502,6 +1532,7 @@ export function isSolidFillWithAlpha(value: unknown): value is import('@superdoc
  * normalizeFillColor('#FF0000'); // '#FF0000' (string pass-through)
  * normalizeFillColor({ type: 'gradient', ... }); // GradientFill object
  * normalizeFillColor({ type: 'solidWithAlpha', color: '#FF0000', alpha: 0.5 }); // SolidFillWithAlpha
+ * normalizeFillColor({ type: 'picture', src: 'word/media/image1.jpeg' }); // PictureFill
  * normalizeFillColor(null); // null (no fill)
  * normalizeFillColor(123); // undefined (invalid)
  * ```
@@ -1511,6 +1542,7 @@ export function normalizeFillColor(value: unknown): import('@superdoc/contracts'
   if (typeof value === 'string') return value;
   if (isGradientFill(value)) return value;
   if (isSolidFillWithAlpha(value)) return value;
+  if (isPictureFill(value)) return value;
   return undefined;
 }
 

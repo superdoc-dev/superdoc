@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestPainter as createDomPainter } from './_test-utils.js';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import type { DrawingGeometry, FlowBlock, Layout, Measure, SolidFillWithAlpha } from '@superdoc/contracts';
+import type { DrawingGeometry, FlowBlock, Layout, Measure, PictureFill, SolidFillWithAlpha } from '@superdoc/contracts';
 
 type DrawingFlowBlock = Extract<FlowBlock, { kind: 'drawing' }>;
 
@@ -99,6 +99,199 @@ describe('DomPainter shape regressions', () => {
     expect(path?.getAttribute('d')).toBe(
       'M 0 98742.5 L 575945 98742.5 L 575945 0 L 773430 197485 L 575945 394970 L 575945 296227.5 L 0 296227.5 Z',
     );
+  });
+
+  it('renders DrawingML tailEnd on the visual end of a straight connector', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-tail-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    expect(line?.getAttribute('marker-start')).toBeNull();
+    expect(line?.getAttribute('marker-end')).toContain('straight-connector-tail-end');
+  });
+
+  it('keeps straight connector line-end markers stroke-relative when effect extent is present', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 16, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-effect-extent-tail-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const marker = mount.querySelector('.superdoc-vector-shape svg marker[id*="tail"]') as SVGMarkerElement | null;
+    expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
+    expect(marker?.getAttribute('markerWidth')).toBe('8');
+    expect(marker?.getAttribute('markerHeight')).toBe('8');
+  });
+
+  it('renders straight connector strokes without scaling them thinner than connector presets', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 16, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const line = svg?.querySelector('line') as SVGLineElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 450 1');
+    expect(svg?.getAttribute('preserveAspectRatio')).toBe('none');
+    expect(line?.getAttribute('y1')).toBe('0.5');
+    expect(line?.getAttribute('y2')).toBe('0.5');
+    expect(line?.getAttribute('stroke-width')).toBe('1');
+    expect(line?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
+  it('preserves tiny square straight connectors as diagonal lines', () => {
+    const geometry: DrawingGeometry = { width: 1, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-tiny-diagonal',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    expect(line?.getAttribute('x1')).toBe('0');
+    expect(line?.getAttribute('y1')).toBe('0');
+    expect(line?.getAttribute('x2')).toBe('1');
+    expect(line?.getAttribute('y2')).toBe('1');
+  });
+
+  it('renders DrawingML headEnd on the visual start of a straight connector', () => {
+    const geometry: DrawingGeometry = { width: 450, height: 1, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'straight-connector-head-end',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'straightConnector1',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        head: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const line = mount.querySelector('.superdoc-vector-shape svg line') as SVGLineElement | null;
+    const marker = mount.querySelector('.superdoc-vector-shape svg marker[id*="head"]') as SVGMarkerElement | null;
+    expect(line?.getAttribute('marker-start')).toContain('straight-connector-head-end');
+    expect(line?.getAttribute('marker-end')).toBeNull();
+    expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 10 0 L 0 5 L 10 10 Z');
+  });
+
+  it('renders bent connector strokes in target coordinates', () => {
+    const geometry: DrawingGeometry = { width: 427, height: 28, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'bent-connector-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'bentConnector3',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const path = mount.querySelector('.superdoc-vector-shape svg path') as SVGPathElement | null;
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('-0.5 -0.5 428 29');
+    expect(svg?.getAttribute('preserveAspectRatio')).toBe('none');
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 213.5 0 L 213.5 28 L 427 28');
+    expect(path?.getAttribute('stroke-width')).toBe('1');
+    expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
+  it('renders bent connector arrowheads without a stretched 100x100 connector viewBox', () => {
+    const geometry: DrawingGeometry = { width: 418, height: 169, rotation: 0, flipH: false, flipV: false };
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'bent-connector-arrow-uniform-stroke',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'bentConnector3',
+      fillColor: null,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 1,
+      lineEnds: {
+        tail: { type: 'triangle' },
+      },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const path = Array.from(svg?.querySelectorAll('path') ?? []).find((candidate) => !candidate.closest('marker')) as
+      | SVGPathElement
+      | undefined;
+    const marker = svg?.querySelector('marker[id*="tail"]') as SVGMarkerElement | null;
+    expect(svg?.getAttribute('viewBox')).toBe('-0.5 -0.5 419 170');
+    expect(path?.getAttribute('d')).toBe('M 0 0 L 209 0 L 209 169 L 418 169');
+    expect(path?.getAttribute('marker-end')).toContain('bent-connector-arrow-uniform-stroke');
+    expect(path?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+    expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
+    expect(marker?.querySelector('path')?.getAttribute('d')).toBe('M 0 0 L 10 5 L 0 10 Z');
   });
 
   it('generates roundRect preset geometry in the target coordinate space', () => {
@@ -216,6 +409,43 @@ describe('DomPainter shape regressions', () => {
     expect(path).toBeTruthy();
     expect(path?.getAttribute('fill')).toBe(alphaFill.color);
     expect(path?.getAttribute('fill-opacity')).toBe(String(alphaFill.alpha));
+  });
+
+  it('renders picture fills clipped by preset shape geometry', () => {
+    const geometry: DrawingGeometry = { width: 120, height: 120, rotation: 0, flipH: false, flipV: false };
+    const pictureFill: PictureFill = {
+      type: 'picture',
+      src: 'data:image/jpeg;base64,profileBase64',
+      rId: 'rId6',
+      extension: 'jpeg',
+    };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'ellipse-picture-fill',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'ellipse',
+      fillColor: pictureFill,
+      strokeColor: '#5b9bd5',
+      strokeWidth: 4,
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const svg = mount.querySelector('.superdoc-vector-shape svg') as SVGSVGElement | null;
+    const fillTarget = svg?.querySelector('ellipse, path') as SVGElement | null;
+    const pattern = svg?.querySelector('pattern[id^="sd-picture-fill-"]') as SVGPatternElement | null;
+    const image = pattern?.querySelector('image') as SVGImageElement | null;
+
+    expect(pattern).toBeTruthy();
+    expect(pattern?.getAttribute('patternContentUnits')).toBe('objectBoundingBox');
+    expect(image?.getAttribute('href')).toBe(pictureFill.src);
+    expect(image?.getAttribute('preserveAspectRatio')).toBe('none');
+    expect(fillTarget?.getAttribute('fill')).toBe(`url(#${pattern?.id})`);
+    expect(fillTarget?.getAttribute('stroke')).toBe('#5b9bd5');
   });
 
   it('keeps explicit custom-geometry strokes visible for EMU-sized coordinate spaces', () => {
@@ -1064,8 +1294,8 @@ describe('DomPainter shape regressions', () => {
     const marker = childWrapper?.querySelector('marker') as SVGMarkerElement | null;
     expect(marker).toBeTruthy();
     expect(marker?.getAttribute('markerUnits')).toBe('strokeWidth');
-    expect(marker?.getAttribute('markerWidth')).toBe('4');
-    expect(marker?.getAttribute('markerHeight')).toBe('4');
+    expect(marker?.getAttribute('markerWidth')).toBe('8');
+    expect(marker?.getAttribute('markerHeight')).toBe('8');
     expect(childWrapper?.querySelector('feDropShadow')).toBeTruthy();
   });
 

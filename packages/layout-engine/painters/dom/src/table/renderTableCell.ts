@@ -626,8 +626,6 @@ type TableCellRenderDependencies = {
   ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   /** Receives notification when this cell or descendants render SDT container chrome */
   onSdtContainerChrome?: () => void;
-  /** Table indent in pixels (applied to table fragment positioning) */
-  tableIndent?: number;
   /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
   isRtl?: boolean;
   /** Computed cell width from rescaled columnWidths (overrides cellMeasure.width when present) */
@@ -728,7 +726,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     ancestorContainerKeys,
     ancestorContainerSdts,
     onSdtContainerChrome,
-    tableIndent,
     isRtl,
     cellWidth,
     fromLine,
@@ -1126,8 +1123,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const objectHeight = anchoredMeasure.height;
 
       const baseLeft = anchor.offsetH ?? 0;
-      const indentOffset = typeof tableIndent === 'number' && Number.isFinite(tableIndent) ? tableIndent : 0;
-      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
+      // ECMA-376 ST_RelFromH "column" anchors are offset from the containing column's
+      // extents. The imported offsetH already represents wp:posOffset in that base;
+      // subtract only the cell's local x, not the table's tblInd, or table images shift left.
+      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x : baseLeft;
       const top = anchor.offsetV ?? 0;
 
       const behindDoc =

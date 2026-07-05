@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
 import type {
   FlowBlock,
+  ChartDrawing,
   ImageBlock,
   ImageRun,
   ParagraphBlock,
@@ -242,6 +243,75 @@ describe('deriveBlockVersion - vector shape effects', () => {
     withExtent.effectExtent = { left: 2, top: 2, right: 14, bottom: 14 };
 
     expect(deriveBlockVersion(withExtent)).not.toBe(deriveBlockVersion(base));
+  });
+
+  it('changes when an object fill changes', () => {
+    const base = makeVectorShape();
+    const withPictureA: VectorShapeDrawing = {
+      ...base,
+      fillColor: { type: 'picture', src: 'data:image/png;base64,AAA', rId: 'rId1', extension: 'png' },
+    };
+    const withPictureB: VectorShapeDrawing = {
+      ...base,
+      fillColor: { type: 'picture', src: 'data:image/png;base64,BBB', rId: 'rId2', extension: 'png' },
+    };
+
+    expect(deriveBlockVersion(withPictureB)).not.toBe(deriveBlockVersion(withPictureA));
+  });
+
+  it('does not embed picture fill data URIs in the version string', () => {
+    const version = deriveBlockVersion({
+      ...makeVectorShape(),
+      fillColor: {
+        type: 'picture',
+        src: `data:image/png;base64,${'A'.repeat(1024)}`,
+        rId: 'rId1',
+        extension: 'png',
+      },
+    });
+
+    expect(version).not.toContain('data:image/png;base64');
+    expect(version.length).toBeLessThan(300);
+  });
+});
+
+describe('deriveBlockVersion - chart drawings', () => {
+  const makeChartDrawing = (values: number[]): ChartDrawing => ({
+    kind: 'drawing',
+    id: 'chart-1',
+    drawingKind: 'chart',
+    geometry: { width: 320, height: 180, rotation: 0, flipH: false, flipV: false },
+    chartRelId: 'rIdChart1',
+    chartData: {
+      chartType: 'barChart',
+      barDirection: 'col',
+      gapWidth: 150,
+      series: [
+        {
+          name: 'Series 1',
+          categories: ['Q1', 'Q2', 'Q3'],
+          values,
+          dataLabels: { showValue: true, numberFormat: '0%' },
+        },
+      ],
+      valueAxis: { deleted: false, majorGridlines: true },
+      legendPosition: 'b',
+    },
+  });
+
+  it('changes when rendered chart data changes without changing series count', () => {
+    const first = deriveBlockVersion(makeChartDrawing([0.25, 0.5, 0.75]));
+    const second = deriveBlockVersion(makeChartDrawing([0.25, 0.5, 1]));
+
+    expect(second).not.toBe(first);
+  });
+
+  it('hashes chart data instead of embedding every series point', () => {
+    const values = Array.from({ length: 1000 }, (_, index) => index);
+    const version = deriveBlockVersion(makeChartDrawing(values));
+
+    expect(version).not.toContain('999');
+    expect(version.length).toBeLessThan(200);
   });
 });
 

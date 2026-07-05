@@ -12,13 +12,17 @@ vi.mock('@converter/helpers.js', () => ({
   inchesToPixels: vi.fn((inches) => inches * 96),
 }));
 
-vi.mock('../shared/svg-utils.js', () => ({
-  createGradient: vi.fn(),
-  createTextElement: vi.fn(),
-  applyGradientToSVG: vi.fn(),
-  applyAlphaToSVG: vi.fn(),
-  generateTransforms: vi.fn(() => []),
-}));
+vi.mock('../shared/svg-utils.js', async () => {
+  const actual = await vi.importActual('../shared/svg-utils.js');
+  return {
+    ...actual,
+    createGradient: vi.fn(),
+    createTextElement: vi.fn(),
+    applyGradientToSVG: vi.fn(),
+    applyAlphaToSVG: vi.fn(),
+    generateTransforms: vi.fn(() => []),
+  };
+});
 
 describe('VectorShapeView', () => {
   let mockEditor;
@@ -339,6 +343,39 @@ describe('VectorShapeView', () => {
       expect(ellipse.getAttribute('ry')).toBe('50');
     });
 
+    it('renders picture fills as SVG patterns for basic shapes', () => {
+      const pictureNode = {
+        attrs: {
+          kind: 'rect',
+          width: 120,
+          height: 80,
+          fillColor: {
+            type: 'picture',
+            src: 'data:image/png;base64,abc123',
+          },
+          strokeColor: '#000000',
+          strokeWidth: 1,
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: pictureNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const rect = view.dom.querySelector('rect');
+      const pattern = view.dom.querySelector('pattern');
+      const image = view.dom.querySelector('pattern image');
+      expect(rect.getAttribute('fill')).toMatch(/^url\(#picture-fill-/);
+      expect(pattern.getAttribute('patternUnits')).toBe('objectBoundingBox');
+      expect(image.getAttribute('href')).toBe('data:image/png;base64,abc123');
+    });
+
     it('uses preset geometry for complex shapes with preserveAspectRatio="none"', () => {
       const complexNode = {
         attrs: {
@@ -408,6 +445,111 @@ describe('VectorShapeView', () => {
       expect(svg.getAttribute('preserveAspectRatio')).toBe('none');
       expect(svg.getAttribute('width')).toBe('200');
       expect(svg.getAttribute('height')).toBe('50');
+    });
+
+    it('renders connector presets in target coordinates with non-scaling strokes and line ends', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'bentConnector3',
+          width: 427,
+          height: 28,
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+          lineEnds: {
+            tail: { type: 'triangle' },
+          },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      const path = [...view.dom.querySelectorAll('svg path')].find((candidate) => !candidate.closest('marker'));
+      const marker = view.dom.querySelector('svg marker');
+      expect(presetGeometry.getPresetShapeSvg).not.toHaveBeenCalled();
+      expect(svg.getAttribute('viewBox')).toBe('-0.5 -0.5 428 29');
+      expect(path.getAttribute('d')).toBe('M 0 0 L 213.5 0 L 213.5 28 L 427 28');
+      expect(path.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+      expect(path.getAttribute('marker-end')).toContain('tail');
+      expect(marker.getAttribute('markerUnits')).toBe('strokeWidth');
+    });
+
+    it('renders straight connector strokes as non-scaling inside an unscaled base viewBox', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'straightConnector1',
+          width: 450,
+          height: 1,
+          effectExtent: { left: 0, top: 7, right: 0, bottom: 8 },
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+          lineEnds: {
+            tail: { type: 'triangle' },
+          },
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const svg = view.dom.querySelector('svg');
+      const line = svg.querySelector('line');
+      expect(view.dom.style.height).toBe('16px');
+      expect(svg.getAttribute('viewBox')).toBe('0 0 450 1');
+      expect(svg.getAttribute('preserveAspectRatio')).toBe('none');
+      expect(svg.style.width).toBe('450px');
+      expect(svg.style.height).toBe('1px');
+      expect(line.getAttribute('y1')).toBe('0.5');
+      expect(line.getAttribute('y2')).toBe('0.5');
+      expect(line.getAttribute('stroke-width')).toBe('1');
+      expect(line.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+      expect(line.getAttribute('marker-end')).toContain('tail');
+    });
+
+    it('preserves tiny square straight connectors as diagonal lines', () => {
+      const connectorNode = {
+        attrs: {
+          kind: 'straightConnector1',
+          width: 1,
+          height: 1,
+          fillColor: null,
+          strokeColor: '#5b9bd5',
+          strokeWidth: 1,
+        },
+      };
+
+      const view = new VectorShapeView({
+        node: connectorNode,
+        editor: mockEditor,
+        getPos: mockGetPos,
+        decorations: [],
+        innerDecorations: [],
+        extension: {},
+        htmlAttributes: {},
+      });
+
+      const line = view.dom.querySelector('svg line');
+      expect(line.getAttribute('x1')).toBe('0');
+      expect(line.getAttribute('y1')).toBe('0');
+      expect(line.getAttribute('x2')).toBe('1');
+      expect(line.getAttribute('y2')).toBe('1');
     });
   });
 

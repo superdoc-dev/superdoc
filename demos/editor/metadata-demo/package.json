@@ -5,20 +5,26 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server.js",
+    "dev:collab": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@superdoc-dev/react": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "superdoc": "workspace:*"
+    "@hocuspocus/provider": "^2.13.6",
+    "@superdoc-dev/react": "latest",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "superdoc": "latest",
+    "yjs": "^13.6.0"
   },
   "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "@hocuspocus/server": "^2.13.6",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.0.0",
+    "typescript": "^5",
+    "vite": "^6.0.0"
   }
 }

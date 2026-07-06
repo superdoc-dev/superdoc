@@ -1,24 +1,53 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { SuperDocUIProvider, useSuperDocHost } from 'superdoc/ui/react';
 import { EditorMount } from './editor/EditorMount';
 import { Toolbar, MetadataButton, HighlightToggle } from './components/Toolbar';
 import { MetadataPanel } from './components/MetadataPanel';
 import { MetadataHighlights } from './components/MetadataHighlights';
 
+const WEBSOCKET_URL = 'ws://localhost:1234';
+
+function useCollaboration() {
+  return useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room');
+    if (room) {
+      return { room, websocketUrl: WEBSOCKET_URL };
+    }
+    return null;
+  }, []);
+}
+
 export function App() {
+  const collaboration = useCollaboration();
+
+  useEffect(() => {
+    console.log(`collab enabled: ${collaboration !== null}`);
+  }, [collaboration]);
+
   return (
     <SuperDocUIProvider>
-      <AppInner />
+      <AppInner collaboration={collaboration} />
     </SuperDocUIProvider>
   );
 }
 
-function AppInner() {
+interface CollabConfig {
+  room: string;
+  websocketUrl: string;
+}
+
+function AppInner({ collaboration }: { collaboration: CollabConfig | null }) {
   const [highlightEnabled, setHighlightEnabled] = useState(false);
   const [documentSource, setDocumentSource] = useState<string | File>('/sample-review.docx');
   const [editorKey, setEditorKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const host = useSuperDocHost();
+
+  const handleCollab = useCallback(() => {
+    const roomId = Math.random().toString(36).substring(2, 10);
+    window.location.href = `${window.location.pathname}?room=${roomId}`;
+  }, []);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -63,6 +92,9 @@ function AppInner() {
         <h1>Metadata Demo</h1>
         <span className="subtitle">Invisible ranges with metadata</span>
         <div className="header-actions">
+          <button className="header-btn" onClick={handleCollab}>
+            <CollabIcon /> Collab
+          </button>
           <button className="header-btn" onClick={handleImport}>
             <UploadIcon /> Import
           </button>
@@ -86,7 +118,7 @@ function AppInner() {
           </div>
           <div className="editor-shell">
             <div className="editor-canvas">
-              <EditorMount key={editorKey} document={documentSource} />
+              <EditorMount key={editorKey} document={documentSource} collaboration={collaboration ?? undefined} />
             </div>
           </div>
           {highlightEnabled && <MetadataHighlights />}
@@ -123,6 +155,17 @@ const ICON_PROPS = {
   strokeLinejoin: 'round' as const,
   'aria-hidden': true,
 };
+
+function CollabIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
 
 function UploadIcon() {
   return (

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  addDefaultStylesIfMissing,
   createDocumentJson,
   collapseWhitespaceNextToInlinePassthrough,
   defaultNodeListHandler,
@@ -10,6 +11,31 @@ import {
 } from './docxImporter.js';
 
 const n = (type, attrs = {}) => ({ type, attrs, marks: [] });
+
+const makeStylesXml = (styleElements) => ({
+  elements: [
+    {
+      name: 'w:styles',
+      elements: styleElements,
+    },
+  ],
+});
+
+const style = (styleId, name, type = 'paragraph') => ({
+  name: 'w:style',
+  attributes: {
+    'w:type': type,
+    'w:styleId': styleId,
+  },
+  elements: [
+    {
+      name: 'w:name',
+      attributes: { 'w:val': name },
+    },
+  ],
+});
+
+const getStyleIds = (styles) => styles.elements[0].elements.map((element) => element.attributes?.['w:styleId']);
 
 const makeCustomPropertyDocx = (propertyName, textValue) => ({
   'word/document.xml': {
@@ -95,6 +121,36 @@ const makeGoogleDocsLikeDocx = () => ({
       },
     ],
   },
+});
+
+describe('addDefaultStylesIfMissing', () => {
+  it('recognizes localized title and heading styles before adding defaults', () => {
+    const styles = makeStylesXml([
+      style('Normal', 'Normal'),
+      style('Ttulo', 'Título'),
+      style('Ttulo1', 'Título 1'),
+      style('BodyText', 'Body Text'),
+    ]);
+
+    const result = addDefaultStylesIfMissing(styles);
+    const styleIds = getStyleIds(result);
+
+    expect(styleIds.filter((styleId) => styleId === 'Title')).toHaveLength(0);
+    expect(styleIds.filter((styleId) => styleId === 'Heading1')).toHaveLength(0);
+    expect(styleIds).toContain('Ttulo');
+    expect(styleIds).toContain('Ttulo1');
+    expect(getStyleIds(styles)).toEqual(['Normal', 'Ttulo', 'Ttulo1', 'BodyText']);
+  });
+
+  it('still adds defaults that have no canonical or localized equivalent', () => {
+    const styles = makeStylesXml([style('Normal', 'Normal')]);
+
+    const result = addDefaultStylesIfMissing(styles);
+    const styleIds = getStyleIds(result);
+
+    expect(styleIds).toContain('Title');
+    expect(styleIds).toContain('Heading1');
+  });
 });
 
 describe('filterOutRootInlineNodes', () => {

@@ -786,7 +786,7 @@ export function addDefaultStylesIfMissing(styles) {
   const { elements } = updatedStyles.elements[0];
 
   Object.keys(DEFAULT_LINKED_STYLES).forEach((styleId) => {
-    const existsOnDoc = elements.some((el) => el.attributes?.['w:styleId'] === styleId);
+    const existsOnDoc = elements.some((el) => isEquivalentBuiltInStyle(el, styleId));
     if (!existsOnDoc) {
       const missingStyle = DEFAULT_LINKED_STYLES[styleId];
       updatedStyles.elements[0].elements.push(missingStyle);
@@ -794,6 +794,40 @@ export function addDefaultStylesIfMissing(styles) {
   });
 
   return updatedStyles;
+}
+
+const BUILT_IN_STYLE_ALIASES = {
+  Title: ['title', 'titulo', 'ttulo'],
+  Subtitle: ['subtitle', 'subtitulo', 'subttulo'],
+  Heading1: ['heading1', 'titulo1', 'ttulo1', 'kop1'],
+  Heading2: ['heading2', 'titulo2', 'ttulo2', 'kop2'],
+  Heading3: ['heading3', 'titulo3', 'ttulo3', 'kop3'],
+  Normal: ['normal'],
+};
+
+function normalizeBuiltInStyleName(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
+
+function getStyleDisplayName(styleElement) {
+  return styleElement.elements?.find((el) => el.name === 'w:name')?.attributes?.['w:val'];
+}
+
+function isEquivalentBuiltInStyle(styleElement, canonicalStyleId) {
+  if (styleElement.attributes?.['w:styleId'] === canonicalStyleId) return true;
+  if (styleElement.attributes?.['w:type'] !== 'paragraph') return false;
+
+  const aliases = BUILT_IN_STYLE_ALIASES[canonicalStyleId];
+  if (!aliases) return false;
+
+  const normalizedStyleId = normalizeBuiltInStyleName(styleElement.attributes?.['w:styleId']);
+  const normalizedName = normalizeBuiltInStyleName(getStyleDisplayName(styleElement));
+
+  return aliases.includes(normalizedStyleId) || aliases.includes(normalizedName);
 }
 
 /**

@@ -616,6 +616,199 @@ describe('renderTableCell', () => {
     expect(anchorLine?.style.marginLeft).toBe('20px');
   });
 
+  it('does not repeat anchored images on continuation slices where the anchor paragraph started earlier', () => {
+    const splitPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-split-across-slices',
+      runs: [{ text: 'Long anchor paragraph', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const splitParaMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        { fromRun: 0, fromChar: 0, toRun: 0, toChar: 10, width: 10, ascent: 15, descent: 5, lineHeight: 20 },
+        { fromRun: 0, fromChar: 10, toRun: 0, toChar: 21, width: 10, ascent: 15, descent: 5, lineHeight: 20 },
+      ],
+      totalHeight: 40,
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-continuation-slice',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-split-across-slices' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [splitParaMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 50,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-continuation-slice', blocks: [splitPara, anchoredImage], attrs: {} },
+      fromLine: 1,
+      toLine: 2,
+    });
+
+    expect(cellElement.querySelector('img.superdoc-table-image')).toBeNull();
+  });
+
+  it('anchors to the paragraph flow position before its own spacing-before, after preceding spacing-after', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-with-space-after',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: { spacing: { after: 7 } },
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-with-space-before',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: { spacing: { before: 12 } },
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-spacing-semantics',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-with-space-before' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 70,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-spacing-semantics', blocks: [beforePara, anchorPara, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    // 20 (preceding lines) + 7 (its spacing.after) + 5 (offsetV); the anchor paragraph's own
+    // spacing.before must NOT shift the object (Word fixture: SpaceBefore moves text, not object).
+    expect(imgEl?.parentElement?.style.top).toBe('32px');
+  });
+
+  it('shifts anchored objects by the vertical cell alignment offset', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-valign',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-valign-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-valign-anchor',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-valign-anchor' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      rowHeight: 60,
+      cellMeasure: {
+        blocks: [paragraphMeasure, paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: {
+        id: 'cell-valign-anchor',
+        blocks: [beforePara, anchorPara, anchoredImage],
+        attrs: { verticalAlign: 'center' },
+      },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    // paragraphY 20 + offsetV 5 + alignmentOffsetY (60 - 40)/2 = 10
+    expect(imgEl?.parentElement?.style.top).toBe('35px');
+  });
+
+  it('honors alignV center/bottom for paragraph-relative anchors like the body path', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-alignv',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-alignv-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const bottomImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-alignv-bottom',
+      src: 'data:image/png;base64,AAA',
+      anchor: {
+        isAnchored: true,
+        alignH: 'left',
+        offsetH: 0,
+        vRelativeFrom: 'paragraph',
+        alignV: 'bottom',
+        offsetV: 0,
+      },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-alignv-anchor' },
+    };
+    const centerImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-alignv-center',
+      src: 'data:image/png;base64,AAA',
+      anchor: {
+        isAnchored: true,
+        alignH: 'left',
+        offsetH: 0,
+        vRelativeFrom: 'paragraph',
+        alignV: 'center',
+        offsetV: 0,
+      },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-alignv-anchor' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [
+          paragraphMeasure,
+          paragraphMeasure,
+          { kind: 'image' as const, width: 20, height: 10 },
+          { kind: 'image' as const, width: 20, height: 10 },
+        ],
+        width: 80,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-alignv-anchor', blocks: [beforePara, anchorPara, bottomImage, centerImage], attrs: {} },
+    });
+
+    const imageEls = Array.from(cellElement.querySelectorAll('img.superdoc-table-image')) as HTMLImageElement[];
+    expect(imageEls).toHaveLength(2);
+    // bottom: paragraphY 20 + firstLine 20 - objectHeight 10 = 30
+    expect(imageEls[0]?.parentElement?.style.top).toBe('30px');
+    // center: paragraphY 20 + (firstLine 20 - objectHeight 10) / 2 = 25
+    expect(imageEls[1]?.parentElement?.style.top).toBe('25px');
+  });
+
   it('skips anchored images whose anchor paragraph is outside the rendered split window', () => {
     const firstPara: ParagraphBlock = {
       kind: 'paragraph',

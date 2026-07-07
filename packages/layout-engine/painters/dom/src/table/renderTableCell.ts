@@ -26,6 +26,7 @@ import {
   getCellSpacingPx,
   getBorderBandProfile,
   getSdtContainerKey,
+  resolveAnchoredGraphicY,
 } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -55,6 +56,7 @@ type ResolveCellAnchoredTopParams = {
   globalFromLine: number;
   globalToLine: number;
   paddingTop: number;
+  objectHeight: number;
 };
 
 const getCellBlockSdtBoundaryKey = (block: ParagraphBlock | TableBlock): string | null => {
@@ -333,11 +335,24 @@ export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): nu
     const blockEndGlobal = cumulativeLineCount + blockSegmentCount;
 
     if (block.kind === 'paragraph' && block.id === params.anchorParagraphId) {
-      if (blockEndGlobal <= params.globalFromLine || blockStartGlobal >= params.globalToLine) {
+      // Paint only on the slice where the anchor paragraph STARTS: a paragraph split across
+      // slices intersects several windows, and painting on each would duplicate the object.
+      if (blockStartGlobal < params.globalFromLine || blockStartGlobal >= params.globalToLine) {
         return null;
       }
 
-      return flowY + offsetV;
+      // Word measures the paragraph anchor base at the paragraph's flow position BEFORE its
+      // own spacing-before region (fixture evidence: adding SpaceBefore moves the text, not
+      // the anchored object), so flowY is not adjusted by this paragraph's spacing.
+      const firstLineHeight = (blockMeasure as ParagraphMeasure).lines?.[0]?.lineHeight ?? 0;
+      return resolveAnchoredGraphicY({
+        anchor: { vRelativeFrom, alignV: params.anchor?.alignV, offsetV },
+        objectHeight: params.objectHeight,
+        contentTop: 0,
+        contentBottom: 0,
+        anchorParagraphY: flowY,
+        firstLineHeight,
+      });
     }
 
     flowY += computeRenderedBlockFlowHeight(
@@ -1285,7 +1300,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
       const anchorParagraphId =
         typeof anchoredBlock.attrs?.anchorParagraphId === 'string' ? anchoredBlock.attrs.anchorParagraphId : undefined;
-      const top = resolveCellAnchoredTop({
+      const resolvedTop = resolveCellAnchoredTop({
         anchor,
         anchorParagraphId,
         cellBlocks,
@@ -1293,10 +1308,15 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         globalFromLine,
         globalToLine,
         paddingTop,
+        objectHeight,
       });
-      if (top === null) {
+      if (resolvedTop === null) {
         continue;
       }
+      // Flow content is shifted by alignmentOffsetY via the flex container (verticalAlign
+      // center/bottom), and applySquareWrapExclusionsToLines compares lines in that shifted
+      // space - anchored objects and their exclusions must live in the same visual space.
+      const top = resolvedTop + alignmentOffsetY;
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);

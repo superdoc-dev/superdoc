@@ -31,6 +31,33 @@ const stubAdapter = () =>
     list: mock(() => ({ items: [], total: 0 })),
   }) as any;
 
+describe('executeCommentsCreate parentId alias', () => {
+  it('accepts the contract param name parentId and threads the reply', () => {
+    const adapter = stubAdapter();
+    const receipt = executeCommentsCreate(adapter, { text: 'Reply body', parentId: 'c1' } as any);
+    expect(receipt.success).toBe(true);
+    expect(adapter.reply).toHaveBeenCalledTimes(1);
+    expect(adapter.reply.mock.calls[0][0]).toEqual({ parentCommentId: 'c1', text: 'Reply body' });
+  });
+
+  it('accepts both keys when they agree (dual-dialect callers)', () => {
+    const adapter = stubAdapter();
+    const receipt = executeCommentsCreate(adapter, {
+      text: 'Reply body',
+      parentId: 'c1',
+      parentCommentId: 'c1',
+    } as any);
+    expect(receipt.success).toBe(true);
+    expect(adapter.reply).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects disagreeing parentId / parentCommentId', () => {
+    expect(() =>
+      executeCommentsCreate(stubAdapter(), { text: 'x', parentId: 'c1', parentCommentId: 'c2' } as any),
+    ).toThrow(/disagree/);
+  });
+});
+
 describe('executeCommentsCreate validation', () => {
   it('rejects null input with INVALID_INPUT', () => {
     expect(() => executeCommentsCreate(stubAdapter(), null as any)).toThrow(/non-null object/);

@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/sdk",
-  "version": "1.19.1",
+  "version": "1.20.0",
   "private": false,
   "type": "module",
   "main": "./dist/index.cjs",
@@ -20,8 +20,9 @@
     "tools"
   ],
   "scripts": {
-    "build": "tsc && rollup -c rollup.cjs.config.mjs",
+    "build": "node scripts/embed-prompts.mjs && tsc && rollup -c rollup.cjs.config.mjs && rm -rf dist/prompts && mkdir -p dist/prompts && cp src/prompts/*.md dist/prompts/",
     "typecheck": "tsc --noEmit",
+    "smoke:product-action": "node scripts/product-action-smoke.mjs",
     "prepack": "rm -rf tools && cp -r ../../tools ./tools && rm -f ./tools/__init__.py",
     "postpack": "rm -rf tools && ln -s ../../tools tools"
   },

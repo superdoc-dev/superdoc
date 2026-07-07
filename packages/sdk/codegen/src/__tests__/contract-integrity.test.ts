@@ -22,6 +22,15 @@ const CLI_ONLY_OPERATIONS = new Set([
   'doc.session.save',
   'doc.session.close',
   'doc.session.setDefault',
+  // CLI/SDK-only session op: model-authored JS against the live editor.doc.
+  'doc.executeCode',
+  // LLM-tools preset proxies (cross-language surface for the Python SDK).
+  'doc.preset.list',
+  'doc.preset.getCatalog',
+  'doc.preset.getTools',
+  'doc.preset.getSystemPrompt',
+  'doc.preset.getMcpPrompt',
+  'doc.preset.dispatch',
 ]);
 
 async function loadJson<T>(filePath: string): Promise<T> {

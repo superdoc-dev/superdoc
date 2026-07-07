@@ -11,6 +11,7 @@ import { enforceNestingPolicy } from './nesting-guard.js';
 import { validateDocumentFragment } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import type { SDFragment, SelectionTarget, SDReplaceInput } from '@superdoc/document-api';
+import { getExportedResultWithDocContent } from '@tests/export/export-helpers/index.js';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -101,6 +102,54 @@ function enableTrackedMode(editor: Editor): void {
     name: 'Test User',
     email: 'test-user@example.com',
   };
+}
+
+function collectTextMarks(editor: Editor, text: string): string[][] {
+  const matches: string[][] = [];
+  editor.state.doc.descendants((node) => {
+    if (!node.isText || node.text !== text) return true;
+    matches.push(node.marks.map((mark) => mark.type.name));
+    return true;
+  });
+  return matches;
+}
+
+function collectXmlText(node: any): string {
+  if (!node) return '';
+  if (node.type === 'text' && typeof node.text === 'string') return node.text;
+  if (!Array.isArray(node.elements)) return '';
+  return node.elements.map(collectXmlText).join('');
+}
+
+function hasXmlDescendant(node: any, name: string): boolean {
+  if (!node || !Array.isArray(node.elements)) return false;
+  return node.elements.some((child: any) => child.name === name || hasXmlDescendant(child, name));
+}
+
+function findXmlNodes(node: any, predicate: (node: any) => boolean, matches: any[] = []): any[] {
+  if (!node) return matches;
+  if (predicate(node)) matches.push(node);
+  if (Array.isArray(node.elements)) {
+    node.elements.forEach((child: any) => findXmlNodes(child, predicate, matches));
+  }
+  return matches;
+}
+
+function findTrackedInsertedHyperlinkCitations(exported: any, citationText: string): any[] {
+  const hyperlinkOwnsTrackedInsertion = findXmlNodes(
+    exported,
+    (node) => node.name === 'w:hyperlink' && collectXmlText(node) === citationText && hasXmlDescendant(node, 'w:ins'),
+  );
+  const trackedInsertionOwnsHyperlink = findXmlNodes(
+    exported,
+    (node) => node.name === 'w:ins' && collectXmlText(node) === citationText && hasXmlDescendant(node, 'w:hyperlink'),
+  );
+  return [...hyperlinkOwnsTrackedInsertion, ...trackedInsertionOwnsHyperlink];
+}
+
+function getDocumentRelationships(editor: Editor): any[] {
+  const rels = (editor.converter as any).convertedXml['word/_rels/document.xml.rels'];
+  return rels?.elements?.find((element: any) => element.name === 'Relationships')?.elements ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +614,84 @@ describe('mutations.apply structural steps', () => {
     const dispatchedTr = dispatchSpy.mock.calls.at(-1)?.[0];
     expect(dispatchedTr?.getMeta('forceTrackChanges')).toBe(true);
     expect(dispatchedTr?.getMeta('skipTrackChanges')).not.toBe(true);
+  });
+
+  it('inserts SD-3563 citation hyperlinks as tracked inserted link text', async () => {
+    enableTrackedMode(editor);
+    const anchor = executeStructuralInsert(editor, {
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'citation anchor' }] },
+    });
+    const citationText = '[27]';
+    const citationHref = 'https://www.bloomberg.com/example-citation';
+
+    const receipt = executePlan(editor, {
+      changeMode: 'tracked',
+      steps: [
+        {
+          id: 'step-structural-hyperlink-insert',
+          op: 'structural.insert',
+          where: { by: 'ref', ref: anchor.insertedBlockIds[0]! },
+          args: {
+            content: {
+              kind: 'paragraph',
+              paragraph: {
+                inlines: [
+                  { kind: 'run', run: { text: 'See ' } },
+                  {
+                    kind: 'hyperlink',
+                    hyperlink: {
+                      href: citationHref,
+                      inlines: [{ kind: 'run', run: { text: citationText } }],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(receipt.success).toBe(true);
+    const citationMarks = collectTextMarks(editor, citationText);
+    expect(citationMarks).toHaveLength(1);
+    expect(citationMarks[0]).toEqual(expect.arrayContaining(['link', 'trackInsert']));
+
+    const exported = await getExportedResultWithDocContent(editor.getJSON().content ?? []);
+    const insertedCitationLinks = findTrackedInsertedHyperlinkCitations(exported, citationText);
+
+    expect(insertedCitationLinks).toHaveLength(1);
+
+    await editor.converter.exportToDocx(
+      editor.getUpdatedJson(),
+      editor.schema,
+      (editor.storage.image as { media?: Record<string, unknown> }).media ?? {},
+      false,
+      'external',
+      [],
+      editor,
+      false,
+      null,
+    );
+
+    const [exportedCitationLink] = findTrackedInsertedHyperlinkCitations(
+      (editor.converter as any).convertedXml['word/document.xml'],
+      citationText,
+    );
+    const relationshipId = exportedCitationLink?.attributes?.['r:id'];
+    const relationship = getDocumentRelationships(editor).find(
+      (element) =>
+        element.attributes?.Id === relationshipId &&
+        element.attributes?.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+
+    expect(relationshipId).toBeTruthy();
+    expect(relationship?.attributes).toEqual(
+      expect.objectContaining({
+        Target: citationHref,
+        TargetMode: 'External',
+      }),
+    );
   });
 
   it('passes tracked mode through structural.replace step execution', () => {

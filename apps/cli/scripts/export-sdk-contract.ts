@@ -15,8 +15,14 @@ import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 
+// This build script deliberately reaches into document-api SOURCE (it runs
+// pre-build, and the package's `exports` map exposes neither ./src/* nor
+// ./scripts/*, so the alias form the lint rule suggests would not resolve).
+// eslint-disable-next-line import-x/no-relative-packages
 import { COMMAND_CATALOG } from '../../../packages/document-api/src/contract/command-catalog.ts';
+// eslint-disable-next-line import-x/no-relative-packages
 import { INTENT_GROUP_META } from '../../../packages/document-api/src/contract/operation-definitions.ts';
+// eslint-disable-next-line import-x/no-relative-packages
 import { buildContractSnapshot } from '../../../packages/document-api/scripts/lib/contract-snapshot.ts';
 import { ensureDocumentApiBuild } from './ensure-superdoc-build.js';
 

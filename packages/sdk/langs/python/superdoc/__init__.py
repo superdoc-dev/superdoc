@@ -1,9 +1,10 @@
-from .presets import DEFAULT_PRESET, get_preset, list_presets
+from .presets import DEFAULT_PRESET, get_preset, list_presets, register_preset, unregister_preset
 from .client import AsyncSuperDocClient, AsyncSuperDocDocument, SuperDocClient, SuperDocDocument
 from .errors import SuperDocError
 from .skill_api import get_skill, install_skill, list_skills
 from .tools_api import (
     choose_tools,
+    create_agent_toolkit,
     dispatch_superdoc_tool,
     dispatch_superdoc_tool_async,
     get_mcp_prompt,
@@ -26,6 +27,7 @@ __all__ = [
     "get_tool_catalog",
     "list_tools",
     "choose_tools",
+    "create_agent_toolkit",
     "dispatch_superdoc_tool",
     "dispatch_superdoc_tool_async",
     "get_mcp_prompt",
@@ -33,4 +35,6 @@ __all__ = [
     "DEFAULT_PRESET",
     "get_preset",
     "list_presets",
+    "register_preset",
+    "unregister_preset",
 ]

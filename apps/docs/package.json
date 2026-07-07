@@ -12,7 +12,8 @@
     "check:icons": "bun scripts/validate-icons.ts",
     "check:em-dashes": "bun scripts/validate-em-dashes.ts",
     "check:types": "tsx __tests__/doctest-types.ts",
-    "test:examples": "bun test __tests__/doctest.test.ts"
+    "test:examples": "bun test __tests__/doctest.test.ts",
+    "check:ai-snippets": "node scripts/validate-ai-snippets.mjs"
   },
   "devDependencies": {
     "documentation": "^14.0.3",

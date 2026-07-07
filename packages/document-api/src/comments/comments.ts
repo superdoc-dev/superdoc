@@ -142,6 +142,11 @@ export interface CommentsCreateInput {
   story?: StoryLocator;
   /** Parent comment ID: when provided, creates a reply instead of a root comment. */
   parentCommentId?: string;
+  /**
+   * Public contract alias for {@link parentCommentId} (the operation's param
+   * name is `parentId`); normalized during validation. Pass one or the other.
+   */
+  parentId?: string;
 }
 
 /**
@@ -249,6 +254,22 @@ const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId'
 function validateCreateCommentInput(input: unknown): asserts input is CommentsCreateInput {
   if (!isRecord(input)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'comments.create input must be a non-null object.');
+  }
+
+  // `parentId` is the public contract param name for reply threading (the CLI
+  // renames it to parentCommentId after parsing); accept it here too so
+  // in-process callers can use the contract name. When both are present they
+  // must agree.
+  const record = input as Record<string, unknown>;
+  if (record.parentId !== undefined) {
+    if (record.parentCommentId !== undefined && record.parentCommentId !== record.parentId) {
+      throw new DocumentApiValidationError('INVALID_INPUT', 'parentId and parentCommentId disagree; pass one.', {
+        field: 'parentId',
+        value: record.parentId,
+      });
+    }
+    record.parentCommentId = record.parentId;
+    delete record.parentId;
   }
 
   assertNoUnknownFields(input, CREATE_COMMENT_ALLOWED_KEYS, 'comments.create');

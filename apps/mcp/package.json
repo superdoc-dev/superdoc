@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/mcp",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@superdoc-dev/sdk": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

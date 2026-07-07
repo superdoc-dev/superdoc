@@ -8,10 +8,10 @@
  *
  *     const { tools, meta } = await chooseTools({ provider: 'vercel', preset: 'legacy' });
  *
- * v1 ships a single preset: `'legacy'` — a thin wrapper around today's
- * codegen-emitted intent tools. When callers omit `preset`, `legacy` is used.
- * The default may move once a replacement preset reaches parity; bumping it is
- * a coordinated change in this file alone.
+ * Two presets ship built-in: `'legacy'` (codegen-emitted intent tools; the
+ * default when callers omit `preset`) and `'core'` (the actions-only LLM
+ * surface). The default may move once core fully replaces legacy; bumping it
+ * is a coordinated change in this file alone.
  *
  * Presets are NOT versioned. The preset id encodes the variant; a new shape
  * ships as a new id, not a new version of an existing one.
@@ -23,6 +23,7 @@ import type { BoundDocApi } from './generated/client.js';
 import type { InvokeOptions } from './runtime/process.js';
 import { SuperDocCliError } from './runtime/errors.js';
 import { legacyPreset } from './presets/legacy.js';
+import { corePreset } from './presets/core.js';
 
 /**
  * Wire format the tools are emitted in.
@@ -89,6 +90,24 @@ export interface GetToolsOptions {
    * for example). When omitted or `false`, no markers are added.
    */
   cache?: boolean;
+  /**
+   * Action names to REMOVE from the advertised action surface (the `core`
+   * preset's `superdoc_perform_action` enum/description/args shrink together).
+   * Unknown names throw. Presets without an action surface (e.g. `legacy`)
+   * ignore this option.
+   */
+  excludeActions?: readonly string[];
+}
+
+/**
+ * Options for {@link PresetDescriptor.getSystemPrompt}. Mirrors the exclusion
+ * options on getTools so the prompt and the advertised tool surface can be
+ * narrowed TOGETHER — a prompt that documents an uncallable action teaches the
+ * model to call it.
+ */
+export interface GetSystemPromptOptions {
+  /** Drop the per-action documentation lines for these actions (core preset). */
+  excludeActions?: readonly string[];
 }
 
 export interface GetToolsResult {
@@ -129,7 +148,7 @@ export interface PresetDescriptor {
   getCatalog(): Promise<ToolCatalog>;
 
   /** System prompt for embedded LLM usage (OpenAI/Anthropic/Vercel APIs). */
-  getSystemPrompt(): Promise<string>;
+  getSystemPrompt(options?: GetSystemPromptOptions): Promise<string>;
 
   /** System prompt for MCP server `instructions`. */
   getMcpPrompt(): Promise<string>;
@@ -153,19 +172,66 @@ export interface PresetDescriptor {
 // ---------------------------------------------------------------------------
 
 /**
- * The default preset returned when callers omit `preset`. Set to `'legacy'`
- * so consumers built before presets existed (today's intent-tool path) keep
- * working without changes.
+ * The default preset returned when callers omit `preset`. Stays as `'legacy'`
+ * for backward compatibility — consumers built before presets existed (today's
+ * intent-tool path) keep working without changes. To exercise the `core`
+ * preset, callers pass `preset: 'core'` explicitly.
  */
 export const DEFAULT_PRESET = 'legacy';
 
-const PRESETS: Record<string, PresetDescriptor> = {
+const BUILTIN_PRESETS: Record<string, PresetDescriptor> = {
   legacy: legacyPreset,
+  core: corePreset,
 };
+
+/**
+ * Mutable registry, seeded with the built-ins. Customers add their own presets
+ * via {@link registerPreset} (e.g. one produced by `extendPreset` /
+ * `composePreset`) so `getPreset`/`chooseTools` can resolve them by id.
+ */
+const PRESETS: Record<string, PresetDescriptor> = { ...BUILTIN_PRESETS };
 
 /** List the IDs of all registered presets. */
 export function listPresets(): readonly string[] {
   return Object.keys(PRESETS);
+}
+
+/**
+ * Register one or more presets so they resolve by id through `getPreset` and
+ * the `chooseTools`/`dispatchSuperDocTool` plumbing. Re-registering a custom id
+ * replaces the previously registered preset for that id (tests / hot-reload
+ * rely on this). Built-in ids (legacy / core) cannot
+ * be overwritten.
+ */
+export function registerPreset(...presets: PresetDescriptor[]): void {
+  for (const preset of presets) {
+    if (preset == null || typeof preset.id !== 'string' || preset.id.length === 0) {
+      throw new SuperDocCliError('registerPreset requires a preset with a non-empty string id.', {
+        code: 'INVALID_ARGUMENT',
+      });
+    }
+    if (preset.id in BUILTIN_PRESETS) {
+      throw new SuperDocCliError(`Cannot overwrite built-in preset "${preset.id}".`, {
+        code: 'INVALID_ARGUMENT',
+        details: { id: preset.id },
+      });
+    }
+    PRESETS[preset.id] = preset;
+  }
+}
+
+/**
+ * Unregister a customer-registered preset. Idempotent (no-op if absent).
+ * Rejects unregistering a built-in preset id.
+ */
+export function unregisterPreset(id: string): void {
+  if (id in BUILTIN_PRESETS) {
+    throw new SuperDocCliError(`Cannot unregister built-in preset "${id}".`, {
+      code: 'INVALID_ARGUMENT',
+      details: { id },
+    });
+  }
+  delete PRESETS[id];
 }
 
 /**

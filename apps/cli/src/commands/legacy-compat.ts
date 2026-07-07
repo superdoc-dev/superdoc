@@ -631,7 +631,7 @@ async function runLegacyInsertInlineSpecial(
   context: CommandContext,
 ): Promise<CommandExecution> {
   const commandSpec = COMMAND_BY_KIND[kind];
-  const { parsed, help } = parseOperationArgs(commandSpec.operationId, tokens, {
+  const { parsed, args, help } = parseOperationArgs(commandSpec.operationId, tokens, {
     commandName: `insert ${kind === 'tab' ? 'tab' : 'line-break'}`,
   });
 
@@ -655,8 +655,7 @@ async function runLegacyInsertInlineSpecial(
   const { doc } = resolveDocArg(parsed, `insert ${COMMAND_BY_KIND[kind].label}`);
   const outPath = getStringOption(parsed, 'out');
   const force = getBooleanOption(parsed, 'force');
-  const expectedRevisionRaw = parsed.options.expectedRevision;
-  const expectedRevision = typeof expectedRevisionRaw === 'number' ? expectedRevisionRaw : undefined;
+  const expectedRevision = typeof args.expectedRevision === 'number' ? args.expectedRevision : undefined;
   const commandName = kind === 'tab' ? 'insert tab' : 'insert line-break';
   const input = parsed.options as Record<string, unknown>;
 

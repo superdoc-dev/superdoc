@@ -129,8 +129,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Python build tools
-        run: pip install build
+      - name: Install Python build and test tools
+        run: python3 -m pip install build pytest pytest-asyncio
 
       - name: Build packages
         run: pnpm run build
@@ -304,8 +304,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Python build tools
-        run: pip install build
+      - name: Install Python build and test tools
+        run: python3 -m pip install build pytest pytest-asyncio
 
       - name: Show current version
         run: |
@@ -425,8 +425,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Python build tools
-        run: pip install build
+      - name: Install Python build and test tools
+        run: python3 -m pip install build pytest pytest-asyncio
 
       - name: Compute smoke version
         id: smoke_version

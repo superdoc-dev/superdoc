@@ -39,6 +39,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Python test dependencies
+        run: python3 -m pip install pytest pytest-asyncio
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

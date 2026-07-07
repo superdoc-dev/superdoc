@@ -9,7 +9,7 @@ When tool calls fail or produce unexpected results, use these patterns to diagno
 
 ## LLM tools wrap the Document API
 
-Every LLM tool call maps to a [Document API](/document-api/overview) operation under the hood. `superdoc_edit` with `action: "replace"` calls the same function as `doc.replace()`.
+Every LLM tool call maps to a [Document API](/document-api/overview) operation under the hood. On the core preset, `superdoc_perform_action` with `action: "replace_text"` resolves its targets and then runs the same operations as `doc.replace()`; on legacy, `superdoc_edit` with `action: "replace"` calls it directly.
 
 This gives you a clear debugging strategy:
 
@@ -20,8 +20,8 @@ This gives you a clear debugging strategy:
 ```typescript
 // Instead of going through the LLM, test the operation directly:
 const result = await doc.replace({
-  target: { handle: 'some-handle' },
-  content: 'New text',
+  ref: 'ref-from-a-recent-search', // refs/handles come from search results
+  text: 'New text',
 });
 console.log(result); // Does this work?
 ```
@@ -32,6 +32,10 @@ This narrows every issue to one of two layers: the operation or the prompt.
 
 Add logging around `dispatchSuperDocTool` to see exactly what the model is requesting and what comes back.
 
+<Note>
+`dispatchSuperDocTool(doc, name, args)` without options dispatches against the **legacy default**. Pass `{ preset: 'core' }` when your tools came from the core preset — or use the toolkit's pre-bound `dispatch`, which can't mismatch. The examples below assume core.
+</Note>
+
 ```typescript
 for (const toolCall of choice.message.tool_calls) {
   const args = JSON.parse(toolCall.function.arguments);
@@ -40,7 +44,7 @@ for (const toolCall of choice.message.tool_calls) {
   console.log(`[agent] tool: ${toolCall.function.name}`, JSON.stringify(args, null, 2));
 
   try {
-    const result = await dispatchSuperDocTool(doc, toolCall.function.name, args);
+    const result = await dispatchSuperDocTool(doc, toolCall.function.name, args, { preset: 'core' });
 
     // Log the result (truncate large responses)
     const resultStr = JSON.stringify(result);
@@ -60,6 +64,17 @@ What to look for in logs:
 - **Targets**: are handles/addresses from a recent search, or did the model guess?
 - **Result**: did the operation return data or an error?
 
+## Read the receipt first (core preset)
+
+On the core preset, most "failures" aren't thrown errors — they're receipts doing their job. Before reaching for logs:
+
+- `status: "failed"` + `errors[].code: "MATCH_NOT_FOUND"` — the target text/element wasn't found and **nothing was changed**. The message names what to fix; `recovery` is machine-usable (`reinspect` / `retry` / `revert` with a paste-ready call).
+- `status: "partial"` — part of the batch landed; the receipt reports which part (`editsApplied` / `editsSkipped`, capped lists with `*Count` totals). Re-inspect, then fix forward.
+- `verificationPassed: false` on an `ok` receipt — the edit applied but a post-check (placement adjacency, count delta) disagreed; the `verification` array shows which check.
+- `INVALID_ARGUMENT` with `excluded: true` — the action is excluded by your `excludeActions` configuration, not broken.
+
+Feeding the whole receipt back as the tool result is usually all the "debugging" the model needs.
+
 ## Error shapes
 
 `dispatchSuperDocTool` throws errors in two categories:
@@ -67,7 +82,7 @@ What to look for in logs:
 **Validation errors**: bad arguments before the operation runs:
 ```json
 { "error": "Missing required parameter: action" }
-{ "error": "Unknown action 'bold' for tool superdoc_format. Valid actions: inline, set_style, set_alignment, set_indentation, set_spacing" }
+{ "error": "Unknown action 'bold' for tool superdoc_format. Valid actions: inline, set_alignment, set_direction, set_flow_options, set_indentation, set_spacing, set_style" }
 { "error": "Parameter 'target' is required for action 'replace'" }
 ```
 
@@ -81,16 +96,34 @@ Both types are returned as strings in `err.message`. Pass them back as tool resu
 
 ## Common failure modes
 
+Shared (either preset):
+
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Model calls the wrong tool | System prompt missing or too vague | Use `getSystemPrompt()` or add workflow instructions |
-| "Target not found" errors | Model uses stale or guessed handles | Instruct model to always search before editing |
-| Edits land in the wrong place | Model invented a block address | Use `superdoc_search` to get fresh handles |
+| Model calls the wrong tool | System prompt missing, or paired with the wrong preset's tools | Use `createAgentToolkit` so prompt and tools always match |
+| `Unknown tool` on dispatch | Tools from one preset dispatched through another | Same fix — one preset for tools, prompt, and dispatch |
 | Infinite tool call loop | Model never reaches a stopping point | Add a max iterations guard (see below) |
-| Model doesn't use tools at all | Tools not passed to the API call | Verify `chooseTools()` result is in the `tools` param |
+| Model doesn't use tools at all | Tools not passed to the API call | Verify the toolkit's `tools` is in the `tools` param |
 | "Missing required parameter" | Model forgot `action` or another field | Check the tool schema: add examples to the prompt |
 | Collaboration edits not appearing | SDK not in the same collab room | Verify the collaboration URL and documentId match |
 | Operation works via API but fails via tool | Model passes wrong argument types/names | Log the parsed arguments and compare to the API signature |
+
+Core preset:
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `MATCH_NOT_FOUND` receipts | Target text drifted after earlier edits | Re-inspect, target current text (nothing was changed — safe to retry) |
+| `partial` receipts on batches | Some edits' targets matched, others didn't | Read `editsApplied`/`editsSkipped`; retry only the skipped ones |
+| Action refused (`excluded: true`) | Your `excludeActions` config | Expected — the guard is doing its job |
+| Tracked edit landed direct | `changeMode` missing on that call | Set `changeMode: "tracked"` per call or via prompt rules |
+
+Legacy preset:
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| "Target not found" errors | Stale or guessed handles | Always search before editing; search again after every mutation |
+| `REVISION_MISMATCH` | Ref fetched before a mutation, used after | Use `superdoc_mutations` for multi-block edits, or re-search between edits |
+| Edits land in the wrong place | Model invented a block address | Use `superdoc_search` to get fresh handles |
 
 ## Inspect tools directly
 
@@ -99,12 +132,12 @@ Dump the tool schemas to verify the SDK loaded correctly:
 ```typescript
 import { listTools, getToolCatalog } from '@superdoc-dev/sdk';
 
-// See all tools for a provider
-const tools = await listTools('openai');
+// See all tools for a provider — omitting the preset argument selects legacy
+const tools = await listTools('openai', 'core');
 console.log(JSON.stringify(tools, null, 2));
 
 // Get the full catalog with metadata
-const catalog = await getToolCatalog();
+const catalog = await getToolCatalog('core');
 console.log(`Loaded ${catalog.tools.length} tools`);
 ```
 
@@ -124,7 +157,7 @@ while (iterations++ < MAX_ITERATIONS) {
   if (!message.tool_calls?.length) break;
 
   for (const call of message.tool_calls) {
-    const result = await dispatchSuperDocTool(doc, call.function.name, JSON.parse(call.function.arguments));
+    const result = await dispatchSuperDocTool(doc, call.function.name, JSON.parse(call.function.arguments), { preset: 'core' });
     messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
   }
 }

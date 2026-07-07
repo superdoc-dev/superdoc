@@ -19,6 +19,14 @@ function assertOrder(content, first, second, context) {
   assert.ok(firstIndex < secondIndex, `${context}: expected "${first}" before "${second}"`);
 }
 
+function sectionBetween(content, start, end, context) {
+  const startIndex = content.indexOf(start);
+  const endIndex = content.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `${context}: missing section start "${start}"`);
+  assert.notEqual(endIndex, -1, `${context}: missing section end "${end}"`);
+  return content.slice(startIndex, endIndex);
+}
+
 test('sdk-release.mjs builds Node SDK before validate', async () => {
   const content = await readRepoFile('packages/sdk/scripts/sdk-release.mjs');
   assertOrder(
@@ -37,6 +45,45 @@ test('ci-sdk workflow builds Node SDK before validate', async () => {
 test('release-sdk fallback workflow builds Node SDK before validate', async () => {
   const content = await readRepoFile('.github/workflows/release-sdk.yml');
   assertOrder(content, '- name: Build Node SDK', '- name: Validate SDK', '.github/workflows/release-sdk.yml');
+});
+
+test('release workflows install Python SDK test dependencies before validation', async () => {
+  const installCommand = 'python3 -m pip install build pytest pytest-asyncio';
+
+  const releaseSdk = await readRepoFile('.github/workflows/release-sdk.yml');
+  const autoRelease = sectionBetween(
+    releaseSdk,
+    '  auto-release:',
+    '  sync-labs-agent:',
+    '.github/workflows/release-sdk.yml',
+  );
+  assertOrder(
+    autoRelease,
+    installCommand,
+    '- name: Run semantic-release',
+    '.github/workflows/release-sdk.yml auto-release',
+  );
+
+  const manualRelease = sectionBetween(
+    releaseSdk,
+    '  manual-release:',
+    '  testpypi-smoke:',
+    '.github/workflows/release-sdk.yml',
+  );
+  assertOrder(
+    manualRelease,
+    installCommand,
+    '- name: Validate SDK',
+    '.github/workflows/release-sdk.yml manual-release',
+  );
+
+  const stableRelease = await readRepoFile('.github/workflows/release-stable.yml');
+  assertOrder(
+    stableRelease,
+    installCommand,
+    '- name: Release stable packages (orchestrator)',
+    '.github/workflows/release-stable.yml',
+  );
 });
 
 test('release-sdk fallback workflow publishes Node SDK via sdk-release-publish', async () => {

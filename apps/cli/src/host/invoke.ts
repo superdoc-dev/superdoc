@@ -18,11 +18,13 @@ type CliInvokeParams = {
  * @param ioNow - Clock function used for elapsed-time tracking
  * @param sessionPool - Pool for reusing sessions (local and collab) across invocations
  * @param maxStdinBytes - Maximum allowed size (bytes) for base64-decoded stdin payloads
+ * @param requestTimeoutMs - Host request timeout, exposed to cooperative command code
  */
 export interface HostInvokeCliOptions {
   ioNow?: () => number;
   sessionPool?: SessionPool;
   maxStdinBytes?: number;
+  requestTimeoutMs?: number;
 }
 
 function estimateBase64RawLength(base64: string): number {
@@ -122,6 +124,7 @@ export async function invokeCliFromHost(
     ioOverrides: io,
     executionMode: 'host',
     sessionPool: options.sessionPool,
+    ambientTimeoutMs: options.requestTimeoutMs,
   });
 
   if (invocation.helpText) {

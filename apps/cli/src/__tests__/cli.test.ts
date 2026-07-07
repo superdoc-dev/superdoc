@@ -2352,6 +2352,59 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
+  test('expected revision protects execute code and preset dispatch', async () => {
+    await runCli(['open', SAMPLE_DOC, '--session', 'llm-guard']);
+
+    const advance = await runCli([
+      'execute',
+      'code',
+      '--session',
+      'llm-guard',
+      '--code',
+      "doc.create.paragraph({ text: 'REVISION_GUARD_BASELINE' }); return 'ok';",
+    ]);
+    expect(advance.code).toBe(0);
+
+    const staleExecute = await runCli([
+      'execute',
+      'code',
+      '--session',
+      'llm-guard',
+      '--expected-revision',
+      '0',
+      '--code',
+      "doc.create.paragraph({ text: 'STALE_EXECUTE_CODE' }); return 'ok';",
+    ]);
+    expect(staleExecute.code).toBe(1);
+    expect(parseJsonOutput<ErrorEnvelope>(staleExecute).error.code).toBe('REVISION_MISMATCH');
+
+    const stalePreset = await runCli([
+      'preset',
+      'dispatch',
+      '--session',
+      'llm-guard',
+      '--preset',
+      'core',
+      '--tool-name',
+      'superdoc_perform_action',
+      '--args-json',
+      JSON.stringify({ action: 'insert_paragraphs', text: 'STALE_PRESET_DISPATCH' }),
+      '--expected-revision',
+      '0',
+    ]);
+    expect(stalePreset.code).toBe(1);
+    expect(parseJsonOutput<ErrorEnvelope>(stalePreset).error.code).toBe('REVISION_MISMATCH');
+
+    const textResult = await runCli(['get-text', '--session', 'llm-guard']);
+    expect(textResult.code).toBe(0);
+    expect(textResult.stdout).toContain('REVISION_GUARD_BASELINE');
+    expect(textResult.stdout).not.toContain('STALE_EXECUTE_CODE');
+    expect(textResult.stdout).not.toContain('STALE_PRESET_DISPATCH');
+
+    const closeResult = await runCli(['close', '--discard', '--session', 'llm-guard']);
+    expect(closeResult.code).toBe(0);
+  });
+
   test('session use switches default session', async () => {
     const alphaOpen = await runCli(['open', SAMPLE_DOC, '--session', 'alpha']);
     expect(alphaOpen.code).toBe(0);

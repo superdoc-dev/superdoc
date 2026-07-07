@@ -574,7 +574,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
@@ -743,6 +743,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insertTab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insertLineBreak` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.executeCode` | `execute code` | Run model-authored JavaScript IN-HOST against the live, SYNCHRONOUS Document API for the open session. Two globals are injected: `doc` (the synchronous Document API — do NOT await doc.* calls) and `console`. `return` a short summary; logs and the return value come back structured as { ok, result, logs, error }. Use for complex/multi-step workflows (loops, per-item branching, extract-then-generate) in ONE call instead of chaining many narrow tools. Large code can be passed on stdin. |
+| `doc.preset.dispatch` | `preset dispatch` | Dispatch an LLM tool call through the named preset's dispatcher against the active session's live document. Used by cross-language SDKs (e.g. Python) to proxy preset behavior over the CLI. |
 
 #### Format
 
@@ -859,7 +861,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
-| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. With changeMode:"tracked" the former (unnumbered) paragraph properties are recorded as a w:pPrChange so a reviewer can accept/reject the numbering. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1034,6 +1036,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `client.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `client.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
+| `doc.preset.list` | `preset list` | List the LLM-tools preset ids registered in the Node SDK preset registry, plus the default preset id. |
+| `doc.preset.getCatalog` | `preset get-catalog` | Return the full tool catalog for an LLM-tools preset (defaults to the registered default preset). |
+| `doc.preset.getTools` | `preset get-tools` | Return the provider-shaped tool array (openai\|anthropic\|vercel\|generic) for an LLM-tools preset, plus the active cache strategy. |
+| `doc.preset.getSystemPrompt` | `preset get-system-prompt` | Return the SDK-style system prompt for an LLM-tools preset. |
+| `doc.preset.getMcpPrompt` | `preset get-mcp-prompt` | Return the MCP-flavored system prompt for an LLM-tools preset. |
 
   </Tab>
   <Tab title="Python">
@@ -1056,7 +1063,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
@@ -1225,6 +1232,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insert_tab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insert_line_break` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.execute_code` | `execute code` | Run model-authored JavaScript IN-HOST against the live, SYNCHRONOUS Document API for the open session. Two globals are injected: `doc` (the synchronous Document API — do NOT await doc.* calls) and `console`. `return` a short summary; logs and the return value come back structured as { ok, result, logs, error }. Use for complex/multi-step workflows (loops, per-item branching, extract-then-generate) in ONE call instead of chaining many narrow tools. Large code can be passed on stdin. |
+| `doc.preset.dispatch` | `preset dispatch` | Dispatch an LLM tool call through the named preset's dispatcher against the active session's live document. Used by cross-language SDKs (e.g. Python) to proxy preset behavior over the CLI. |
 
 #### Format
 
@@ -1341,7 +1350,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
-| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. With changeMode:"tracked" the former (unnumbered) paragraph properties are recorded as a w:pPrChange so a reviewer can accept/reject the numbering. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1516,6 +1525,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `client.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `client.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
+| `doc.preset.list` | `preset list` | List the LLM-tools preset ids registered in the Node SDK preset registry, plus the default preset id. |
+| `doc.preset.get_catalog` | `preset get-catalog` | Return the full tool catalog for an LLM-tools preset (defaults to the registered default preset). |
+| `doc.preset.get_tools` | `preset get-tools` | Return the provider-shaped tool array (openai\|anthropic\|vercel\|generic) for an LLM-tools preset, plus the active cache strategy. |
+| `doc.preset.get_system_prompt` | `preset get-system-prompt` | Return the SDK-style system prompt for an LLM-tools preset. |
+| `doc.preset.get_mcp_prompt` | `preset get-mcp-prompt` | Return the MCP-flavored system prompt for an LLM-tools preset. |
 
   </Tab>
 </Tabs>

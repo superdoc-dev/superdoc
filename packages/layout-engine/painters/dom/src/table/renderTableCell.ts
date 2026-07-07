@@ -20,11 +20,13 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import {
+  effectiveTableCellSpacing,
   rescaleColumnWidths,
   normalizeZIndex,
   getCellSpacingPx,
   getBorderBandProfile,
   getSdtContainerKey,
+  resolveAnchoredGraphicY,
 } from '@superdoc/contracts';
 import type { ResolvePhysicalFamily } from '@superdoc/font-system';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
@@ -43,6 +45,19 @@ import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
+type TableCellBlock = ParagraphBlock | ImageBlock | DrawingBlock | TableBlock;
+type TableCellBlockMeasure = NonNullable<TableCellMeasure['blocks']>[number];
+
+type ResolveCellAnchoredTopParams = {
+  anchor: ImageBlock['anchor'] | DrawingBlock['anchor'];
+  anchorParagraphId?: string;
+  cellBlocks: TableCellBlock[];
+  blockMeasures: TableCellBlockMeasure[];
+  globalFromLine: number;
+  globalToLine: number;
+  paddingTop: number;
+  objectHeight: number;
+};
 
 const getCellBlockSdtBoundaryKey = (block: ParagraphBlock | TableBlock): string | null => {
   return getSdtContainerKey(block.attrs?.containerSdt) ?? getSdtContainerKey(block.attrs?.sdt);
@@ -201,6 +216,174 @@ function computeCellVisibleHeight(cell: TableCellMeasure, cellFrom: number, cell
   }
   return cellVisHeight;
 }
+
+const getCellBlockSegmentCount = (blockMeasure: TableCellBlockMeasure): number => {
+  if (blockMeasure.kind === 'paragraph') {
+    return (blockMeasure as ParagraphMeasure).lines?.length || 0;
+  }
+  if (blockMeasure.kind === 'table') {
+    return getEmbeddedTableSegmentCount(blockMeasure as TableMeasure);
+  }
+  if (blockMeasure.kind === 'image' || blockMeasure.kind === 'drawing') {
+    return blockMeasure.height > 0 ? 1 : 0;
+  }
+
+  return 0;
+};
+
+const computeRenderedParagraphFlowHeight = (
+  block: ParagraphBlock,
+  measure: ParagraphMeasure,
+  localStartLine: number,
+  localEndLine: number,
+  isFirstBlock: boolean,
+  isLastBlock: boolean,
+  paddingTop: number,
+): number => {
+  const lines = measure.lines ?? [];
+  const renderedLocalEndLine = Math.min(localEndLine, lines.length);
+  let renderedHeight = 0;
+
+  for (let lineIdx = localStartLine; lineIdx < renderedLocalEndLine; lineIdx += 1) {
+    renderedHeight += lines[lineIdx]?.lineHeight ?? 0;
+  }
+
+  const renderedEntireBlock = localStartLine === 0 && renderedLocalEndLine >= lines.length;
+  if (renderedEntireBlock && measure.totalHeight && measure.totalHeight > renderedHeight) {
+    renderedHeight = measure.totalHeight;
+  }
+
+  const beforeHeight =
+    localStartLine === 0 ? effectiveTableCellSpacing(block.attrs?.spacing?.before, isFirstBlock, paddingTop) : 0;
+  const spacingAfter = block.attrs?.spacing?.after;
+  const afterHeight =
+    renderedEntireBlock && !isLastBlock && typeof spacingAfter === 'number' && spacingAfter > 0 ? spacingAfter : 0;
+
+  return beforeHeight + renderedHeight + afterHeight;
+};
+
+const computeRenderedBlockFlowHeight = (
+  block: TableCellBlock,
+  blockMeasure: TableCellBlockMeasure,
+  blockIndex: number,
+  blockStartGlobal: number,
+  blockEndGlobal: number,
+  globalFromLine: number,
+  globalToLine: number,
+  blockCount: number,
+  paddingTop: number,
+): number => {
+  if (blockEndGlobal <= globalFromLine || blockStartGlobal >= globalToLine) {
+    return 0;
+  }
+
+  if (blockMeasure.kind === 'paragraph' && block.kind === 'paragraph') {
+    const blockLineCount = (blockMeasure as ParagraphMeasure).lines?.length || 0;
+    const localStartLine = Math.max(0, globalFromLine - blockStartGlobal);
+    const localEndLine = Math.min(blockLineCount, globalToLine - blockStartGlobal);
+
+    return computeRenderedParagraphFlowHeight(
+      block,
+      blockMeasure as ParagraphMeasure,
+      localStartLine,
+      localEndLine,
+      blockIndex === 0,
+      blockIndex === blockCount - 1,
+      paddingTop,
+    );
+  }
+
+  if (blockMeasure.kind === 'table') {
+    return computeCellVisibleHeight(
+      { blocks: [blockMeasure], width: 0, height: 0 },
+      Math.max(0, globalFromLine - blockStartGlobal),
+      Math.min(blockEndGlobal - blockStartGlobal, globalToLine - blockStartGlobal),
+    );
+  }
+
+  if (blockMeasure.kind === 'image' || blockMeasure.kind === 'drawing') {
+    if ((block.kind === 'image' || block.kind === 'drawing') && block.anchor?.isAnchored) {
+      return 0;
+    }
+
+    return blockMeasure.height;
+  }
+
+  return 0;
+};
+
+type CellAnchoredTop = {
+  top: number;
+  /**
+   * True only when the anchor paragraph was found and used as the base. Fallback results
+   * (page/margin bases, missing/unresolvable anchorParagraphId) keep the legacy
+   * top-of-cell invariant and must NOT be shifted by the vertical-alignment offset.
+   */
+  paragraphResolved: boolean;
+};
+
+export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): CellAnchoredTop | null => {
+  const offsetV = params.anchor?.offsetV ?? 0;
+  const vRelativeFrom = params.anchor?.vRelativeFrom;
+  if (vRelativeFrom !== undefined && vRelativeFrom !== 'paragraph') {
+    return { top: offsetV, paragraphResolved: false };
+  }
+
+  if (!params.anchorParagraphId) {
+    return { top: offsetV, paragraphResolved: false };
+  }
+
+  let flowY = 0;
+  let cumulativeLineCount = 0;
+  const blockCount = Math.min(params.blockMeasures.length, params.cellBlocks.length);
+
+  for (let i = 0; i < blockCount; i += 1) {
+    const blockMeasure = params.blockMeasures[i]!;
+    const block = params.cellBlocks[i]!;
+    const blockSegmentCount = getCellBlockSegmentCount(blockMeasure);
+    const blockStartGlobal = cumulativeLineCount;
+    const blockEndGlobal = cumulativeLineCount + blockSegmentCount;
+
+    if (block.kind === 'paragraph' && block.id === params.anchorParagraphId) {
+      // Paint only on the slice where the anchor paragraph STARTS: a paragraph split across
+      // slices intersects several windows, and painting on each would duplicate the object.
+      if (blockStartGlobal < params.globalFromLine || blockStartGlobal >= params.globalToLine) {
+        return null;
+      }
+
+      // Word measures the paragraph anchor base at the paragraph's flow position BEFORE its
+      // own spacing-before region (fixture evidence: adding SpaceBefore moves the text, not
+      // the anchored object), so flowY is not adjusted by this paragraph's spacing.
+      const firstLineHeight = (blockMeasure as ParagraphMeasure).lines?.[0]?.lineHeight ?? 0;
+      return {
+        top: resolveAnchoredGraphicY({
+          anchor: { vRelativeFrom, alignV: params.anchor?.alignV, offsetV },
+          objectHeight: params.objectHeight,
+          contentTop: 0,
+          contentBottom: 0,
+          anchorParagraphY: flowY,
+          firstLineHeight,
+        }),
+        paragraphResolved: true,
+      };
+    }
+
+    flowY += computeRenderedBlockFlowHeight(
+      block,
+      blockMeasure,
+      i,
+      blockStartGlobal,
+      blockEndGlobal,
+      params.globalFromLine,
+      params.globalToLine,
+      blockCount,
+      params.paddingTop,
+    );
+    cumulativeLineCount = blockEndGlobal;
+  }
+
+  return { top: offsetV, paragraphResolved: false };
+};
 
 /**
  * Applies inline CSS styles to an element, filtering out null/undefined/empty values.
@@ -1128,7 +1311,27 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const baseLeft = anchor.offsetH ?? 0;
       const indentOffset = typeof tableIndent === 'number' && Number.isFinite(tableIndent) ? tableIndent : 0;
       const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
-      const top = anchor.offsetV ?? 0;
+      const anchorParagraphId =
+        typeof anchoredBlock.attrs?.anchorParagraphId === 'string' ? anchoredBlock.attrs.anchorParagraphId : undefined;
+      const resolvedTop = resolveCellAnchoredTop({
+        anchor,
+        anchorParagraphId,
+        cellBlocks,
+        blockMeasures,
+        globalFromLine,
+        globalToLine,
+        paddingTop,
+        objectHeight,
+      });
+      if (resolvedTop === null) {
+        continue;
+      }
+      // Flow content is shifted by alignmentOffsetY via the flex container (verticalAlign
+      // center/bottom), and applySquareWrapExclusionsToLines compares lines in that shifted
+      // space - paragraph-anchored objects and their exclusions must follow the paragraph
+      // into that visual space. Fallback results (page/margin bases, missing anchor id)
+      // keep the legacy top-of-cell invariant and stay unshifted.
+      const top = resolvedTop.top + (resolvedTop.paragraphResolved ? alignmentOffsetY : 0);
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);

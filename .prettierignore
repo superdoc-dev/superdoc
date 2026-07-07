@@ -36,3 +36,4 @@ tests/consumer-typecheck/tsconfig.matrix.json
 
 # Markdown files
 *.md
+packages/sdk/langs/node/src/embedded-prompts.generated.ts

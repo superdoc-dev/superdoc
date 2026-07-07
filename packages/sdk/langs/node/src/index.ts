@@ -4,8 +4,6 @@ import {
   type BoundDocApi,
   type DocCloseBoundParams,
   type DocCloseResult,
-  type DocFormatApplyBoundParams,
-  type DocFormatApplyResult,
   type DocOpenParams as GeneratedDocOpenParams,
   type DocOpenResult,
   type DocSaveBoundParams,
@@ -58,10 +56,6 @@ class BoundRuntime implements RuntimeInvoker {
   markClosed(): void {
     this.closed = true;
   }
-}
-
-export interface DocFormatRangeBoundParams extends Omit<DocFormatApplyBoundParams, 'inline'> {
-  properties: NonNullable<DocFormatApplyBoundParams['inline']>;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,18 +113,6 @@ class SuperDocDocumentCore {
   /** @internal */
   markClosed(): void {
     this.boundRuntime.markClosed();
-  }
-
-  async formatRange(params: DocFormatRangeBoundParams, options: InvokeOptions = {}): Promise<DocFormatApplyResult> {
-    const { properties, ...rest } = params;
-    return this.boundRuntime.invoke<DocFormatApplyResult>(
-      CONTRACT.operations['doc.format.apply'],
-      {
-        ...rest,
-        inline: properties,
-      },
-      options,
-    );
   }
 }
 
@@ -256,6 +238,8 @@ export {
   DEFAULT_PRESET,
   getPreset,
   listPresets,
+  registerPreset,
+  unregisterPreset,
 } from './tools.js';
 export type {
   AnthropicSystemPrompt,
@@ -268,6 +252,14 @@ export type {
   ToolProvider,
 } from './tools.js';
 export { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
+// Integrator-facing types: the doc-handle contract dispatch expects, the action
+// names/receipts the core preset produces, and the preset option shapes.
+export type { BoundDocApi } from './generated/client.js';
+export type { ActionName } from './agent/actions.js';
+export type { AgentReceipt } from './agent/runtime.js';
+export type { GetSystemPromptOptions, GetToolsOptions, GetToolsResult, PresetDescriptor } from './presets.js';
+export { createAgentToolkit } from './tools.js';
+export type { AgentToolkit, CreateAgentToolkitInput } from './tools.js';
 export { SuperDocCliError } from './runtime/errors.js';
 export type {
   InvokeOptions,

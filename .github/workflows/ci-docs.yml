@@ -51,3 +51,12 @@ jobs:
 
       - name: Test Code Examples
         run: pnpm --filter @superdoc/docs test:examples
+
+      - name: Build SDK (Node)
+        run: pnpm --prefix packages/sdk/langs/node run build
+
+      - name: Build CLI
+        run: pnpm --prefix apps/cli run build
+
+      - name: Check AI Snippets
+        run: pnpm --filter @superdoc/docs check:ai-snippets

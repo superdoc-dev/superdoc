@@ -121,6 +121,7 @@ Document editing through models and agents.
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
 | [redlining](./ai/redlining) | LLM-driven tracked-change review (browser) |
 | [footnote-tool-agent](./ai/footnote-tool-agent) | Real LLM tool-use loop: model picks `addFootnoteCitation`, browser executes against `editor.doc` |
+| [core-actions-agent](./ai/core-actions-agent) | Headless agent on the `core` preset: 2 tools, 40 actions, receipts, tracked-changes redlining (Node + Python) |
 
 ## Advanced
 

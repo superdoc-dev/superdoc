@@ -564,6 +564,64 @@ describe('CLI host mode', () => {
   );
 
   test(
+    'host request timeout blocks delayed execute-code mutations',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
+
+      const docCopy = path.join(stateDir, 'doc.docx');
+      await copyFile(await resolveSourceDocFixture(), docCopy);
+
+      const host = launchHost(stateDir, ['--request-timeout-ms', '1000']);
+      const sessionId = 'timeout-guard';
+      const marker = 'HOST_TIMEOUT_LATE_MUTATION';
+
+      const open = await host.request('cli.invoke', {
+        argv: ['open', docCopy, '--session', sessionId],
+        stdinBase64: '',
+      });
+      expect(open.error).toBeUndefined();
+
+      const delayedMutation = await host.request('cli.invoke', {
+        argv: [
+          'preset',
+          'dispatch',
+          '--session',
+          sessionId,
+          '--preset',
+          'core',
+          '--tool-name',
+          'superdoc_execute_code',
+          '--args-json',
+          JSON.stringify({
+            code: `await new Promise((resolve) => setTimeout(resolve, 1200)); doc.create.paragraph({ text: '${marker}' }); return 'late';`,
+          }),
+        ],
+        stdinBase64: '',
+      });
+      if (delayedMutation.error) {
+        expect(delayedMutation.error.code).toBe(-32011);
+      } else {
+        const payload = delayedMutation.result as { data?: { ok?: boolean; error?: { message?: string } } };
+        expect(payload.data?.ok).toBe(false);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const text = await host.request('cli.invoke', {
+        argv: ['get-text', '--session', sessionId],
+        stdinBase64: '',
+      });
+      expect(text.error).toBeUndefined();
+      expect(JSON.stringify(text.result)).not.toContain(marker);
+
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
+
+  test(
     'rejects --request-timeout-ms with a non-numeric value',
     async () => {
       const child = spawn('bun', [CLI_BIN, 'host', '--stdio', '--request-timeout-ms', 'not-a-number'], {

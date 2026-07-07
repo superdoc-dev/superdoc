@@ -1,0 +1,369 @@
+---
+title: Core preset — the action surface
+sidebarTitle: Core preset (recommended)
+description: "Two tools, forty deterministic actions: inspect a document, then edit it with named, verifiable operations — including tracked-changes redlining."
+keywords: "superdoc core preset, superdoc_perform_action, superdoc_inspect, llm document actions, tracked changes ai, redlining, deterministic document editing"
+---
+
+The `core` preset is an **actions-only LLM surface**: instead of many low-level tools, the model gets exactly two —
+
+| Tool | Role |
+| --- | --- |
+| `superdoc_inspect` | Read: a deterministic snapshot of the document (blocks, lists, tables, comments, tracked changes, …) |
+| `superdoc_perform_action` | Write: one of **40 named actions** with flat, validated arguments and a verifiable receipt |
+
+Every action wraps the underlying [Document API](/document-api/overview) operations with product semantics: it resolves targets deterministically, applies the edit, re-inspects the document, and returns a **receipt** with real pre/post evidence — so your agent loop (and your users) can trust what actually happened.
+
+The default preset is still `legacy` (the grouped intent tools documented in the [overview](/ai/agents/llm-tools)). The core preset is opt-in: pass `preset: 'core'` everywhere.
+
+## Quick start
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { createSuperDocClient, createAgentToolkit, type AgentReceipt } from '@superdoc-dev/sdk';
+
+    const client = createSuperDocClient();
+    await client.connect();
+    const doc = await client.open({ doc: './contract.docx' });
+
+    // One call — tools, system prompt, and a pre-bound dispatcher that are
+    // guaranteed to agree on preset and exclusions.
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'openai',
+      preset: 'core',
+    });
+
+    // ... run your agent loop (see the overview page) ...
+    const receipt = (await dispatch(doc, 'superdoc_perform_action', {
+      action: 'replace_text',
+      edits: [{ find: 'thirty (30) days', replace: 'sixty (60) days' }],
+      changeMode: 'tracked',
+    })) as AgentReceipt;
+
+    console.log(receipt.status, receipt.verificationPassed);
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import SuperDocClient, create_agent_toolkit
+
+    client = SuperDocClient()
+    client.connect()
+    doc = client.open({"doc": "./contract.docx"})
+
+    # One call — tools, system prompt, and pre-bound dispatchers that are
+    # guaranteed to agree on preset and exclusions.
+    kit = create_agent_toolkit({"provider": "openai", "preset": "core"})
+    tools, system_prompt = kit["tools"], kit["system_prompt"]
+
+    receipt = kit["dispatch"](
+        doc,
+        "superdoc_perform_action",
+        {
+            "action": "replace_text",
+            "edits": [{"find": "thirty (30) days", "replace": "sixty (60) days"}],
+            "changeMode": "tracked",
+        },
+    )
+    print(receipt["status"], receipt.get("verificationPassed"))
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Tools, system prompt, and dispatch must all come from the **same preset** — the legacy dispatcher does not know `superdoc_perform_action` and fails with `Unknown tool`. `createAgentToolkit` guarantees this; if you use the standalone functions (`chooseTools`, `getSystemPrompt`, `dispatchSuperDocTool`) instead, pass the same `preset` (and `excludeActions`) to every call.
+</Warning>
+
+## Reading: `superdoc_inspect`
+
+`superdoc_inspect` returns a stable snapshot the model can target edits against. Prefer the **narrowest** inspect that answers the question:
+
+```jsonc
+// counts only — cheapest possible orientation call
+{ "countsOnly": true }
+
+// just the lists and tables
+{ "includeDomains": ["lists", "tables"] }
+
+// only headings
+{ "includeDomains": ["blocks"], "blockNodeTypes": ["heading"] }
+```
+
+Available domains: `blocks`, `lists`, `tables`, `comments`, `trackedChanges`, `sections`, `headerFooters`, `styles`, `contentControls`, `fields`, `hyperlinks`, `bookmarks`, `permissionRanges`, `images`.
+
+### Large documents: windowed reads
+
+For long documents, read blocks in contiguous windows instead of one giant snapshot. Ordinals are **absolute**, so windows line up across calls:
+
+```jsonc
+{ "includeDomains": ["blocks"], "blockOffset": 0,   "blockLimit": 200 }
+{ "includeDomains": ["blocks"], "blockOffset": 200, "blockLimit": 200, "omitEmptyBlocks": true, "dropTextPreview": true }
+```
+
+`omitEmptyBlocks` and `dropTextPreview` trim the payload for a pure reading pass; `blockTextLimit` caps per-block text length. This keeps a single inspect call from dominating your context window (every tool result lives in conversation history and is re-billed as prompt tokens on every later turn).
+
+<Note>
+All ordinals shown by `superdoc_inspect` (`blockOrdinal`, `paragraphOrdinal`, `headingOrdinal`, `tableOrdinal`, …) are **1-based**, and selectors accept the same 1-based values.
+</Note>
+
+## Editing: `superdoc_perform_action`
+
+One tool, one `action` argument, flat parameters. The dispatcher statically validates arguments against the action's declared schema (unknown keys are rejected with a descriptive error) before anything touches the document.
+
+### Targeting: selectors
+
+Actions that operate on a specific block accept a `selector`:
+
+| Selector | Shape | Use when |
+| --- | --- | --- |
+| Node id | `{kind:"nodeId", nodeId}` | You have a `nodeId` from `superdoc_inspect` (most precise) |
+| Ordinal | `{kind:"ordinal", ordinalKind:"paragraphOrdinal"\|"headingOrdinal"\|"tableOrdinal"\|"listOrdinal"\|"sectionOrdinal"\|"bodyParagraphOrdinal"\|"blockOrdinal", value:N}` | "the 3rd paragraph", "the 2nd table" (1-based) |
+| Text search | `{kind:"textSearch", terms:[...], match?:"all"\|"any", occurrence?:N, nodeTypes?:[...]}` | You know the text but not the position |
+| Table cell | `{kind:"tableCell", tableOrdinal, rowIndex, columnIndex}` | Cell-scoped edits |
+| Relative | `{kind:"relative", position:"after"\|"before", target:selector}` | "the paragraph after the heading X" |
+
+### Placement
+
+Insert-style actions accept a `placement`:
+
+```jsonc
+{ "at": "document_end" }
+{ "at": "document_start" }
+{ "at": "after",  "selector": { "kind": "textSearch", "terms": ["Definitions"] } }
+{ "at": "before", "selector": { "kind": "nodeId", "nodeId": "p42" } }
+```
+
+### Tracked changes: `changeMode`
+
+Most mutating actions accept `changeMode: "tracked"`. In tracked mode the edit is recorded as a **redline suggestion** — a tracked insert/delete/format change the user (or the model) can accept or reject later — instead of being applied directly. This is the backbone of review workflows:
+
+<Tabs>
+  <Tab title="Suggest (tracked)">
+    ```jsonc
+    {
+      "action": "rewrite_block",
+      "selector": { "kind": "ordinal", "ordinalKind": "paragraphOrdinal", "value": 4 },
+      "text": "Either party may terminate this Agreement on sixty (60) days' written notice.",
+      "changeMode": "tracked"
+    }
+    ```
+  </Tab>
+  <Tab title="Apply directly">
+    ```jsonc
+    {
+      "action": "rewrite_block",
+      "selector": { "kind": "ordinal", "ordinalKind": "paragraphOrdinal", "value": 4 },
+      "text": "Either party may terminate this Agreement on sixty (60) days' written notice."
+    }
+    ```
+  </Tab>
+</Tabs>
+
+A "suggest vs. apply directly" toggle in your chat UI maps 1:1 to setting `changeMode` on every mutating call. Review then happens with the same action surface:
+
+- `accept_tracked_changes` / `reject_tracked_changes` — optionally filtered by `author` or `changeType` (`insert` | `delete` | `replacement` | `format`)
+- `undo_changes` / `redo_changes` — deterministic history recovery (`untilMarker` restores until a rendered clause marker like `"2.1."` reappears)
+
+A few actions are **always direct** (not tracked) and say so in their reference entry: `move_range`, `split_list`, `set_paragraph_spacing`, `insert_page_break`, `add_hyperlink`, `style_table`. Requesting `changeMode:"tracked"` on `move_range` fails with nothing changed — use `move_text` for tracked text-span moves.
+
+### Receipts
+
+Every action returns a receipt — not just "ok", but evidence:
+
+```jsonc
+{
+  "status": "ok",                    // "ok" | "partial" | "failed"
+  "intent": "replace_text",
+  "preSnapshot":  { "revision": "41", "counts": { "paragraphs": 58, "trackedChanges": 0 } },
+  "postSnapshot": { "revision": "42", "counts": { "paragraphs": 58, "trackedChanges": 2 } },
+  "verification": [
+    { "check": { "kind": "text-replaced", "find": "thirty (30) days" }, "passed": true }
+  ],
+  "verificationPassed": true,
+  "editsApplied": 2
+}
+```
+
+What to rely on:
+
+- **`status`** — `partial` means some of the requested work landed (the receipt says which part); `failed` means nothing changed unless the receipt explicitly says otherwise.
+- **`verification`** — post-edit checks the action ran against a fresh snapshot (counts deltas, placement adjacency, text presence). `verificationPassed` is the roll-up.
+- **`errors[]`** — failures carry a `code`, a human-readable `message` written for the model to act on, and often a structured `recovery` (`{kind: "reinspect" | "retry" | "revert", call?}`) plus a paste-ready `revertHint`.
+- **`formattingMatched`** — insert actions that blend new content into its surroundings (e.g. `add_list_items`) report the font/size/style they copied from neighbors, so the model knows not to re-format.
+- **List caps** — long per-item lists (`executedOperations`, `selectedTargets`) are capped at 8 entries with a `*Count` field preserving the true total, to keep receipts from bloating your conversation history.
+
+### Action reference
+
+Forty actions, grouped. Arguments marked `?` are optional; most mutating actions also accept `changeMode`.
+
+#### Text & structure
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `insert_paragraphs` | `texts[]` (or `text`), `placement?`, `headingLevel?` | First item can become a heading (1–6) |
+| `insert_heading` | `text`, `level`, `placement?` | |
+| `replace_text` | `edits[{find, replace}]`, `selector?`, `caseSensitive?` | Selector scopes all edits to one block |
+| `delete_text` | `finds[]`, `selector?`, `caseSensitive?` | Scope with `selector` to delete stray whitespace safely |
+| `append_list` | `items[]`, `kind?: ordered\|bullet`, `headingText?`, `placement?` | With `placement`, builds the list at that block instead of document end |
+| `create_table` | `rows`, `columns`, `cellTexts?`, `placement?` | Tracked mode makes the whole insertion one tracked change |
+| `rewrite_block` | `selector`, `text` | Replaces a block's text; tracked mode produces a redline |
+| `fill_placeholders` | `values[]` and/or `fields[{label?, value}]` | Fills template placeholders |
+| `move_range` | `fromText`, `toText?`, `afterText` or `beforeText` | Moves a block range or visual "section" identified by text. Auto-extends to the section end when `toText` is omitted. Direct-only: `changeMode:"tracked"` is refused with nothing changed (use `move_text` for tracked moves). Also refuses reversed ranges and ranges containing tables/lists/images — move those with `move_table` or narrow the range |
+
+#### Lists & numbering
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `convert_list` | `kind`, one of: `listOrdinal?`/`anchorText?`, `fromMarker`+`toMarker`, `fromText`+`toText` | Converts lists, rendered clause ranges ("2.1."–"2.3."), or plain paragraphs to a list **in place** |
+| `attach_numbering` | `anchorText` or `nodeId`, `likeMarker` | Numbers a block at the same scheme/level as the sibling rendering `likeMarker` (e.g. `"10."`); tracked mode records the former state |
+| `add_list_items` | `anchorText` + `entries[{text, level?}]` | **The** way to add items into an existing list. `level` is relative to the anchor (0 same, positive nests, negative promotes — e.g. `-1` from item "12(e)" creates top-level item 13). Inherits the anchor's look automatically |
+| `split_list` | `anchorText`, `restartNumbering?` (default true) | Splits one list into two at an item. Direct edit |
+
+#### History
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `undo_changes` | `untilMarker?`, `steps?` (1–25) | Steps history back until the marker reappears — deterministic revert |
+| `redo_changes` | `steps?` (default 1) | Re-applies edits after an undo overshot. Only valid before any new edit |
+
+#### Moving text
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `move_text` | `text`, `afterText?` | Direct by default (requires `afterText`). `changeMode:"tracked"` records the move as a redline: tracked delete at the source + tracked insert at the destination — accept keeps the move, reject restores the original order |
+
+#### Comments
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `comment_paragraphs` | `commentText`, `scope?: all\|body`, `excludeBlockQuotes?` | One comment per paragraph |
+| `add_comments` | `commentText`, `selector` or `selectors[]` | Batch many targets into `selectors[]` in ONE call |
+| `resolve_comments` | `anchorText?`, `reopen?` | Omit `anchorText` to resolve all open comments |
+| `reply_to_comment` | `commentText`, `anchorText` or `commentId` | Adds a **threaded** reply, not a new top-level comment |
+
+#### Tracked-change review
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `accept_tracked_changes` | `author?`, `changeType?` | e.g. `changeType:"format"` accepts only formatting revisions |
+| `reject_tracked_changes` | `author?`, `changeType?` | |
+
+#### Formatting
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `format_text` | `bold?`/`italic?`/`underline?`/`strike?`, `highlight?`, `color?`, `fontSize?`, `targetText`/`targetTexts[]`/`selector`, `caseSensitive?` | Applies to every occurrence; tracked-safe |
+| `apply_style` | `selector`, one of `styleId`, `headingLevel`, `likeText` | `likeText` copies another block's style **and** effective look |
+| `format_paragraph` | `selector`, `alignment` | Tracked mode records the former alignment (`w:pPrChange`) |
+| `set_paragraph_spacing` | `selector`, `lineSpacing?`, `spaceBefore?`, `spaceAfter?` | Never insert blank paragraphs for spacing. Direct edit |
+| `normalize_body_font_size` | `fontSize` | Whole-body font size |
+| `set_font_family` | `fontFamily`, `selector?` or `targetText`/`targetTexts[]?` | Omit both to set the whole body typeface |
+| `apply_letter_spacing` | `selector`, `letterSpacing` | |
+
+#### Layout, links, media
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `insert_page_break` | `selector` | Sets `pageBreakBefore` on the block — never pushes content with empty paragraphs. Direct edit |
+| `add_hyperlink` | `text`, `url`, `tooltip?` | Turns existing text into a link. Direct edit |
+| `insert_toc` | `title?`, `placement?` | Table of contents |
+
+#### Tables
+
+| Action | Arguments | Notes |
+| --- | --- | --- |
+| `style_table` | `tableOrdinal?`, `accentColor?` | Professional look in one call: accent header, bold labels, banded rows. Direct edit |
+| `move_table` | `tableOrdinal?`, `placement` | Moves the whole table with all content in one call |
+| `delete_table` | `tableOrdinal?` | Deletes an entire table |
+| `insert_table_row` | `tableOrdinal?`, `rowIndex?`, `position?`, `cellTexts?`, `dryRun?` | |
+| `insert_table_column` | `tableOrdinal?`, `columnIndex?`, `position?`, `headerText?` | |
+| `delete_table_row` | `tableOrdinal?`, `rowIndex` | |
+| `delete_table_column` | `tableOrdinal?`, `columnIndex` | |
+| `split_table` | `tableOrdinal?`, `rowIndex`, `separatorText?` | |
+
+## Narrowing the surface: `excludeActions`
+
+Hide actions you don't want the model to see. The exclusion narrows **everything coherently**: the `action` enum, the argument schema, the per-action documentation lines in the system prompt, and the dispatch guard (an excluded action is refused even if the model guesses its name).
+
+The safest way to use it is `createAgentToolkit` — one options object, all three surfaces guaranteed to agree:
+
+```typescript
+const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+  provider: 'anthropic',
+  preset: 'core',
+  excludeActions: ['delete_table', 'fill_placeholders'],
+});
+```
+
+With the standalone functions, pass the same list everywhere:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const { tools } = await chooseTools({
+      provider: 'anthropic',
+      preset: 'core',
+      excludeActions: ['delete_table', 'fill_placeholders'],
+    });
+    const prompt = await getSystemPrompt('core', { excludeActions: ['delete_table', 'fill_placeholders'] });
+
+    // Defense in depth: pass the same list at dispatch time.
+    await dispatchSuperDocTool(doc, name, args, {
+      preset: 'core',
+      excludeActions: ['delete_table', 'fill_placeholders'],
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    tools = choose_tools({
+        "provider": "anthropic",
+        "preset": "core",
+        "excludeActions": ["delete_table", "fill_placeholders"],
+    })["tools"]
+    prompt = get_system_prompt("core", exclude_actions=["delete_table", "fill_placeholders"])
+
+    dispatch_superdoc_tool(doc, name, args, preset="core",
+                           exclude_actions=["delete_table", "fill_placeholders"])
+    ```
+  </Tab>
+  <Tab title="CLI">
+    ```bash
+    superdoc preset get-tools --preset core --provider anthropic \
+      --excludeActions delete_table,fill_placeholders
+    superdoc preset get-system-prompt --preset core \
+      --excludeActions delete_table,fill_placeholders
+    ```
+  </Tab>
+</Tabs>
+
+Unknown action names in the list throw immediately (typo protection). The legacy preset ignores exclusion options entirely.
+
+## The system prompt
+
+`getSystemPrompt('core')` returns the prompt the action surface was **evaluated with**: document-model vocabulary (visual sections, rendered markers, effective formatting), the full per-action argument documentation, targeting conventions, tracked-changes rules, and receipt-reading discipline (trust the receipt, re-inspect on `partial`, use `revertHint` on failures).
+
+- **Use it as-is** for the best out-of-the-box behavior — the eval suite scores this exact prompt.
+- **Extend it** by appending your domain instructions (tone, house style, what to never touch) at the end.
+- **Replacing it entirely is not recommended**: the per-action lines teach argument shapes the schema alone can't convey. If you do, keep the action documentation block.
+
+## Creating custom actions
+
+<Note>
+**Coming soon.** A first-class authoring kit (`defineAction`) is in the works: define your own action with a typed schema and handler, register it alongside the built-in forty, and it appears in the tool enum, the system prompt's action list, and the dispatch surface automatically — same receipts, same exclusion support. Until it ships, custom capabilities can be added as [custom tools](/ai/agents/legacy-preset#creating-custom-tools) registered next to the preset's own tools in your loop.
+</Note>
+
+## Over MCP
+
+The core preset is also available through the SuperDoc MCP server: start it with `MCP_PRESET=core` and clients get the session lifecycle tools (`superdoc_open` / `superdoc_save` / `superdoc_close`) plus `superdoc_inspect` and `superdoc_perform_action`, registered from the same catalog `chooseTools()` serves — the MCP surface cannot drift from the SDK surface. Server instructions use the core MCP prompt automatically.
+
+## Experimental: `superdoc_execute_code`
+
+The SDK can dispatch a third tool, `superdoc_execute_code` (model-authored JavaScript against a synchronous in-process Document API). It is **work-in-progress and deliberately not advertised**: it is absent from `chooseTools()` results and from the served system prompt, and its behavior may change. It will ship behind an explicit safety flag in a future release. Don't build on it yet.
+
+## Related
+
+- [Overview & agent loops](/ai/agents/llm-tools): providers, token budget, error codes, troubleshooting
+- [Best practices](/ai/agents/best-practices)
+- [Document API](/document-api/overview): the operations the actions wrap

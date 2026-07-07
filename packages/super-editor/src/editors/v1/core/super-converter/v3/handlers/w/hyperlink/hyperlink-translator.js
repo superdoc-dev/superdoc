@@ -58,11 +58,12 @@ const encode = (params, encodedAttrs) => {
   // Add marks to the run nodes and process them
   const linkMark = { type: 'link', attrs: { ...encodedAttrs, href } };
   const referenceNodeTypes = ['sd:pageReference', 'sd:autoPageNumber', 'sd:totalPageNumber'];
-  const contentNodes = node.elements.filter((el) => el.name === 'w:r' || referenceNodeTypes.includes(el.name));
+  const revisionNodeTypes = ['w:ins', 'w:del'];
+  const contentNodes = node.elements.filter(
+    (el) => el.name === 'w:r' || revisionNodeTypes.includes(el.name) || referenceNodeTypes.includes(el.name),
+  );
   contentNodes.forEach((contentNode) => {
-    const existingMarks = Array.isArray(contentNode.marks) ? contentNode.marks : [];
-    const marksWithoutLink = existingMarks.filter((mark) => mark?.type !== 'link');
-    contentNode.marks = [...marksWithoutLink, linkMark];
+    addLinkMarkToContentNode(contentNode, linkMark, referenceNodeTypes);
   });
 
   const updatedNode = nodeListHandler.handler({
@@ -73,6 +74,34 @@ const encode = (params, encodedAttrs) => {
 
   return updatedNode;
 };
+
+/**
+ * @param {Record<string, any>} contentNode
+ * @param {{ type: string, attrs: Record<string, any> }} linkMark
+ * @param {string[]} referenceNodeTypes
+ */
+function addLinkMarkToContentNode(contentNode, linkMark, referenceNodeTypes) {
+  if (contentNode.name === 'w:ins' || contentNode.name === 'w:del') {
+    (contentNode.elements || []).forEach((child) => addLinkMarkToContentNode(child, linkMark, referenceNodeTypes));
+    return;
+  }
+
+  if (contentNode.name !== 'w:r' && !referenceNodeTypes.includes(contentNode.name)) {
+    return;
+  }
+
+  addLinkMark(contentNode, linkMark);
+}
+
+/**
+ * @param {Record<string, any>} node
+ * @param {{ type: string, attrs: Record<string, any> }} linkMark
+ */
+function addLinkMark(node, linkMark) {
+  const existingMarks = Array.isArray(node.marks) ? node.marks : [];
+  const marksWithoutLink = existingMarks.filter((mark) => mark?.type !== 'link');
+  node.marks = [...marksWithoutLink, linkMark];
+}
 
 /**
  * Resolve the href from the relationship ID or anchor.
@@ -112,23 +141,44 @@ function decode(params) {
   const linkAttrs = this.decodeAttributes({ ...params, node: linkMark });
   let { href: link, anchor } = linkMark.attrs;
 
-  if (!linkAttrs['r:id'] && !anchor) {
-    linkAttrs['r:id'] = _addNewLinkRelationship(params, link);
-  }
-
   let contentNodes = [];
   hyperlinkGroup.forEach((linkNode) => {
+    let nodeWithoutLink = linkNode;
     if ('marks' in linkNode) {
-      linkNode.marks = linkNode.marks.filter((m) => m.type !== 'link');
+      nodeWithoutLink = {
+        ...linkNode,
+        marks: linkNode.marks.filter((m) => m.type !== 'link'),
+      };
     } else {
-      linkNode.attrs.marksAsAttrs = linkNode.attrs.marksAsAttrs.filter((m) => m.type !== 'link');
+      nodeWithoutLink = {
+        ...linkNode,
+        attrs: {
+          ...linkNode.attrs,
+          marksAsAttrs: linkNode.attrs.marksAsAttrs.filter((m) => m.type !== 'link'),
+        },
+      };
     }
-    const outputNode = exportSchemaToJson({ ...params, node: linkNode });
+    const outputNode = exportSchemaToJson({
+      ...params,
+      node: nodeWithoutLink,
+      extraParams: {
+        ...params.extraParams,
+        linkProcessed: true,
+      },
+    });
     if (outputNode) {
       if (outputNode instanceof Array) contentNodes.push(...outputNode);
       else contentNodes.push(outputNode);
     }
   });
+
+  if (!contentNodes.length) {
+    return null;
+  }
+
+  if (!linkAttrs['r:id'] && !anchor) {
+    linkAttrs['r:id'] = _addNewLinkRelationship(params, link);
+  }
 
   const newNode = {
     name: 'w:hyperlink',

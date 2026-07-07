@@ -450,6 +450,21 @@
     "ci": true
   },
   {
+    "id": "ai-core-actions-agent",
+    "section": "ai",
+    "subsection": "agents",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Core actions agent",
+    "category": "AI",
+    "surface": "SDK (Node + Python)",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/core-actions-agent",
+    "docs": "https://docs.superdoc.dev/ai/agents/core-preset",
+    "ci": false
+  },
+  {
     "id": "document-engine-ai-redlining",
     "section": "document-engine",
     "subsection": "sdks",

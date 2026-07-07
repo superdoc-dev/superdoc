@@ -14,15 +14,25 @@ import {
   DEFAULT_PRESET,
   getPreset,
   listPresets,
+  registerPreset,
+  unregisterPreset,
   type CacheStrategy,
+  type GetSystemPromptOptions,
   type ToolCatalog,
   type ToolCatalogEntry,
   type ToolCatalogOperation,
   type ToolProvider,
 } from './presets.js';
 
-export { DEFAULT_PRESET, getPreset, listPresets };
-export type { CacheStrategy, ToolCatalog, ToolCatalogEntry, ToolCatalogOperation, ToolProvider };
+export { DEFAULT_PRESET, getPreset, listPresets, registerPreset, unregisterPreset };
+export type {
+  CacheStrategy,
+  GetSystemPromptOptions,
+  ToolCatalog,
+  ToolCatalogEntry,
+  ToolCatalogOperation,
+  ToolProvider,
+};
 
 // ---------------------------------------------------------------------------
 // chooseTools — provider-shaped tool list with optional cache markers
@@ -51,6 +61,13 @@ export type ToolChooserInput = {
    *   underlying model; reported as `'unsupported'`.
    */
   cache?: boolean;
+  /**
+   * Action names to REMOVE from the advertised action surface. Supported by
+   * the `core` preset (the `superdoc_perform_action` enum, description, and
+   * argument properties shrink together); presets without an action surface
+   * ignore it. Unknown names throw.
+   */
+  excludeActions?: readonly string[];
 };
 
 /**
@@ -81,6 +98,7 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
   const preset = getPreset(presetId);
   const { tools, cacheStrategy } = await preset.getTools(input.provider, {
     cache: input.cache === true,
+    excludeActions: input.excludeActions,
   });
   return {
     tools,
@@ -131,34 +149,107 @@ export async function dispatchSuperDocTool(
   documentHandle: BoundDocApi,
   toolName: string,
   args: Record<string, unknown> = {},
-  invokeOptions?: InvokeOptions,
+  invokeOptions?: InvokeOptions & {
+    preset?: string;
+    /** Refuse dispatch of these actions (defense-in-depth for exclusion configs). */
+    excludeActions?: readonly string[];
+  },
 ): Promise<unknown> {
-  return getPreset(DEFAULT_PRESET).dispatch(documentHandle, toolName, args, invokeOptions);
+  const presetId = invokeOptions?.preset ?? DEFAULT_PRESET;
+  const { preset: _p, ...rest } = invokeOptions ?? {};
+  return getPreset(presetId).dispatch(documentHandle, toolName, args, rest);
 }
 
 // ---------------------------------------------------------------------------
-// System prompts (preset-scoped; default to legacy)
+// System prompts (preset-scoped; default to DEFAULT_PRESET)
 // ---------------------------------------------------------------------------
 
 /**
- * Read the packaged SDK system prompt (default preset: legacy).
+ * Resolve a preset-id arg that may be a bare string OR a `{preset?: string}`
+ * options object. Object form is tolerated for callers (e.g. older eval
+ * harnesses) that pass `{...}` instead of a string; any unknown keys on the
+ * object are silently dropped and the preset falls through to DEFAULT_PRESET.
+ */
+function resolvePromptPresetArg(preset?: string | { preset?: string }): string {
+  if (typeof preset === 'string') return preset;
+  if (preset != null && typeof preset === 'object' && typeof preset.preset === 'string') {
+    return preset.preset;
+  }
+  return DEFAULT_PRESET;
+}
+
+/**
+ * Read the SDK system prompt for the given preset (default: {@link DEFAULT_PRESET}).
  *
  * Includes a persona preamble ("You are a document editing assistant…")
  * suitable for embedded LLM usage (OpenAI, Anthropic, Vercel APIs). For MCP
  * server instructions, use {@link getMcpPrompt} instead.
  */
-export async function getSystemPrompt(preset?: string): Promise<string> {
-  return getPreset(preset ?? DEFAULT_PRESET).getSystemPrompt();
+export type CreateAgentToolkitInput = ToolChooserInput;
+
+export type AgentToolkit = {
+  /** Provider-shaped tool definitions (see {@link chooseTools}). */
+  tools: unknown[];
+  meta: {
+    provider: ToolProvider;
+    preset: string;
+    toolCount: number;
+    cacheStrategy: CacheStrategy;
+  };
+  /** The preset's system prompt with the SAME exclusions applied. */
+  systemPrompt: string;
+  /**
+   * {@link dispatchSuperDocTool} pre-bound to this toolkit's preset and
+   * exclusions — an excluded action is refused here even if the model
+   * guesses its name.
+   */
+  dispatch: (
+    documentHandle: BoundDocApi,
+    toolName: string,
+    args?: Record<string, unknown>,
+    invokeOptions?: InvokeOptions,
+  ) => Promise<unknown>;
+};
+
+/**
+ * One-call agent surface: tools, system prompt, and a pre-bound dispatcher
+ * that are coherent BY CONSTRUCTION — the same preset and `excludeActions`
+ * apply to all three, so an action can never linger in the prompt after
+ * being excluded from the tool array (or vice versa).
+ *
+ * The legacy preset ignores exclusion options everywhere (it has no action
+ * surface); passing `excludeActions` with `preset: 'legacy'` is a no-op,
+ * matching the standalone functions.
+ */
+export async function createAgentToolkit(input: CreateAgentToolkitInput): Promise<AgentToolkit> {
+  const presetId = input.preset ?? DEFAULT_PRESET;
+  const excludeActions = input.excludeActions ? [...input.excludeActions] : undefined;
+  const { tools, meta } = await chooseTools({ ...input, preset: presetId, excludeActions });
+  const systemPrompt = await getSystemPrompt(presetId, excludeActions ? { excludeActions } : undefined);
+  const dispatch: AgentToolkit['dispatch'] = (documentHandle, toolName, args = {}, invokeOptions) =>
+    dispatchSuperDocTool(documentHandle, toolName, args, {
+      ...invokeOptions,
+      preset: presetId,
+      ...(excludeActions ? { excludeActions } : {}),
+    });
+  return { tools, meta, systemPrompt, dispatch };
+}
+
+export async function getSystemPrompt(
+  preset?: string | { preset?: string },
+  options?: GetSystemPromptOptions,
+): Promise<string> {
+  return getPreset(resolvePromptPresetArg(preset)).getSystemPrompt(options);
 }
 
 /**
- * Read the packaged MCP system prompt for intent tools (default preset: legacy).
+ * Read the MCP system prompt for the given preset (default: {@link DEFAULT_PRESET}).
  *
  * Omits the persona preamble and includes session lifecycle instructions
  * (open/save/close) suitable for MCP server `instructions`.
  */
-export async function getMcpPrompt(preset?: string): Promise<string> {
-  return getPreset(preset ?? DEFAULT_PRESET).getMcpPrompt();
+export async function getMcpPrompt(preset?: string | { preset?: string }): Promise<string> {
+  return getPreset(resolvePromptPresetArg(preset)).getMcpPrompt();
 }
 
 // ---------------------------------------------------------------------------
@@ -207,8 +298,13 @@ export async function getSystemPromptForProvider(input: {
   provider: ToolProvider;
   preset?: string;
   cache?: boolean;
+  /** Same exclusions as chooseTools — keeps the provider-shaped prompt and the tool surface narrowed together. */
+  excludeActions?: readonly string[];
 }): Promise<SystemPromptForProviderResult> {
-  const text = await getSystemPrompt(input.preset);
+  const text = await getSystemPrompt(
+    input.preset,
+    input.excludeActions ? { excludeActions: input.excludeActions } : undefined,
+  );
   const cacheRequested = input.cache === true;
 
   if (input.provider === 'anthropic') {

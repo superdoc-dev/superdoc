@@ -196,6 +196,11 @@
                 "group": "Agents",
                 "pages": [
                   "ai/agents/llm-tools",
+                  "ai/agents/architecture",
+                  {
+                    "group": "Presets",
+                    "pages": ["ai/agents/core-preset", "ai/agents/legacy-preset"]
+                  },
                   "ai/agents/integrations",
                   "ai/agents/best-practices",
                   "ai/agents/debugging",
@@ -295,7 +300,7 @@
     ]
   },
   "banner": {
-    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement →](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
+    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement \u2192](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
     "dismissible": true
   },
   "redirects": [

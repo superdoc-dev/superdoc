@@ -4891,6 +4891,13 @@ export const MCP_TOOL_CATALOG = {
                       "destination"
                     ],
                     "description": "Optional move pairing assertion. 'pair' requires the resolved tracked change to be a paired move; 'source' / 'destination' further narrow to a specific half. When the assertion does not hold the decide adapter fails closed."
+                  },
+                  "side": {
+                    "enum": [
+                      "inserted",
+                      "deleted"
+                    ],
+                    "description": "Optional replacement side. When the id resolves to a paired replacement, decides only the 'inserted' or 'deleted' half, leaving the other half as a standalone pending change."
                   }
                 },
                 "additionalProperties": false,
@@ -5089,6 +5096,13 @@ export const MCP_TOOL_CATALOG = {
                       "destination"
                     ],
                     "description": "Optional move pairing assertion. 'pair' requires the resolved tracked change to be a paired move; 'source' / 'destination' further narrow to a specific half. When the assertion does not hold the decide adapter fails closed."
+                  },
+                  "side": {
+                    "enum": [
+                      "inserted",
+                      "deleted"
+                    ],
+                    "description": "Optional replacement side. When the id resolves to a paired replacement, decides only the 'inserted' or 'deleted' half."
                   }
                 },
                 "additionalProperties": false,

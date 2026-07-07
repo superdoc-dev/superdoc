@@ -13,11 +13,20 @@ describe('manual command allowlist', () => {
       'close',
       'insert tab',
       'insert line-break',
+      // CLI/SDK-only session op: model-authored JS against the live editor.doc.
+      'execute code',
       'session list',
       'session save',
       'session close',
       'session set-default',
       'session use',
+      // LLM-tools preset proxies (cross-language surface for the Python SDK).
+      'preset list',
+      'preset get-catalog',
+      'preset get-tools',
+      'preset get-system-prompt',
+      'preset get-mcp-prompt',
+      'preset dispatch',
     ]);
   });
 
@@ -28,10 +37,17 @@ describe('manual command allowlist', () => {
       'doc.close',
       'doc.insertTab',
       'doc.insertLineBreak',
+      'doc.executeCode',
       'doc.session.list',
       'doc.session.save',
       'doc.session.close',
       'doc.session.setDefault',
+      'doc.preset.list',
+      'doc.preset.getCatalog',
+      'doc.preset.getTools',
+      'doc.preset.getSystemPrompt',
+      'doc.preset.getMcpPrompt',
+      'doc.preset.dispatch',
     ]);
   });
 
@@ -44,10 +60,12 @@ describe('manual command allowlist', () => {
     expect(actual).toEqual([
       'call.ts',
       'close.ts',
+      'execute-code.ts',
       'insert-inline-special.ts',
       'install.ts',
       'legacy-compat.ts',
       'open.ts',
+      'preset.ts',
       'save.ts',
       'session-close.ts',
       'session-list.ts',

@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { getMcpPrompt } from '@superdoc-dev/sdk';
 import { MCP_SYSTEM_PROMPT } from './generated/mcp-prompt.js';
 import { SessionManager } from './session-manager.js';
 import { registerAllTools } from './tools/index.js';
@@ -10,34 +11,33 @@ const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
 // Validate MCP_PRESET at startup so misconfiguration fails fast instead of
-// silently falling back to 'legacy'. Tool registration is wired to legacy via
-// the static MCP_TOOL_CATALOG + dispatchIntentTool imports in tools/intent.ts;
-// the resolved id is not plumbed further yet. When a non-legacy preset lands,
-// pass the id into registerAllTools() so it can route through the registry.
-const PRESETS_SUPPORTED = new Set(['legacy']);
-const requestedPreset = process.env.MCP_PRESET ?? 'legacy';
+// silently falling back to 'legacy'.
+//   legacy (default) — the 9 grouped intent tools from the generated catalog.
+//   core             — the actions surface (superdoc_inspect +
+//                      superdoc_perform_action) from the SDK's core preset,
+//                      with the SDK's MCP-flavored core prompt as instructions.
+const PRESETS_SUPPORTED = new Set(['legacy', 'core']);
+const requestedPreset = (process.env.MCP_PRESET ?? 'legacy') as 'legacy' | 'core';
 if (!PRESETS_SUPPORTED.has(requestedPreset)) {
   console.error(`SuperDoc MCP: unknown preset "${requestedPreset}". Supported: ${[...PRESETS_SUPPORTED].join(', ')}.`);
   process.exit(2);
 }
 
-const server = new McpServer(
-  {
-    name: 'superdoc',
-    version,
-  },
-  {
-    instructions: MCP_SYSTEM_PROMPT,
-  },
-);
-
 const sessions = new SessionManager();
-
-registerAllTools(server, sessions);
-
 const transport = new StdioServerTransport();
 
 async function main(): Promise<void> {
+  const instructions = requestedPreset === 'core' ? await getMcpPrompt('core') : MCP_SYSTEM_PROMPT;
+  const server = new McpServer(
+    {
+      name: 'superdoc',
+      version,
+    },
+    {
+      instructions,
+    },
+  );
+  await registerAllTools(server, sessions, requestedPreset);
   await server.connect(transport);
 }
 

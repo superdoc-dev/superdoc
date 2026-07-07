@@ -1,0 +1,137 @@
+---
+title: How it works
+sidebarTitle: How it works
+description: "The moving parts behind SuperDoc's LLM tools: your agent loop, the SDK, the CLI host, and the model — and exactly what crosses each boundary"
+keywords: "superdoc architecture, sdk cli host, agent loop, llm tool dispatch, document sessions, json-rpc"
+---
+
+Three layers cooperate to let a model edit Word documents. Nothing here is required reading to get started — the [overview quick start](/ai/agents/llm-tools#quick-start) works without it — but when you're debugging, budgeting tokens, or deciding where code should run, this is the map.
+
+## The big picture
+
+```mermaid
+flowchart TB
+    subgraph browser["🖥 Browser (optional)"]
+        UI["Your chat UI"]
+        ED["SuperDoc editor<br/>superdoc / @superdoc-dev/react<br/><i>renders the same .docx for the user</i>"]
+    end
+
+    subgraph backend["⚙️ Your backend"]
+        direction TB
+        APP["<b>Your agent loop</b><br/><i>the broker — owns messages, calls the model,<br/>forwards tool calls, streams status</i>"]
+        subgraph sdkbox["@superdoc-dev/sdk (Node) · superdoc-sdk (Python)"]
+            KIT["createAgentToolkit()<br/><i>tools · systemPrompt · dispatch</i>"]
+            CLIENT["Document client<br/><i>open / save / close sessions</i>"]
+        end
+        subgraph clibox["SuperDoc CLI host (bundled binary)"]
+            HOST["JSON-RPC host process"]
+            ENGINE["Headless document engine<br/><i>the same engine the browser editor uses</i>"]
+            SESS["Sessions<br/><i>live documents + revision counters</i>"]
+        end
+    end
+
+    subgraph provider["☁️ LLM provider"]
+        LLM["OpenAI · Anthropic · Vercel AI"]
+    end
+
+    UI -- "user request" --> APP
+    APP -- "1 · tools + system prompt" --> KIT
+    APP -- "2 · messages + tools" --> LLM
+    LLM -- "3 · tool calls" --> APP
+    APP -- "4 · dispatch(doc, name, args)" --> KIT
+    KIT -- "typed operations" --> HOST
+    CLIENT -- "spawn + sessions" --> HOST
+    HOST --- ENGINE
+    ENGINE --- SESS
+    HOST -- "5 · receipts" --> APP
+    APP -- "status + final summary" --> UI
+```
+
+The three rules this diagram encodes:
+
+1. **The SDK is server-side.** `dispatchSuperDocTool` (and the toolkit's `dispatch`) need a session-bound document handle from `createSuperDocClient().open(...)`. Never import the SDK — or the `superdoc` editor package — into browser bundles or Next.js API-route bundling without marking it external.
+2. **The model never touches a document.** It only ever sees tool definitions, a system prompt, and tool results. Your loop is the broker for everything.
+3. **The engine is the same everywhere.** The CLI host embeds the identical document engine the browser editor uses — edits made headless render exactly the same in the editor.
+
+## SDK ↔ CLI: where documents actually live
+
+The SDK packages are deliberately thin: typed clients, the tool surfaces, and prompts. The document engine ships inside the **CLI host binary** (`@superdoc-dev/cli-<platform>` for Node, an embedded companion in the Python wheels).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SDK as SDK client
+    participant CLI as CLI host process
+    participant ENG as Document engine
+
+    SDK->>CLI: spawn (bundled binary), JSON-RPC over stdio
+    CLI-->>SDK: host.capabilities (handshake)
+    SDK->>CLI: open({doc: "contract.docx"})
+    CLI->>ENG: load .docx into a live session
+    CLI-->>SDK: session handle (revision 0)
+    Note over SDK,CLI: every operation now targets this session
+    SDK->>CLI: blocks.list / comments.create / mutations.apply ...
+    CLI->>ENG: execute against the live document
+    CLI-->>SDK: result + revision bump when mutated
+    SDK->>CLI: save({out: "reviewed.docx"})
+    CLI-->>SDK: bytes written
+    SDK->>CLI: close()
+```
+
+What crosses this boundary, precisely:
+
+- **Transport**: newline-delimited JSON-RPC on stdio. One host process serves many sequential requests; sessions keep documents live between calls, which is what makes multi-step agent edits fast.
+- **Validation**: every operation's input is validated against the generated contract *inside the host* before it touches the document — a malformed tool call fails loudly with a coded error, never half-applies.
+- **Revisions**: the host keeps a per-session revision counter (starts at 0, +1 per mutation). `--expected-revision` / optimistic-concurrency guards compare against this counter. Receipts additionally carry the engine's own revision string for before/after evidence.
+- **Tracked changes**: `changeMode: "tracked"` rides the operation into the engine, which records real OOXML revisions (`w:ins`, `w:del`, `w:pPrChange`) — the same marks Word shows.
+
+If the host can't start, everything surfaces as `Host process disconnected` — the [troubleshooting checklist](/ai/agents/llm-tools#troubleshooting-host-process-disconnected) walks the causes (Gatekeeper, Node version, bundler).
+
+## LLM ↔ SDK: one tool call, end to end
+
+The model's entire world is `tools` + `systemPrompt` + tool results. Here's a complete round trip for "rewrite the termination clause as a tracked change" on the core preset:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as Your agent loop
+    participant LLM as Model
+    participant SDK as Toolkit dispatch
+    participant CLI as CLI host
+
+    App->>SDK: createAgentToolkit({provider, preset: "core"})
+    SDK-->>App: tools (2) + systemPrompt + dispatch
+    App->>LLM: system + user message + tools
+    LLM-->>App: tool call · superdoc_inspect {includeDomains: ["blocks"]}
+    App->>SDK: dispatch(doc, "superdoc_inspect", args)
+    SDK->>CLI: read operations (session)
+    CLI-->>SDK: snapshot (blocks, 1-based ordinals, nodeIds)
+    SDK-->>App: snapshot → tool result
+    App->>LLM: tool result
+    LLM-->>App: tool call · superdoc_perform_action<br/>{action: "rewrite_block", selector, text, changeMode: "tracked"}
+    App->>SDK: dispatch(doc, "superdoc_perform_action", args)
+    Note over SDK,CLI: resolve target → validate args → mutate → re-inspect → verify
+    CLI-->>SDK: receipt {status: "ok", verification, pre/post evidence}
+    SDK-->>App: receipt → tool result
+    App->>LLM: receipt
+    LLM-->>App: final text: "Rewrote clause 8.2 as a tracked change."
+    App->>CLI: doc.save({out: "reviewed.docx"})
+```
+
+Three properties worth internalizing:
+
+- **The static prefix repeats every turn.** Tools + system prompt are re-sent on each model call and every tool result stays in history — this is why the [token budget](/ai/agents/llm-tools#token-budget) section exists, and why Anthropic callers should enable prompt caching.
+- **Receipts are the feedback loop.** The model self-corrects from `status`, `verification`, and `errors[].message` — which is why core-preset receipts carry evidence rather than a bare "ok", and why streaming them to your UI gives users meaningful progress for free.
+- **Dispatch is the security boundary you control.** The toolkit's pre-bound `dispatch` enforces the preset and `excludeActions` no matter what the model asks for.
+
+## Where Python and MCP fit
+
+- **Python** is the same architecture with the same binary: `superdoc-sdk` talks to the CLI host embedded in its platform wheel (or `SUPERDOC_CLI_BIN`). The core preset's tools, prompt, and dispatch are proxied through the host, so both languages expose byte-identical surfaces.
+- **MCP** is an alternative front door for MCP clients (Claude Desktop, IDEs): the `superdoc-mcp` server embeds the document engine in-process and registers either preset's tools (`MCP_PRESET=core`) plus session lifecycle tools. Same engine, same actions — no agent loop of your own required.
+
+## Related
+
+- [Overview & agent loops](/ai/agents/llm-tools)
+- [Core preset reference](/ai/agents/core-preset)
+- [Legacy preset reference](/ai/agents/legacy-preset)
+- [Document API](/document-api/overview) — the operation contract the SDK speaks

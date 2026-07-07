@@ -247,6 +247,12 @@ jobs:
       - name: Build superdoc (CLI runtime dependency)
         run: pnpm run build:superdoc
 
+      - name: Generate SDK sources (gitignored generated client)
+        run: pnpm run generate:all
+
+      - name: Build Node SDK (CLI preset ops dependency)
+        run: pnpm --prefix packages/sdk/langs/node run build
+
       - name: Run CLI tests
         run: pnpm run test:cli
 

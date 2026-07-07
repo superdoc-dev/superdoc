@@ -7,8 +7,17 @@ import { normalizeJsonValue } from './lib/input-readers';
 import type { CliIO, CommandContext, CommandExecution, ExecutionMode, GlobalOptions, OutputMode } from './lib/types';
 import { runCall } from './commands/call';
 import { runClose } from './commands/close';
+import { runExecuteCode } from './commands/execute-code';
 import { runInsertLineBreak, runInsertTab } from './commands/insert-inline-special';
 import { runOpen } from './commands/open';
+import {
+  runPresetDispatchCommand,
+  runPresetGetCatalogCommand,
+  runPresetGetMcpPromptCommand,
+  runPresetGetSystemPromptCommand,
+  runPresetGetToolsCommand,
+  runPresetListCommand,
+} from './commands/preset';
 import { runSessionClose } from './commands/session-close';
 import { runSessionList } from './commands/session-list';
 import { runSessionSave } from './commands/session-save';
@@ -81,11 +90,13 @@ export type InvokeCommandOptions = {
   executionMode?: ExecutionMode;
   sessionPool?: CommandContext['sessionPool'];
   stateDir?: string;
+  ambientTimeoutMs?: number;
 };
 
 const MANUAL_COMMANDS = {
   call: runCall,
   close: runClose,
+  'execute code': runExecuteCode,
   'insert line-break': runInsertLineBreak,
   'insert tab': runInsertTab,
   open: runOpen,
@@ -95,6 +106,12 @@ const MANUAL_COMMANDS = {
   'session close': runSessionClose,
   'session set-default': runSessionSetDefault,
   'session use': runSessionUse,
+  'preset list': runPresetListCommand,
+  'preset get-catalog': runPresetGetCatalogCommand,
+  'preset get-tools': runPresetGetToolsCommand,
+  'preset get-system-prompt': runPresetGetSystemPromptCommand,
+  'preset get-mcp-prompt': runPresetGetMcpPromptCommand,
+  'preset dispatch': runPresetDispatchCommand,
 } satisfies Record<ManualCommandKey, CommandRunner>;
 
 const EXTRA_COMMAND_KEYS = ['call'] as const;
@@ -245,6 +262,7 @@ async function executeParsedInvocation(
   io: CliIO,
   executionMode: ExecutionMode,
   sessionPool?: CommandContext['sessionPool'],
+  ambientTimeoutMs?: number,
 ): Promise<ParsedInvocationOutput> {
   if (parsed.globals.help) {
     return { helpText: HELP };
@@ -261,10 +279,11 @@ async function executeParsedInvocation(
   }
 
   const { key, args } = parseCommand(parsed.rest);
+  const contextTimeoutMs = parsed.globals.timeoutMs ?? ambientTimeoutMs;
 
   const context: CommandContext = {
     io,
-    timeoutMs: parsed.globals.timeoutMs,
+    timeoutMs: contextTimeoutMs,
     sessionId: parsed.globals.sessionId,
     executionMode,
     sessionPool,
@@ -318,6 +337,7 @@ export async function invokeCommand(argv: string[], options: InvokeCommandOption
       runtimeIo,
       options.executionMode ?? 'oneshot',
       options.sessionPool,
+      options.ambientTimeoutMs,
     );
     return { parsed: parsedInvocation, output: commandOutput };
   });

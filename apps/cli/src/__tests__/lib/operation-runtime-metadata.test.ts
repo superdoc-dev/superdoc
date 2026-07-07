@@ -112,7 +112,7 @@ describe('operation runtime metadata', () => {
     expect(openOptions.map((o) => o.name)).not.toContain('runtime');
   });
 
-  test('final recipe-provider parity operations expose their promoted CLI params', () => {
+  test('final action-provider parity operations expose their promoted CLI params', () => {
     const blocksListMeta = CLI_OPERATION_METADATA['doc.blocks.list'];
     expect(blocksListMeta.params.find((p) => p.name === 'in')?.flag).toBe('in-json');
 

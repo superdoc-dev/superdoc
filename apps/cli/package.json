@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/cli",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "type": "module",
   "bin": {
     "superdoc": "./dist/index.js"
@@ -13,7 +13,7 @@
     "predev": "node scripts/ensure-superdoc-build.js",
     "dev": "bun run src/index.ts",
     "prebuild": "node scripts/ensure-superdoc-build.js",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm && node scripts/copy-runtime-assets.js",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm && node scripts/copy-runtime-assets.js && rm -rf dist/prompts && mkdir -p dist/prompts && cp ../../packages/sdk/langs/node/src/prompts/*.md dist/prompts/",
     "prebuild:native": "node scripts/ensure-superdoc-build.js",
     "build:native": "bun build src/index.ts --compile --outfile dist/superdoc && node scripts/copy-runtime-assets.js",
     "build:native:all": "node scripts/build-native-cli.js --all",
@@ -45,6 +45,7 @@
     "yjs": "catalog:"
   },
   "devDependencies": {
+    "@superdoc-dev/sdk": "workspace:*",
     "@superdoc/document-api": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",

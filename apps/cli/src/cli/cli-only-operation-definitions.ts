@@ -208,6 +208,48 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       required: ['receipt', 'inserted'],
     },
   },
+  executeCode: {
+    category: 'core',
+    description:
+      'Run model-authored JavaScript IN-HOST against the live, SYNCHRONOUS Document API for the open session. Two globals are injected: `doc` (the synchronous Document API — do NOT await doc.* calls) and `console`. `return` a short summary; logs and the return value come back structured as { ok, result, logs, error }. Use for complex/multi-step workflows (loops, per-item branching, extract-then-generate) in ONE call instead of chaining many narrow tools. Large code can be passed on stdin.',
+    requiresDocumentContext: false,
+    tokenOverride: ['execute', 'code'],
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ok: { type: 'boolean' },
+        result: {},
+        logs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              level: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+        error: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            message: { type: 'string' },
+            stack: { type: 'string' },
+          },
+        },
+        context: {
+          type: 'object',
+          properties: {
+            dirty: { type: 'boolean' },
+            revision: { type: 'number' },
+            mutated: { type: 'boolean' },
+          },
+        },
+      },
+      required: ['ok', 'logs'],
+    },
+  },
   status: {
     category: 'session',
     description: 'Show the current session status and document metadata.',
@@ -402,6 +444,98 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
         activeSessionId: { type: 'string' },
       },
       required: ['activeSessionId'],
+    },
+  },
+  'preset.list': {
+    category: 'session',
+    description:
+      'List the LLM-tools preset ids registered in the Node SDK preset registry, plus the default preset id.',
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'list'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        presets: { type: 'array', items: { type: 'string' } },
+        defaultPreset: { type: 'string' },
+      },
+      required: ['presets', 'defaultPreset'],
+    },
+  },
+  'preset.getCatalog': {
+    category: 'session',
+    description: 'Return the full tool catalog for an LLM-tools preset (defaults to the registered default preset).',
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'get-catalog'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: { type: 'object' },
+  },
+  'preset.getTools': {
+    category: 'session',
+    description:
+      'Return the provider-shaped tool array (openai|anthropic|vercel|generic) for an LLM-tools preset, plus the active cache strategy.',
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'get-tools'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        tools: { type: 'array' },
+        cacheStrategy: { type: 'string' },
+      },
+      required: ['tools', 'cacheStrategy'],
+    },
+  },
+  'preset.getSystemPrompt': {
+    category: 'session',
+    description: 'Return the SDK-style system prompt for an LLM-tools preset.',
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'get-system-prompt'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: { prompt: { type: 'string' } },
+      required: ['prompt'],
+    },
+  },
+  'preset.getMcpPrompt': {
+    category: 'session',
+    description: 'Return the MCP-flavored system prompt for an LLM-tools preset.',
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'get-mcp-prompt'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: { prompt: { type: 'string' } },
+      required: ['prompt'],
+    },
+  },
+  'preset.dispatch': {
+    category: 'core',
+    description:
+      "Dispatch an LLM tool call through the named preset's dispatcher against the active session's live document. Used by cross-language SDKs (e.g. Python) to proxy preset behavior over the CLI.",
+    requiresDocumentContext: false,
+    tokenOverride: ['preset', 'dispatch'],
+    skipAsATool: true,
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        result: {},
+        context: {
+          type: 'object',
+          properties: {
+            dirty: { type: 'boolean' },
+            revision: { type: 'number' },
+            mutated: { type: 'boolean' },
+          },
+        },
+      },
     },
   },
 };

@@ -312,15 +312,25 @@ const computeRenderedBlockFlowHeight = (
   return 0;
 };
 
-export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): number | null => {
+type CellAnchoredTop = {
+  top: number;
+  /**
+   * True only when the anchor paragraph was found and used as the base. Fallback results
+   * (page/margin bases, missing/unresolvable anchorParagraphId) keep the legacy
+   * top-of-cell invariant and must NOT be shifted by the vertical-alignment offset.
+   */
+  paragraphResolved: boolean;
+};
+
+export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): CellAnchoredTop | null => {
   const offsetV = params.anchor?.offsetV ?? 0;
   const vRelativeFrom = params.anchor?.vRelativeFrom;
   if (vRelativeFrom !== undefined && vRelativeFrom !== 'paragraph') {
-    return offsetV;
+    return { top: offsetV, paragraphResolved: false };
   }
 
   if (!params.anchorParagraphId) {
-    return offsetV;
+    return { top: offsetV, paragraphResolved: false };
   }
 
   let flowY = 0;
@@ -345,14 +355,17 @@ export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): nu
       // own spacing-before region (fixture evidence: adding SpaceBefore moves the text, not
       // the anchored object), so flowY is not adjusted by this paragraph's spacing.
       const firstLineHeight = (blockMeasure as ParagraphMeasure).lines?.[0]?.lineHeight ?? 0;
-      return resolveAnchoredGraphicY({
-        anchor: { vRelativeFrom, alignV: params.anchor?.alignV, offsetV },
-        objectHeight: params.objectHeight,
-        contentTop: 0,
-        contentBottom: 0,
-        anchorParagraphY: flowY,
-        firstLineHeight,
-      });
+      return {
+        top: resolveAnchoredGraphicY({
+          anchor: { vRelativeFrom, alignV: params.anchor?.alignV, offsetV },
+          objectHeight: params.objectHeight,
+          contentTop: 0,
+          contentBottom: 0,
+          anchorParagraphY: flowY,
+          firstLineHeight,
+        }),
+        paragraphResolved: true,
+      };
     }
 
     flowY += computeRenderedBlockFlowHeight(
@@ -369,7 +382,7 @@ export const resolveCellAnchoredTop = (params: ResolveCellAnchoredTopParams): nu
     cumulativeLineCount = blockEndGlobal;
   }
 
-  return offsetV;
+  return { top: offsetV, paragraphResolved: false };
 };
 
 /**
@@ -1315,8 +1328,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       }
       // Flow content is shifted by alignmentOffsetY via the flex container (verticalAlign
       // center/bottom), and applySquareWrapExclusionsToLines compares lines in that shifted
-      // space - anchored objects and their exclusions must live in the same visual space.
-      const top = resolvedTop + alignmentOffsetY;
+      // space - paragraph-anchored objects and their exclusions must follow the paragraph
+      // into that visual space. Fallback results (page/margin bases, missing anchor id)
+      // keep the legacy top-of-cell invariant and stay unshifted.
+      const top = resolvedTop.top + (resolvedTop.paragraphResolved ? alignmentOffsetY : 0);
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);

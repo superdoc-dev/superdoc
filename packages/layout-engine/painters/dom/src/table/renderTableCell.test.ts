@@ -741,6 +741,73 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.top).toBe('35px');
   });
 
+  it('does not shift fallback anchors (page/margin base or missing anchor id) in vertically aligned cells', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-fallback-valign',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-fallback-valign',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const marginImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-fallback-valign-margin',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'margin', offsetV: 4 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-fallback-valign' },
+    };
+    const pageImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-fallback-valign-page',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'page', offsetV: 6 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-fallback-valign' },
+    };
+    const missingIdImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-fallback-valign-missing-id',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 8 },
+      wrap: { type: 'None' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      rowHeight: 60,
+      cellMeasure: {
+        blocks: [
+          paragraphMeasure,
+          paragraphMeasure,
+          { kind: 'image' as const, width: 20, height: 10 },
+          { kind: 'image' as const, width: 20, height: 10 },
+          { kind: 'image' as const, width: 20, height: 10 },
+        ],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: {
+        id: 'cell-fallback-valign',
+        blocks: [beforePara, anchorPara, marginImage, pageImage, missingIdImage],
+        attrs: { verticalAlign: 'center' },
+      },
+    });
+
+    const imageEls = Array.from(cellElement.querySelectorAll('img.superdoc-table-image')) as HTMLImageElement[];
+    expect(imageEls).toHaveLength(3);
+    // Fallback invariant: top stays offsetV, NOT shifted by the (60 - 40)/2 alignment offset.
+    expect(imageEls[0]?.parentElement?.style.top).toBe('4px');
+    expect(imageEls[1]?.parentElement?.style.top).toBe('6px');
+    expect(imageEls[2]?.parentElement?.style.top).toBe('8px');
+  });
+
   it('honors alignV center/bottom for paragraph-relative anchors like the body path', () => {
     const beforePara: ParagraphBlock = {
       kind: 'paragraph',

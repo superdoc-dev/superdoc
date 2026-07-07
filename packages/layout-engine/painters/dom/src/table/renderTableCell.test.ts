@@ -384,6 +384,12 @@ describe('renderTableCell', () => {
   });
 
   it('absolutely positions anchored image blocks inside table cells', () => {
+    const precedingPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
     const para: ParagraphBlock = {
       kind: 'paragraph',
       id: 'para-anchor',
@@ -402,6 +408,7 @@ describe('renderTableCell', () => {
     const cellMeasure: TableCellMeasure = {
       blocks: [
         paragraphMeasure,
+        paragraphMeasure,
         {
           kind: 'image' as const,
           width: 20,
@@ -409,7 +416,7 @@ describe('renderTableCell', () => {
         },
       ],
       width: 80,
-      height: 30,
+      height: 50,
       gridColumnStart: 0,
       colSpan: 1,
       rowSpan: 1,
@@ -417,7 +424,7 @@ describe('renderTableCell', () => {
 
     const cell: TableCell = {
       id: 'cell-with-anchored-image',
-      blocks: [para, anchoredImage],
+      blocks: [precedingPara, para, anchoredImage],
       attrs: {},
     };
 
@@ -431,7 +438,272 @@ describe('renderTableCell', () => {
     expect(imgEl).toBeTruthy();
     expect(imgEl?.parentElement?.style.position).toBe('absolute');
     expect(imgEl?.parentElement?.style.left).toBe('10px');
+    expect(imgEl?.parentElement?.style.top).toBe('25px');
+  });
+
+  it('positions anchored image blocks after multiple preceding paragraphs', () => {
+    const firstPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-anchor-1',
+      runs: [{ text: 'One', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const secondPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-anchor-2',
+      runs: [{ text: 'Two', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-multi',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const firstMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 3, width: 10, ascent: 6, descent: 2, lineHeight: 8 }],
+      totalHeight: 8,
+    };
+    const secondMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 3, width: 10, ascent: 9, descent: 3, lineHeight: 12 }],
+      totalHeight: 12,
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-anchored-multi',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, offsetV: 6 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-multi' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [firstMeasure, secondMeasure, paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 100,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-anchored-multi', blocks: [firstPara, secondPara, anchorPara, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.parentElement?.style.top).toBe('26px');
+  });
+
+  it('keeps anchored image top unchanged when the anchor paragraph is the first cell block', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-first',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-anchored-first',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-first' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-anchored-first', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
     expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('falls back to offsetV when anchorParagraphId is missing or unresolvable', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-unresolved-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const missingAnchorImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-missing-anchor-id',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 7 },
+      wrap: { type: 'None' },
+    };
+    const unresolvedAnchorImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-unresolved-anchor-id',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 9 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-does-not-exist' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [
+          paragraphMeasure,
+          { kind: 'image' as const, width: 20, height: 10 },
+          { kind: 'image' as const, width: 20, height: 10 },
+        ],
+        width: 80,
+        height: 50,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-unresolved-anchor-id', blocks: [para, missingAnchorImage, unresolvedAnchorImage], attrs: {} },
+    });
+
+    const imageEls = Array.from(cellElement.querySelectorAll('img.superdoc-table-image')) as HTMLImageElement[];
+    expect(imageEls).toHaveLength(2);
+    expect(imageEls[0]?.parentElement?.style.top).toBe('7px');
+    expect(imageEls[1]?.parentElement?.style.top).toBe('9px');
+  });
+
+  it('uses corrected anchored top for wrap exclusions in table cells', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-wrap-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap-corrected-top',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap-anchor' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 50,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-wrap-corrected-top', blocks: [beforePara, anchorPara, anchoredImage], attrs: {} },
+      renderLine: (block) => {
+        const el = doc.createElement('div');
+        el.dataset.blockId = block.id;
+        return el;
+      },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    const beforeLine = cellElement.querySelector('[data-block-id="para-before-wrap-anchor"]') as HTMLElement | null;
+    const anchorLine = cellElement.querySelector('[data-block-id="para-wrap-anchor"]') as HTMLElement | null;
+    expect(imgEl?.parentElement?.style.top).toBe('20px');
+    expect(beforeLine?.style.marginLeft).toBe('');
+    expect(anchorLine?.style.marginLeft).toBe('20px');
+  });
+
+  it('skips anchored images whose anchor paragraph is outside the rendered split window', () => {
+    const firstPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-in-window',
+      runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-outside-window',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-outside-window',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-outside-window' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 50,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-split-window', blocks: [firstPara, anchorPara, anchoredImage], attrs: {} },
+      fromLine: 0,
+      toLine: 1,
+    });
+
+    expect(cellElement.querySelector('img.superdoc-table-image')).toBeNull();
+  });
+
+  it('keeps top = offsetV for page- and margin-relative anchors regardless of the anchor paragraph', () => {
+    const beforePara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-nonparagraph-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchorPara: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-nonparagraph-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const marginImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-margin-anchor',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'margin', offsetV: 4 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-nonparagraph-anchor' },
+    };
+    const pageImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-page-anchor',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'page', offsetV: 6 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-nonparagraph-anchor' },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [
+          paragraphMeasure,
+          paragraphMeasure,
+          { kind: 'image' as const, width: 20, height: 10 },
+          { kind: 'image' as const, width: 20, height: 10 },
+        ],
+        width: 80,
+        height: 60,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-nonparagraph-anchor', blocks: [beforePara, anchorPara, marginImage, pageImage], attrs: {} },
+    });
+
+    const imageEls = Array.from(cellElement.querySelectorAll('img.superdoc-table-image')) as HTMLImageElement[];
+    expect(imageEls).toHaveLength(2);
+    expect(imageEls[0]?.parentElement?.style.top).toBe('4px');
+    expect(imageEls[1]?.parentElement?.style.top).toBe('6px');
   });
 
   it('applies top-level clipPath to anchored image blocks inside table cells', () => {

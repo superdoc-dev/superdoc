@@ -26,9 +26,10 @@ const NUMBERING_PART_ID = 'word/numbering.xml' as const;
  * (`DEFAULT_DOCX_DEFS`), instead of hand-picking a subset. A prior version
  * of this map declared only `xmlns:w`/`xmlns:w15`/`xmlns:mc`, which was
  * enough for `w15:restartNumberingAfterBreak` but omitted `xmlns:w16cid`
- * (used by list level overrides) — Word refused to open/repair any docx
- * where this part was freshly created (i.e. the source docx had no
- * numbering.xml before the user added their first list). See GH #3773.
+ * (used by the seeded base numbering definitions, e.g. `w16cid:durableId`
+ * on `w:num`) — Word flagged any docx where this part was freshly created
+ * (i.e. the source docx had no numbering.xml before the user added their
+ * first list) as unreadable and forced a repair pass. See GH #3773.
  */
 const NUMBERING_ROOT_ATTRS: Record<string, string> = { ...DEFAULT_DOCX_DEFS };
 

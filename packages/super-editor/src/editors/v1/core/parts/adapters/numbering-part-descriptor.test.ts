@@ -13,6 +13,18 @@ describe('numberingPartDescriptor.ensurePart', () => {
     expect(root.attributes['xmlns:mc']).toBe('http://schemas.openxmlformats.org/markup-compatibility/2006');
     expect(root.attributes['mc:Ignorable']).toContain('w15');
   });
+
+  it('declares xmlns:w16cid so freshly-created numbering parts are namespace-valid (GH #3773)', () => {
+    const part = numberingPartDescriptor.ensurePart() as {
+      elements: Array<{ attributes: Record<string, string> }>;
+    };
+    const root = part.elements[0];
+
+    expect(root.attributes['xmlns:w16cid']).toBe('http://schemas.microsoft.com/office/word/2016/wordml/cid');
+    expect(root.attributes['xmlns:w14']).toBe('http://schemas.microsoft.com/office/word/2010/wordml');
+    expect(root.attributes['xmlns:r']).toBe('http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+    expect(root.attributes['mc:Ignorable']).toContain('w16cid');
+  });
 });
 
 describe('syncNumberingToXmlTree', () => {

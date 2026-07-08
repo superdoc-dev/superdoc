@@ -13,6 +13,7 @@ import type { Editor } from '../../Editor.js';
 import type { PartDescriptor } from '../types.js';
 import { translator as wAbstractNumTranslator } from '../../super-converter/v3/handlers/w/abstractNum/index.js';
 import { translator as wNumTranslator } from '../../super-converter/v3/handlers/w/num/index.js';
+import { DEFAULT_DOCX_DEFS } from '../../super-converter/exporter-docx-defs.js';
 import { isPartCacheStale, clearPartCacheStale } from '../cache-staleness.js';
 
 const NUMBERING_PART_ID = 'word/numbering.xml' as const;
@@ -20,16 +21,17 @@ const NUMBERING_PART_ID = 'word/numbering.xml' as const;
 /**
  * Namespace attributes for the `<w:numbering>` root element.
  *
- * Includes `xmlns:w15` because base list definitions use
- * `w15:restartNumberingAfterBreak` — without this declaration the
- * numbering part is namespace-invalid and Word shows a repair prompt.
+ * Reuses the same full namespace + `mc:Ignorable` map that document.xml,
+ * comments.xml, footnotes.xml, and people.xml apply unconditionally
+ * (`DEFAULT_DOCX_DEFS`), instead of hand-picking a subset. A prior version
+ * of this map declared only `xmlns:w`/`xmlns:w15`/`xmlns:mc`, which was
+ * enough for `w15:restartNumberingAfterBreak` but omitted `xmlns:w16cid`
+ * (used by the seeded base numbering definitions, e.g. `w16cid:durableId`
+ * on `w:num`) — Word flagged any docx where this part was freshly created
+ * (i.e. the source docx had no numbering.xml before the user added their
+ * first list) as unreadable and forced a repair pass. See GH #3773.
  */
-const NUMBERING_ROOT_ATTRS: Record<string, string> = {
-  'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-  'xmlns:w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
-  'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
-  'mc:Ignorable': 'w15',
-};
+const NUMBERING_ROOT_ATTRS: Record<string, string> = { ...DEFAULT_DOCX_DEFS };
 
 // ---------------------------------------------------------------------------
 // Converter shape (minimal interface to avoid importing SuperConverter)

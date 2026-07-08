@@ -142,7 +142,7 @@ Check the [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for o
 ## License
 
 - Open source: [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)
-- Commercial: [Enterprise License](https://www.superdocportal.dev/get-in-touch)
+- Commercial: [SuperDoc Commercial License](https://www.superdocportal.dev/superdoc-terms-of-service)
 
 ## Acknowledgments
 
@@ -186,6 +186,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/wookieb"><img src="https://github.com/wookieb.png" width="50" height="50" alt="wookieb" title="Łukasz Kużyński" /></a>
 <a href="https://github.com/xy200303"><img src="https://github.com/xy200303.png" width="50" height="50" alt="xy200303" title="小云" /></a>
 <a href="https://github.com/garhm"><img src="https://github.com/garhm.png" width="50" height="50" alt="garhm" title="Yaroslav Zakharov" /></a>
+<a href="https://github.com/MIt9"><img src="https://github.com/MIt9.png" width="50" height="50" alt="MIt9" title="Dmitro Bilukha" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

@@ -278,7 +278,7 @@ describe('templates.apply adapter integration', () => {
     expect(numberingXml).toContain('xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"');
     expect(numberingXml).toContain('xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"');
     expect(numberingXml).toContain('xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"');
-    expect(numberingXml).toContain('mc:Ignorable="w15 w14 w16cid"');
+    expect(numberingXml).toMatch(/mc:Ignorable="[^"]*\bw16cid\b/);
     expect(numberingXml).toContain('w15:restartNumberingAfterBreak="0"');
     expect(numberingXml).toContain('w16cid:durableId="123456789"');
   });

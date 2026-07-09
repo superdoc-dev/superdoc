@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { HocuspocusProvider } from '@hocuspocus/provider';
-import { Doc as YDoc } from 'yjs';
+import { Doc as YDoc, encodeStateAsUpdate, applyUpdate } from 'yjs';
 import { SuperDoc, DocxZipper, SuperConverter } from 'superdoc';
 import 'superdoc/style.css';
 
@@ -12,6 +11,8 @@ interface Version {
   id: string;
   label?: string;
   createdAt: string;
+  sizeBytes?: number;
+  isYjsState?: boolean;
 }
 
 interface CollaboratorUser {
@@ -25,45 +26,7 @@ interface CollaboratorUser {
 // =============================================================================
 
 const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001/api';
-
-// Derive WebSocket URL from API URL (same host, different protocol).
-// Simple single-port setup for demo purposes.
-function getWsUrl(): string {
-  const url = new URL(API_URL);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.pathname = '/'; // WebSocket at root, not /api
-  return url.toString().replace(/\/$/, ''); // Remove trailing slash
-}
-const WS_URL = getWsUrl();
 const BLANK_DOC_URL = '/blank.docx';
-
-// =============================================================================
-// Room ID Management
-// =============================================================================
-
-function generateRoomId(): string {
-  return `room-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function getRoomIdFromUrl(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('room');
-}
-
-function setRoomIdInUrl(roomId: string): void {
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', roomId);
-  window.history.replaceState({}, '', url.toString());
-}
-
-function getOrCreateRoomId(): string {
-  let roomId = getRoomIdFromUrl();
-  if (!roomId) {
-    roomId = generateRoomId();
-    setRoomIdInUrl(roomId);
-  }
-  return roomId;
-}
 
 // =============================================================================
 // Logging
@@ -118,7 +81,7 @@ const Versions = {
   },
 
   /**
-   * Save a new version.
+   * Save a new version (DOCX blob - legacy).
    */
   async save(documentId: string, blob: Blob, label?: string): Promise<Version> {
     const formData = new FormData();
@@ -139,7 +102,33 @@ const Versions = {
   },
 
   /**
-   * Download a version blob.
+   * Save a new version from Yjs state (much smaller than DOCX).
+   */
+  async saveYjsState(documentId: string, yjsState: Uint8Array, label?: string): Promise<Version> {
+    // Convert Uint8Array to base64 in chunks to avoid stack overflow
+    const chunkSize = 8192;
+    let binary = '';
+    for (let i = 0; i < yjsState.length; i += chunkSize) {
+      const chunk = yjsState.subarray(i, Math.min(i + chunkSize, yjsState.length));
+      binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+    }
+    const base64 = btoa(binary);
+    this._log(`→ POST /documents/${documentId}/versions/yjs (${yjsState.byteLength} bytes)`);
+    const response = await fetch(`${API_URL}/documents/${documentId}/versions/yjs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yjsState: base64, label }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    this._log(`← ✓ saved ${data.sizeBytes} bytes`);
+    return data;
+  },
+
+  /**
+   * Download a version blob (DOCX - legacy).
    */
   async download(documentId: string, versionId: string): Promise<Blob> {
     this._log(`→ GET /documents/${documentId}/versions/${versionId}/download`);
@@ -150,6 +139,26 @@ const Versions = {
     const blob = await response.blob();
     this._log(`← ✓`);
     return blob;
+  },
+
+  /**
+   * Download a version's Yjs state.
+   */
+  async downloadYjsState(documentId: string, versionId: string): Promise<Uint8Array> {
+    this._log(`→ GET /documents/${documentId}/versions/${versionId}/yjs`);
+    const response = await fetch(`${API_URL}/documents/${documentId}/versions/${versionId}/yjs`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    // Decode base64 to Uint8Array
+    const binary = atob(data.yjsState);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    this._log(`← ✓ downloaded ${bytes.byteLength} bytes`);
+    return bytes;
   },
 
   /**
@@ -258,9 +267,7 @@ const TCPermissions = {
    * Called synchronously when user tries to accept/reject a tracked change.
    */
   resolver(payload: { permission: string; trackedChange: any }): boolean {
-    const allowed = TCPermissions._allowed;
-    log('tc-permission-check', { permission: payload.permission, allowed });
-    return allowed;
+    return TCPermissions._allowed;
   },
 };
 
@@ -305,6 +312,33 @@ async function replaceEditorContent(editor: any, blob: Blob): Promise<void> {
 
 const generateUserId = () => `User ${Math.floor(Math.random() * 1000)}`;
 
+/**
+ * Minimal no-op provider for viewing Yjs state without real sync.
+ */
+class NoOpProvider {
+  awareness = {
+    setLocalState: () => {},
+    setLocalStateField: () => {},
+    getLocalState: () => ({}),
+    getStates: () => new Map(),
+    on: () => {},
+    off: () => {},
+    destroy: () => {},
+  };
+
+  on(event: string, callback: (synced: boolean) => void) {
+    // Emit sync immediately when registered
+    if (event === 'sync' || event === 'synced') {
+      setTimeout(() => callback(true), 0);
+    }
+  }
+
+  off() {}
+  destroy() {}
+  connect() {}
+  disconnect() {}
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -315,18 +349,17 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const superdocRef = useRef<any>(null);
   const previewSuperdocRef = useRef<any>(null);
-  const providerRef = useRef<HocuspocusProvider | null>(null);
   const ydocRef = useRef<YDoc | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
-  const [roomId] = useState(() => getOrCreateRoomId());
-  const [users, setUsers] = useState<any[]>([]);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
   const [selectedVersionBlob, setSelectedVersionBlob] = useState<Blob | null>(null);
+  const [selectedVersionYjsState, setSelectedVersionYjsState] = useState<Uint8Array | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [tcAllowed, setTcAllowed] = useState(true);
   const [currentUser] = useState<CollaboratorUser>(() => {
@@ -363,49 +396,34 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const registerDocument = useCallback(async (blob: Blob) => {
     try {
-      const result = await Docs.upload(blob, 'document.docx', roomId);
+      const result = await Docs.upload(blob, 'document.docx');
       setDocumentId(result.documentId);
       log('document-registered', { documentId: result.documentId });
     } catch (e) {
       log('document-register-error', { error: String(e) });
     }
-  }, [roomId]);
+  }, []);
 
   // ---------------------------------------------------------------------------
-  // Initialization
+  // Initialization (no real-time collab - Yjs used only for snapshots)
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    log('initializing', { wsUrl: WS_URL, apiUrl: API_URL, roomId: roomId });
+    log('initializing', { apiUrl: API_URL });
 
-    const ydoc = new YDoc();
-    ydocRef.current = ydoc;
-
-    const provider = new HocuspocusProvider({
-      url: WS_URL,
-      name: roomId,
-      document: ydoc,
-    });
-    providerRef.current = provider;
-
-    provider.on('synced', async () => {
-      log('synced', { roomId: roomId });
-
-      // Check if this is a fresh room (no content yet)
-      // TODO: SUPERDOC V2 MIGRATION - PM INTERNAL
-      const xmlFragment = ydoc.getXmlFragment('prosemirror');
-      const isEmpty = xmlFragment.length === 0;
-
-      // Always fetch blank.docx to seed empty rooms with valid structure
+    const init = async () => {
+      // Fetch blank.docx to seed the editor
       let initialDoc: Blob | undefined;
-      if (isEmpty) {
-        try {
-          const response = await fetch(BLANK_DOC_URL);
-          initialDoc = await response.blob();
-          log('blank-doc-loaded', { size: initialDoc.size });
-        } catch (e) {
-          log('blank-doc-error', { error: String(e) });
-        }
+      try {
+        const response = await fetch(BLANK_DOC_URL);
+        initialDoc = await response.blob();
+        log('blank-doc-loaded', { size: initialDoc.size });
+      } catch (e) {
+        log('blank-doc-error', { error: String(e) });
       }
+
+      // Create local ydoc for snapshot capture
+      const ydoc = new YDoc();
+      ydocRef.current = ydoc;
 
       superdocRef.current = new SuperDoc({
         selector: '#superdoc-editor',
@@ -413,18 +431,15 @@ export default function App() {
         document: initialDoc,
         user: currentUser,
         comments: { visible: false },
-        // Server-side permission gating for tracked changes
         permissionResolver: TCPermissions.resolver,
         modules: {
-          // Provider-agnostic mode: we manage our own Yjs doc and provider
-          // (using Hocuspocus here for convenience)
-          collaboration: { ydoc, provider },
+          // Use NoOpProvider - no real-time collab, Yjs just for snapshots
+          collaboration: { ydoc, provider: new NoOpProvider() as any },
           trackChanges: { enabled: true, visible: false },
         },
         onReady: async () => {
           log('superdoc-ready');
           setIsReady(true);
-          // Show document in "final" mode (hides TC marks) while still tracking changes
           superdocRef.current?.setTrackedChangesPreferences?.({ mode: 'final' });
 
           // Register document with backend
@@ -441,47 +456,41 @@ export default function App() {
             }
           }
         },
-        onAwarenessUpdate: ({ states }: any) => {
-          setUsers(states.filter((s: any) => s.user));
-        },
       });
-    });
+    };
+
+    init();
 
     return () => {
       log('cleanup');
       superdocRef.current?.destroy();
       previewSuperdocRef.current?.destroy();
-      provider.destroy();
       superdocRef.current = null;
       previewSuperdocRef.current = null;
-      providerRef.current = null;
       ydocRef.current = null;
     };
-  }, [currentUser, registerDocument, roomId]);
+  }, [currentUser, registerDocument]);
 
   // ---------------------------------------------------------------------------
-  // Save Version
+  // Save Version (using Yjs state - much smaller than DOCX)
   // ---------------------------------------------------------------------------
   const saveVersion = useCallback(async () => {
     const superdoc = superdocRef.current;
     const editor = superdoc?.activeEditor;
-    if (!editor || !superdoc || !documentId) return;
+    const ydoc = ydocRef.current;
+    if (!editor || !superdoc || !documentId || !ydoc) return;
 
     try {
-      log('saving-version', { documentId });
+      // Capture Yjs state (includes tracked changes from this edit session)
+      const yjsState = encodeStateAsUpdate(ydoc);
+      log('saving-version', { documentId, sizeBytes: yjsState.byteLength });
 
-      // Export current document state as DOCX
-      const blobs = await superdoc.exportEditorsToDOCX?.();
-      const docxBlob = blobs?.[0];
-      if (!docxBlob) {
-        log('save-version-error', { error: 'Failed to export DOCX' });
-        return;
-      }
+      // Save version using Yjs state (much smaller than DOCX)
+      const result = await Versions.saveYjsState(documentId, yjsState, `Saved by ${currentUser.name}`);
+      log('version-saved', { versionId: result.id, sizeBytes: result.sizeBytes });
 
-      // Save version
-      const result = await Versions.save(documentId, docxBlob, `Saved by ${currentUser.name}`);
-      log('version-saved', { versionId: result.id });
-      // TODO: SUPERDOC V2 MIGRATION - DEPRECATED
+      // Accept all tracked changes to clear for next session
+      // This way the next save will show fresh TC from this point forward
       editor.commands.acceptAllTrackedChanges?.();
     } catch (e) {
       log('save-version-error', { error: String(e) });
@@ -494,10 +503,21 @@ export default function App() {
   const viewVersion = useCallback(async (version: Version) => {
     if (!documentId) return;
     setSelectedVersion(version);
+    setSelectedVersionBlob(null);
+    setSelectedVersionYjsState(null);
+
     try {
-      log('downloading-version-for-preview', { versionId: version.id });
-      const blob = await Versions.download(documentId, version.id);
-      setSelectedVersionBlob(blob);
+      // Try Yjs state first (much smaller and shows TC)
+      if (version.isYjsState) {
+        log('downloading-yjs-state-for-preview', { versionId: version.id });
+        const yjsState = await Versions.downloadYjsState(documentId, version.id);
+        setSelectedVersionYjsState(yjsState);
+      } else {
+        // Fall back to DOCX blob for legacy versions
+        log('downloading-blob-for-preview', { versionId: version.id });
+        const blob = await Versions.download(documentId, version.id);
+        setSelectedVersionBlob(blob);
+      }
     } catch (e) {
       log('download-version-error', { error: String(e) });
     }
@@ -506,12 +526,14 @@ export default function App() {
   const closePreview = useCallback(() => {
     setSelectedVersion(null);
     setSelectedVersionBlob(null);
+    setSelectedVersionYjsState(null);
     previewSuperdocRef.current?.destroy();
     previewSuperdocRef.current = null;
   }, []);
 
   useEffect(() => {
-    if (!selectedVersion || !selectedVersionBlob) {
+    // Need either blob or Yjs state to show preview
+    if (!selectedVersion || (!selectedVersionBlob && !selectedVersionYjsState)) {
       previewSuperdocRef.current?.destroy();
       previewSuperdocRef.current = null;
       return;
@@ -524,16 +546,36 @@ export default function App() {
         return;
       }
 
-      log('initializing-preview', { versionId: selectedVersion.id });
+      log('initializing-preview', { versionId: selectedVersion.id, isYjsState: !!selectedVersionYjsState });
       previewSuperdocRef.current?.destroy();
-      previewSuperdocRef.current = new SuperDoc({
-        selector: '#superdoc-preview',
-        documentMode: 'viewing',
-        document: selectedVersionBlob,
-        modules: {
-          trackChanges: { visible: true, mode: 'review' },
-        },
-      });
+
+      if (selectedVersionYjsState) {
+        // Create preview from Yjs state - shows tracked changes
+        const previewYdoc = new YDoc();
+        applyUpdate(previewYdoc, selectedVersionYjsState);
+
+        previewSuperdocRef.current = new SuperDoc({
+          selector: '#superdoc-preview',
+          documentMode: 'viewing',
+          modules: {
+            collaboration: {
+              ydoc: previewYdoc,
+              provider: new NoOpProvider() as any,
+            },
+            trackChanges: { visible: true, mode: 'review' },
+          },
+        });
+      } else if (selectedVersionBlob) {
+        // Legacy: Create preview from DOCX blob
+        previewSuperdocRef.current = new SuperDoc({
+          selector: '#superdoc-preview',
+          documentMode: 'viewing',
+          document: selectedVersionBlob,
+          modules: {
+            trackChanges: { visible: true, mode: 'review' },
+          },
+        });
+      }
     };
 
     initPreview();
@@ -541,31 +583,95 @@ export default function App() {
       previewSuperdocRef.current?.destroy();
       previewSuperdocRef.current = null;
     };
-  }, [selectedVersion, selectedVersionBlob]);
+  }, [selectedVersion, selectedVersionBlob, selectedVersionYjsState]);
 
   // ---------------------------------------------------------------------------
-  // Revert to Version
+  // Revert to Version (wholesale replacement)
   // ---------------------------------------------------------------------------
   const revertToVersion = useCallback(async (version: Version) => {
-    const editor = superdocRef.current?.activeEditor;
-    if (!editor || !documentId) return;
+    if (!documentId) return;
 
     try {
-      log('reverting-to-version', { versionId: version.id });
+      log('reverting-to-version', { versionId: version.id, isYjsState: version.isYjsState });
 
-      // Call backend revert (this updates collab room)
+      // Call backend revert (updates version pointer)
       await Versions.revert(documentId, version.id);
       log('revert-complete', { versionId: version.id });
 
-      // Download the blob to update local editor
-      const blob = await Versions.download(documentId, version.id);
-      await replaceEditorContent(editor, blob);
+      if (version.isYjsState) {
+        // For Yjs versions: Download state and replace editor completely
+        const yjsState = await Versions.downloadYjsState(documentId, version.id);
+        log('wholesale-replacement', { sizeBytes: yjsState.byteLength });
+
+        // Destroy current instance
+        superdocRef.current?.destroy();
+        superdocRef.current = null;
+
+        // Create fresh ydoc with the reverted state
+        const newYdoc = new YDoc();
+        applyUpdate(newYdoc, yjsState);
+        ydocRef.current = newYdoc;
+
+        superdocRef.current = new SuperDoc({
+          selector: '#superdoc-editor',
+          documentMode: 'suggesting',
+          user: currentUser,
+          comments: { visible: false },
+          permissionResolver: TCPermissions.resolver,
+          modules: {
+            collaboration: { ydoc: newYdoc, provider: new NoOpProvider() as any },
+            trackChanges: { enabled: true, visible: false },
+          },
+          onReady: () => {
+            log('revert-superdoc-ready');
+            setIsReady(true);
+            superdocRef.current?.setTrackedChangesPreferences?.({ mode: 'final' });
+          },
+        });
+
+        setIsReady(false);
+      } else {
+        // For DOCX versions: Download blob and replace editor content
+        const editor = superdocRef.current?.activeEditor;
+        if (editor) {
+          const blob = await Versions.download(documentId, version.id);
+          await replaceEditorContent(editor, blob);
+        }
+      }
 
       closePreview();
     } catch (error) {
       log('revert-error', { error: String(error) });
     }
-  }, [documentId, closePreview]);
+  }, [documentId, currentUser, closePreview]);
+
+  // ---------------------------------------------------------------------------
+  // Upload Document
+  // ---------------------------------------------------------------------------
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.endsWith('.docx')) return;
+
+    const editor = superdocRef.current?.activeEditor;
+    if (!editor) return;
+
+    try {
+      log('uploading-document', { filename: file.name, size: file.size });
+      await replaceEditorContent(editor, file);
+      log('document-uploaded');
+    } catch (error) {
+      log('upload-error', { error: String(error) });
+    }
+
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -589,19 +695,23 @@ export default function App() {
           <h1 style={styles.title}>Version History Demo</h1>
           <p style={styles.subtitle}>
             Editing as <strong>{currentUser.name}</strong>
-            <span style={{ marginLeft: '1rem', color: '#94a3b8' }}>
-              Room: {roomId} <span style={{ fontSize: '0.75rem' }}>(share URL to collaborate)</span>
-            </span>
           </p>
         </div>
         <div style={styles.headerActions}>
-          <div style={styles.users}>
-            {users.map((u, i) => (
-              <span key={i} style={{ ...styles.userBadge, background: u.user?.color || '#666' }}>
-                {u.user?.name}
-              </span>
-            ))}
-          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".docx"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={openFilePicker}
+            disabled={!isReady}
+            style={{ ...styles.secondaryButton, opacity: isReady ? 1 : 0.5 }}
+          >
+            Open DOCX
+          </button>
           <button
             onClick={toggleTcPermissions}
             style={{
@@ -646,7 +756,14 @@ export default function App() {
                   onClick={() => viewVersion(version)}
                 >
                   <div style={styles.versionTimestamp}>{formatTimestamp(version.createdAt)}</div>
-                  <div style={styles.versionMeta}>{version.label || version.id}</div>
+                  <div style={styles.versionMeta}>
+                    {version.label || version.id}
+                    {version.sizeBytes && (
+                      <span style={{ marginLeft: '0.5rem', color: '#10b981' }}>
+                        ({(version.sizeBytes / 1024).toFixed(1)} KB)
+                      </span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -675,7 +792,7 @@ export default function App() {
               </div>
             </div>
             <div style={styles.modalBody}>
-              {selectedVersionBlob ? (
+              {selectedVersionBlob || selectedVersionYjsState ? (
                 <div id="superdoc-preview" style={styles.previewEditor} />
               ) : (
                 <p style={styles.emptyState}>Loading version...</p>
@@ -729,16 +846,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '1rem',
-  },
-  users: {
-    display: 'flex',
-    gap: '0.5rem',
-  },
-  userBadge: {
-    padding: '0.25rem 0.5rem',
-    borderRadius: '4px',
-    color: 'white',
-    fontSize: '0.875rem',
   },
 
   // Buttons

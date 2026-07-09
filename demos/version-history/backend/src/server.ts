@@ -25,6 +25,7 @@ import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import { join, basename, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 import { SuperDocClient } from '@superdoc-dev/sdk';
+import { tcPermissionRoutes } from './tc-permissions.js';
 
 // =============================================================================
 // CONFIGURATION
@@ -56,6 +57,9 @@ type Version = {
   label?: string;
   createdAt: string;
   path: string;
+  // New: Yjs state storage (optional for backwards compat)
+  yjsState?: Buffer;
+  sizeBytes?: number;
 };
 
 // =============================================================================
@@ -284,7 +288,7 @@ const Versions = {
   },
 
   /**
-   * Save a new version.
+   * Save a new version (DOCX blob).
    */
   async save(docId: string, buffer: Buffer, label?: string): Promise<Version> {
     const id = nanoid(8);
@@ -314,6 +318,58 @@ const Versions = {
     await this.evictOld(docId);
 
     return version;
+  },
+
+  /**
+   * Save a new version from Yjs state (much smaller than DOCX).
+   */
+  async saveYjsState(docId: string, yjsState: Buffer, label?: string): Promise<Version> {
+    const id = nanoid(8);
+    const path = join(Config.versionsDir, `${docId}-${id}.yjs`);
+
+    // Write Yjs state to disk
+    await writeFile(path, yjsState);
+
+    // Create version record
+    const version: Version = {
+      id,
+      docId,
+      label,
+      createdAt: new Date().toISOString(),
+      path,
+      yjsState,
+      sizeBytes: yjsState.byteLength,
+    };
+
+    // Add to store (newest first)
+    const vers = this._store.get(docId) || [];
+    vers.unshift(version);
+    this._store.set(docId, vers);
+
+    // Enforce limit
+    await this.evictOld(docId);
+
+    return version;
+  },
+
+  /**
+   * Get Yjs state for a version.
+   */
+  async getYjsState(version: Version): Promise<Buffer | null> {
+    if (version.yjsState) {
+      return version.yjsState;
+    }
+    // Try loading from disk if path ends with .yjs
+    if (version.path.endsWith('.yjs')) {
+      try {
+        const state = await readFile(version.path);
+        version.yjsState = state;
+        return state;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   },
 
   /**
@@ -510,14 +566,85 @@ const API = {
         id: v.id,
         label: v.label,
         createdAt: v.createdAt,
+        sizeBytes: v.sizeBytes,
+        isYjsState: v.path.endsWith('.yjs'),
       })),
+    });
+  },
+
+  /**
+   * POST /api/documents/:id/versions/yjs
+   * Save a new version from Yjs state (JSON body with base64-encoded state).
+   * Much smaller than DOCX blobs (~10-50KB vs ~100-500KB).
+   */
+  async saveYjsVersion(
+    req: FastifyRequest<{ Params: { id: string }; Body: { yjsState: string; label?: string } }>,
+    reply: FastifyReply,
+  ) {
+    const doc = Docs.get(req.params.id);
+    if (!doc) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+
+    const body = req.body as { yjsState: string; label?: string };
+    if (!body.yjsState) {
+      return reply.status(400).send({ error: 'Missing yjsState' });
+    }
+
+    // Decode base64 Yjs state
+    const yjsBuffer = Buffer.from(body.yjsState, 'base64');
+    req.log.info({ docId: doc.id, label: body.label, sizeBytes: yjsBuffer.byteLength }, '→ save yjs version');
+
+    // Save version
+    const version = await Versions.saveYjsState(doc.id, yjsBuffer, body.label);
+
+    // Update current version pointer
+    doc.currentVersionId = version.id;
+
+    req.log.info({ id: version.id, sizeBytes: yjsBuffer.byteLength }, '← saved yjs');
+    return reply.status(201).send({
+      versionId: version.id,
+      label: version.label,
+      createdAt: version.createdAt,
+      sizeBytes: yjsBuffer.byteLength,
+    });
+  },
+
+  /**
+   * GET /api/documents/:id/versions/:versionId/yjs
+   * Download a version's Yjs state (base64-encoded).
+   */
+  async downloadYjsVersion(
+    req: FastifyRequest<{ Params: { id: string; versionId: string } }>,
+    reply: FastifyReply,
+  ) {
+    const doc = Docs.get(req.params.id);
+    if (!doc) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+
+    const version = Versions.get(doc.id, req.params.versionId);
+    if (!version) {
+      return reply.status(404).send({ error: 'Version not found' });
+    }
+
+    const yjsState = await Versions.getYjsState(version);
+    if (!yjsState) {
+      return reply.status(404).send({ error: 'Yjs state not available for this version' });
+    }
+
+    return reply.send({
+      versionId: version.id,
+      yjsState: yjsState.toString('base64'),
+      sizeBytes: yjsState.byteLength,
     });
   },
 
   /**
    * POST /api/documents/:id/versions/:versionId/revert
    * Revert document to a previous version.
-   * Overwrites the working file and reopens with SDK.
+   * For DOCX versions: Overwrites the working file and reopens with SDK.
+   * For Yjs versions: Just updates the version pointer (client handles state).
    */
   async revertVersion(
     req: FastifyRequest<{ Params: { id: string; versionId: string } }>,
@@ -533,9 +660,22 @@ const API = {
       return reply.status(404).send({ error: 'Version not found' });
     }
 
-    req.log.info({ docId: doc.id, versionId: version.id }, '→ revert');
+    req.log.info({ docId: doc.id, versionId: version.id, isYjs: version.path.endsWith('.yjs') }, '→ revert');
 
-    // Get version blob and overwrite working file
+    // For Yjs versions, client handles the state update directly
+    // We just update the version pointer here
+    if (version.path.endsWith('.yjs')) {
+      doc.currentVersionId = version.id;
+      req.log.info({ versionId: version.id }, '← reverted (yjs - client handles state)');
+      return reply.send({
+        reverted: true,
+        versionId: version.id,
+        isYjsState: true,
+        restoredAt: new Date().toISOString(),
+      });
+    }
+
+    // For DOCX versions: Get version blob and overwrite working file
     const blob = await Versions.getBlob(version);
     await SDK.close(doc.id);
     await writeFile(doc.workingPath, blob);
@@ -622,10 +762,13 @@ const routes: Array<{
   { method: 'get', path: '/api/documents', handler: API.listDocuments },
   { method: 'get', path: '/api/documents/:id', handler: API.getDocument },
   { method: 'post', path: '/api/documents/:id/versions', handler: API.saveVersion },
+  { method: 'post', path: '/api/documents/:id/versions/yjs', handler: API.saveYjsVersion },
   { method: 'get', path: '/api/documents/:id/versions', handler: API.listVersions },
   { method: 'post', path: '/api/documents/:id/versions/:versionId/revert', handler: API.revertVersion },
   { method: 'get', path: '/api/documents/:id/versions/:versionId/download', handler: API.downloadVersion },
+  { method: 'get', path: '/api/documents/:id/versions/:versionId/yjs', handler: API.downloadYjsVersion },
   { method: 'delete', path: '/api/documents/:id/versions/:versionId', handler: API.deleteVersion },
+  ...tcPermissionRoutes,
 ];
 
 // =============================================================================

@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@hocuspocus/provider": "^2.13.6",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "superdoc": "workspace:*",

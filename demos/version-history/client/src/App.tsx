@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Doc as YDoc, encodeStateAsUpdate, applyUpdate } from 'yjs';
+import { Doc as YDoc } from 'yjs';
 import { SuperDoc, DocxZipper, SuperConverter } from 'superdoc';
 import 'superdoc/style.css';
+
+import { Version, YjsOps, VersionAPI, Snapshots } from './snapshots';
 
 // =============================================================================
 // Types
 // =============================================================================
-
-interface Version {
-  id: string;
-  label?: string;
-  createdAt: string;
-  sizeBytes?: number;
-  isYjsState?: boolean;
-}
 
 interface CollaboratorUser {
   name: string;
@@ -58,148 +52,8 @@ async function apiRequest<T>(method: string, path: string, body?: unknown): Prom
   return data as T;
 }
 
-// =============================================================================
-// VERSIONS - Version operations and polling
-// =============================================================================
-
-const Versions = {
-  _log(msg: string): void {
-    const ts = new Date().toISOString().slice(11, 23);
-    console.log(`[${ts}] [client][versions] ${msg}`);
-  },
-
-  /**
-   * List all versions for a document.
-   */
-  async list(documentId: string): Promise<Version[]> {
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data = await response.json();
-    return data.versions;
-  },
-
-  /**
-   * Save a new version (DOCX blob - legacy).
-   */
-  async save(documentId: string, blob: Blob, label?: string): Promise<Version> {
-    const formData = new FormData();
-    formData.append('file', blob, 'version.docx');
-    if (label) formData.append('label', label);
-
-    this._log(`→ POST /documents/${documentId}/versions`);
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions`, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
-    this._log(`← ✓`);
-    return data;
-  },
-
-  /**
-   * Save a new version from Yjs state (much smaller than DOCX).
-   */
-  async saveYjsState(documentId: string, yjsState: Uint8Array, label?: string): Promise<Version> {
-    // Convert Uint8Array to base64 in chunks to avoid stack overflow
-    const chunkSize = 8192;
-    let binary = '';
-    for (let i = 0; i < yjsState.length; i += chunkSize) {
-      const chunk = yjsState.subarray(i, Math.min(i + chunkSize, yjsState.length));
-      binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
-    }
-    const base64 = btoa(binary);
-    this._log(`→ POST /documents/${documentId}/versions/yjs (${yjsState.byteLength} bytes)`);
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions/yjs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yjsState: base64, label }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
-    this._log(`← ✓ saved ${data.sizeBytes} bytes`);
-    return data;
-  },
-
-  /**
-   * Download a version blob (DOCX - legacy).
-   */
-  async download(documentId: string, versionId: string): Promise<Blob> {
-    this._log(`→ GET /documents/${documentId}/versions/${versionId}/download`);
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions/${versionId}/download`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const blob = await response.blob();
-    this._log(`← ✓`);
-    return blob;
-  },
-
-  /**
-   * Download a version's Yjs state.
-   */
-  async downloadYjsState(documentId: string, versionId: string): Promise<Uint8Array> {
-    this._log(`→ GET /documents/${documentId}/versions/${versionId}/yjs`);
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions/${versionId}/yjs`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data = await response.json();
-    // Decode base64 to Uint8Array
-    const binary = atob(data.yjsState);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    this._log(`← ✓ downloaded ${bytes.byteLength} bytes`);
-    return bytes;
-  },
-
-  /**
-   * Revert to a previous version.
-   */
-  async revert(documentId: string, versionId: string): Promise<void> {
-    this._log(`→ POST /documents/${documentId}/versions/${versionId}/revert`);
-    const response = await fetch(`${API_URL}/documents/${documentId}/versions/${versionId}/revert`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    this._log(`← ✓`);
-  },
-
-  /**
-   * Start polling for versions.
-   * Optional polling for simplicity. Can use WS messages instead.
-   */
-  startPolling(documentId: string, onUpdate: (versions: Version[]) => void, intervalMs = 2000): () => void {
-    const ts = () => new Date().toISOString().slice(11, 23);
-    const log = (msg: string) => console.log(`[${ts()}] [client] ${msg}`);
-
-    log(`started polling /documents/${documentId}/versions every ${intervalMs}ms`);
-
-    const poll = async () => {
-      try {
-        const versions = await this.list(documentId);
-        onUpdate(versions);
-      } catch (e) {
-        log(`failed: ${e}`);
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, intervalMs);
-
-    return () => clearInterval(interval);
-  },
-};
+// Initialize VersionAPI with server URL
+VersionAPI.init(API_URL);
 
 // =============================================================================
 // DOCS - Document operations
@@ -375,7 +229,7 @@ export default function App() {
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!documentId) return;
-    return Versions.startPolling(documentId, setVersions);
+    return VersionAPI.startPolling(documentId, setVersions);
   }, [documentId]);
 
   // ---------------------------------------------------------------------------
@@ -481,16 +335,11 @@ export default function App() {
     if (!editor || !superdoc || !documentId || !ydoc) return;
 
     try {
-      // Capture Yjs state (includes tracked changes from this edit session)
-      const yjsState = encodeStateAsUpdate(ydoc);
-      log('saving-version', { documentId, sizeBytes: yjsState.byteLength });
-
-      // Save version using Yjs state (much smaller than DOCX)
-      const result = await Versions.saveYjsState(documentId, yjsState, `Saved by ${currentUser.name}`);
+      // Save snapshot using high-level Snapshots API
+      const result = await Snapshots.save(ydoc, documentId, `Saved by ${currentUser.name}`);
       log('version-saved', { versionId: result.id, sizeBytes: result.sizeBytes });
 
       // Accept all tracked changes to clear for next session
-      // This way the next save will show fresh TC from this point forward
       editor.commands.acceptAllTrackedChanges?.();
     } catch (e) {
       log('save-version-error', { error: String(e) });
@@ -507,15 +356,14 @@ export default function App() {
     setSelectedVersionYjsState(null);
 
     try {
-      // Try Yjs state first (much smaller and shows TC)
       if (version.isYjsState) {
         log('downloading-yjs-state-for-preview', { versionId: version.id });
-        const yjsState = await Versions.downloadYjsState(documentId, version.id);
+        const yjsState = await VersionAPI.downloadYjsState(documentId, version.id);
         setSelectedVersionYjsState(yjsState);
       } else {
         // Fall back to DOCX blob for legacy versions
         log('downloading-blob-for-preview', { versionId: version.id });
-        const blob = await Versions.download(documentId, version.id);
+        const blob = await VersionAPI.downloadBlob(documentId, version.id);
         setSelectedVersionBlob(blob);
       }
     } catch (e) {
@@ -551,8 +399,7 @@ export default function App() {
 
       if (selectedVersionYjsState) {
         // Create preview from Yjs state - shows tracked changes
-        const previewYdoc = new YDoc();
-        applyUpdate(previewYdoc, selectedVersionYjsState);
+        const previewYdoc = YjsOps.createFromState(selectedVersionYjsState);
 
         previewSuperdocRef.current = new SuperDoc({
           selector: '#superdoc-preview',
@@ -595,12 +442,12 @@ export default function App() {
       log('reverting-to-version', { versionId: version.id, isYjsState: version.isYjsState });
 
       // Call backend revert (updates version pointer)
-      await Versions.revert(documentId, version.id);
+      await VersionAPI.revert(documentId, version.id);
       log('revert-complete', { versionId: version.id });
 
       if (version.isYjsState) {
         // For Yjs versions: Download state and replace editor completely
-        const yjsState = await Versions.downloadYjsState(documentId, version.id);
+        const yjsState = await VersionAPI.downloadYjsState(documentId, version.id);
         log('wholesale-replacement', { sizeBytes: yjsState.byteLength });
 
         // Destroy current instance
@@ -608,8 +455,7 @@ export default function App() {
         superdocRef.current = null;
 
         // Create fresh ydoc with the reverted state
-        const newYdoc = new YDoc();
-        applyUpdate(newYdoc, yjsState);
+        const newYdoc = YjsOps.createFromState(yjsState);
         ydocRef.current = newYdoc;
 
         superdocRef.current = new SuperDoc({
@@ -634,7 +480,7 @@ export default function App() {
         // For DOCX versions: Download blob and replace editor content
         const editor = superdocRef.current?.activeEditor;
         if (editor) {
-          const blob = await Versions.download(documentId, version.id);
+          const blob = await VersionAPI.downloadBlob(documentId, version.id);
           await replaceEditorContent(editor, blob);
         }
       }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { SuperDocUIProvider } from 'superdoc/ui/react';
 import { EditorMount } from './editor/EditorMount';
 import { Toolbar } from './components/Toolbar';
@@ -11,7 +11,7 @@ import { CitationsPanel } from './components/CitationsPanel';
 import { CitationHighlights } from './components/CitationHighlights';
 import { CitationPopover } from './components/CitationPopover';
 import { TrackedChangeActivation } from './components/TrackedChangeActivation';
-import { AIPromptPopover } from './components/AIPromptPopover';
+import { AIPromptPopover, type AIPromptOpenState } from './components/AIPromptPopover';
 import { E2EProbe } from './e2e/E2EProbe';
 
 export function App() {
@@ -47,6 +47,20 @@ function AppInner() {
   // through `decided.decideChange` so the Resolved audit row shows
   // up regardless of which surface fired the decision.
   const decided = useDecidedChanges();
+  // AI prompt popover state. Tracks position and captured selection.
+  const [aiPromptState, setAIPromptState] = useState<AIPromptOpenState | null>(null);
+  // Track last contextmenu position so AI popover can appear there
+  const lastContextMenuPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Track contextmenu events to capture click position
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      lastContextMenuPos.current = { x: e.clientX, y: e.clientY };
+    };
+    document.addEventListener('contextmenu', handler, true);
+    return () => document.removeEventListener('contextmenu', handler, true);
+  }, []);
+
   // Stable callbacks so the effect-driven `ContextMenuRegistrations`
   // (and similar children whose deps include these handlers) don't
   // unregister and re-register every time `composeOpen` toggles or a
@@ -56,6 +70,15 @@ function AppInner() {
   // every consumer that follows the pattern.
   const openComposer = useCallback(() => setComposeOpen(true), []);
   const closeComposer = useCallback(() => setComposeOpen(false), []);
+  const openAIPrompt = useCallback((state: AIPromptOpenState) => {
+    // Use the last contextmenu position for accurate placement
+    setAIPromptState({
+      ...state,
+      x: lastContextMenuPos.current.x,
+      y: lastContextMenuPos.current.y,
+    });
+  }, []);
+  const closeAIPrompt = useCallback(() => setAIPromptState(null), []);
 
   return (
     <div className="app">
@@ -75,10 +98,13 @@ function AppInner() {
             </div>
           </div>
           <SelectionPopover onComposeComment={openComposer} />
-          {/* AIPromptPopover must be before ContextMenu so it takes priority for selection right-clicks */}
-          <AIPromptPopover />
           <ContextMenu />
-          <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
+          <ContextMenuRegistrations
+            decided={decided}
+            onComposeComment={openComposer}
+            onOpenAIPrompt={openAIPrompt}
+          />
+          <AIPromptPopover openState={aiPromptState} onClose={closeAIPrompt} />
           <TrackedChangeActivation />
           <CitationHighlights />
           <CitationPopover />

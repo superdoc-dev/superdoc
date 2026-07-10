@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { ViewportEntityHit } from 'superdoc/ui';
 import { useSuperDocUI } from 'superdoc/ui/react';
 import type { DecidedChangesState } from './useDecidedChanges';
+import type { AIPromptOpenState } from './AIPromptPopover';
 
 interface Props {
   /**
@@ -17,6 +18,12 @@ interface Props {
    * uses, so a context-menu trigger lands on the same composer.
    */
   onComposeComment(): void;
+  /**
+   * Open the AI prompt popover at the given position with the captured
+   * selection. The context menu closes and the popover appears in its
+   * place.
+   */
+  onOpenAIPrompt(state: AIPromptOpenState): void;
 }
 
 /**
@@ -29,7 +36,7 @@ interface Props {
  * the menu was opened on, so the demo doesn't thread payloads through
  * the menu UI to keep them in sync.
  */
-export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
+export function ContextMenuRegistrations({ decided, onComposeComment, onOpenAIPrompt }: Props) {
   const ui = useSuperDocUI();
 
   useEffect(() => {
@@ -38,6 +45,33 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       entities?.find((e) => e.type === 'trackedChange')?.id;
     const commentId = (entities: ReadonlyArray<ViewportEntityHit> | undefined) =>
       entities?.find((e) => e.type === 'comment')?.id;
+
+    // AI Replace - first item in selection context menu
+    const aiReplace = ui.commands.register({
+      id: 'demo.aiReplace',
+      execute: ({ context }) => {
+        if (!context) return false;
+        // Capture selection at the moment of click
+        const captured = ui.selection.capture();
+        if (!captured || !captured.quotedText) return false;
+        // The context menu was opened at this position - we need to get it from
+        // the click event. Since we don't have direct access here, we'll use
+        // a workaround: store the last contextmenu position.
+        // For now, use selection rect position as fallback.
+        const rect = context.selection.rects?.[0];
+        const x = rect ? rect.left + rect.width : 100;
+        const y = rect ? rect.top + rect.height : 100;
+        onOpenAIPrompt({ x, y, captured });
+        return true;
+      },
+      contextMenu: {
+        label: 'Replace with AI',
+        group: 'ai',
+        order: -100, // Negative to appear first
+        when: ({ selection, insideSelection }) =>
+          !selection.empty && selection.target !== null && insideSelection === true,
+      },
+    });
 
     const accept = ui.commands.register({
       id: 'demo.acceptSuggestion',
@@ -168,6 +202,7 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
     });
 
     return () => {
+      aiReplace.unregister();
       accept.unregister();
       reject.unregister();
       resolve.unregister();
@@ -175,7 +210,7 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       comment.unregister();
       insertHere.unregister();
     };
-  }, [ui, onComposeComment, decided]);
+  }, [ui, onComposeComment, onOpenAIPrompt, decided]);
 
   return null;
 }

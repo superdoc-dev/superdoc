@@ -11,6 +11,7 @@ import { CitationsPanel } from './components/CitationsPanel';
 import { CitationHighlights } from './components/CitationHighlights';
 import { CitationPopover } from './components/CitationPopover';
 import { TrackedChangeActivation } from './components/TrackedChangeActivation';
+import { AIPromptPopover } from './components/AIPromptPopover';
 import { E2EProbe } from './e2e/E2EProbe';
 
 export function App() {
@@ -74,6 +75,8 @@ function AppInner() {
             </div>
           </div>
           <SelectionPopover onComposeComment={openComposer} />
+          {/* AIPromptPopover must be before ContextMenu so it takes priority for selection right-clicks */}
+          <AIPromptPopover />
           <ContextMenu />
           <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
           <TrackedChangeActivation />

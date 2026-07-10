@@ -26,6 +26,7 @@ import {
   removeCustomXmlPart,
   resolveTargetPartName,
 } from '../../core/super-converter/custom-xml-parts.js';
+import { commitPreparedCustomXmlPartMutation, prepareCustomXmlPartMutation } from './custom-xml-part-mutation.js';
 
 // ---------------------------------------------------------------------------
 // Converter access
@@ -169,14 +170,16 @@ export function customXmlPartsCreateWrapper(
         };
       }
       const probe = safeValidate(() =>
-        createCustomXmlPart(
-          getConvertedXml(editor),
-          { content: input.content, schemaRefs: input.schemaRefs },
-          getConverter(editor),
+        prepareCustomXmlPartMutation(
+          editor,
+          (convertedXml, converter) =>
+            createCustomXmlPart(convertedXml, { content: input.content, schemaRefs: input.schemaRefs }, converter),
+          'customXml.parts.create',
         ),
       );
       if (isWriteFailure(probe)) return { changed: false, payload: probe };
-      return { changed: true, payload: { ok: true, payload: probe.payload } };
+      const created = commitPreparedCustomXmlPartMutation(editor, probe.payload, { source: 'customXml.parts.create' });
+      return { changed: false, payload: { ok: true, payload: created } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
@@ -211,16 +214,22 @@ export function customXmlPartsPatchWrapper(
       const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
       if (!partName) return { changed: false, payload: targetNotFound() };
       const probe = safeValidate(() =>
-        patchCustomXmlPart(
-          getConvertedXml(editor),
-          input.target,
-          { content: input.content, schemaRefs: input.schemaRefs },
-          getConverter(editor),
+        prepareCustomXmlPartMutation(
+          editor,
+          (convertedXml, converter) =>
+            patchCustomXmlPart(
+              convertedXml,
+              input.target,
+              { content: input.content, schemaRefs: input.schemaRefs },
+              converter,
+            ),
+          'customXml.parts.patch',
         ),
       );
       if (isWriteFailure(probe)) return { changed: false, payload: probe };
-      if (!probe.payload) return { changed: false, payload: targetNotFound() };
-      return { changed: true, payload: { ok: true, payload: { id: probe.payload.id ?? null } } };
+      if (!probe.payload.result) return { changed: false, payload: targetNotFound() };
+      const patched = commitPreparedCustomXmlPartMutation(editor, probe.payload, { source: 'customXml.parts.patch' });
+      return { changed: false, payload: { ok: true, payload: { id: patched.id ?? null } } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
@@ -245,9 +254,14 @@ export function customXmlPartsRemoveWrapper(
           ? { changed: false, payload: { ok: true, payload: true } }
           : { changed: false, payload: targetNotFound() };
       }
-      const ok = removeCustomXmlPart(getConvertedXml(editor), input.target, getConverter(editor));
-      if (!ok) return { changed: false, payload: targetNotFound() };
-      return { changed: true, payload: { ok: true, payload: true } };
+      const probe = prepareCustomXmlPartMutation(
+        editor,
+        (convertedXml, converter) => removeCustomXmlPart(convertedXml, input.target, converter),
+        'customXml.parts.remove',
+      );
+      if (!probe.result) return { changed: false, payload: targetNotFound() };
+      commitPreparedCustomXmlPartMutation(editor, probe, { source: 'customXml.parts.remove' });
+      return { changed: false, payload: { ok: true, payload: true } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );

@@ -14,8 +14,17 @@ import type { Editor } from '../../../core/Editor.js';
 import type { PartId } from '../../../core/parts/types.js';
 import type { PartsCapability } from './types.js';
 import { createPartPublisher, type PartPublisher } from './publisher.js';
-import { createPartConsumer, replacePartData, type PartConsumer } from './consumer.js';
+import {
+  createPartConsumer,
+  replacePartData,
+  isCustomXmlPartPath,
+  isCustomXmlTombstonePath,
+  getCustomXmlTombstoneConverter,
+  recordCustomXmlTombstone,
+  type PartConsumer,
+} from './consumer.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';
+import { invalidateConverterCachesForPath } from '../../../core/super-converter/custom-xml-parts.js';
 import { isMigrationNeeded, migrateMetaDocxToParts } from './migration-from-meta-docx.js';
 import { seedPartsFromEditor } from './seed-parts.js';
 import { mutateParts, hasPart } from '../../../core/parts/index.js';
@@ -213,9 +222,17 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
   // Decode rels from Yjs for header/footer sectionId resolution
   const relsData = decodeYjsToEnvelope(partsMap.get('word/_rels/document.xml.rels'))?.data ?? null;
 
+  // Track which non-document parts the authoritative map actually contains, so
+  // the late-joiner prune below can tombstone local custom-XML parts that a
+  // peer already deleted before this client joined and clear stale tombstones
+  // for custom-XML parts that successfully hydrate from the map.
+  const presentKeys = new Set<string>();
+  const hydratedCustomXmlPaths = new Set<string>();
+
   for (const [key, value] of partsMap.entries()) {
     if (EXCLUDED_PART_IDS.has(key)) continue;
 
+    presentKeys.add(key);
     const partId = key as PartId;
 
     // Resolve sectionId (rId) for header/footer parts so afterCommit
@@ -248,6 +265,9 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
           initial: envelope.data,
         });
       }
+      if (isCustomXmlPartPath(key)) {
+        hydratedCustomXmlPaths.add(key);
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
 
@@ -265,15 +285,108 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
     return { ok: false, failures: criticalFailures };
   }
 
-  if (operations.length === 0) return { ok: true, failures: [] };
+  // Late-joiner prune: a peer may have deleted a custom-XML part before this
+  // client joined. Live deletes are tombstoned by the consumer observer, but a
+  // joiner that loaded the original DOCX still holds the part locally and would
+  // re-emit it on export. Prune local custom-XML parts absent from the map, then
+  // record tombstones after the prune mutation succeeds so export drops them.
+  // At the same success point, clear tombstones for paths that hydrated from
+  // the map so recreated parts are not dropped on export.
+  // Only runs when the map genuinely carries non-document parts (presentKeys
+  // non-empty) — the seed/migration paths mirror the local converter, so a
+  // present part is never pruned.
+  const customXmlPathsToTombstone = pruneAbsentCustomXmlParts(editor, presentKeys, operations);
+
+  if (operations.length === 0) {
+    applyCustomXmlHydrationTombstoneChanges(editor, customXmlPathsToTombstone, hydratedCustomXmlPaths);
+    return { ok: true, failures: [] };
+  }
 
   try {
     mutateParts({ editor, source: SOURCE_COLLAB_REMOTE_PARTS, operations });
+    applyCustomXmlHydrationTombstoneChanges(editor, customXmlPathsToTombstone, hydratedCustomXmlPaths);
     return { ok: true, failures: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[part-sync] Hydration mutateParts failed:', err);
     return { ok: false, failures: [`mutateParts: ${msg}`] };
+  }
+}
+
+/**
+ * Prune local custom-XML parts that the authoritative parts map no longer
+ * contains. Collect tombstone paths so the exporter drops them after the prune
+ * mutation commits, and push delete operations for locally present parts so the
+ * removal flows through the same `mutateParts` mechanism hydration already uses.
+ *
+ * Guards:
+ * - Only acts when `presentKeys` is non-empty — an empty authoritative map is
+ *   not a signal to wipe local custom XML.
+ * - Only touches paths matching the custom-XML tombstone shapes
+ *   (`isCustomXmlTombstonePath`); `word/*` parts and anything excluded from sync
+ *   are never pruned.
+ * - Reuses the consumer's path predicate and tombstone recorder so the prune
+ *   and live-delete paths stay identical once the local mutation succeeds
+ *   (including bibliography-cache clearing).
+ */
+function pruneAbsentCustomXmlParts(
+  editor: Editor,
+  presentKeys: Set<string>,
+  operations: import('../../../core/parts/types.js').PartOperation[],
+): Set<string> {
+  const pathsToTombstone = new Set<string>();
+  if (presentKeys.size === 0) return pathsToTombstone;
+
+  const converter = getCustomXmlTombstoneConverter(editor);
+  const convertedXml = converter?.convertedXml;
+  if (!converter || !convertedXml) return pathsToTombstone;
+
+  for (const key of Object.keys(convertedXml)) {
+    if (EXCLUDED_PART_IDS.has(key)) continue;
+    if (presentKeys.has(key)) continue;
+    if (!isCustomXmlTombstonePath(editor, key)) continue;
+
+    pathsToTombstone.add(key);
+    if (hasPart(editor, key as PartId)) {
+      operations.push({
+        editor,
+        partId: key as PartId,
+        operation: 'delete',
+        source: SOURCE_COLLAB_REMOTE_PARTS,
+      });
+    }
+  }
+
+  return pathsToTombstone;
+}
+
+function applyCustomXmlHydrationTombstoneChanges(
+  editor: Editor,
+  pathsToTombstone: Set<string>,
+  pathsToClear: Set<string>,
+): void {
+  if (pathsToTombstone.size === 0 && pathsToClear.size === 0) return;
+
+  const converter = getCustomXmlTombstoneConverter(editor);
+  if (!converter) return;
+
+  for (const path of pathsToClear) {
+    // Clear only when the part actually hydrated into local state. A key that
+    // is present in the authoritative map but failed to decode never landed in
+    // convertedXml; clearing its tombstone would let export copy the stale
+    // original zip entry through instead of dropping the part.
+    if (!converter.convertedXml || !Object.prototype.hasOwnProperty.call(converter.convertedXml, path)) continue;
+    // The part hydrated locally: drop any stale tombstone and invalidate the
+    // bibliography cache so the next export rebuilds from hydrated content
+    // instead of resurrecting the stale cache.
+    if (converter.removedCustomXmlPaths instanceof Set) {
+      converter.removedCustomXmlPaths.delete(path);
+    }
+    invalidateConverterCachesForPath(converter, path);
+  }
+
+  for (const path of pathsToTombstone) {
+    recordCustomXmlTombstone(converter, path);
   }
 }
 

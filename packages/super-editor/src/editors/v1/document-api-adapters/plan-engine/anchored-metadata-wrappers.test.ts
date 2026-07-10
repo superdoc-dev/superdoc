@@ -288,6 +288,26 @@ describe('anchored metadata wrappers', () => {
     expect(metadataListWrapper(editor).total).toBe(0);
   });
 
+  it('rejects a non-serializable payload before mutating the document', () => {
+    const editor = makeEditor();
+
+    // A cyclic object cannot be represented in the JSON envelope and cannot be
+    // ruled out by the payload type. The preview must fail serialization before
+    // the live path inserts the SDT anchor; otherwise attach dispatches the
+    // anchor transaction and only then throws while building the envelope,
+    // leaving an anchor with no matching customXml payload.
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    expect(() =>
+      metadataAttachWrapper(editor, { id: 'cyclic', target: TARGET, namespace: 'urn:test:metadata', payload: cyclic }),
+    ).toThrow();
+
+    // No anchor transaction was dispatched and no payload entry was written.
+    expect(editor.view!.dispatch).not.toHaveBeenCalled();
+    expect(metadataListWrapper(editor).total).toBe(0);
+  });
+
   it('attach dry-run throws REVISION_MISMATCH when expectedRevision is stale', () => {
     const editor = makeEditor();
 

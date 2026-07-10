@@ -27,16 +27,12 @@ export function ContextMenuRegistrations({ onOpenAIPrompt }: Props) {
     // AI Replace - first item in selection context menu
     const aiReplace = ui.commands.register({
       id: 'demo.aiReplace',
-      execute: ({ context }) => {
-        if (!context) return false;
+      execute: () => {
         // Capture selection at the moment of click
         const captured = ui.selection.capture();
         if (!captured || !captured.quotedText) return false;
-        // Use selection rect position as fallback (actual position comes from App.tsx)
-        const rect = context.selection.rects?.[0];
-        const x = rect ? rect.left + rect.width : 100;
-        const y = rect ? rect.top + rect.height : 100;
-        onOpenAIPrompt({ x, y, captured });
+        // Position will be overridden by App.tsx with actual contextmenu position
+        onOpenAIPrompt({ x: 100, y: 100, captured });
         return true;
       },
       contextMenu: {

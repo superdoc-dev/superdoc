@@ -180,6 +180,190 @@ describe('bootstrapPartSync', () => {
     handle.destroy();
   });
 
+  it('prunes and tombstones local custom-XML parts absent from an authoritative parts map (late joiner)', () => {
+    const editor = createMockEditor();
+
+    // Late joiner loaded the original DOCX: convertedXml holds a custom-XML part
+    // (item1) that a peer already deleted, plus one (item2) still shared.
+    const survivingData = { type: 'element', name: 'root', elements: [] };
+    editor.converter.convertedXml['customXml/item1.xml'] = { type: 'element', name: 'root', elements: [] };
+    editor.converter.convertedXml['customXml/itemProps1.xml'] = {
+      type: 'element',
+      name: 'ds:datastoreItem',
+      elements: [],
+    };
+    editor.converter.convertedXml['customXml/_rels/item1.xml.rels'] = {
+      type: 'element',
+      name: 'Relationships',
+      elements: [],
+    };
+    editor.converter.convertedXml['customXml/item2.xml'] = survivingData;
+
+    // Authoritative map (capability marker present) carries item2 but NOT item1.
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    partsMap.set('customXml/item2.xml', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: survivingData }));
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    // item1 family pruned locally and tombstoned for export.
+    expect(editor.converter.convertedXml['customXml/item1.xml']).toBeUndefined();
+    expect(editor.converter.convertedXml['customXml/itemProps1.xml']).toBeUndefined();
+    expect(editor.converter.convertedXml['customXml/_rels/item1.xml.rels']).toBeUndefined();
+
+    const removed = (editor.converter as unknown as { removedCustomXmlPaths?: Set<string> }).removedCustomXmlPaths;
+    expect(removed?.has('customXml/item1.xml')).toBe(true);
+    expect(removed?.has('customXml/itemProps1.xml')).toBe(true);
+    expect(removed?.has('customXml/_rels/item1.xml.rels')).toBe(true);
+
+    // The part still present in the authoritative map survives.
+    expect(editor.converter.convertedXml['customXml/item2.xml']).toBeDefined();
+    expect(removed?.has('customXml/item2.xml')).toBeFalsy();
+
+    handle.destroy();
+  });
+
+  it('clears stale custom-XML tombstones for parts present in the authoritative parts map', () => {
+    const editor = createMockEditor();
+    const converter = editor.converter as typeof editor.converter & {
+      removedCustomXmlPaths: Set<string>;
+    };
+    const recreatedItemData = { type: 'element', name: 'recreated-root', elements: [] };
+    const recreatedPropsData = {
+      type: 'element',
+      name: 'ds:datastoreItem',
+      elements: [],
+    };
+    const recreatedRelsData = {
+      type: 'element',
+      name: 'Relationships',
+      elements: [],
+    };
+    const absentItemData = { type: 'element', name: 'absent-root', elements: [] };
+    const staleTombstonePaths = ['customXml/item1.xml', 'customXml/itemProps1.xml', 'customXml/_rels/item1.xml.rels'];
+
+    converter.removedCustomXmlPaths = new Set(staleTombstonePaths);
+    converter.convertedXml['customXml/item2.xml'] = absentItemData;
+
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    partsMap.set('customXml/item1.xml', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: recreatedItemData }));
+    partsMap.set('customXml/itemProps1.xml', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: recreatedPropsData }));
+    partsMap.set('customXml/_rels/item1.xml.rels', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: recreatedRelsData }));
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    expect(converter.convertedXml['customXml/item1.xml']).toEqual(recreatedItemData);
+    expect(converter.convertedXml['customXml/itemProps1.xml']).toEqual(recreatedPropsData);
+    expect(converter.convertedXml['customXml/_rels/item1.xml.rels']).toEqual(recreatedRelsData);
+    for (const path of staleTombstonePaths) {
+      expect(converter.removedCustomXmlPaths.has(path)).toBe(false);
+    }
+
+    expect(converter.convertedXml['customXml/item2.xml']).toBeUndefined();
+    expect(converter.removedCustomXmlPaths.has('customXml/item2.xml')).toBe(true);
+
+    handle.destroy();
+  });
+
+  it('keeps stale custom-XML tombstones when an authoritative part fails hydration', () => {
+    const editor = createMockEditor();
+    const converter = editor.converter as typeof editor.converter & {
+      removedCustomXmlPaths: Set<string>;
+    };
+    const staleLocalData = { type: 'element', name: 'stale-root', elements: [] };
+    const hydratedData = { type: 'element', name: 'hydrated-root', elements: [] };
+
+    converter.convertedXml['customXml/item1.xml'] = staleLocalData;
+    converter.removedCustomXmlPaths = new Set(['customXml/item1.xml', 'customXml/item2.xml']);
+
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    partsMap.set('customXml/item1.xml', { v: 'invalid', clientId: 0, data: staleLocalData });
+    partsMap.set('customXml/item2.xml', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: hydratedData }));
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    expect(converter.convertedXml['customXml/item1.xml']).toEqual(staleLocalData);
+    expect(converter.convertedXml['customXml/item2.xml']).toEqual(hydratedData);
+    expect(converter.removedCustomXmlPaths.has('customXml/item1.xml')).toBe(true);
+    expect(converter.removedCustomXmlPaths.has('customXml/item2.xml')).toBe(false);
+
+    handle.destroy();
+  });
+
+  it('invalidates the bibliography cache when hydration receives the cached storage part', () => {
+    const editor = createMockEditor();
+    const converter = editor.converter as typeof editor.converter & {
+      bibliographyPart?: { partPath: string | null } | null;
+    };
+
+    const bibliographyPartPath = 'customXml/item1.xml';
+    // Local cache points at a storage part the authoritative map has updated.
+    converter.bibliographyPart = { partPath: bibliographyPartPath };
+    converter.convertedXml[bibliographyPartPath] = { type: 'element', name: 'stale-root', elements: [] };
+
+    const freshData = { type: 'element', name: 'fresh-root', elements: [] };
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    partsMap.set(bibliographyPartPath, encodeEnvelopeToYjs({ v: 1, clientId: 0, data: freshData }));
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    // The map's content replaces the local part…
+    expect(converter.convertedXml[bibliographyPartPath]).toEqual(freshData);
+    // …and the stale cache is invalidated so export cannot resurrect it.
+    expect(converter.bibliographyPart?.partPath).toBeNull();
+
+    handle.destroy();
+  });
+
+  it('does not tombstone absent custom-XML parts when hydration rolls back', () => {
+    const editor = createMockEditor();
+    const prunedPartId = 'customXml/item1.xml' as const;
+    const survivingPartId = 'customXml/item2.xml' as const;
+    const converter = editor.converter as typeof editor.converter & {
+      bibliographyPart?: { partPath: string | null } | null;
+      removedCustomXmlPaths?: Set<string>;
+    };
+    const originalSurvivingData = { type: 'element', name: 'local-root', elements: [] };
+    const expectedSurvivingData = { type: 'element', name: 'local-root', elements: [] };
+    const remoteSurvivingData = { type: 'element', name: 'remote-root', elements: [] };
+
+    converter.convertedXml[prunedPartId] = { type: 'element', name: 'pruned-root', elements: [] };
+    converter.convertedXml[survivingPartId] = originalSurvivingData;
+    converter.bibliographyPart = { partPath: prunedPartId };
+
+    registerPartDescriptor({
+      id: prunedPartId,
+      ensurePart() {
+        return { type: 'element', name: 'pruned-root', elements: [] };
+      },
+      onDelete() {
+        throw new Error('delete failed');
+      },
+    });
+
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    partsMap.set(survivingPartId, encodeEnvelopeToYjs({ v: 1, clientId: 0, data: remoteSurvivingData }));
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    expect(handle.publisher).toBeNull();
+    expect(converter.convertedXml[prunedPartId]).toBeDefined();
+    expect(converter.convertedXml[survivingPartId]).toEqual(expectedSurvivingData);
+    expect(converter.removedCustomXmlPaths?.has(prunedPartId)).toBeFalsy();
+    expect(converter.bibliographyPart?.partPath).toBe(prunedPartId);
+
+    handle.destroy();
+  });
+
   it('registers partChanged listener and cleans up on destroy', () => {
     const editor = createMockEditor();
     const metaMap = ydoc.getMap(META_MAP_KEY);

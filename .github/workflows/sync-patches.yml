@@ -6,7 +6,7 @@ name: 🔄 Sync stable → main
 on:
   workflow_run:
     workflows:
-      - "📦 Release stable tooling (CLI/SDK/MCP)"
+      - '📦 Release stable tooling (CLI/SDK/MCP)'
     types:
       - completed
   workflow_dispatch:
@@ -14,7 +14,6 @@ on:
 permissions:
   actions: read
   contents: write
-  pull-requests: write
 
 concurrency:
   group: sync-stable-to-main
@@ -84,8 +83,6 @@ jobs:
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Sync stable into main
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -94,16 +91,12 @@ jobs:
 
           git fetch origin main stable --tags --prune
 
-          SYNC_BRANCH="sync/stable-to-main-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b "$SYNC_BRANCH" origin/main
+          git checkout --detach origin/main
 
           if git merge-base --is-ancestor origin/stable origin/main; then
             echo "No changes to sync - stable is already in main's ancestry."
             exit 0
           fi
-
-          PR_TITLE="🔄 Sync stable → main"
-          MERGE_STATUS="clean"
 
           normalize_json_without_keys() {
             python3 -c 'import json, sys; data = json.load(sys.stdin); [data.pop(key, None) for key in sys.argv[1:]]; sys.stdout.write(json.dumps(data, sort_keys=True, separators=(",", ":")))' "$@"
@@ -143,9 +136,7 @@ jobs:
           # Use a real merge, not a squash, so stable release tags become
           # reachable from main. semantic-release uses reachable tags as the
           # version floor for @next prereleases.
-          if git merge --no-ff --no-edit origin/stable; then
-            MERGE_STATUS="clean"
-          else
+          if ! git merge --no-ff --no-edit origin/stable; then
             echo "Merge conflict — attempting auto-resolution of release artifacts..."
 
             # Auto-resolve release artifact conflicts only when the conflict is
@@ -166,7 +157,6 @@ jobs:
             done < <(git diff --name-only --diff-filter=U)
 
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-              MERGE_STATUS="auto_resolved"
               git commit -m "chore: merge stable into main (release conflicts auto-resolved)"
             else
               echo "Unresolved conflicts remain after version-only release artifact auto-resolution."
@@ -181,40 +171,7 @@ jobs:
             exit 1
           fi
 
-          git push origin "$SYNC_BRANCH"
-
-          # Check for existing open sync PR
-          EXISTING=$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            echo "Sync PR #$EXISTING already exists."
-            exit 0
-          fi
-
-          gh pr create \
-            --base main \
-            --head "$SYNC_BRANCH" \
-            --title "$PR_TITLE" \
-            --body "$(cat <<EOF
-          ## Summary
-
-          Merges latest stable patches into main with a real merge commit so stable release tags remain reachable from main.
-
-          This keeps \`@next\` prerelease version calculation ahead of the latest published stable release.
-
-          ## Merge requirement
-
-          This PR must be merged with GitHub's merge-commit option. Squash or rebase merging will discard stable ancestry and break \`@next\` version calculation again.
-
-          ## Conflict handling
-
-          Merge status: \`${MERGE_STATUS}\`.
-
-          Version-only release artifact conflicts are auto-resolved to keep stable's already-published versions. Non-version conflicts fail this workflow instead of committing conflict markers.
-
-          ---
-          _Auto-created by sync-patches workflow._
-          EOF
-            )" \
-            --label "patch-sync"
-
-          echo "✅ Created sync PR"
+          # The merge commit must land unchanged so semantic-release can see
+          # stable release tags in main's ancestry. A normal push fails safely
+          # if main advanced while this job was running.
+          git push origin HEAD:main

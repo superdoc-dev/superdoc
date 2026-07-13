@@ -570,8 +570,10 @@ test('release configs publish GitHub releases only for stable versions while Lin
 
     if (usesGithubPlugin) {
       assert.ok(
-        content.includes('const shouldPublishGitHubRelease =') && content.includes('!isPrerelease'),
-        `${releasercPath}: must make GitHub release publication stable-only`,
+        content.includes('const shouldPublishGitHubRelease =') &&
+          content.includes('Boolean(branch)') &&
+          content.includes('!isPrerelease'),
+        `${releasercPath}: must fail closed when the release branch is unknown and publish GitHub releases only for stable versions`,
       );
       assert.ok(
         content.includes('if (shouldPublishGitHubRelease)'),

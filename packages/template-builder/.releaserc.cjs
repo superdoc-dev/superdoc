@@ -23,7 +23,7 @@ const branches = [
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
-const shouldPublishGitHubRelease = !isPrerelease;
+const shouldPublishGitHubRelease = Boolean(branch) && !isPrerelease;
 // Linear release comments remain the shipped-version breadcrumb, so
 // prereleases link to their Git tags when no GitHub Release exists.
 const shouldCommentOnLinearRelease = true;

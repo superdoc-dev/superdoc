@@ -631,6 +631,11 @@ const createPluginStateEnvironment = ({ schema: providedSchema, doc: providedDoc
   };
 
   editor.view = view;
+  Object.defineProperty(editor, 'state', {
+    get() {
+      return view.state;
+    },
+  });
   const pluginView = plugin.spec.view?.(view);
 
   return { plugin, editor, view, schema, pluginView };
@@ -654,6 +659,122 @@ describe('CommentsPlugin state', () => {
 
     const pluginState = CommentsPluginKey.getState(view.state);
     expect(pluginState.activeThreadId).toBe('thread-1');
+  });
+
+  describe('deferred selected events', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const setActiveComment = (view, activeThreadId) => {
+      view.dispatch(
+        view.state.tr.setMeta(CommentsPluginKey, {
+          type: 'setActiveComment',
+          activeThreadId,
+          forceUpdate: true,
+        }),
+      );
+    };
+
+    it('only emits the final active thread when several activations are scheduled together', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      setActiveComment(view, 'comment-2');
+      setActiveComment(view, 'comment-3');
+
+      expect(editor.emit).not.toHaveBeenCalled();
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('comment-3');
+
+      vi.runAllTimers();
+
+      expect(editor.emit).toHaveBeenCalledTimes(1);
+      expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'comment-3',
+      });
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('comment-3');
+    });
+
+    it('drops a stale activation when a clear is scheduled after it', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      setActiveComment(view, null);
+
+      vi.runAllTimers();
+
+      expect(editor.emit).toHaveBeenCalledTimes(1);
+      expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: null,
+      });
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBeNull();
+    });
+
+    it('drops a stale clear when a new activation is scheduled after it', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      vi.runAllTimers();
+      editor.emit.mockClear();
+
+      setActiveComment(view, null);
+      setActiveComment(view, 'comment-2');
+
+      vi.runAllTimers();
+
+      expect(editor.emit).toHaveBeenCalledTimes(1);
+      expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'comment-2',
+      });
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('comment-2');
+    });
+
+    it('emits the reverted thread once when an activation burst returns to the original id', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      setActiveComment(view, 'comment-2');
+      setActiveComment(view, 'comment-1');
+
+      vi.runAllTimers();
+
+      expect(editor.emit).toHaveBeenCalledTimes(1);
+      expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'comment-1',
+      });
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('comment-1');
+    });
+
+    it('does not schedule a notification when the active thread is reasserted', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      vi.runAllTimers();
+      editor.emit.mockClear();
+
+      setActiveComment(view, 'comment-1');
+      vi.runAllTimers();
+
+      expect(editor.emit).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when the editor is destroyed before a deferred notification runs', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      setActiveComment(view, 'comment-1');
+      editor.isDestroyed = true;
+
+      expect(() => vi.runAllTimers()).not.toThrow();
+      expect(editor.emit).not.toHaveBeenCalled();
+    });
   });
 
   it('stores decorations provided through metadata', () => {

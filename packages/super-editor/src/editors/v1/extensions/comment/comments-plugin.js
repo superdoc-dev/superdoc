@@ -475,6 +475,7 @@ export const CommentsPlugin = Extension.create({
     const editor = this.editor;
     const isHeadless = editor.options.isHeadless;
     let shouldUpdate = true;
+    let pendingSelectedNotification = null;
 
     const pluginSpec = {
       key: CommentsPluginKey,
@@ -507,11 +508,25 @@ export const CommentsPlugin = Extension.create({
             // Emit commentsUpdate event when active comment changes (e.g., from comment bubble click)
             // Defer emission to after transaction completes to avoid dispatching during apply()
             if (previousActiveThreadId !== newActiveThreadId) {
+              const activeCommentId = newActiveThreadId ?? null;
               const update = {
                 type: comments_module_events.SELECTED,
-                activeCommentId: newActiveThreadId ? newActiveThreadId : null,
+                activeCommentId,
               };
-              setTimeout(() => editor.emit('commentsUpdate', update), 0);
+              clearTimeout(pendingSelectedNotification);
+              pendingSelectedNotification = setTimeout(() => {
+                pendingSelectedNotification = null;
+                if (editor.isDestroyed) return;
+
+                const editorState = editor.state;
+                if (!editorState) return;
+
+                const currentActiveCommentId = CommentsPluginKey.getState(editorState)?.activeThreadId ?? null;
+                // A deferred SELECTED(id) may only publish while id is still the active plugin state.
+                if (currentActiveCommentId !== activeCommentId) return;
+
+                editor.emit('commentsUpdate', update);
+              }, 0);
             }
 
             pluginState.activeThreadId = newActiveThreadId;

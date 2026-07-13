@@ -98,16 +98,37 @@ jobs:
               exit 1
             fi
 
+            release_subject_pattern='^chore(\([^)]+\))?: [^[:space:]]+ \[skip ci\]$'
             unexpected_commit=false
             while read -r sha subject; do
               [ -z "$sha" ] && continue
-              case "$subject" in
-                *"[skip ci]") ;;
-                *)
-                  echo "Pinned stable includes a newer unverified commit: $sha $subject"
-                  unexpected_commit=true
-                  ;;
-              esac
+
+              author_email=$(git show -s --format='%ae' "$sha")
+              committer_email=$(git show -s --format='%ce' "$sha")
+              if [ "$author_email" != "semantic-release-bot@martynus.net" ] ||
+                [ "$committer_email" != "semantic-release-bot@martynus.net" ] ||
+                [[ ! "$subject" =~ $release_subject_pattern ]]; then
+                echo "Pinned stable includes a non-release commit: $sha $subject"
+                unexpected_commit=true
+                continue
+              fi
+
+              changed_files=$(git diff-tree --no-commit-id --name-only -r "$sha")
+              if [ -z "$changed_files" ]; then
+                echo "Release writeback has no version files: $sha"
+                unexpected_commit=true
+                continue
+              fi
+
+              while read -r f; do
+                case "$f" in
+                  package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json) ;;
+                  *)
+                    echo "Release writeback changes an unexpected file: $sha $f"
+                    unexpected_commit=true
+                    ;;
+                esac
+              done <<< "$changed_files"
             done < <(git log --format='%H %s' "$TRIGGER_STABLE_SHA..$stable_sha")
 
             if [ "$unexpected_commit" = true ]; then

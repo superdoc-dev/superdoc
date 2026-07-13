@@ -485,10 +485,12 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
       verificationIndex < mergeIndex &&
       workflow.includes('TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}') &&
       workflow.includes('"$TRIGGER_STABLE_SHA..$stable_sha"') &&
-      workflow.includes('*"[skip ci]"') &&
+      workflow.includes('semantic-release-bot@martynus.net') &&
+      workflow.includes('release_subject_pattern=') &&
+      workflow.includes('git diff-tree --no-commit-id --name-only -r "$sha"') &&
       workflow.includes('git merge-base --is-ancestor "$stable_sha" origin/main') &&
       workflow.includes('git merge-base --is-ancestor "$stable_sha" HEAD'),
-    '.github/workflows/sync-patches.yml: must allow only release writebacks after the successful trigger before merging the pinned stable SHA',
+    '.github/workflows/sync-patches.yml: must verify release writeback provenance and files before merging the pinned stable SHA',
   );
   assert.ok(
     workflow.includes('release_artifact_only_conflict') &&

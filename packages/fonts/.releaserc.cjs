@@ -14,7 +14,8 @@ const branches = [
 ];
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
-const shouldCommentOnRelease = !isPrerelease;
+// GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
+const shouldPublishGitHubRelease = !isPrerelease;
 const shouldCommentOnLinearRelease = true;
 const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
@@ -49,13 +50,14 @@ config.plugins.push([
   },
 ]);
 
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/fonts** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
-    successCommentCondition: shouldCommentOnRelease ? undefined : false,
-  },
-]);
+if (shouldPublishGitHubRelease) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      successComment:
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/fonts** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+    },
+  ]);
+}
 
 module.exports = config;

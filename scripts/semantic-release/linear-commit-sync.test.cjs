@@ -89,7 +89,7 @@ test('collectIssueIdsFromCommits ignores generated release commits with old note
 });
 
 
-test('formatComment keeps the existing release comment template behavior', () => {
+test('formatComment links prerelease comments to the Git tag', () => {
   assert.equal(
     formatComment(
       'shipped in {package} {releaseLink} {channel}',
@@ -99,7 +99,21 @@ test('formatComment keeps the existing release comment template behavior', () =>
       'v1.2.3',
       'https://github.com/superdoc-dev/superdoc.git',
     ),
-    'shipped in **superdoc** [1.2.3](https://github.com/superdoc-dev/superdoc/releases/tag/v1.2.3) (next channel)',
+    'shipped in **superdoc** [1.2.3](https://github.com/superdoc-dev/superdoc/tree/v1.2.3) (next channel)',
+  );
+});
+
+test('formatComment links stable comments to the GitHub release', () => {
+  assert.equal(
+    formatComment(
+      'shipped in {package} {releaseLink} {channel}',
+      '1.2.3',
+      'latest',
+      'superdoc',
+      'v1.2.3',
+      'https://github.com/superdoc-dev/superdoc.git',
+    ),
+    'shipped in **superdoc** [1.2.3](https://github.com/superdoc-dev/superdoc/releases/tag/v1.2.3) (latest channel)',
   );
 });
 

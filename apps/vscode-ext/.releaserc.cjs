@@ -33,12 +33,10 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
-// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
-const shouldCommentOnRelease = !isPrerelease;
-// Linear release comments are the shipped-version breadcrumb inside Linear
-// itself, so keep them on for prereleases even while GitHub PR comments stay
-// gated separately.
+// GitHub Releases are stable-only; prerelease tags still proceed on main.
+const shouldPublishGitHubRelease = !isPrerelease;
+// Linear release comments remain the shipped-version breadcrumb, so
+// prereleases link to their Git tags when no GitHub Release exists.
 const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
@@ -65,16 +63,9 @@ const config = {
   ],
 };
 
-// VS Code Marketplace doesn't support semver prerelease versions (e.g., 0.0.1-next.1)
-// Only publish stable releases to marketplace; prereleases get GitHub release with .vsix attached
-if (isPrerelease) {
-  config.plugins.push([
-    '@semantic-release/exec',
-    {
-      prepareCmd: 'pnpm run package', // Creates .vsix file only
-    },
-  ]);
-} else {
+// VS Code Marketplace doesn't support semver prerelease versions, so only
+// stable releases build and publish a .vsix.
+if (!isPrerelease) {
   config.plugins.push([
     '@semantic-release/exec',
     {
@@ -103,14 +94,15 @@ config.plugins.push([
   },
 ]);
 
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    assets: [{ path: '*.vsix', label: 'VS Code Extension' }],
-    successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **vscode-ext** v${nextRelease.version}',
-    successCommentCondition: shouldCommentOnRelease ? undefined : false,
-  },
-]);
+if (shouldPublishGitHubRelease) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      assets: [{ path: '*.vsix', label: 'VS Code Extension' }],
+      successComment:
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **vscode-ext** v${nextRelease.version}',
+    },
+  ]);
+}
 
 module.exports = config;

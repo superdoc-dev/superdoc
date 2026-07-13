@@ -33,12 +33,10 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
-// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
-const shouldCommentOnRelease = !isPrerelease;
-// Linear release comments are the shipped-version breadcrumb inside Linear
-// itself, so keep them on for prereleases even while GitHub PR comments stay
-// gated separately.
+// GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
+const shouldPublishGitHubRelease = !isPrerelease;
+// Linear release comments remain the shipped-version breadcrumb, so
+// prereleases link to their Git tags when no GitHub Release exists.
 const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
@@ -116,13 +114,14 @@ config.plugins.push([
   },
 ]);
 
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc-sdk** v${nextRelease.version}',
-    successCommentCondition: shouldCommentOnRelease ? undefined : false,
-  },
-]);
+if (shouldPublishGitHubRelease) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      successComment:
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc-sdk** v${nextRelease.version}',
+    },
+  ]);
+}
 
 module.exports = config;

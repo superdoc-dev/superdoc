@@ -266,7 +266,7 @@ function getLabelColor(releaseType) {
   return colors[releaseType] || '#4752C4';
 }
 
-function buildReleaseUrl(repositoryUrl, gitTag) {
+function buildReleaseUrl(repositoryUrl, gitTag, channel) {
   if (!repositoryUrl || !gitTag) {
     return '';
   }
@@ -274,13 +274,14 @@ function buildReleaseUrl(repositoryUrl, gitTag) {
   if (!match) {
     return '';
   }
-  return `https://github.com/${match[1]}/${match[2]}/releases/tag/${gitTag}`;
+  const tagPath = channel === 'next' ? 'tree' : 'releases/tag';
+  return `https://github.com/${match[1]}/${match[2]}/${tagPath}/${gitTag}`;
 }
 
 function formatComment(template, version, channel, packageName, gitTag, repositoryUrl) {
   const channelText = channel ? `(${channel} channel)` : '';
   const packageText = packageName ? `**${packageName}**` : '';
-  const releaseUrl = buildReleaseUrl(repositoryUrl, gitTag);
+  const releaseUrl = buildReleaseUrl(repositoryUrl, gitTag, channel);
   const releaseLink = releaseUrl ? `[${version}](${releaseUrl})` : version;
   const tpl = template || 'Released in {package} v{releaseLink} {channel}';
   return tpl

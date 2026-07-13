@@ -1,9 +1,10 @@
 name: 🔄 Sync stable → main
 
 # Stable pushes first run semantic-release, which can append version/tag
-# commits back to stable. Automatic sync waits for a successful release so
-# main never advances from a failed or intermediate stable head. Manual
-# dispatch remains available after an investigated failure.
+# commits back to stable. Automatic sync waits for every triggered stable
+# release workflow to succeed so main never advances from a failed or
+# intermediate stable head. Manual dispatch remains available after an
+# investigated failure.
 on:
   workflow_run:
     workflows:
@@ -36,6 +37,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          RELEASE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_CREATED_AT: ${{ github.event.workflow_run.created_at }}
         run: |
           set -euo pipefail
 
@@ -67,6 +70,29 @@ jobs:
             echo "Waiting for ${active_runs} stable release run(s) to finish..."
             sleep 30
           done
+
+          release_runs=$(gh run list \
+            --repo "$REPO" \
+            --branch stable \
+            --event push \
+            --limit 100 \
+            --json conclusion,createdAt,headSha,name,status,url)
+
+          failed_runs=$(jq \
+            --arg head_sha "$RELEASE_HEAD_SHA" \
+            --arg created_at "$RELEASE_CREATED_AT" \
+            '[.[] | select(
+              (.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and
+              .status == "completed" and
+              (.headSha == $head_sha or .createdAt >= $created_at) and
+              (.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required" or .conclusion == "startup_failure" or .conclusion == "stale")
+            )]' <<< "$release_runs")
+
+          if [ "$(jq 'length' <<< "$failed_runs")" -ne 0 ]; then
+            echo "Stable release lane contains failed runs."
+            jq -r '.[] | "\(.name)\t\(.conclusion)\t\(.url)"' <<< "$failed_runs"
+            exit 1
+          fi
 
       - name: Generate token
         id: generate_token

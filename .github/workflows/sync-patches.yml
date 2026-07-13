@@ -29,8 +29,9 @@ jobs:
       )
 
     steps:
+      # Manual dispatch is the recovery path after an investigated failure,
+      # but it still waits for active stable releases before pinning stable.
       - name: Wait for stable release lane to drain
-        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

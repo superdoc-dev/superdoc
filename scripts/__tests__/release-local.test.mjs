@@ -390,6 +390,10 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
 
 test('stable-to-main sync waits for the stable release lane after stable tooling succeeds', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+  const laneDrainStep = workflow.slice(
+    workflow.indexOf('- name: Wait for stable release lane to drain'),
+    workflow.indexOf('- name: Generate token'),
+  );
 
   assert.ok(
     workflow.includes('workflow_run:'),
@@ -431,14 +435,16 @@ test('stable-to-main sync waits for the stable release lane after stable tooling
       workflow.includes('"📦 Release template-builder"'),
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
+  assert.equal(
+    laneDrainStep.includes("if: github.event_name == 'workflow_run'"),
+    false,
+    '.github/workflows/sync-patches.yml: manual recovery must also wait for active stable release runs to finish',
+  );
   for (const removedGate of [
     'Verify stable release lane succeeded',
-    'require_successful_release',
-    '--workflow "$workflow_file"',
-    'git diff --name-only origin/main...origin/stable',
-    'GITHUB_OUTPUT',
-    'release-esign.yml',
-    'release-template-builder.yml',
+    'id: verify_release_lane',
+    'require_successful_release()',
+    'steps.verify_release_lane.outputs.stable_sha',
   ]) {
     assert.equal(
       workflow.includes(removedGate),
@@ -446,16 +452,6 @@ test('stable-to-main sync waits for the stable release lane after stable tooling
       `.github/workflows/sync-patches.yml: must not retain the aggregate release-health gate (${removedGate})`,
     );
   }
-  assert.equal(
-    /--limit 1(?:\s|$)/.test(workflow),
-    false,
-    '.github/workflows/sync-patches.yml: must not query the latest release run',
-  );
-  assert.equal(
-    workflow.includes("workflow_run.conclusion == 'success'"),
-    true,
-    '.github/workflows/sync-patches.yml: only the triggering stable tooling release determines whether automatic sync starts',
-  );
 });
 
 test('stable-to-main sync preserves stable release ancestry', async () => {

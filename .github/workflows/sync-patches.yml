@@ -1,10 +1,7 @@
 name: 🔄 Sync stable → main
 
-# Stable pushes first run semantic-release, which can append version/tag
-# commits back to stable. Automatic sync waits for every triggered stable
-# release workflow to succeed so main never advances from a failed or
-# intermediate stable head. Manual dispatch remains available after an
-# investigated failure.
+# Stable releases can append version and tag commits. Wait for that lane to
+# drain, then pin its settled head before merging it into main.
 on:
   workflow_run:
     workflows:
@@ -50,7 +47,7 @@ jobs:
               --jq '[.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed")] | length')
 
             if [ "$active_runs" -eq 0 ]; then
-              echo "Stable release lane is idle."
+              echo "Stable release lane is drained."
               break
             fi
 
@@ -81,69 +78,7 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Verify stable release lane succeeded
-        id: verify_release_lane
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          git fetch origin main stable --tags --prune
-
-          require_successful_release() {
-            local workflow_file="$1"
-            local label="$2"
-            local run
-            local status
-            local conclusion
-            local url
-
-            run=$(gh run list \
-              --repo "$REPO" \
-              --workflow "$workflow_file" \
-              --branch stable \
-              --limit 1 \
-              --json conclusion,status,url)
-            status=$(jq -r '.[0].status // "missing"' <<< "$run")
-            conclusion=$(jq -r '.[0].conclusion // "missing"' <<< "$run")
-            url=$(jq -r '.[0].url // "unavailable"' <<< "$run")
-
-            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
-              echo "$label release is not successful: status=$status conclusion=$conclusion url=$url"
-              exit 1
-            fi
-          }
-
-          require_successful_release release-stable.yml "Stable tooling"
-
-          requires_esign=false
-          requires_template_builder=false
-          while IFS= read -r path; do
-            case "$path" in
-              *.md) ;;
-              packages/esign/*|pnpm-workspace.yaml) requires_esign=true ;;
-            esac
-            case "$path" in
-              *.md) ;;
-              packages/template-builder/*|pnpm-workspace.yaml) requires_template_builder=true ;;
-            esac
-          done < <(git diff --name-only origin/main...origin/stable)
-
-          if [ "$requires_esign" = true ]; then
-            require_successful_release release-esign.yml "eSign"
-          fi
-          if [ "$requires_template_builder" = true ]; then
-            require_successful_release release-template-builder.yml "Template Builder"
-          fi
-
-          echo "stable_sha=$(git rev-parse origin/stable)" >> "$GITHUB_OUTPUT"
-
       - name: Sync stable into main
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          VERIFIED_STABLE_SHA: ${{ steps.verify_release_lane.outputs.stable_sha }}
         run: |
           set -euo pipefail
 
@@ -151,23 +86,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch origin main stable --tags --prune
-
-          stable_ref=origin/stable
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            if [ -z "$VERIFIED_STABLE_SHA" ]; then
-              echo "Verified stable SHA is missing; refusing automatic sync."
-              exit 1
-            fi
-            if ! git merge-base --is-ancestor "$VERIFIED_STABLE_SHA" origin/stable; then
-              echo "Verified stable SHA is no longer in origin/stable; refusing automatic sync."
-              exit 1
-            fi
-            stable_ref="$VERIFIED_STABLE_SHA"
-          fi
+          stable_sha=$(git rev-parse origin/stable)
 
           git checkout --detach origin/main
 
-          if git merge-base --is-ancestor "$stable_ref" origin/main; then
+          if git merge-base --is-ancestor "$stable_sha" origin/main; then
             echo "No changes to sync - stable is already in main's ancestry."
             exit 0
           fi
@@ -207,15 +130,13 @@ jobs:
             return "${status}"
           }
 
-          # Use a real merge, not a squash, so stable release tags become
-          # reachable from main. semantic-release uses reachable tags as the
-          # version floor for @next prereleases.
-          if ! git merge --no-ff --no-edit "$stable_ref"; then
+          # A real merge makes stable release tags reachable from main, which
+          # semantic-release needs as the version floor for @next.
+          if ! git merge --no-ff --no-edit "$stable_sha"; then
             echo "Merge conflict — attempting auto-resolution of release artifacts..."
 
-            # Auto-resolve release artifact conflicts only when the conflict is
-            # version-only: keep stable's already-published version, but never
-            # drop dependency, script, export, or package metadata changes.
+            # Only published-version fields may take stable's side. Other
+            # package metadata conflicts remain manual.
             while read -r f; do
               case "$f" in
                 package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
@@ -240,12 +161,10 @@ jobs:
             fi
           fi
 
-          if ! git merge-base --is-ancestor "$stable_ref" HEAD; then
+          if ! git merge-base --is-ancestor "$stable_sha" HEAD; then
             echo "Stable is still not in the sync branch ancestry after merge."
             exit 1
           fi
 
-          # The merge commit must land unchanged so semantic-release can see
-          # stable release tags in main's ancestry. A normal push fails safely
-          # if main advanced while this job was running.
+          # Push this merge unchanged. A normal push fails safely if main moved.
           git push origin HEAD:main

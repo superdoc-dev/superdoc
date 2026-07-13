@@ -80,6 +80,9 @@ jobs:
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Sync stable into main
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
@@ -88,6 +91,29 @@ jobs:
 
           git fetch origin main stable --tags --prune
           stable_sha=$(git rev-parse origin/stable)
+
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            if ! git merge-base --is-ancestor "$TRIGGER_STABLE_SHA" "$stable_sha"; then
+              echo "Pinned stable SHA does not descend from the successful tooling release."
+              exit 1
+            fi
+
+            unexpected_commit=false
+            while read -r sha subject; do
+              [ -z "$sha" ] && continue
+              case "$subject" in
+                *"[skip ci]") ;;
+                *)
+                  echo "Pinned stable includes a newer unverified commit: $sha $subject"
+                  unexpected_commit=true
+                  ;;
+              esac
+            done < <(git log --format='%H %s' "$TRIGGER_STABLE_SHA..$stable_sha")
+
+            if [ "$unexpected_commit" = true ]; then
+              exit 1
+            fi
+          fi
 
           git checkout --detach origin/main
 

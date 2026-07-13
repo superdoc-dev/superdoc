@@ -390,10 +390,14 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
 
 test('stable-to-main sync waits for the stable release lane after stable tooling succeeds', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
-  const laneDrainStep = workflow.slice(
-    workflow.indexOf('- name: Wait for stable release lane to drain'),
-    workflow.indexOf('- name: Generate token'),
-  );
+  const laneDrainStart = workflow.indexOf('- name: Wait for stable release lane to drain');
+  const laneDrainEnd = workflow.indexOf('- name: Generate token');
+
+  assert.notEqual(laneDrainStart, -1, '.github/workflows/sync-patches.yml: must include the stable lane drain step');
+  assert.notEqual(laneDrainEnd, -1, '.github/workflows/sync-patches.yml: must include the token generation step');
+  assert.ok(laneDrainStart < laneDrainEnd, '.github/workflows/sync-patches.yml: must drain the stable lane before checkout');
+
+  const laneDrainStep = workflow.slice(laneDrainStart, laneDrainEnd);
 
   assert.ok(
     workflow.includes('workflow_run:'),
@@ -458,6 +462,7 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
   const stableShaAssignment = 'stable_sha=$(git rev-parse origin/stable)';
   const pinIndex = workflow.indexOf(stableShaAssignment);
+  const verificationIndex = workflow.indexOf('git merge-base --is-ancestor "$TRIGGER_STABLE_SHA" "$stable_sha"');
   const mergeIndex = workflow.indexOf('git merge --no-ff --no-edit "$stable_sha"');
 
   assert.equal(
@@ -476,9 +481,14 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
       pinIndex < mergeIndex &&
       !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('git fetch origin') &&
       !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('origin/stable') &&
+      pinIndex < verificationIndex &&
+      verificationIndex < mergeIndex &&
+      workflow.includes('TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}') &&
+      workflow.includes('"$TRIGGER_STABLE_SHA..$stable_sha"') &&
+      workflow.includes('*"[skip ci]"') &&
       workflow.includes('git merge-base --is-ancestor "$stable_sha" origin/main') &&
       workflow.includes('git merge-base --is-ancestor "$stable_sha" HEAD'),
-    '.github/workflows/sync-patches.yml: must pin stable once after fetching and merge that immutable SHA without refreshing stable',
+    '.github/workflows/sync-patches.yml: must allow only release writebacks after the successful trigger before merging the pinned stable SHA',
   );
   assert.ok(
     workflow.includes('release_artifact_only_conflict') &&

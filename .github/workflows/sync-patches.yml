@@ -37,8 +37,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RELEASE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          RELEASE_CREATED_AT: ${{ github.event.workflow_run.created_at }}
         run: |
           set -euo pipefail
 
@@ -71,29 +69,6 @@ jobs:
             sleep 30
           done
 
-          release_runs=$(gh run list \
-            --repo "$REPO" \
-            --branch stable \
-            --event push \
-            --limit 100 \
-            --json conclusion,createdAt,headSha,name,status,url)
-
-          failed_runs=$(jq \
-            --arg head_sha "$RELEASE_HEAD_SHA" \
-            --arg created_at "$RELEASE_CREATED_AT" \
-            '[.[] | select(
-              (.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and
-              .status == "completed" and
-              (.headSha == $head_sha or .createdAt >= $created_at) and
-              (.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required" or .conclusion == "startup_failure" or .conclusion == "stale")
-            )]' <<< "$release_runs")
-
-          if [ "$(jq 'length' <<< "$failed_runs")" -ne 0 ]; then
-            echo "Stable release lane contains failed runs."
-            jq -r '.[] | "\(.name)\t\(.conclusion)\t\(.url)"' <<< "$failed_runs"
-            exit 1
-          fi
-
       - name: Generate token
         id: generate_token
         uses: actions/create-github-app-token@v2
@@ -105,6 +80,62 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Verify stable release lane succeeded
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main stable --tags --prune
+
+          require_successful_release() {
+            local workflow_file="$1"
+            local label="$2"
+            local run
+            local status
+            local conclusion
+            local url
+
+            run=$(gh run list \
+              --repo "$REPO" \
+              --workflow "$workflow_file" \
+              --branch stable \
+              --limit 1 \
+              --json conclusion,status,url)
+            status=$(jq -r '.[0].status // "missing"' <<< "$run")
+            conclusion=$(jq -r '.[0].conclusion // "missing"' <<< "$run")
+            url=$(jq -r '.[0].url // "unavailable"' <<< "$run")
+
+            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+              echo "$label release is not successful: status=$status conclusion=$conclusion url=$url"
+              exit 1
+            fi
+          }
+
+          require_successful_release release-stable.yml "Stable tooling"
+
+          requires_esign=false
+          requires_template_builder=false
+          while IFS= read -r path; do
+            case "$path" in
+              *.md) ;;
+              packages/esign/*|pnpm-workspace.yaml) requires_esign=true ;;
+            esac
+            case "$path" in
+              *.md) ;;
+              packages/template-builder/*|pnpm-workspace.yaml) requires_template_builder=true ;;
+            esac
+          done < <(git diff --name-only origin/main...origin/stable)
+
+          if [ "$requires_esign" = true ]; then
+            require_successful_release release-esign.yml "eSign"
+          fi
+          if [ "$requires_template_builder" = true ]; then
+            require_successful_release release-template-builder.yml "Template Builder"
+          fi
 
       - name: Sync stable into main
         run: |

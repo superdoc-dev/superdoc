@@ -432,11 +432,13 @@ test('stable-to-main sync waits for stable release completion', async () => {
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
   assert.ok(
-    workflow.includes('RELEASE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}') &&
-      workflow.includes('RELEASE_CREATED_AT: ${{ github.event.workflow_run.created_at }}') &&
-      workflow.includes('.headSha == $head_sha or .createdAt >= $created_at') &&
-      workflow.includes('.conclusion == "failure"'),
-    '.github/workflows/sync-patches.yml: must reject failed release runs from the triggering stable push and any newer stable pushes',
+    workflow.includes('Verify stable release lane succeeded') &&
+      workflow.includes('--workflow "$workflow_file"') &&
+      workflow.includes('--limit 1') &&
+      workflow.includes('git diff --name-only origin/main...origin/stable') &&
+      workflow.includes('require_successful_release release-esign.yml') &&
+      workflow.includes('require_successful_release release-template-builder.yml'),
+    '.github/workflows/sync-patches.yml: must require the latest relevant stable release workflows to succeed before syncing',
   );
 });
 

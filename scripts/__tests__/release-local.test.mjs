@@ -396,7 +396,7 @@ test('stable-to-main sync waits for stable release completion', async () => {
     '.github/workflows/sync-patches.yml: must trigger from release workflow completion, not directly from stable pushes',
   );
   assert.ok(
-    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(workflow),
+    /workflows:\s*\n\s*-\s*['"]📦 Release stable tooling \(CLI\/SDK\/MCP\)['"]/.test(workflow),
     '.github/workflows/sync-patches.yml: must trigger after the stable release orchestrator completes',
   );
   assert.equal(
@@ -409,9 +409,17 @@ test('stable-to-main sync waits for stable release completion', async () => {
     '.github/workflows/sync-patches.yml: must scope automatic syncs to stable release runs',
   );
   assert.ok(
-    workflow.includes("github.event.workflow_run.conclusion == 'success'") &&
-      workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
-    '.github/workflows/sync-patches.yml: must wait for release completion while still surfacing failed-release sync PRs for review',
+    workflow.includes("github.event.workflow_run.conclusion == 'success'"),
+    '.github/workflows/sync-patches.yml: automatic syncs must require a successful stable release',
+  );
+  assert.equal(
+    workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    false,
+    '.github/workflows/sync-patches.yml: failed stable releases must not push to main automatically',
+  );
+  assert.ok(
+    workflow.includes("github.event_name == 'workflow_dispatch'"),
+    '.github/workflows/sync-patches.yml: manual dispatch must remain available for investigated recovery',
   );
   assert.ok(
     workflow.includes('actions: read'),
@@ -451,11 +459,11 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
   assert.equal(
     workflow.includes('git add -A'),
     false,
-    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers into review PRs',
+    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers',
   );
   assert.ok(
-    workflow.includes("This PR must be merged with GitHub's merge-commit option"),
-    '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
+    workflow.includes('git push origin HEAD:main'),
+    '.github/workflows/sync-patches.yml: sync must push the verified merge commit directly so stable ancestry is preserved',
   );
 });
 

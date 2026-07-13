@@ -1,0 +1,41 @@
+diff --git a/node_modules/superdoc/dist/chunks/SuperConverter-Dtd-RlxM.es.js b/node_modules/superdoc/dist/chunks/SuperConverter-Dtd-RlxM.es.js
+index 056d820..726fcea 100644
+--- a/node_modules/superdoc/dist/chunks/SuperConverter-Dtd-RlxM.es.js
++++ b/node_modules/superdoc/dist/chunks/SuperConverter-Dtd-RlxM.es.js
+@@ -63439,12 +63439,26 @@ var RUN_LEVEL_WRAPPERS = new Set([
+ 	"w:del",
+ 	"w:smartTag"
+ ]);
++// PATCH: Elements to skip when flattening SDTs
++var SDT_FLATTEN_SKIP_ELEMENTS = new Set([
++	"w:bookmarkStart", "w:bookmarkEnd",
++	"w:commentRangeStart", "w:commentRangeEnd",
++	"w:proofErr",
++	"w:permStart", "w:permEnd",
++	"w:moveFromRangeStart", "w:moveFromRangeEnd",
++	"w:moveToRangeStart", "w:moveToRangeEnd",
++	"w:customXmlInsRangeStart", "w:customXmlInsRangeEnd",
++	"w:customXmlDelRangeStart", "w:customXmlDelRangeEnd",
++	"w:customXmlMoveFromRangeStart", "w:customXmlMoveFromRangeEnd",
++	"w:customXmlMoveToRangeStart", "w:customXmlMoveToRangeEnd"
++]);
+ function convertSdtContentToRuns(elements) {
+ 	const normalized = Array.isArray(elements) ? elements : [elements];
+ 	const runs = [];
+ 	normalized.forEach((element) => {
+ 		if (!element) return;
+ 		if (element.name === "w:sdtPr") return;
++		if (SDT_FLATTEN_SKIP_ELEMENTS.has(element.name)) return;
+ 		if (element.name === "w:r") {
+ 			runs.push(element);
+ 			return;
+@@ -63482,7 +63496,8 @@ function translateStructuredContent(params) {
+ 		node
+ 	});
+ 	const childElements = Array.isArray(childContent) ? childContent : [childContent];
+-	if (isFinalDoc && !preserveSdtWrappers) {
++	// PATCH: Always flatten SDTs (preserves tracked changes, unlike isFinalDoc)
++	if (!preserveSdtWrappers) {
+ 		if (node?.type === "structuredContent") return convertSdtContentToRuns(childElements);
+ 		if (node?.type === "structuredContentBlock") return childElements.length === 1 ? childElements[0] : childElements;
+ 	}

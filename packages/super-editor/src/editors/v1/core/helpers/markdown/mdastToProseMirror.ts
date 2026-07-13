@@ -37,6 +37,7 @@ import { ListHelpers } from '../list-numbering-helpers.js';
 import { generateDocxRandomId } from '../generateDocxRandomId.js';
 import { readImageDimensionsFromDataUri } from '../../super-converter/image-dimensions.js';
 import type { MdastConversionContext, MarkdownDiagnostic } from './types.js';
+import { MARKDOWN_MONOSPACE_FONT } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Public entry point
@@ -274,9 +275,44 @@ function convertCodeBlock(node: MdastCode, ctx: MdastConversionContext): JsonNod
       content.push({ type: 'lineBreak' });
     }
     if (lines[i].length > 0) {
-      content.push(makeRun(lines[i], [], { rFonts: { ascii: 'Courier New', hAnsi: 'Courier New' } }));
+      // Use a `textStyle` mark (not just a direct `runProperties.fontFamily`
+      // attr) so `calculateInlineRunPropertiesPlugin`'s mark-based
+      // recalculation (which treats `fontFamily` as mark-derived) has a mark
+      // to decode the font from. A bare `runProperties.fontFamily` with no
+      // matching mark gets dropped on the first `editor.dispatch(tr)`, since
+      // that plugin recomputes inline run properties from marks/styles and
+      // `fontFamily` is not preserved via the existing-props fallback for
+      // mark-derived keys.
+      //
+      // Unlike the `inlineCode` case below, we ALSO set the direct
+      // `runProperties.fontFamily` attr here (belt-and-suspenders, not a true
+      // mirror of `inlineCode`). That's deliberate: code-block JSON can be
+      // consumed by callers that never dispatch a transaction through a live
+      // `Editor` (e.g. inspecting the converter's raw JSON output directly),
+      // in which case `calculateInlineRunPropertiesPlugin` never runs and the
+      // mark alone wouldn't populate `runProperties`. `inlineCode` spans are
+      // always produced within content destined for an editor dispatch, so a
+      // mark alone is sufficient there. Once dispatched, the plugin
+      // recomputes `runProperties.fontFamily` from the mark via
+      // `decodeRPrFromMarks` anyway (see styles.js). That decoder always sets
+      // all four rFonts slots (ascii/eastAsia/hAnsi/cs) to the same value, so
+      // the direct attrs set here match that 4-key shape upfront — otherwise
+      // the 2-key shape would be silently reshaped by the plugin on first
+      // dispatch, and any pre-dispatch consumer of the raw JSON would see a
+      // different (incomplete) shape than a post-dispatch consumer.
+      content.push(
+        makeRun(lines[i], [{ type: 'textStyle', attrs: { fontFamily: MARKDOWN_MONOSPACE_FONT } }], {
+          fontFamily: {
+            ascii: MARKDOWN_MONOSPACE_FONT,
+            eastAsia: MARKDOWN_MONOSPACE_FONT,
+            hAnsi: MARKDOWN_MONOSPACE_FONT,
+            cs: MARKDOWN_MONOSPACE_FONT,
+          },
+        }),
+      );
     }
   }
+
   return makeParagraph(content);
 }
 
@@ -443,7 +479,7 @@ function convertInlineNode(node: PhrasingContent, ctx: MdastConversionContext, p
       return [
         makeRun((node as MdastInlineCode).value, [
           ...parentMarks,
-          { type: 'textStyle', attrs: { fontFamily: 'Courier New' } },
+          { type: 'textStyle', attrs: { fontFamily: MARKDOWN_MONOSPACE_FONT } },
         ]),
       ];
 

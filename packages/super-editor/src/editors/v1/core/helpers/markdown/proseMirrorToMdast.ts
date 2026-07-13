@@ -39,6 +39,7 @@ import type {
 } from 'mdast';
 import { ListHelpers } from '../list-numbering-helpers.js';
 import type { Editor } from '../../Editor.js';
+import { MARKDOWN_MONOSPACE_FONT } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Public entry point
@@ -350,9 +351,11 @@ function convertRunNode(node: PmNode, editor: Editor): PhrasingContent[] {
   node.forEach((child) => {
     if (child.type.name === 'text') {
       const text = child.text ?? '';
-      // Check for inline code via run properties (Courier New font)
+      // Check for inline code via run properties (Courier New font) or via
+      // the `textStyle` mark (see `isMonospaceSignal` — the two detectors
+      // are unified so both directions of the monospace signal stay in sync).
       const runProps = node.attrs.runProperties as Record<string, unknown> | undefined;
-      if (isMonospaceRun(runProps)) {
+      if (isMonospaceSignal(runProps, child.marks)) {
         const code: InlineCode = { type: 'inlineCode', value: text };
         result.push(wrapWithMarks(code, child.marks));
       } else {
@@ -365,11 +368,36 @@ function convertRunNode(node: PmNode, editor: Editor): PhrasingContent[] {
   return result;
 }
 
+/**
+ * True when the direct `runProperties.fontFamily` attr is set to the
+ * monospace font used by `mdastToProseMirror.ts` for code blocks/spans.
+ */
 function isMonospaceRun(runProps: Record<string, unknown> | undefined): boolean {
   if (!runProps) return false;
-  const rFonts = runProps.rFonts as Record<string, string> | undefined;
-  if (!rFonts) return false;
-  return rFonts.ascii === 'Courier New' || rFonts.hAnsi === 'Courier New';
+  const fontFamily = runProps.fontFamily as Record<string, string> | undefined;
+  if (!fontFamily) return false;
+  return fontFamily.ascii === MARKDOWN_MONOSPACE_FONT || fontFamily.hAnsi === MARKDOWN_MONOSPACE_FONT;
+}
+
+/**
+ * True when the `textStyle` mark's `fontFamily` attr is set to the
+ * monospace font used by `mdastToProseMirror.ts` for code blocks/spans.
+ */
+function isMonospaceMark(marks: readonly Mark[] | undefined): boolean {
+  if (!marks) return false;
+  const textStyleMark = marks.find((mark) => mark.type.name === 'textStyle');
+  return textStyleMark?.attrs?.fontFamily === MARKDOWN_MONOSPACE_FONT;
+}
+
+/**
+ * Single shared "is this monospace/code text" predicate. Combines the two
+ * independent signals a run can carry — the direct `runProperties.fontFamily`
+ * attr (checked by `convertRunNode`) and the `textStyle` mark (checked by
+ * `applyMark`) — so both call sites agree on what counts as code, and any
+ * future change to the detection logic only needs to happen in one place.
+ */
+function isMonospaceSignal(runProps: Record<string, unknown> | undefined, marks: readonly Mark[] | undefined): boolean {
+  return isMonospaceRun(runProps) || isMonospaceMark(marks);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,9 +465,11 @@ function applyMark(mark: Mark, child: PhrasingContent): PhrasingContent {
         children: [child],
       } as Link;
     case 'textStyle': {
-      // Courier New fontFamily → inlineCode (only if child is text)
+      // Monospace fontFamily → inlineCode (only if child is text). Uses the
+      // same `isMonospaceMark` predicate as `convertRunNode` via the shared
+      // `MARKDOWN_MONOSPACE_FONT` constant (see `isMonospaceSignal`).
       const fontFamily = mark.attrs.fontFamily as string | undefined;
-      if (fontFamily === 'Courier New' && child.type === 'text') {
+      if (fontFamily === MARKDOWN_MONOSPACE_FONT && child.type === 'text') {
         return { type: 'inlineCode', value: (child as Text).value } as InlineCode;
       }
       return child;

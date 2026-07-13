@@ -287,7 +287,7 @@ describe('proseMirrorDocToMdast', () => {
   });
 
   describe('inline code via run properties', () => {
-    it('converts Courier New rFonts in runProperties to inlineCode', () => {
+    it('converts Courier New fontFamily in runProperties to inlineCode', () => {
       const doc = buildDoc({
         type: 'doc',
         content: [
@@ -296,7 +296,7 @@ describe('proseMirrorDocToMdast', () => {
             content: [
               {
                 type: 'run',
-                attrs: { runProperties: { rFonts: { ascii: 'Courier New', hAnsi: 'Courier New' } } },
+                attrs: { runProperties: { fontFamily: { ascii: 'Courier New', hAnsi: 'Courier New' } } },
                 content: [{ type: 'text', text: 'monospace' }],
               },
             ],

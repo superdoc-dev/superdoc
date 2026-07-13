@@ -92,6 +92,11 @@ const makeSchema = () =>
         toDOM: () => ['em', 0],
         parseDOM: [{ tag: 'em' }],
       },
+      textStyle: {
+        attrs: { fontFamily: { default: null } },
+        toDOM: (mark) => ['span', { style: mark.attrs.fontFamily ? `font-family: ${mark.attrs.fontFamily}` : '' }, 0],
+        parseDOM: [{ tag: 'span' }],
+      },
     },
   });
 
@@ -782,12 +787,68 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
   });
 
+  // Regression coverage for the markdown code-block import scenario (see
+  // mdastToProseMirror.ts `convertCodeBlock`): a run is seeded with BOTH a
+  // `textStyle` mark carrying `fontFamily: 'Courier New'` AND a matching direct
+  // `runProperties.fontFamily` (4-key shape). No `sdPreserveRunPropertiesKeys`
+  // meta is set on the import transaction — this plugin's own appendTransaction
+  // must not drop the font on the very first doc-changing dispatch after import.
+  it('keeps mark-decoded fontFamily on a freshly-imported code-block-shaped run (no preserve meta set)', () => {
+    const codeFont = { ascii: 'Courier New', eastAsia: 'Courier New', hAnsi: 'Courier New', cs: 'Courier New' };
+    decodeRPrFromMarksMock.mockImplementation((marks) => {
+      const textStyleMark = marks.find((mark) => mark.type.name === 'textStyle');
+      if (textStyleMark?.attrs?.fontFamily === 'Courier New') {
+        return { fontFamily: { ...codeFont } };
+      }
+      return {};
+    });
+    resolveRunPropertiesMock.mockImplementation(() => ({}));
+    // Encoder mirrors the real one closely enough for this scenario: it derives a
+    // concrete `attrs.fontFamily` value from whatever fontFamily object/string it is
+    // given, rather than returning a hardcoded constant. A constant-return mock would
+    // make the marks-derived and style-derived encodings always compare equal, hiding
+    // whether the plugin's mark-vs-style divergence gate behaves correctly.
+    encodeMarksFromRPrMock.mockImplementation((props) => {
+      const ff = props?.fontFamily;
+      if (!ff) return [];
+      const value = typeof ff === 'string' ? ff : ff.ascii;
+      if (!value) return [];
+      return [{ attrs: { fontFamily: value } }];
+    });
+
+    const schema = makeSchema();
+    const textStyleMark = schema.marks.textStyle.create({ fontFamily: 'Courier New' });
+    const doc = paragraphDoc(
+      schema,
+      {
+        runProperties: { fontFamily: { ...codeFont } },
+        runPropertiesInlineKeys: null,
+        runPropertiesStyleKeys: null,
+        runPropertiesOverrideKeys: null,
+      },
+      [textStyleMark],
+      'const x = 1;',
+    );
+    const state = createState(schema, doc);
+
+    // Simulate the first doc-changing transaction after import (e.g. a benign no-op
+    // insert/delete elsewhere triggering appendTransaction), mirroring the fact that
+    // the markdown importer sets no `sdPreserveRunPropertiesKeys` meta at all.
+    const textPos = runPos(state.doc) + 1;
+    const tr = state.tr.insertText('X', textPos).delete(textPos, textPos + 1);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties?.fontFamily).toEqual(codeFont);
+  });
+
   it('maps changed ranges through later transactions', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
       schema.node('paragraph', null, [schema.node('run', null, schema.text('AAA'))]),
       schema.node('paragraph', null, [schema.node('run', null, schema.text('Hello'))]),
     ]);
+
     const state = createState(schema, doc);
     const [firstRunPos, secondRunPos] = runPositions(state.doc);
     const { from, to } = runTextRangeAtPos(secondRunPos, 0, 2); // "He"

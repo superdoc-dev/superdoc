@@ -82,6 +82,7 @@ jobs:
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Verify stable release lane succeeded
+        id: verify_release_lane
         if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -137,7 +138,12 @@ jobs:
             require_successful_release release-template-builder.yml "Template Builder"
           fi
 
+          echo "stable_sha=$(git rev-parse origin/stable)" >> "$GITHUB_OUTPUT"
+
       - name: Sync stable into main
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VERIFIED_STABLE_SHA: ${{ steps.verify_release_lane.outputs.stable_sha }}
         run: |
           set -euo pipefail
 
@@ -146,9 +152,22 @@ jobs:
 
           git fetch origin main stable --tags --prune
 
+          stable_ref=origin/stable
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            if [ -z "$VERIFIED_STABLE_SHA" ]; then
+              echo "Verified stable SHA is missing; refusing automatic sync."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$VERIFIED_STABLE_SHA" origin/stable; then
+              echo "Verified stable SHA is no longer in origin/stable; refusing automatic sync."
+              exit 1
+            fi
+            stable_ref="$VERIFIED_STABLE_SHA"
+          fi
+
           git checkout --detach origin/main
 
-          if git merge-base --is-ancestor origin/stable origin/main; then
+          if git merge-base --is-ancestor "$stable_ref" origin/main; then
             echo "No changes to sync - stable is already in main's ancestry."
             exit 0
           fi
@@ -191,7 +210,7 @@ jobs:
           # Use a real merge, not a squash, so stable release tags become
           # reachable from main. semantic-release uses reachable tags as the
           # version floor for @next prereleases.
-          if ! git merge --no-ff --no-edit origin/stable; then
+          if ! git merge --no-ff --no-edit "$stable_ref"; then
             echo "Merge conflict — attempting auto-resolution of release artifacts..."
 
             # Auto-resolve release artifact conflicts only when the conflict is
@@ -221,7 +240,7 @@ jobs:
             fi
           fi
 
-          if ! git merge-base --is-ancestor origin/stable HEAD; then
+          if ! git merge-base --is-ancestor "$stable_ref" HEAD; then
             echo "Stable is still not in the sync branch ancestry after merge."
             exit 1
           fi

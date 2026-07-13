@@ -437,7 +437,8 @@ test('stable-to-main sync waits for stable release completion', async () => {
       workflow.includes('--limit 1') &&
       workflow.includes('git diff --name-only origin/main...origin/stable') &&
       workflow.includes('require_successful_release release-esign.yml') &&
-      workflow.includes('require_successful_release release-template-builder.yml'),
+      workflow.includes('require_successful_release release-template-builder.yml') &&
+      workflow.includes('stable_sha=$(git rev-parse origin/stable)'),
     '.github/workflows/sync-patches.yml: must require the latest relevant stable release workflows to succeed before syncing',
   );
 });
@@ -451,13 +452,15 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
     '.github/workflows/sync-patches.yml: stable-to-main sync must not squash because semantic-release needs stable tags reachable from main',
   );
   assert.ok(
-    workflow.includes('git merge --no-ff --no-edit origin/stable'),
-    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit',
+    workflow.includes('git merge --no-ff --no-edit "$stable_ref"'),
+    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit from the verified stable ref',
   );
   assert.ok(
-    workflow.includes('git merge-base --is-ancestor origin/stable origin/main') &&
-      workflow.includes('git merge-base --is-ancestor origin/stable HEAD'),
-    '.github/workflows/sync-patches.yml: sync must guard on and verify stable ancestry',
+    workflow.includes('VERIFIED_STABLE_SHA: ${{ steps.verify_release_lane.outputs.stable_sha }}') &&
+      workflow.includes('git merge-base --is-ancestor "$VERIFIED_STABLE_SHA" origin/stable') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_ref" origin/main') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_ref" HEAD'),
+    '.github/workflows/sync-patches.yml: automatic sync must pin the verified stable SHA and guard on its ancestry',
   );
   assert.ok(
     workflow.includes('release_artifact_only_conflict') &&

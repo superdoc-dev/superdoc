@@ -12,7 +12,7 @@ const {
  *
  * Keep in sync with .github/workflows/release-cli.yml paths: trigger.
  */
-require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+const RELEASE_PATHS = [
   'apps/cli',
   'packages/document-api',
   'packages/superdoc',
@@ -22,7 +22,9 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/preset-geometry',
   'shared',
   'pnpm-workspace.yaml',
-]);
+];
+
+require('../../scripts/semantic-release/patch-commit-filter.cjs')(RELEASE_PATHS);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
@@ -42,7 +44,21 @@ const shouldCommentOnRelease = !isPrerelease;
 const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease
+  ? createReleaseNotesGenerator()
+  : [
+      'semantic-release-ai-notes',
+      {
+        style: 'concise',
+        scope: {
+          name: 'SuperDoc CLI',
+          paths: RELEASE_PATHS,
+          audience: 'Developers using the SuperDoc CLI to convert and process documents from the command line',
+          instructions:
+            'This CLI wraps the document engine. Only mention engine changes when they change CLI commands, output, or supported document operations.',
+        },
+      },
+    ];
 
 const config = {
   branches,

@@ -84,8 +84,8 @@ jobs:
                   git show ":3:${f}" | normalize_json_without_keys version > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
                   ;;
                 pyproject.toml|*/pyproject.toml)
-                  git show ":2:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
-                  git show ":3:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
+                  git show ":2:${f}" | python3 scripts/normalize-pyproject-release-artifact.py > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
+                  git show ":3:${f}" | python3 scripts/normalize-pyproject-release-artifact.py > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
                   ;;
                 version.json|*/version.json)
                   git show ":2:${f}" | normalize_json_without_keys version sdkVersion > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }

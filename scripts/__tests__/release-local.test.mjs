@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -30,6 +31,44 @@ function assertOrder(content, first, second, context) {
   assert.notEqual(firstIndex, -1, `${context}: missing "${first}"`);
   assert.notEqual(secondIndex, -1, `${context}: missing "${second}"`);
   assert.ok(firstIndex < secondIndex, `${context}: expected "${first}" before "${second}"`);
+}
+
+function normalizePyprojectReleaseArtifact(content) {
+  return spawnSync('python3', [path.join(REPO_ROOT, 'scripts/normalize-pyproject-release-artifact.py')], {
+    input: content,
+    encoding: 'utf8',
+  });
+}
+
+function extractShellFunction(content, functionName, context) {
+  const signature = `${functionName}() {`;
+  const start = content.indexOf(signature);
+  assert.notEqual(start, -1, `${context}: missing ${functionName}`);
+
+  const lineStart = content.lastIndexOf('\n', start) + 1;
+  const indentation = content.slice(lineStart, start);
+  const closing = `\n${indentation}}`;
+  const end = content.indexOf(closing, start);
+  assert.notEqual(end, -1, `${context}: missing closing brace for ${functionName}`);
+
+  return {
+    block: content.slice(start, end + closing.length),
+    end: end + closing.length,
+  };
+}
+
+function extractConflictResolutionLoop(content, startAt, context) {
+  const startMarker = 'while read -r f; do';
+  const endMarker = 'done < <(git diff --name-only --diff-filter=U)';
+  const start = content.indexOf(startMarker, startAt);
+  const end = content.indexOf(endMarker, start);
+  assert.notEqual(start, -1, `${context}: missing conflict-resolution loop`);
+  assert.notEqual(end, -1, `${context}: missing conflict-resolution loop terminator`);
+  return content.slice(start, end + endMarker.length);
+}
+
+function countOccurrences(content, needle) {
+  return content.split(needle).length - 1;
 }
 
 test('inferDryRunWouldRelease detects pending release previews', () => {
@@ -388,15 +427,23 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
   }
 });
 
-test('stable-to-main sync waits for stable release completion', async () => {
+test('stable-to-main sync waits for the stable release lane after stable tooling succeeds', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+  const laneDrainStart = workflow.indexOf('- name: Wait for stable release lane to drain');
+  const laneDrainEnd = workflow.indexOf('- name: Generate token');
+
+  assert.notEqual(laneDrainStart, -1, '.github/workflows/sync-patches.yml: must include the stable lane drain step');
+  assert.notEqual(laneDrainEnd, -1, '.github/workflows/sync-patches.yml: must include the token generation step');
+  assert.ok(laneDrainStart < laneDrainEnd, '.github/workflows/sync-patches.yml: must drain the stable lane before checkout');
+
+  const laneDrainStep = workflow.slice(laneDrainStart, laneDrainEnd);
 
   assert.ok(
     workflow.includes('workflow_run:'),
     '.github/workflows/sync-patches.yml: must trigger from release workflow completion, not directly from stable pushes',
   );
   assert.ok(
-    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(workflow),
+    /workflows:\s*\n\s*-\s*['"]📦 Release stable tooling \(CLI\/SDK\/MCP\)['"]/.test(workflow),
     '.github/workflows/sync-patches.yml: must trigger after the stable release orchestrator completes',
   );
   assert.equal(
@@ -409,9 +456,17 @@ test('stable-to-main sync waits for stable release completion', async () => {
     '.github/workflows/sync-patches.yml: must scope automatic syncs to stable release runs',
   );
   assert.ok(
-    workflow.includes("github.event.workflow_run.conclusion == 'success'") &&
-      workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
-    '.github/workflows/sync-patches.yml: must wait for release completion while still surfacing failed-release sync PRs for review',
+    workflow.includes("github.event.workflow_run.conclusion == 'success'"),
+    '.github/workflows/sync-patches.yml: automatic syncs must require a successful stable tooling release',
+  );
+  assert.equal(
+    workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    false,
+    '.github/workflows/sync-patches.yml: failed stable tooling releases must not push to main automatically',
+  );
+  assert.ok(
+    workflow.includes("github.event_name == 'workflow_dispatch'"),
+    '.github/workflows/sync-patches.yml: manual dispatch must remain available for investigated recovery',
   );
   assert.ok(
     workflow.includes('actions: read'),
@@ -423,10 +478,41 @@ test('stable-to-main sync waits for stable release completion', async () => {
       workflow.includes('"📦 Release template-builder"'),
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
+  assert.equal(
+    laneDrainStep.includes("if: github.event_name == 'workflow_run'"),
+    false,
+    '.github/workflows/sync-patches.yml: manual recovery must also wait for active stable release runs to finish',
+  );
+  for (const removedGate of [
+    'Verify stable release lane succeeded',
+    'id: verify_release_lane',
+    'require_successful_release()',
+    'steps.verify_release_lane.outputs.stable_sha',
+  ]) {
+    assert.equal(
+      workflow.includes(removedGate),
+      false,
+      `.github/workflows/sync-patches.yml: must not retain the aggregate release-health gate (${removedGate})`,
+    );
+  }
 });
 
 test('stable-to-main sync preserves stable release ancestry', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+  const artifactConflictFunction = extractShellFunction(
+    workflow,
+    'release_artifact_only_conflict',
+    '.github/workflows/sync-patches.yml',
+  );
+  const conflictResolutionLoop = extractConflictResolutionLoop(
+    workflow,
+    artifactConflictFunction.end,
+    '.github/workflows/sync-patches.yml',
+  );
+  const stableShaAssignment = 'stable_sha=$(git rev-parse origin/stable)';
+  const pinIndex = workflow.indexOf(stableShaAssignment);
+  const verificationIndex = workflow.indexOf('git merge-base --is-ancestor "$TRIGGER_STABLE_SHA" "$stable_sha"');
+  const mergeIndex = workflow.indexOf('git merge --no-ff --no-edit "$stable_sha"');
 
   assert.equal(
     workflow.includes('git merge --squash'),
@@ -434,29 +520,143 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
     '.github/workflows/sync-patches.yml: stable-to-main sync must not squash because semantic-release needs stable tags reachable from main',
   );
   assert.ok(
-    workflow.includes('git merge --no-ff --no-edit origin/stable'),
-    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit',
+    mergeIndex !== -1,
+    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit from the pinned stable SHA',
   );
   assert.ok(
-    workflow.includes('git merge-base --is-ancestor origin/stable origin/main') &&
-      workflow.includes('git merge-base --is-ancestor origin/stable HEAD'),
-    '.github/workflows/sync-patches.yml: sync must guard on and verify stable ancestry',
+    pinIndex !== -1 &&
+      (workflow.match(/stable_sha=\$\(git rev-parse origin\/stable\)/g) ?? []).length === 1 &&
+      workflow.indexOf('git fetch origin main stable --tags --prune') < pinIndex &&
+      pinIndex < mergeIndex &&
+      !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('git fetch origin') &&
+      !workflow.slice(pinIndex + stableShaAssignment.length, mergeIndex).includes('origin/stable') &&
+      pinIndex < verificationIndex &&
+      verificationIndex < mergeIndex &&
+      workflow.includes('TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}') &&
+      workflow.includes('"$TRIGGER_STABLE_SHA..$stable_sha"') &&
+      workflow.includes('semantic-release-bot@martynus.net') &&
+      workflow.includes('release_subject_pattern=') &&
+      workflow.includes('git diff-tree --no-commit-id --name-only -r "$sha"') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_sha" origin/main') &&
+      workflow.includes('git merge-base --is-ancestor "$stable_sha" HEAD'),
+    '.github/workflows/sync-patches.yml: must verify release writeback provenance and files before merging the pinned stable SHA',
   );
   assert.ok(
-    workflow.includes('release_artifact_only_conflict') &&
-      workflow.includes('version-only') &&
-      workflow.includes('git checkout --theirs "$f"'),
+    workflow.includes('version-only') &&
+      conflictResolutionLoop.includes('release_artifact_only_conflict "$f"') &&
+      conflictResolutionLoop.includes('git checkout --theirs "$f"') &&
+      countOccurrences(
+        artifactConflictFunction.block,
+        'python3 scripts/normalize-pyproject-release-artifact.py',
+      ) === 2,
     '.github/workflows/sync-patches.yml: release artifact conflicts must resolve to stable only when the conflict is version-only',
   );
   assert.equal(
     workflow.includes('git add -A'),
     false,
-    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers into review PRs',
+    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers',
   );
   assert.ok(
-    workflow.includes("This PR must be merged with GitHub's merge-commit option"),
-    '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
+    workflow.includes('git push origin HEAD:main'),
+    '.github/workflows/sync-patches.yml: sync must push the verified merge commit directly so stable ancestry is preserved',
   );
+});
+
+test('pyproject release normalization accepts coordinated Python SDK platform pins', () => {
+  const pyproject = (version) => `[project]
+name = "superdoc-sdk"
+version = "${version}"
+dependencies = [
+  "superdoc-sdk-cli-darwin-arm64==${version}; platform_system == 'Darwin'",
+  "superdoc-sdk-cli-darwin-x64==${version}; platform_system == 'Darwin'",
+  "superdoc-sdk-cli-linux-arm64==${version}; platform_system == 'Linux'",
+  "superdoc-sdk-cli-linux-x64==${version}; platform_system == 'Linux'",
+  "superdoc-sdk-cli-windows-x64==${version}; platform_system == 'Windows'",
+]
+`;
+
+  const main = normalizePyprojectReleaseArtifact(pyproject('1.20.1'));
+  const stable = normalizePyprojectReleaseArtifact(pyproject('1.20.2'));
+
+  assert.equal(main.status, 0, main.stderr);
+  assert.equal(stable.status, 0, stable.stderr);
+  assert.equal(main.stdout, stable.stdout);
+});
+
+test('pyproject release normalization preserves real dependency changes', () => {
+  const main = normalizePyprojectReleaseArtifact(`[project]
+version = "1.20.1"
+dependencies = ["httpx>=0.27"]
+`);
+  const stable = normalizePyprojectReleaseArtifact(`[project]
+version = "1.20.2"
+dependencies = ["httpx>=0.28"]
+`);
+
+  assert.equal(main.status, 0, main.stderr);
+  assert.equal(stable.status, 0, stable.stderr);
+  assert.notEqual(main.stdout, stable.stdout);
+});
+
+test('pyproject release normalization rejects a platform pin that diverges from the project version', () => {
+  const result = normalizePyprojectReleaseArtifact(`[project]
+version = "1.20.2"
+dependencies = ["superdoc-sdk-cli-linux-x64==1.20.1; platform_system == 'Linux'"]
+`);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /does not match project version 1\.20\.2/);
+});
+
+test('pyproject release normalization ignores embedded package names and comments', () => {
+  const result = normalizePyprojectReleaseArtifact(`[project]
+version = "1.20.2"
+dependencies = [
+  "internal-superdoc-sdk-cli-linux-x64==0.5.0",
+]
+# superdoc-sdk-cli-linux-x64==0.5.0
+# "superdoc-sdk-cli-windows-x64==0.5.0"
+`);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /internal-superdoc-sdk-cli-linux-x64==0\.5\.0/);
+  assert.match(result.stdout, /# superdoc-sdk-cli-linux-x64==0\.5\.0/);
+  assert.match(result.stdout, /# "superdoc-sdk-cli-windows-x64==0\.5\.0"/);
+});
+
+test('pyproject release normalization distinguishes URL fragments from TOML comments', () => {
+  const pyproject = (pinVersion) => `[project]
+version = "1.20.2"
+dependencies = ["custom @ https://example.invalid/pkg.whl#fragment", "superdoc-sdk-cli-linux-x64==${pinVersion}; platform_system == 'Linux'"]
+`;
+
+  const valid = normalizePyprojectReleaseArtifact(pyproject('1.20.2'));
+  const mismatched = normalizePyprojectReleaseArtifact(pyproject('1.20.1'));
+
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.match(valid.stdout, /pkg\.whl#fragment/);
+  assert.match(valid.stdout, /superdoc-sdk-cli-linux-x64==<RELEASE_VERSION>/);
+  assert.notEqual(mismatched.status, 0);
+});
+
+test('both stable sync directions use checked pyproject release normalization', async () => {
+  const workflows = [
+    ['.github/workflows/sync-patches.yml', 'git checkout --theirs "$f"'],
+    ['.github/workflows/promote-stable.yml', 'git checkout --ours "$f"'],
+  ];
+
+  for (const [workflowPath, expectedCheckout] of workflows) {
+    const workflow = await readRepoFile(workflowPath);
+    const artifactConflictFunction = extractShellFunction(workflow, 'release_artifact_only_conflict', workflowPath);
+    const conflictResolutionLoop = extractConflictResolutionLoop(workflow, artifactConflictFunction.end, workflowPath);
+
+    assert.equal(
+      countOccurrences(artifactConflictFunction.block, 'python3 scripts/normalize-pyproject-release-artifact.py'),
+      2,
+      `${workflowPath}: both pyproject conflict stages must use checked release normalization`,
+    );
+    assert.ok(conflictResolutionLoop.includes(expectedCheckout), `${workflowPath}: conflict resolution uses the wrong side`);
+  }
 });
 
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {

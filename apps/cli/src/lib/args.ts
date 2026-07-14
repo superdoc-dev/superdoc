@@ -227,7 +227,7 @@ export function parseCommandArgs(tokens: string[], specs: OptionSpec[]): ParsedA
       }
     } else {
       const valueToken = inlineValue ?? tokens[i + 1];
-      if (valueToken == null) {
+      if (valueToken == null || (inlineValue == null && valueToken.startsWith('--'))) {
         errors.push(`--${rawName} requires a value.`);
         i += 1;
         continue;

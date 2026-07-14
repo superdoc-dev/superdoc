@@ -121,6 +121,21 @@ describe('parseCommandArgs', () => {
     expect(result.options.name).toBe('bob');
   });
 
+  test('reports a missing value without consuming the following option', () => {
+    const result = parseCommandArgs(['--name', '--verbose'], specs);
+
+    expect(result.errors).toEqual(['--name requires a value.']);
+    expect(result.options.name).toBeUndefined();
+    expect(result.options.verbose).toBe(true);
+  });
+
+  test('accepts an option-like string when provided inline', () => {
+    const result = parseCommandArgs(['--name=--verbose'], specs);
+
+    expect(result.errors).toEqual([]);
+    expect(result.options.name).toBe('--verbose');
+  });
+
   test('parses number options', () => {
     const result = parseCommandArgs(['--count', '42'], specs);
     expect(result.options.count).toBe(42);

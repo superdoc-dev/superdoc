@@ -766,6 +766,30 @@ describe('CommentsPlugin state', () => {
       expect(editor.emit).not.toHaveBeenCalled();
     });
 
+    it('settles when the selected event is echoed back to the plugin', () => {
+      const { view, editor } = createPluginStateEnvironment();
+
+      editor.emit.mockImplementation((event, update) => {
+        if (event === 'commentsUpdate' && update.type === comments_module_events.SELECTED) {
+          setActiveComment(view, update.activeCommentId);
+        }
+      });
+
+      setActiveComment(view, 'comment-1');
+      setActiveComment(view, 'comment-2');
+      setActiveComment(view, 'comment-3');
+
+      vi.runAllTimers();
+
+      expect(editor.emit).toHaveBeenCalledTimes(1);
+      expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'comment-3',
+      });
+      expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('comment-3');
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('does not emit when the editor is destroyed before a deferred notification runs', () => {
       const { view, editor } = createPluginStateEnvironment();
 

@@ -1,0 +1,8 @@
+{
+  "extends": "../../../apps/mcp/tsconfig.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

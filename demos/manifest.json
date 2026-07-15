@@ -442,5 +442,23 @@
     "liveUrl": null,
     "homepage": false,
     "stackblitz": false
+  },
+  {
+    "id": "mcp-collaboration",
+    "section": "ai",
+    "subsection": "agents",
+    "kind": "workflow-demo",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Live MCP collaboration",
+    "description": "Connect an external MCP agent to a live Y.js-backed SuperDoc document and watch edits appear in real time.",
+    "category": "AI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/mcp-collaboration",
+    "docs": null,
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": false
   }
 ]

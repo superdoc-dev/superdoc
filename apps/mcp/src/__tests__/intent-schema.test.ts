@@ -44,7 +44,7 @@ describe('jsonSchemaPropertyToZod', () => {
 
   it('falls back to z.unknown() for top-level oneOf with non-object variant in real catalog (superdoc_edit.content)', () => {
     type Tool = { toolName: string; inputSchema: { properties?: Record<string, Record<string, unknown>> } };
-    const catalog = MCP_TOOL_CATALOG as { tools: Tool[] };
+    const catalog = MCP_TOOL_CATALOG as unknown as { tools: Tool[] };
     const edit = catalog.tools.find((t) => t.toolName === 'superdoc_edit');
     const content = edit?.inputSchema?.properties?.content;
     expect(content?.oneOf).toBeDefined();

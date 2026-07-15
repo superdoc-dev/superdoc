@@ -1293,6 +1293,144 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  demos/mcp-collaboration/client:
+    dependencies:
+      '@radix-ui/react-slot':
+        specifier: ^1.1.0
+        version: 1.1.1(@types/react@19.2.14)(react@19.2.5)
+      '@radix-ui/react-tabs':
+        specifier: ^1.1.0
+        version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@superdoc-dev/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      '@tanstack/react-query':
+        specifier: ^5.0.0
+        version: 5.97.0(react@19.2.5)
+      class-variance-authority:
+        specifier: ^0.7.0
+        version: 0.7.1
+      clsx:
+        specifier: ^2.0.0
+        version: 2.1.1
+      lucide-react:
+        specifier: ^0.511.0
+        version: 0.511.0(react@19.2.5)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.5(react@19.2.5)
+      react-router-dom:
+        specifier: ^7.0.0
+        version: 7.14.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      tailwind-merge:
+        specifier: ^2.0.0
+        version: 2.6.1
+      y-websocket:
+        specifier: 'catalog:'
+        version: 3.0.0(yjs@13.6.30)
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.30
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.2.2(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.3.12
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.2.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: ~5.5.0
+        version: 5.5.4
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  demos/mcp-collaboration/mcp-server:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.26.0
+        version: 1.29.0(zod@4.3.6)
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.3.12
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
+      bun:
+        specifier: ^1.3.0
+        version: 1.3.14
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      ws:
+        specifier: ^8.18.3
+        version: 8.20.0
+      y-websocket:
+        specifier: ^2.1.0
+        version: 2.1.0(yjs@13.6.19)
+      yjs:
+        specifier: 13.6.19
+        version: 13.6.19
+
+  demos/mcp-collaboration/room-server:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^10.0.0
+        version: 10.1.0
+      '@fastify/multipart':
+        specifier: ^9.4.0
+        version: 9.4.0
+      '@superdoc-dev/sdk':
+        specifier: workspace:*
+        version: link:../../../packages/sdk/langs/node
+      fastify:
+        specifier: ^5.3.3
+        version: 5.8.4
+      y-websocket:
+        specifier: ^2.1.0
+        version: 2.1.0(yjs@13.6.19)
+      yjs:
+        specifier: 13.6.19
+        version: 13.6.19
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   demos/nextjs-ssr:
     dependencies:
       next:
@@ -7698,6 +7836,86 @@ packages:
     resolution: {integrity: sha512-cifvXDhcqMwwTlTK04GBNeIe7yyo28Mfby85QXFe1Yk8nmi36Ab/5UQwptOx84SsoGNRg+EVSjwzfSZMy6pmlw==}
     engines: {node: '>=14'}
 
+  '@oven/bun-darwin-aarch64@1.3.14':
+    resolution: {integrity: sha512-Omj20SuiHBOUjUBIyqtkNjSUIjOtEOJwmbix/ZyFH4BaQ6OZTaaRWIR4TjHVz0yadHgli6lLTiAh1uarnvD49A==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@oven/bun-darwin-x64-baseline@1.3.14':
+    resolution: {integrity: sha512-OSfsTZstc898HHElhU4NccaBGOSSDn5VfahiVTnidZ9B/+wb7WTyfZJaBeJcfjwJ9H2W9uTh2TGtl3UfcXgV9g==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oven/bun-darwin-x64@1.3.14':
+    resolution: {integrity: sha512-FFj3QdU/OhlDyZOJ8CWfN5eWLpRlT4qjZg7lMQi7jA6GuoY5ajlO1zWLP/MuHYRSbXQUvV52RejNi8DVnAp13w==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oven/bun-freebsd-aarch64@1.3.14':
+    resolution: {integrity: sha512-LIKrXaFxAHybVO5Pf+9XP2FHUj/5APvXTUKk9dqHm5iFz4oH+W24cmhjkJirNujh9hKeTyrpWSe3no9JZKowIw==}
+    cpu: [arm64]
+    os: [freebsd]
+
+  '@oven/bun-freebsd-x64@1.3.14':
+    resolution: {integrity: sha512-uwD+fGUH1ADpIF3B1U2jWzzb20QwRLZfj5QZ28GUCGrAJ/nTmWrD6YYGsblCY1wuhldRez3lU40AyuvSCyLYmw==}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@oven/bun-linux-aarch64-android@1.3.14':
+    resolution: {integrity: sha512-y4kq5b85lsrmFb9Xvi4w9mA5IEFJkLMrSmYn06q24KjL9rUWDWO3VFZEtteZxUN5+ec3Zm5S8OnJw1umaCbVjA==}
+    cpu: [arm64]
+    os: [android]
+
+  '@oven/bun-linux-aarch64-musl@1.3.14':
+    resolution: {integrity: sha512-jmqOA92Cd1NL/1XBd4bFkJLxQ86K0RW7ohxS2qzzAvuitO4JiIxjjTeCspoU44zCozH72HpfZfUE2On31OjnWA==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@oven/bun-linux-aarch64@1.3.14':
+    resolution: {integrity: sha512-X5SsPZHs+iYO8R/efIcRtc7gT2Q2DgPfliCxEkx4cXBumwkw0c/EsHMNwH3EgGpCDaZ7IYVPhpCG/xBOQHEwZw==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@oven/bun-linux-x64-android@1.3.14':
+    resolution: {integrity: sha512-qe9e1d+3VAEU7nAA2ol9Jvmy/o99PVMSgZhHn7Q/9O3YcDrfEqyQ8zm4zoe5qTEo8HZH0dN03Le0Ys2eQPs7eg==}
+    cpu: [x64]
+    os: [android]
+
+  '@oven/bun-linux-x64-baseline@1.3.14':
+    resolution: {integrity: sha512-q/8EdOC0yUE8FPeoOVq8/Pw5I9/tJaYmUfO/uDUAREx8IUnOJH1RJ5A3BjFqre8pvJoiZA9AovPJq5FnNNjSxA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@oven/bun-linux-x64-musl-baseline@1.3.14':
+    resolution: {integrity: sha512-n6iE71G4lQE4XkrZhQQcL5YUlxDbnq6nqV7zeQi33PMsLT/0kYE+RvHOtBWZ3w0wMdXZfINmp63hIb9ijUBGtw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@oven/bun-linux-x64-musl@1.3.14':
+    resolution: {integrity: sha512-GBCB/k/sIqcr06eTNgg7g46qiUv35Jasx4XiccJ/n7RGqrE4RWUD/XJBbWFprVPjvqd59+QtSnS99XGqvftHfg==}
+    cpu: [x64]
+    os: [linux]
+
+  '@oven/bun-linux-x64@1.3.14':
+    resolution: {integrity: sha512-7OVTAKvwfPmSbIV1HpdOoVVx5VRc427GuPPne93N6vk4eQBPId9nXmZDh9/zGaKPdbVjVtQSZafWQoUjx38Utw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@oven/bun-windows-aarch64@1.3.14':
+    resolution: {integrity: sha512-T7s3x/BsVKQObGU6QDkZeI6wKynzqGbBH1yI77jrrj5siElclxr3DQrDIk8CV4G5/SJq2HHq4kpLyYY2DKCSmA==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@oven/bun-windows-x64-baseline@1.3.14':
+    resolution: {integrity: sha512-uIjLUC1S9DWgICzuoMba7vurBJnBruE4S5CxnvmZkdqWVXRzx1Rgu636HoH+k0qeaQCFh3jeG3JQ1y6fRHv0sw==}
+    cpu: [x64]
+    os: [win32]
+
+  '@oven/bun-windows-x64@1.3.14':
+    resolution: {integrity: sha512-mUFWL3BoYkNpjd8e9PqROiFF/1Xeotq20mABJsiQH62jM1g5zqWh4khw1RZ6bX8Q8fWvlPaxG1PjofkmjUi3vg==}
+    cpu: [x64]
+    os: [win32]
+
   '@oxc-minify/binding-android-arm-eabi@0.117.0':
     resolution: {integrity: sha512-5Hf2KsGRjxp3HnPU/mse7cQJa5tWfMFUPZQcgSMVsv2JZnGFFOIDzA0Oja2KDD+VPJqMpEJKc2dCHAGZgJxsGg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -12475,6 +12693,12 @@ packages:
 
   bun-types@1.3.12:
     resolution: {integrity: sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA==}
+
+  bun@1.3.14:
+    resolution: {integrity: sha512-aB6GVd42x1Y5ie1K16SF+oLGtgSkwX9hgoDdIW88pjvfTccU8F1vfpoOt34QLv0dZ1v3XimtaxPlZUG81Gx9Zg==}
+    cpu: [arm64, x64]
+    os: [darwin, linux, android, freebsd, win32]
+    hasBin: true
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -23549,7 +23773,7 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk@0.2.86(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.74.0(zod@4.3.6)
-      '@modelcontextprotocol/sdk': 1.28.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       zod: 4.3.6
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -28765,7 +28989,7 @@ snapshots:
       debug: 4.4.3(supports-color@5.5.0)
       openai: 6.35.0(ws@8.20.0)(zod@4.3.6)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.28.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       zod: 4.3.6
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -28977,6 +29201,54 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.6.1(@opentelemetry/api@1.9.1)
 
   '@opentelemetry/semantic-conventions@1.40.0': {}
+
+  '@oven/bun-darwin-aarch64@1.3.14':
+    optional: true
+
+  '@oven/bun-darwin-x64-baseline@1.3.14':
+    optional: true
+
+  '@oven/bun-darwin-x64@1.3.14':
+    optional: true
+
+  '@oven/bun-freebsd-aarch64@1.3.14':
+    optional: true
+
+  '@oven/bun-freebsd-x64@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-aarch64-android@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-aarch64-musl@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-aarch64@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-x64-android@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-x64-baseline@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-x64-musl-baseline@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-x64-musl@1.3.14':
+    optional: true
+
+  '@oven/bun-linux-x64@1.3.14':
+    optional: true
+
+  '@oven/bun-windows-aarch64@1.3.14':
+    optional: true
+
+  '@oven/bun-windows-x64-baseline@1.3.14':
+    optional: true
+
+  '@oven/bun-windows-x64@1.3.14':
+    optional: true
 
   '@oxc-minify/binding-android-arm-eabi@0.117.0':
     optional: true
@@ -32381,6 +32653,13 @@ snapshots:
       postcss: 8.5.8
       tailwindcss: 4.2.2
 
+  '@tailwindcss/vite@4.2.2(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
+    dependencies:
+      '@tailwindcss/node': 4.2.2
+      '@tailwindcss/oxide': 4.2.2
+      tailwindcss: 4.2.2
+      vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   '@tailwindcss/vite@4.2.2(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@tailwindcss/node': 4.2.2
@@ -33330,6 +33609,18 @@ snapshots:
   '@vitejs/plugin-basic-ssl@2.1.4(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.3)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.3)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.3)
+
+  '@vitejs/plugin-react@4.7.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
+    dependencies:
+      '@babel/core': 7.29.0
+      '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.29.0)
+      '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.29.0)
+      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@types/babel__core': 7.20.5
+      react-refresh: 0.17.0
+      vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+    transitivePeerDependencies:
+      - supports-color
 
   '@vitejs/plugin-react@4.7.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
@@ -34912,6 +35203,25 @@ snapshots:
   bun-types@1.3.12:
     dependencies:
       '@types/node': 22.19.15
+
+  bun@1.3.14:
+    optionalDependencies:
+      '@oven/bun-darwin-aarch64': 1.3.14
+      '@oven/bun-darwin-x64': 1.3.14
+      '@oven/bun-darwin-x64-baseline': 1.3.14
+      '@oven/bun-freebsd-aarch64': 1.3.14
+      '@oven/bun-freebsd-x64': 1.3.14
+      '@oven/bun-linux-aarch64': 1.3.14
+      '@oven/bun-linux-aarch64-android': 1.3.14
+      '@oven/bun-linux-aarch64-musl': 1.3.14
+      '@oven/bun-linux-x64': 1.3.14
+      '@oven/bun-linux-x64-android': 1.3.14
+      '@oven/bun-linux-x64-baseline': 1.3.14
+      '@oven/bun-linux-x64-musl': 1.3.14
+      '@oven/bun-linux-x64-musl-baseline': 1.3.14
+      '@oven/bun-windows-aarch64': 1.3.14
+      '@oven/bun-windows-x64': 1.3.14
+      '@oven/bun-windows-x64-baseline': 1.3.14
 
   bundle-name@4.1.0:
     dependencies:
@@ -41844,7 +42154,7 @@ snapshots:
       defu: 6.1.4
       destr: 2.0.5
       dot-prop: 10.1.0
-      esbuild: 0.27.4
+      esbuild: 0.27.7
       escape-string-regexp: 5.0.0
       etag: 1.8.1
       exsolve: 1.0.8
@@ -43787,7 +44097,7 @@ snapshots:
       '@inquirer/editor': 5.0.10(@types/node@18.19.130)
       '@inquirer/input': 5.0.10(@types/node@18.19.130)
       '@inquirer/select': 5.1.2(@types/node@18.19.130)
-      '@modelcontextprotocol/sdk': 1.28.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       '@openai/agents': 0.7.2(ws@8.20.0)(zod@4.3.6)
       '@opencode-ai/sdk': 1.3.3
       '@opentelemetry/api': 1.9.1
@@ -46783,7 +47093,7 @@ snapshots:
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.46.1
-      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@5.1.4)
+      webpack: 5.105.4(esbuild@0.27.7)(webpack-cli@6.0.1)
     optionalDependencies:
       esbuild: 0.27.7
 
@@ -47112,7 +47422,7 @@ snapshots:
 
   tsx@4.21.0:
     dependencies:
-      esbuild: 0.27.4
+      esbuild: 0.27.7
       get-tsconfig: 4.13.7
     optionalDependencies:
       fsevents: 2.3.3

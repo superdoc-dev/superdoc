@@ -1,11 +1,15 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { resolve, basename } from 'node:path';
-import { Editor, getStarterExtensions, onCollaborationProviderSynced } from 'superdoc/super-editor';
+import {
+  BLANK_DOCX_BASE64,
+  Editor,
+  getDocumentApiAdapters,
+  getStarterExtensions,
+  onCollaborationProviderSynced,
+} from 'superdoc/super-editor';
 import type { CollaborationProvider } from 'superdoc/super-editor';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
-import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { Doc as YDoc } from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -49,6 +53,7 @@ export class SessionManager {
       documentId: absolutePath,
       user: { id: 'mcp', name: 'MCP Server' },
       telemetry: {
+        enabled: false,
         metadata: {
           source: 'superdoc-mcp',
         },

@@ -1,0 +1,23 @@
+{
+  "name": "superdoc-mcp-collaboration-room-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "@superdoc-dev/sdk": "latest",
+    "fastify": "^5.3.3",
+    "y-websocket": "^2.1.0",
+    "yjs": "13.6.19"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

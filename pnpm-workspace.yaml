@@ -137,6 +137,7 @@ catalog:
 
 onlyBuiltDependencies:
   - '@vscode/vsce-sign'
+  - bun
   - canvas
   - esbuild
   - keytar

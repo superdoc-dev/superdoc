@@ -4,7 +4,24 @@ import { nextTick } from 'vue';
 import SdTooltip from './SdTooltip.vue';
 
 describe('SdTooltip', () => {
+  let mountedWrappers = [];
+
+  // mount() wrapper so afterEach can unmount every instance: SdTooltip registers
+  // window/document listeners while open, and clearing document.body does not
+  // unmount Vue components, so onBeforeUnmount cleanup would never run.
+  const trackedMount = (...args) => {
+    const wrapper = mount(...args);
+    mountedWrappers.push(wrapper);
+    return wrapper;
+  };
+
+  const unmountAll = () => {
+    mountedWrappers.forEach((wrapper) => wrapper.unmount());
+    mountedWrappers = [];
+  };
+
   afterEach(() => {
+    unmountAll();
     vi.useRealTimers();
     vi.restoreAllMocks();
     document.body.innerHTML = '';
@@ -12,7 +29,7 @@ describe('SdTooltip', () => {
 
   it('auto-hides after the configured visible duration', async () => {
     vi.useFakeTimers();
-    const wrapper = mount(SdTooltip, {
+    const wrapper = trackedMount(SdTooltip, {
       attachTo: document.body,
       props: {
         delay: 0,
@@ -74,7 +91,7 @@ describe('SdTooltip', () => {
     const mountAndOpen = async (triggerRect) => {
       stubLayout(triggerRect);
 
-      const wrapper = mount(SdTooltip, {
+      const wrapper = trackedMount(SdTooltip, {
         attachTo: document.body,
         props: {
           delay: 0,
@@ -116,7 +133,7 @@ describe('SdTooltip', () => {
       const flushTopRect = makeRect({ top: 0, left: 100, width: 32, height: 32 });
       expect((await mountAndOpen(flushTopRect)).dataset.placement).toBe('bottom');
 
-      document.body.innerHTML = '';
+      unmountAll();
       vi.restoreAllMocks();
 
       const roomyRect = makeRect({ top: 200, left: 300, width: 32, height: 32 });

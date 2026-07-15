@@ -38,6 +38,7 @@ const isOpen = ref(false);
 const triggerRef = ref(null);
 const contentRef = ref(null);
 const position = ref({ top: '0px', left: '0px' });
+const placement = ref('top');
 
 let closeTimeout = null;
 let openTimeout = null;
@@ -91,12 +92,16 @@ const updatePosition = () => {
   const contentHeight = contentRef.value.offsetHeight;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const gutter = 8;
+  const offset = 10;
 
   let left = triggerRect.left + triggerRect.width / 2 - contentWidth / 2;
   left = Math.max(gutter, Math.min(left, viewportWidth - contentWidth - gutter));
 
+  const topAbove = triggerRect.top - contentHeight - offset;
+  placement.value = topAbove < gutter ? 'bottom' : 'top';
+
   position.value = {
-    top: `${triggerRect.top - contentHeight - 10}px`,
+    top: placement.value === 'top' ? `${topAbove}px` : `${triggerRect.bottom + offset}px`,
     left: `${left}px`,
   };
 };
@@ -218,6 +223,7 @@ onBeforeUnmount(() => {
         ref="contentRef"
         :class="mergedContentClass"
         :style="contentStyle"
+        :data-placement="placement"
         @mouseenter="handleContentMouseEnter"
         @mouseleave="handleContentMouseLeave"
       >
@@ -255,9 +261,19 @@ onBeforeUnmount(() => {
   transform: translateX(-50%) rotate(45deg);
 }
 
+.sd-tooltip-content[data-placement='bottom'] .sd-tooltip-arrow {
+  bottom: auto;
+  top: -5px;
+}
+
 .fade-in-scale-up-transition-enter-active,
 .fade-in-scale-up-transition-leave-active {
   transform-origin: bottom center;
+}
+
+.sd-tooltip-content[data-placement='bottom'].fade-in-scale-up-transition-enter-active,
+.sd-tooltip-content[data-placement='bottom'].fade-in-scale-up-transition-leave-active {
+  transform-origin: top center;
 }
 
 .fade-in-scale-up-transition-enter-active {

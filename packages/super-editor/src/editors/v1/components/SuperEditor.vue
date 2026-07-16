@@ -13,6 +13,7 @@ import EditorSkeleton from './EditorSkeleton.vue';
 import LinkInput from './toolbar/LinkInput.vue';
 import TableResizeOverlay from './TableResizeOverlay.vue';
 import ImageResizeOverlay from './ImageResizeOverlay.vue';
+import TextboxResizeOverlay from './TextboxResizeOverlay.vue';
 import LinkClickHandler from './link-click/LinkClickHandler.vue';
 import { checkNodeSpecificClicks } from './cursor-helpers.js';
 import { adjustPaginationBreaks } from './pagination-helpers.js';
@@ -101,6 +102,8 @@ const currentZoom = ref(1);
  */
 let zoomChangeHandler = null;
 let documentModeChangeHandler = null;
+let headerFooterModeChangeHandler = null;
+const activeHeaderFooterMode = ref('body');
 
 // Watch for changes in options.rulers with deep option to catch nested changes
 watch(
@@ -346,6 +349,7 @@ const cleanupViewingModeUi = () => {
   hideTableResizeOverlay();
   hideImageResizeOverlay();
   clearSelectedImage();
+  clearSelectedTextbox();
 };
 
 /**
@@ -356,6 +360,11 @@ const selectedImageState = reactive({
   element: null,
   blockId: null,
   pmStart: null,
+});
+
+const selectedTextboxState = reactive({
+  element: null,
+  blockId: null,
 });
 
 /**
@@ -655,6 +664,16 @@ const onTableResizeEnd = () => {
   tableResizeState.tableElement = null;
 };
 
+const getBehindDocSection = (element: Element | null): string | null => {
+  return element?.closest?.('[data-behind-doc-section]')?.getAttribute('data-behind-doc-section') ?? null;
+};
+
+const canInteractWithHeaderFooterOwnedMedia = (element: Element | null): boolean => {
+  const section = getBehindDocSection(element);
+  if (!section) return true;
+  return section === activeHeaderFooterMode.value;
+};
+
 /**
  * Update image resize overlay visibility based on mouse position.
  * Shows overlay when hovering over images with data-image-metadata attribute.
@@ -699,6 +718,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
 
     // Check for standalone image fragments (ImageBlock)
     if (target.classList?.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) && target.hasAttribute('data-image-metadata')) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-sd-block-id');
@@ -710,6 +733,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
       target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER) &&
       target.querySelector?.('[data-image-metadata]')
     ) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-pm-start');
@@ -718,6 +745,10 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
     // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
     // use the wrapper so the resizer works on the cropped portion's box.
     if (target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE) && target.hasAttribute('data-image-metadata')) {
+      if (!canInteractWithHeaderFooterOwnedMedia(target)) {
+        hideImageResizeOverlay();
+        return;
+      }
       imageResizeState.visible = true;
       const wrapper = target.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
       imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
@@ -757,6 +788,14 @@ const clearSelectedImage = () => {
   selectedImageState.pmStart = null;
 };
 
+const clearSelectedTextbox = () => {
+  if (selectedTextboxState.element?.classList?.contains('superdoc-textbox-selected')) {
+    selectedTextboxState.element.classList.remove('superdoc-textbox-selected');
+  }
+  selectedTextboxState.element = null;
+  selectedTextboxState.blockId = null;
+};
+
 /**
  * Apply visual selection to the provided image fragment element
  * @param {HTMLElement | null} element - DOM element for the image fragment
@@ -767,6 +806,12 @@ const clearSelectedImage = () => {
 const setSelectedImage = (element, blockId, pmStart) => {
   if (isViewingMode() || !activeEditor.value?.isEditable) {
     clearSelectedImage();
+    return;
+  }
+
+  if (element && !canInteractWithHeaderFooterOwnedMedia(element)) {
+    clearSelectedImage();
+    hideImageResizeOverlay();
     return;
   }
 
@@ -782,6 +827,34 @@ const setSelectedImage = (element, blockId, pmStart) => {
     selectedImageState.pmStart = typeof pmStart === 'number' ? pmStart : null;
   } else {
     clearSelectedImage();
+  }
+};
+
+const cleanupInactiveHeaderFooterOwnedImageUi = () => {
+  if (imageResizeState.imageElement && !canInteractWithHeaderFooterOwnedMedia(imageResizeState.imageElement)) {
+    hideImageResizeOverlay();
+  }
+  if (selectedImageState.element && !canInteractWithHeaderFooterOwnedMedia(selectedImageState.element)) {
+    clearSelectedImage();
+  }
+};
+
+const setSelectedTextbox = (element, blockId) => {
+  if (isViewingMode() || !activeEditor.value?.isEditable) {
+    clearSelectedTextbox();
+    return;
+  }
+
+  if (selectedTextboxState.element && selectedTextboxState.element !== element) {
+    selectedTextboxState.element.classList.remove('superdoc-textbox-selected');
+  }
+
+  if (element && element.classList) {
+    element.classList.add('superdoc-textbox-selected');
+    selectedTextboxState.element = element;
+    selectedTextboxState.blockId = blockId ?? null;
+  } else {
+    clearSelectedTextbox();
   }
 };
 
@@ -1034,6 +1107,17 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
     presentationEditor.on('imageDeselected', () => {
       clearSelectedImage();
     });
+    headerFooterModeChangeHandler = ({ mode } = {}) => {
+      activeHeaderFooterMode.value = mode ?? 'body';
+      cleanupInactiveHeaderFooterOwnedImageUi();
+    };
+    presentationEditor.on('headerFooterModeChanged', headerFooterModeChangeHandler);
+    presentationEditor.on('textboxSelected', ({ element, blockId }) => {
+      setSelectedTextbox(element, blockId ?? null);
+    });
+    presentationEditor.on('textboxDeselected', () => {
+      clearSelectedTextbox();
+    });
 
     layoutUpdatedHandler = () => {
       if (imageResizeState.visible && imageResizeState.blockId) {
@@ -1047,7 +1131,11 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
           newElement = editorElem.value?.querySelector(buildInlineImagePmSelector(escapedBlockId));
         }
         if (newElement) {
-          imageResizeState.imageElement = newElement as HTMLElement;
+          if (canInteractWithHeaderFooterOwnedMedia(newElement)) {
+            imageResizeState.imageElement = newElement as HTMLElement;
+          } else {
+            hideImageResizeOverlay();
+          }
         } else {
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
@@ -1073,6 +1161,16 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
           }
 
           clearSelectedImage();
+        }
+      }
+
+      if (selectedTextboxState.blockId) {
+        const escapedBlockId = CSS.escape(selectedTextboxState.blockId);
+        const refreshed = editorElem.value?.querySelector(`[data-block-id="${escapedBlockId}"]`);
+        if (refreshed) {
+          setSelectedTextbox(refreshed, selectedTextboxState.blockId);
+        } else {
+          clearSelectedTextbox();
         }
       }
 
@@ -1275,6 +1373,10 @@ onBeforeUnmount(() => {
     editor.value.off('zoomChange', zoomChangeHandler);
     zoomChangeHandler = null;
   }
+  if (editor.value instanceof PresentationEditor && headerFooterModeChangeHandler) {
+    editor.value.off('headerFooterModeChanged', headerFooterModeChangeHandler);
+    headerFooterModeChangeHandler = null;
+  }
   if (editor.value instanceof PresentationEditor && layoutUpdatedHandler) {
     editor.value.off('layoutUpdated', layoutUpdatedHandler);
     layoutUpdatedHandler = null;
@@ -1350,6 +1452,12 @@ onBeforeUnmount(() => {
         :editor="contextMenuEditor"
         :visible="imageResizeState.visible"
         :imageElement="imageResizeState.imageElement"
+      />
+      <TextboxResizeOverlay
+        v-if="editorReady && activeEditor"
+        :editor="editor"
+        :visible="Boolean(selectedTextboxState.element)"
+        :textboxElement="selectedTextboxState.element"
       />
     </div>
 

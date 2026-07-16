@@ -144,7 +144,7 @@ const testTextDeleteRange = () => {
 
   const paragraphPos = findParagraphPos(doc);
   const startPos = paragraphPos + 1 + 1;
-  const endPos = startPos + 3;
+  const endPos = startPos + 2;
 
   const diff = {
     action: 'deleted',
@@ -173,7 +173,7 @@ const testTextModifyRange = () => {
 
   const paragraphPos = findParagraphPos(doc);
   const startPos = paragraphPos + 1;
-  const endPos = startPos + 1;
+  const endPos = startPos;
 
   const diff = {
     action: 'modified',
@@ -195,6 +195,37 @@ const testTextModifyRange = () => {
   expect(tr.doc.textContent).toBe('Hello');
   const firstTextNode = tr.doc.nodeAt(startPos);
   expect(firstTextNode?.marks?.some((mark) => mark.type.name === 'bold')).toBe(true);
+};
+
+/**
+ * Verifies inline text modification replaces text when content changes.
+ * @returns {void}
+ */
+const testTextModifyReplacesText = () => {
+  const schema = createSchema();
+  const paragraph = createParagraph(schema, [schema.text('sentence')]);
+  const doc = schema.nodes.doc.create(null, [paragraph]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const startPos = findFirstTextPos(doc);
+
+  const diff = {
+    action: 'modified',
+    kind: 'text',
+    startPos,
+    endPos: startPos + 'sentence'.length - 1,
+    oldText: 'sentence',
+    newText: 'phrase',
+    marksDiff: null,
+    runAttrsDiff: null,
+  };
+
+  const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: startPos + 'sentence'.length });
+
+  expect(result.applied).toBe(1);
+  expect(result.warnings).toEqual([]);
+  expect(tr.doc.textContent).toBe('phrase');
 };
 
 /**
@@ -347,11 +378,9 @@ const testTextModifyRunAttrsAcrossRuns = () => {
     action: 'modified',
     kind: 'text',
     startPos,
-    endPos: startPos,
-    // The replay helper computes `to` from oldText length, so we use a synthetic
-    // span that intersects both runs to validate range-based run-attrs updates.
-    oldText: 'AB__',
-    newText: 'AB__',
+    endPos: startPos + 3, // 'A'(+0) runA-close(+1) runB-open(+2) 'B'(+3) — spans both text nodes
+    oldText: 'AB',
+    newText: 'AB',
     marksDiff: null,
     runAttrsDiff: {
       added: {},
@@ -427,6 +456,7 @@ const runInlineReplaySuite = () => {
   it('inserts text at paragraph end when startPos is null', testTextAddAtParagraphEnd);
   it('deletes a text range', testTextDeleteRange);
   it('applies formatting for a modified text range', testTextModifyRange);
+  it('replaces text for a modified text range when content changes', testTextModifyReplacesText);
   it('applies run attributes for a modified text range', testTextModifyRunAttrsOnly);
   it('applies run attributes across multiple runs in a modified range', testTextModifyRunAttrsAcrossRuns);
   it('applies metadata run attributes when marks are modified', testTextModifyMarksAndRunMetadata);
@@ -436,3 +466,163 @@ const runInlineReplaySuite = () => {
 };
 
 describe('replayInlineDiff', runInlineReplaySuite);
+
+describe('replayInlineDiff staleness guard', () => {
+  it('skips and records a STALE_POSITION warning when oldText does not match (deleted)', () => {
+    const schema = createSchema();
+    const paragraph = createParagraph(schema, [schema.text('Hello world')]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const paragraphPos = findParagraphPos(doc);
+    const startPos = paragraphPos + 1 + 1; // points to 'e' in "Hello"
+    const endPos = startPos + 3; // covers "ello" (inclusive)
+
+    const diff = {
+      action: 'deleted',
+      kind: 'text',
+      startPos,
+      endPos,
+      oldText: 'xyz', // stale — actual text is "ello"
+    };
+
+    const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: paragraphPos + 1 + paragraph.content.size });
+
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/STALE_POSITION/);
+    expect(result.warnings[0]).toMatch(/xyz/);
+    expect(result.warnings[0]).toMatch(/ello/);
+  });
+
+  it('skips and records a STALE_POSITION warning when oldText does not match (modified)', () => {
+    const schema = createSchema();
+    const paragraph = createParagraph(schema, [schema.text('Hello world')]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const paragraphPos = findParagraphPos(doc);
+    const startPos = paragraphPos + 1 + 1;
+    const endPos = startPos + 3;
+
+    const diff = {
+      action: 'modified',
+      kind: 'text',
+      startPos,
+      endPos,
+      oldText: 'xyz', // stale — actual text is "ello"
+      newText: 'abc',
+      marks: [],
+    };
+
+    const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: paragraphPos + 1 + paragraph.content.size });
+
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.warnings[0]).toMatch(/STALE_POSITION/);
+  });
+
+  it('applies normally when oldText matches the actual text at the range', () => {
+    const schema = createSchema();
+    const paragraph = createParagraph(schema, [schema.text('Hello world')]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const paragraphPos = findParagraphPos(doc);
+    const startPos = paragraphPos + 1 + 1;
+    const endPos = startPos + 3;
+
+    const diff = {
+      action: 'deleted',
+      kind: 'text',
+      startPos,
+      endPos,
+      oldText: 'ello', // matches actual text
+    };
+
+    const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: paragraphPos + 1 + paragraph.content.size });
+
+    expect(result.applied).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('skips stale deletion when the guard uses diff.text (as produced by groupDiffs — no oldText)', () => {
+    // groupDiffs sets result.text on deleted diffs, not result.oldText.
+    // The guard must fall back to diff.text for deletions.
+    const schema = createSchema();
+    const paragraph = createParagraph(schema, [schema.text('Hello world')]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const paragraphPos = findParagraphPos(doc);
+    const startPos = paragraphPos + 1 + 1;
+    const endPos = startPos + 3;
+
+    const diff = {
+      action: 'deleted',
+      kind: 'text',
+      startPos,
+      endPos,
+      text: 'xyz', // stale — actual text is "ello". Note: text, not oldText.
+    };
+
+    const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: paragraphPos + 1 + paragraph.content.size });
+
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/STALE_POSITION/);
+    expect(result.warnings[0]).toMatch(/xyz/);
+    expect(result.warnings[0]).toMatch(/ello/);
+  });
+
+  it('applies first diff and skips stale second diff in the same transaction (partial-apply)', () => {
+    // Guards that a batch replay commits earlier steps even when a later step is stale.
+    // The transaction is NOT rolled back — partial apply is the intended behavior.
+    const schema = createSchema();
+    const paragraph = createParagraph(schema, [schema.text('abcdef')]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+
+    const paragraphPos = findParagraphPos(doc);
+    const paragraphEndPos = paragraphPos + 1 + paragraph.content.size;
+    // 'a'=pos1, 'b'=2, 'c'=3, 'd'=4, 'e'=5, 'f'=6
+    const aPos = paragraphPos + 1;
+
+    // diff1: delete "def" at the end — valid, applied first to avoid position shift
+    const diff1 = {
+      action: 'deleted',
+      kind: 'text',
+      startPos: aPos + 3,
+      endPos: aPos + 5,
+      text: 'def',
+    };
+
+    // diff2: delete "xyz" at the start — stale, actual text is "abc"
+    const diff2 = {
+      action: 'deleted',
+      kind: 'text',
+      startPos: aPos,
+      endPos: aPos + 2,
+      text: 'xyz',
+    };
+
+    const result1 = replayInlineDiff({ tr, diff: diff1, schema, paragraphEndPos });
+    const result2 = replayInlineDiff({ tr, diff: diff2, schema, paragraphEndPos: paragraphEndPos - 3 });
+
+    expect(result1.applied).toBe(1);
+    expect(result1.skipped).toBe(0);
+    expect(result2.applied).toBe(0);
+    expect(result2.skipped).toBe(1);
+    expect(result2.warnings[0]).toMatch(/STALE_POSITION/);
+    // Transaction contains only the first deletion — "def" removed, "abc" intact.
+    expect(tr.doc.textContent).toBe('abc');
+  });
+});

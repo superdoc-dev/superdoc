@@ -1,6 +1,6 @@
 # @superdoc/document-api
 
-Contract-first Document API package (internal workspace package).
+Contract-first Document API package for SuperDoc runtimes. Most app-level consumers should depend on higher-level SuperDoc runtime packages, but this package is now built and packed as a publishable dist-backed contract surface.
 
 ## Generated vs manual files
 

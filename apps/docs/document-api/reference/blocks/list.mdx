@@ -1,14 +1,14 @@
 ---
 title: blocks.list
 sidebarTitle: blocks.list
-description: "List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering."
+description: "List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.
+List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`.
 
 - Operation ID: `blocks.list`
 - API member path: `editor.doc.blocks.list(...)`
@@ -26,6 +26,7 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `includeText` | boolean | no |  |
 | `limit` | number | no |  |
 | `nodeTypes` | enum[] | no |  |
@@ -35,7 +36,10 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 
 ```json
 {
-  "limit": 50,
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "offset": 0
 }
 ```
@@ -69,6 +73,11 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 ## Pre-apply throws
 
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -81,6 +90,9 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "includeText": {
       "description": "When true, includes the full flattened block text in each block entry.",
       "type": "boolean"
@@ -151,6 +163,25 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
             "description": "Heading level (1-6).",
             "type": "number"
           },
+          "indent": {
+            "additionalProperties": false,
+            "description": "Direct paragraph indentation in twips (only non-zero fields present).",
+            "properties": {
+              "firstLine": {
+                "type": "number"
+              },
+              "hanging": {
+                "type": "number"
+              },
+              "left": {
+                "type": "number"
+              },
+              "right": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
           "isEmpty": {
             "type": "boolean"
           },
@@ -171,8 +202,61 @@ Returns a BlocksListResult with total block count, an ordered array of block ent
               "sdt"
             ]
           },
+          "numbering": {
+            "additionalProperties": false,
+            "description": "Computed numbering rendering (marker/path/kind) for numbered list items and numbered headings — e.g. the rendered clause label \"2.3.\". Absent for non-numbered blocks.",
+            "properties": {
+              "kind": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "marker": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "path": {
+                "oneOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
           "ordinal": {
             "type": "number"
+          },
+          "paragraphNumbering": {
+            "additionalProperties": false,
+            "description": "Numbering reference (numId + level) for numbered blocks, including numbered headings. Absent for non-numbered blocks.",
+            "properties": {
+              "level": {
+                "type": "number"
+              },
+              "numId": {
+                "type": "number"
+              }
+            },
+            "type": "object"
           },
           "ref": {
             "description": "Ref handle for this block. Pass directly to superdoc_format or superdoc_edit ref param. Only present for non-empty blocks.",

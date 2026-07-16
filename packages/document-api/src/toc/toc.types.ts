@@ -167,6 +167,13 @@ export type TocCreateLocation =
 
 export interface CreateTableOfContentsInput {
   at?: TocCreateLocation;
+  /**
+   * Optional raw TOC field instruction to preserve non-default switch shapes
+   * such as custom-style mappings (`\\t`) or omitted default switches.
+   * When provided, the adapter parses this instruction as the base TOC config
+   * before applying any config patch overrides.
+   */
+  instruction?: string;
   config?: TocConfigurePatch;
 }
 

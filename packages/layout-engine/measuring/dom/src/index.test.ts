@@ -8,8 +8,10 @@ import type {
   DrawingMeasure,
   DrawingBlock,
   TableMeasure,
+  TextRun,
 } from '@superdoc/contracts';
 import { EMPTY_SDT_PLACEHOLDER_TEXT } from '@superdoc/contracts';
+import { resolvePhysicalFamily } from '@superdoc/font-system';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
   expect(measure.kind).toBe('paragraph');
@@ -81,6 +83,116 @@ describe('measureBlock', () => {
       // lineHeight should be at least ascent + descent (+ safety margin)
       expect(measure.lines[0].lineHeight).toBeGreaterThanOrEqual(measure.lines[0].ascent + measure.lines[0].descent);
       expect(measure.totalHeight).toBe(measure.lines[0].lineHeight);
+    });
+
+    it('does not count empty text runs as justification spaces', async () => {
+      const visibleRuns = [
+        {
+          text: '1. Confidential Information. In connection with ',
+          fontFamily: 'Arial',
+          fontSize: 16,
+        },
+      ];
+      const withoutEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'without-empty-runs',
+        runs: visibleRuns,
+        attrs: { alignment: 'justify' },
+      };
+      const withEmptyRuns: FlowBlock = {
+        kind: 'paragraph',
+        id: 'with-empty-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          ...visibleRuns,
+        ],
+        attrs: { alignment: 'justify' },
+      };
+
+      const baseMeasure = expectParagraphMeasure(await measureBlock(withoutEmptyRuns, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(withEmptyRuns, 1000));
+
+      expect(emptyPrefixMeasure.lines).toHaveLength(1);
+      expect(emptyPrefixMeasure.lines[0].width).toBeCloseTo(baseMeasure.lines[0].width, 3);
+      expect(emptyPrefixMeasure.lines[0].spaceCount).toBe(baseMeasure.lines[0].spaceCount);
+      expect(emptyPrefixMeasure.lines[0].segments).toEqual([
+        {
+          runIndex: 3,
+          fromChar: 0,
+          toChar: visibleRuns[0].text.length,
+          width: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('keeps empty-only paragraphs measurable without phantom spaces', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-only-runs',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+          { text: '', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {},
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(0);
+      expect(measure.lines[0].spaceCount).toBeUndefined();
+      expect(measure.lines[0].segments).toEqual([]);
+      expect(measure.totalHeight).toBeGreaterThan(0);
+    });
+
+    it('does not let skipped empty runs inflate visible line height', async () => {
+      const visibleBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'visible-small-run',
+        runs: [{ text: 'visible', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+      const emptyPrefixBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-large-prefix-run',
+        runs: [
+          { text: '', fontFamily: 'Arial', fontSize: 48 },
+          { text: 'visible', fontFamily: 'Arial', fontSize: 12 },
+        ],
+        attrs: {},
+      };
+
+      const visibleMeasure = expectParagraphMeasure(await measureBlock(visibleBlock, 1000));
+      const emptyPrefixMeasure = expectParagraphMeasure(await measureBlock(emptyPrefixBlock, 1000));
+
+      expect(emptyPrefixMeasure.lines[0].lineHeight).toBeCloseTo(visibleMeasure.lines[0].lineHeight, 3);
+    });
+
+    // SD-3330: a line containing only tabs must be measured at the run's font size,
+    // not the 12px fallback, so it has the same height as a text line in the same
+    // paragraph font. Without this, tab-only lines render shorter than text lines.
+    it('measures a tab-only line at the run font size, not the 12px default', async () => {
+      const textBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'text',
+        runs: [{ text: 'x', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const tabBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tab',
+        runs: [{ kind: 'tab', text: '\t', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
+      const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
+      const tabMeasure = expectParagraphMeasure(await measureBlock(tabBlock, 1000));
+
+      // The tab-only line height matches the text line (both 16px), not 12px × 1.15.
+      expect(tabMeasure.lines[0].lineHeight).toBeCloseTo(textMeasure.lines[0].lineHeight, 1);
+      expect(tabMeasure.lines[0].lineHeight).toBeGreaterThan(16);
     });
 
     it('breaks lines when text exceeds maxWidth', async () => {
@@ -367,9 +479,8 @@ describe('measureBlock', () => {
       expect(measure.lines[0].maxWidth).toBe(104);
     });
 
-    it('prefers shared resolved text start over top-level textStartPx when both exist', async () => {
+    it('uses rendered first-line tab stop over stale textStart targets when both exist', async () => {
       const maxWidth = 240;
-      const resolvedTextStart = 112;
       const topLevelTextStart = 160;
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -388,9 +499,11 @@ describe('measureBlock', () => {
             textStartPx: topLevelTextStart,
             marker: {
               markerText: '(a)',
+              glyphWidthPx: 20,
+              markerX: 48,
               markerBoxWidthPx: 24,
               gutterWidthPx: 8,
-              textStartX: resolvedTextStart,
+              textStartX: 112,
               run: {
                 fontFamily: 'Times New Roman',
                 fontSize: 16,
@@ -404,7 +517,49 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
-      expect(measure.lines[0].maxWidth).toBe(maxWidth - resolvedTextStart);
+      expect(measure.lines[0].maxWidth).toBe(maxWidth - 96);
+    });
+
+    it('measures first-line list tabs from the rendered tab stop for justified text', async () => {
+      const maxWidth = 624;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sd-3426-first-line-list-tab',
+        runs: [
+          {
+            text: 'Commencement Date IF LANDLORD MANAGED BUILDOUT Tract D inline retail only The earlier of date',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+        attrs: {
+          alignment: 'justify',
+          indent: { left: 0, firstLine: 48 },
+          wordLayout: {
+            indentLeftPx: 0,
+            firstLineIndentMode: true,
+            marker: {
+              markerText: '(h)',
+              glyphWidthPx: 18.65625,
+              markerX: 48,
+              textStartX: 66,
+              gutterWidthPx: 8,
+              justification: 'left',
+              suffix: 'tab',
+              run: {
+                fontFamily: 'Arial',
+                fontSize: 12,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines[0].maxWidth).toBeCloseTo(maxWidth - 96, 5);
     });
 
     it('expands first-line width for hanging indents on non-list paragraphs', async () => {
@@ -719,7 +874,7 @@ describe('measureBlock', () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       expect(ctx).not.toBeNull();
-      ctx!.font = '16px Arial';
+      ctx!.font = `16px ${resolvePhysicalFamily('Arial')}`;
       const transformedPlaceholderText = EMPTY_SDT_PLACEHOLDER_TEXT.toUpperCase();
       const transformedWidth = ctx!.measureText(transformedPlaceholderText).width;
       const untransformedWidth = ctx!.measureText(EMPTY_SDT_PLACEHOLDER_TEXT).width;
@@ -1582,6 +1737,73 @@ describe('measureBlock', () => {
       // All characters should be present
       const totalChars = measure.lines.reduce((sum, line) => sum + (line.toChar - line.fromChar), 0);
       expect(totalChars).toBe(3);
+    });
+
+    it('matches merged-run wrapping when a numeric run is followed by unspaced CJK text', async () => {
+      const prefix = '2023';
+      const suffix = '年度基层工会职工小家文体活动服务商入围项目';
+      const splitBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'cjk-numeric-split-runs',
+        runs: [
+          {
+            text: prefix,
+            fontFamily: 'Arial',
+            fontSize: 26,
+          },
+          {
+            text: suffix,
+            fontFamily: 'Arial',
+            fontSize: 26,
+          },
+        ],
+        attrs: {},
+      };
+      const mergedBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'cjk-numeric-merged-run',
+        runs: [
+          {
+            text: `${prefix}${suffix}`,
+            fontFamily: 'Arial',
+            fontSize: 26,
+          },
+        ],
+        attrs: {},
+      };
+
+      const fullWidthMeasure = expectParagraphMeasure(await measureBlock(mergedBlock, 2000));
+      const fullWidth = Math.ceil(fullWidthMeasure.lines[0].width);
+      let matchingWidth: number | undefined;
+      let splitMeasureAtMatch: ParagraphMeasure | undefined;
+      let mergedMeasureAtMatch: ParagraphMeasure | undefined;
+
+      for (let width = fullWidth - 1; width >= Math.max(80, Math.floor(fullWidth * 0.4)); width -= 1) {
+        const mergedCandidate = expectParagraphMeasure(await measureBlock(mergedBlock, width));
+        if (mergedCandidate.lines.length !== 2) continue;
+        if (mergedCandidate.lines[0].toRun !== 0 || mergedCandidate.lines[0].toChar <= prefix.length) continue;
+
+        const splitCandidate = expectParagraphMeasure(await measureBlock(splitBlock, width));
+        const splitLineTexts = splitCandidate.lines.map((line) => extractLineText(splitBlock, line));
+        const mergedLineTexts = mergedCandidate.lines.map((line) => extractLineText(mergedBlock, line));
+
+        if (splitCandidate.lines[0].toRun !== 1 || splitCandidate.lines[0].toChar <= 0) continue;
+        if (splitLineTexts.join('|') !== mergedLineTexts.join('|')) continue;
+
+        matchingWidth = width;
+        splitMeasureAtMatch = splitCandidate;
+        mergedMeasureAtMatch = mergedCandidate;
+        break;
+      }
+
+      expect(matchingWidth).toBeDefined();
+
+      const splitLineTexts = splitMeasureAtMatch!.lines.map((line) => extractLineText(splitBlock, line));
+      const mergedLineTexts = mergedMeasureAtMatch!.lines.map((line) => extractLineText(mergedBlock, line));
+
+      expect(splitMeasureAtMatch!.lines[0].toRun).toBe(1);
+      expect(splitMeasureAtMatch!.lines[0].toChar).toBeGreaterThan(0);
+      expect(splitLineTexts).toEqual(mergedLineTexts);
     });
   });
 
@@ -3390,6 +3612,65 @@ describe('measureBlock', () => {
       expect(measure.scale).toBe(1);
     });
 
+    it('honors shape group transforms when measuring rotated bounds', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-rotated-transform',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 200,
+          height: 100,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 200,
+          height: 100,
+          rotation: 90,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBeCloseTo(100);
+      expect(measure.height).toBeCloseTo(200);
+      expect(measure.geometry.width).toBe(200);
+      expect(measure.geometry.height).toBe(100);
+      expect(measure.geometry.rotation).toBe(90);
+      expect(measure.groupTransform?.rotation).toBe(90);
+    });
+
+    it('preserves shape group effect extent when group transform is present', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-effect-extent',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 105,
+          height: 59,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 100,
+          height: 50,
+        },
+        effectExtent: {
+          left: 2,
+          top: 4,
+          right: 3,
+          bottom: 5,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBe(105);
+      expect(measure.height).toBe(59);
+      expect(measure.geometry.width).toBe(105);
+      expect(measure.geometry.height).toBe(59);
+      expect(measure.groupTransform?.width).toBe(100);
+      expect(measure.groupTransform?.height).toBe(50);
+    });
+
     it('resolves full-width drawings using maxWidth constraints and indents', async () => {
       const block: DrawingBlock = {
         kind: 'drawing',
@@ -3449,6 +3730,64 @@ describe('measureBlock', () => {
       expect(measure.geometry.rotation).toBe(270);
     });
 
+    it('bypasses maxHeight for behindDoc wrapNone anchored drawings with positive page-relative offsets', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'drawing-behind-doc-page-overlay',
+        drawingKind: 'vectorShape',
+        geometry: {
+          width: 961.3333333333334,
+          height: 568,
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+        },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          offsetH: -43.76472440944882,
+          offsetV: 0.6,
+          behindDoc: true,
+        },
+        wrap: {
+          type: 'None',
+          behindDoc: true,
+        },
+      };
+
+      const measure = expectDrawingMeasure(
+        await measureBlock(block, { maxWidth: 909.1333333333333, maxHeight: 461.26666666666665 }),
+      );
+      expect(measure.width).toBeCloseTo(961.3333333333334);
+      expect(measure.height).toBeCloseTo(568);
+      expect(measure.scale).toBe(1);
+    });
+
+    it('bypasses maxHeight for behindDoc wrapNone image drawings', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'drawing-image-behind-doc',
+        drawingKind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgo=',
+        width: 960,
+        height: 566,
+        anchor: {
+          isAnchored: true,
+          behindDoc: true,
+        },
+        wrap: {
+          type: 'None',
+          behindDoc: true,
+        },
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 909, maxHeight: 461 }));
+      expect(measure.width).toBeCloseTo(960);
+      expect(measure.height).toBeCloseTo(566);
+      expect(measure.scale).toBe(1);
+    });
+
     describe('negative positioning bypass logic', () => {
       it('bypasses maxHeight when anchored drawing has offsetV < 0', async () => {
         const block: DrawingBlock = {
@@ -3470,6 +3809,38 @@ describe('measureBlock', () => {
         // Should NOT scale height due to negative offsetV bypass
         expect(measure.height).toBe(200);
         expect(measure.width).toBe(100);
+        expect(measure.scale).toBe(1);
+      });
+
+      it('bypasses maxHeight for behindDoc wrapNone anchored drawings with negative paragraph-relative offsets', async () => {
+        const block: DrawingBlock = {
+          kind: 'drawing',
+          id: 'drawing-behind-doc-negative-paragraph-overlay',
+          drawingKind: 'vectorShape',
+          geometry: {
+            width: 969.3333333333334,
+            height: 568.0215223097113,
+            rotation: 0,
+            flipH: false,
+            flipV: false,
+          },
+          anchor: {
+            isAnchored: true,
+            hRelativeFrom: 'column',
+            vRelativeFrom: 'paragraph',
+            offsetH: -51.577952755905514,
+            offsetV: -40.00262467191601,
+            behindDoc: true,
+          },
+          wrap: {
+            type: 'None',
+            behindDoc: true,
+          },
+        };
+
+        const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 909, maxHeight: 461 }));
+        expect(measure.width).toBeCloseTo(969.3333333333334);
+        expect(measure.height).toBeCloseTo(568.0215223097113);
         expect(measure.scale).toBe(1);
       });
 
@@ -3927,7 +4298,7 @@ describe('measureBlock', () => {
       expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
     });
 
-    it('preserves authored widths and synthesizes runtime widths for missing logical columns', async () => {
+    it('synthesizes runtime widths for missing logical columns and content-sizes pure-auto tables', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-3',
@@ -3992,7 +4363,10 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(3);
       expect(measure.columnWidths[0]).toBeGreaterThan(0);
-      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      // SD-3309: pure-auto tables (auto tblW, no tcW anywhere) content-size like Word;
+      // the partial authored grid is not a layout cache, so equal content gives equal columns.
+      expect(measure.columnWidths[1]).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeLessThan(250);
       expect(measure.columnWidths[2]).toBeGreaterThan(0);
       expect(measure.totalWidth).toBeCloseTo(
         measure.columnWidths.reduce((sum, width) => sum + width, 0),
@@ -4273,6 +4647,126 @@ describe('measureBlock', () => {
     });
   });
 
+  // SD-3308: a row whose cells are ALL row-spanning (vMerge start or continuation)
+  // must not collapse to zero height. In OOXML the continuation cells are real
+  // <w:tc> elements holding an empty paragraph, and Word sizes the row from them
+  // (one line high). The import merges those cells away, so the measurer grants
+  // every spanned row a minimum of the spanning cell's one-line height.
+  describe('rowspan-only rows (SD-3028 vMerge continuation)', () => {
+    it('keeps a row alive when all of its cells are row-spanning', async () => {
+      const para = (id: string, text: string) => ({
+        kind: 'paragraph' as const,
+        id,
+        runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+      });
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'vmerge-rows',
+        rows: [
+          {
+            id: 'r0',
+            cells: [
+              { id: 'c00', blocks: [para('p00', 'head')] },
+              { id: 'c01', rowSpan: 2, colSpan: 2, blocks: [para('p01', 'span-down')] },
+              { id: 'c02', rowSpan: 2, blocks: [para('p02', 'right')] },
+            ],
+          },
+          {
+            id: 'r1',
+            cells: [{ id: 'c10', rowSpan: 2, blocks: [para('p10', 'only-real-cell')] }],
+          },
+          {
+            id: 'r2',
+            cells: [
+              { id: 'c20', colSpan: 2, blocks: [para('p20', 'new')] },
+              { id: 'c21', blocks: [para('p21', 'new2')] },
+            ],
+          },
+        ],
+        columnWidths: [120, 60, 60, 60],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.rows).toHaveLength(3);
+      // Row 1 holds only the start of a 2-row span (its other columns are vMerge
+      // continuations merged away at import): one line high like Word, not zero.
+      expect(measure.rows[1].height).toBeGreaterThan(0);
+      expect(measure.rows[1].height).toBeCloseTo(measure.rows[0].height, 0);
+      expect(measure.rows[2].height).toBeCloseTo(measure.rows[0].height, 0);
+    });
+  });
+
+  describe('border band row-height reservation (SD-3308)', () => {
+    const makeTable = (borderStyle: string, width: number): FlowBlock =>
+      ({
+        kind: 'table',
+        id: 'table-band',
+        rows: [0, 1].map((r) => ({
+          id: `row-${r}`,
+          cells: [
+            {
+              id: `cell-${r}-0`,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: `para-${r}`,
+                  runs: [{ text: 'X', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+          ],
+        })),
+        attrs: {
+          borders: {
+            top: { style: borderStyle, width },
+            bottom: { style: borderStyle, width },
+            left: { style: borderStyle, width },
+            right: { style: borderStyle, width },
+            insideH: { style: borderStyle, width },
+            insideV: { style: borderStyle, width },
+          },
+        },
+      }) as unknown as FlowBlock;
+
+    it('reserves the band excess for double borders and nothing for hairline singles', async () => {
+      const single = await measureBlock(makeTable('single', 1), { maxWidth: 600 });
+      const double = await measureBlock(makeTable('double', 2), { maxWidth: 600 });
+      if (single.kind !== 'table' || double.kind !== 'table') throw new Error('expected table measures');
+      // double sz12: band = 3 * 2 = 6px -> reservation 5px per gridline.
+      // row 0 owns its top gridline; the last row owns its top gridline plus the bottom edge.
+      expect(double.rows[0].height).toBeCloseTo(single.rows[0].height + 5, 5);
+      expect(double.rows[1].height).toBeCloseTo(single.rows[1].height + 10, 5);
+    });
+
+    it('does not reserve anything in separate-borders mode', async () => {
+      const base = makeTable('double', 2) as { attrs: Record<string, unknown> };
+      base.attrs.cellSpacing = { type: 'dxa', value: 60 };
+      const separate = await measureBlock(base as unknown as FlowBlock, { maxWidth: 600 });
+      const collapsed = await measureBlock(makeTable('double', 2), { maxWidth: 600 });
+      if (separate.kind !== 'table' || collapsed.kind !== 'table') throw new Error('expected table measures');
+      expect(separate.rows[0].height).toBeLessThan(collapsed.rows[0].height);
+    });
+
+    it('reserves the band excess for compound thinThick* and triple borders', async () => {
+      // The shared contracts band profile drives the reservation, so compound
+      // styles reserve exactly like double does. (SD-3308)
+      const single = await measureBlock(makeTable('single', 1), { maxWidth: 600 });
+      const thinThick = await measureBlock(makeTable('thinThickSmallGap', 4), { maxWidth: 600 });
+      const triple = await measureBlock(makeTable('triple', 2), { maxWidth: 600 });
+      if (single.kind !== 'table' || thinThick.kind !== 'table' || triple.kind !== 'table') {
+        throw new Error('expected table measures');
+      }
+      // thinThickSmallGap w4: band = 4 + 1 + 1 = 6px -> reservation 5px per gridline.
+      expect(thinThick.rows[0].height).toBeCloseTo(single.rows[0].height + 5, 5);
+      expect(thinThick.rows[1].height).toBeCloseTo(single.rows[1].height + 10, 5);
+      // triple w2: band = 5 * 2 = 10px -> reservation 9px per gridline.
+      expect(triple.rows[0].height).toBeCloseTo(single.rows[0].height + 9, 5);
+      expect(triple.rows[1].height).toBeCloseTo(single.rows[1].height + 18, 5);
+    });
+  });
+
   describe('autofit tables with colspan should not truncate grid columns', () => {
     const makeCell = (id: string) => ({
       id,
@@ -4476,7 +4970,7 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(300);
     });
 
-    it('does not scale when widths are within target', async () => {
+    it('does not upscale a pure-auto table beyond its content', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-2',
@@ -4516,8 +5010,139 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // Auto layout preserves explicit widths (no scale-up)
-      expect(measure.columnWidths).toEqual([50, 50]);
-      expect(measure.totalWidth).toBe(100);
+      // SD-3309: pure-auto tables content-size like Word; equal content gives equal
+      // columns and the table never upscales toward the authored grid sum.
+      expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
+      expect(measure.totalWidth).toBeLessThanOrEqual(100);
+      expect(measure.totalWidth).toBeGreaterThan(0);
+    });
+
+    // SD-3308: a SINGLE-column pure-auto grid is not a Word layout cache either.
+    // Word content-sizes such tables to the text (band-scaling probe: gridCol 3000
+    // renders ~70px wide around "XXXX", not 200px). The single-column arm of
+    // hasNonUniformGrid must not let preserveAutoGrid pin the stale grid.
+    it('content-sizes a single-column pure-auto table instead of preserving its grid', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'single-col-pure-auto',
+        attrs: { tableWidth: { width: 0, type: 'auto' } },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      // Content demand for "XXXX" plus margins is far below the stale 200px grid.
+      expect(measure.totalWidth).toBeLessThan(120);
+      expect(measure.totalWidth).toBeGreaterThan(0);
+    });
+
+    // SD-3308 Word-measured band rule for content-sized columns (band-scaling probes):
+    // each vertical gridline grants HALF its band to each adjacent column, then the
+    // painted band sits fully inside the cell box and eats the other half back from
+    // the PADDING. Padding may compress to zero but text never clips, so:
+    //   column = text + max(padding + band, 2 x band)
+    // Probe evidence: Word's thinThickSmallGap content span shrinks by exactly the
+    // band delta as sz grows (padding absorbing), while triple sz24's content span
+    // bottoms out at the text width (floor active, margins fully consumed).
+    it('content-sized columns add half a band per edge, padding absorbing until the text floor', async () => {
+      const makeBordered = (style: string, width: number): FlowBlock =>
+        ({
+          kind: 'table',
+          id: `band-allowance-${style}-${width}`,
+          attrs: {
+            tableWidth: { width: 0, type: 'auto' },
+            borders: {
+              top: { style, width },
+              bottom: { style, width },
+              left: { style, width },
+              right: { style, width },
+            },
+          },
+          rows: [
+            {
+              id: 'row-0',
+              cells: [
+                {
+                  id: 'cell-0-0',
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      id: 'para-0',
+                      runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          columnWidths: [200],
+        }) as unknown as FlowBlock;
+
+      const bare = await measureBlock(makeBordered('none', 0), { maxWidth: 624 });
+      const single = await measureBlock(makeBordered('single', 2), { maxWidth: 624 });
+      const triple = await measureBlock(makeBordered('triple', 2), { maxWidth: 624 });
+      if (bare.kind !== 'table' || single.kind !== 'table' || triple.kind !== 'table') {
+        throw new Error('expected table measures');
+      }
+      // bare = text + default padding 8. single band 2: 2x2 < 8+2 -> padding absorbs,
+      // column = bare + band.
+      expect(single.totalWidth - bare.totalWidth).toBeCloseTo(2, 5);
+      // triple band 10: 2x10 > 8+10 -> text floor wins, column = text + 2x10 =
+      // (bare - 8) + 20 = bare + 12. The content area between the painted bands is
+      // exactly the text width: no clipping.
+      expect(triple.totalWidth - bare.totalWidth).toBeCloseTo(12, 5);
+    });
+
+    it('still preserves a single-column auto grid when the cell carries a concrete width', async () => {
+      // With tcW present the authored grid IS a valid Word layout cache: keep it.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'single-col-cached-grid',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: { tableCellProperties: { cellWidth: { value: 3000, type: 'dxa' } } },
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'XXXX', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+      expect(measure.totalWidth).toBeCloseTo(200, 0);
     });
 
     it('produces exact sum after rounding adjustment', async () => {
@@ -5510,9 +6135,13 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // No tableWidth - auto layout preserves column widths
-      expect(measure.totalWidth).toBe(140);
-      expect(measure.columnWidths[0]).toBe(140);
+      // SD-1239 invariant: a missing tableWidth must not be misread as a percentage
+      // or crash; the table still measures sanely. SD-3308: a single-column
+      // pure-auto table content-sizes to its text like Word (the stale 140px grid
+      // is not a layout cache), so the width tracks content, not the grid.
+      expect(measure.totalWidth).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeLessThan(140);
+      expect(measure.columnWidths[0]).toBe(measure.totalWidth);
     });
 
     it('does NOT scale up column widths for fixed layout tables with explicit width', async () => {

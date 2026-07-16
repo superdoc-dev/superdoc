@@ -13,6 +13,7 @@ import {
   tablesClearBorderAdapter,
   tablesApplyBorderPresetAdapter,
   tablesSetShadingAdapter,
+  tablesClearShadingAdapter,
   tablesInsertRowAdapter,
   tablesInsertColumnAdapter,
   tablesGetCellsAdapter,
@@ -598,6 +599,31 @@ describe('SD-2129: table convenience operations', () => {
       const firstCellId = cells.cells[0]!.nodeId;
       const cellResult = tablesSetShadingAdapter(ed, { nodeId: firstCellId, color: '#FFF' }, DIRECT);
       expect(cellResult.success).toBe(true);
+    });
+
+    it('clearShading on a cell also clears the `background` attr', () => {
+      // `background` is the render/export source of truth for cell fill; a
+      // cell-scoped clear must drop it or the cell stays shaded while the
+      // receipt reports success.
+      const firstCellBackground = (): unknown => {
+        let bg: unknown;
+        (ed.state.doc as any).descendants((node: any) => {
+          if (bg === undefined && node.type?.name === 'tableCell') bg = node.attrs?.background ?? null;
+          return bg === undefined;
+        });
+        return bg;
+      };
+
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+      const cells = tablesGetCellsAdapter(ed, { nodeId: tableId });
+      const firstCellId = cells.cells[0]!.nodeId;
+
+      expect(tablesSetShadingAdapter(ed, { nodeId: firstCellId, color: '#FF0000' }, DIRECT).success).toBe(true);
+      expect(firstCellBackground()).toBeTruthy();
+
+      expect(tablesClearShadingAdapter(ed, { nodeId: firstCellId }, DIRECT).success).toBe(true);
+      expect(firstCellBackground()).toBeFalsy();
     });
   });
 

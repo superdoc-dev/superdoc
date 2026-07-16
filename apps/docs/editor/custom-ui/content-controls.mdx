@@ -30,6 +30,33 @@ new SuperDoc({
 
 The event tells you *what* is active; `getRect` tells you *where* to draw. `active` is an `SdtRef` with `id`, `tag`, `alias`, `controlType`, and `scope`.
 
+## Style the controls in place
+
+Turning off chrome erases the built-in look, including hover and selection. To paint your own field and clause look, set `--sd-content-controls-custom-*` variables on the painted wrapper. Target it by your own `data-sdt-*` attributes. No `!important`, and no need to touch SuperDoc's internal state classes: the painter applies your variables across rest, hover, and selected, so the box stays stable and you never write `.ProseMirror-selectednode` or hover rules yourself.
+
+```css
+/* A field your app tagged { kind: 'smartField', ... } */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
+  --sd-content-controls-custom-inline-border: 1px solid #1355ff;
+  --sd-content-controls-custom-inline-bg: color-mix(in srgb, #1355ff 12%, transparent);
+  --sd-content-controls-custom-inline-hover-bg: color-mix(in srgb, #1355ff 20%, transparent);
+  --sd-content-controls-custom-inline-radius: 4px;
+  --sd-content-controls-custom-inline-padding: 1px 6px;
+}
+
+/* A clause your app tagged { kind: 'reusableSection', ... } */
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
+  --sd-content-controls-custom-block-border: 1px solid #d6e0ff;
+  --sd-content-controls-custom-block-border-left: 4px solid #1355ff; /* accent rail */
+  --sd-content-controls-custom-block-bg: color-mix(in srgb, #1355ff 4%, transparent);
+  --sd-content-controls-custom-block-radius: 6px;
+}
+```
+
+`border` is a full CSS shorthand; `border-left` is an optional accent rail for block clauses. The background variables cascade, so set only what changes: `-hover-bg` defaults to `-bg`, and `-selected-bg` defaults to `-hover-bg`.
+
+This is the path for `chrome: 'none'`. To theme the **built-in** chrome instead (`chrome: 'default'`), use the `--sd-content-controls-*` variables (without `custom`).
+
 ## Pick the right surface
 
 | Goal | API |
@@ -55,8 +82,19 @@ The event tells you *what* is active; `getRect` tells you *where* to draw. `acti
 
 You build your UI *over* the control, not inside it. SuperDoc owns how the control's content is painted in the document; you turn off its built-in chrome and draw your own (chips, badges, panels) anchored with `getRect`, react with the events, and change content through `editor.doc.contentControls.*`. Custom field types are expressed as a `tag` - for example `{ kind: 'smartField', key: 'party_name' }`, interpreted by your own UI - the underlying control stays a standard Word SDT so it round-trips to `.docx`.
 
+## Build a custom field system
+
+Putting it together into a fillable template, the way the contract-templates demo does:
+
+1. **Define a tag schema.** Give each control a JSON `tag` your app owns - e.g. `{ kind: 'smartField', key }` for inline variables and `{ kind: 'reusableSection', sectionId }` for clauses.
+2. **Insert from a palette.** Drop a control at a point with `editor.doc.create.contentControl({ kind, at, content, tag, lockMode })`, resolving the drop point with `ui.viewport.positionAt({ x, y })`. A clause can wrap its `{ field }` slots as nested inline controls.
+3. **Style it.** Set the `--sd-content-controls-custom-*` variables on a `data-sdt-tag` selector (see [Style the controls in place](#style-the-controls-in-place)). The sidebar chips can reuse the same tokens, so palette and document match.
+4. **React.** Highlight the active control from `content-control:active-change` / `:click`, and anchor overlays with `getRect` + `ui.viewport.observe`.
+5. **Fill by tag.** A form edits a value and fans it to every occurrence: `editor.doc.contentControls.selectByTag({ tag })`, then `text.setValue` per occurrence.
+6. **Govern with locks.** Keep controls `contentLocked` so users can't edit them, and have the form unlock → write → relock (see [Lock modes](/document-api/features/content-controls#lock-modes)). For a field nested in a locked clause, unlock the parent for the write.
+
 ## See also
 
-- [Contract templates demo](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) - a working field chip built on these APIs.
+- [Contract templates demo](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) - a full custom contract-template UI: a field + clause library, custom SDT styling, locks, form-driven values, events, insert, and export.
 - [Configuration](/editor/superdoc/configuration) - the `modules.contentControls.chrome` option.
 - [Document API: content controls](/document-api/features/content-controls) - read and change controls.

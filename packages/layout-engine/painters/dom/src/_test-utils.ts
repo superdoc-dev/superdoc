@@ -158,5 +158,8 @@ export function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measu
     setShowFormattingMarks(showFormattingMarks: boolean) {
       painter.setShowFormattingMarks(showFormattingMarks);
     },
+    dispose() {
+      painter.dispose();
+    },
   };
 }

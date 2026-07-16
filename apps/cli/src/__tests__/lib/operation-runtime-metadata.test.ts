@@ -90,7 +90,7 @@ describe('operation runtime metadata', () => {
         replacements: {
           type: 'string',
           enum: ['paired', 'independent'],
-          description: 'Tracked replacement grouping mode.',
+          description: 'How adjacent insertion/deletion replacement wrappers are projected.',
         },
       },
     });
@@ -102,5 +102,47 @@ describe('operation runtime metadata', () => {
 
     expect(trackChangesOption).toBeDefined();
     expect(trackChangesOption!.type).toBe('string');
+  });
+
+  test('doc.open metadata does not expose a runtime selector', () => {
+    const openMeta = CLI_OPERATION_METADATA['doc.open'];
+    const openOptions = CLI_OPERATION_OPTION_SPECS['doc.open'];
+
+    expect(openMeta.params.map((p) => p.name)).not.toContain('runtime');
+    expect(openOptions.map((o) => o.name)).not.toContain('runtime');
+  });
+
+  test('final action-provider parity operations expose their promoted CLI params', () => {
+    const blocksListMeta = CLI_OPERATION_METADATA['doc.blocks.list'];
+    expect(blocksListMeta.params.find((p) => p.name === 'in')?.flag).toBe('in-json');
+
+    const createTocMeta = CLI_OPERATION_METADATA['doc.create.tableOfContents'];
+    expect(createTocMeta.params.find((p) => p.name === 'instruction')?.flag).toBe('instruction');
+
+    const footnotesInsertMeta = CLI_OPERATION_METADATA['doc.footnotes.insert'];
+    expect(footnotesInsertMeta.params.find((p) => p.name === 'body')?.flag).toBe('body-json');
+
+    const fieldsInsertMeta = CLI_OPERATION_METADATA['doc.fields.insert'];
+    expect(fieldsInsertMeta.params.find((p) => p.name === 'cachedResultText')?.flag).toBe('cached-result-text');
+    expect(fieldsInsertMeta.params.find((p) => p.name === 'updatePolicy')?.flag).toBe('update-policy');
+
+    const alignmentMeta = CLI_OPERATION_METADATA['doc.format.paragraph.setAlignment'];
+    expect(alignmentMeta.params.find((p) => p.name === 'alignment')?.flag).toBe('alignment');
+  });
+
+  test('paragraph format operations expose block shortcuts without text-range flags', () => {
+    const paragraphFormatMeta = CLI_OPERATION_METADATA['doc.format.paragraph.setAlignment'];
+    const paragraphParamNames = paragraphFormatMeta.params.map((p) => p.name);
+
+    expect(paragraphParamNames).toContain('blockId');
+    expect(paragraphParamNames).not.toContain('start');
+    expect(paragraphParamNames).not.toContain('end');
+
+    const inlineFormatMeta = CLI_OPERATION_METADATA['doc.format.apply'];
+    const inlineParamNames = inlineFormatMeta.params.map((p) => p.name);
+
+    expect(inlineParamNames).toContain('blockId');
+    expect(inlineParamNames).toContain('start');
+    expect(inlineParamNames).toContain('end');
   });
 });

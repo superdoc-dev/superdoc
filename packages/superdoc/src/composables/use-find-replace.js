@@ -159,7 +159,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
           caseSensitive: caseSensitive.value,
           ignoreDiacritics: ignoreDiacritics.value,
           highlight: true,
-          searchModel: 'visible',
+          searchModel: resolveConfig().includeDeletedText ? 'raw' : 'visible',
         })
       );
       matchCount.value = result.matches.length;
@@ -325,6 +325,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
       enabled: true,
       texts,
       replaceEnabled: cfg.replaceEnabled ?? true,
+      includeDeletedText: cfg.includeDeletedText ?? false,
       component: cfg.component,
       props: cfg.props,
       render: cfg.render,

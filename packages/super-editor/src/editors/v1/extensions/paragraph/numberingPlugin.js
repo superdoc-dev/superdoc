@@ -1,5 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { AddMarkStep, RemoveMarkStep, ReplaceStep, ReplaceAroundStep } from 'prosemirror-transform';
+import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 import { createNumberingManager } from './NumberingManager.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
@@ -151,7 +152,16 @@ export function createNumberingPlugin(editor) {
         return null;
       }
       if (!forcePluginPass && !forceFullRecompute) {
-        const inlineOnly = transactions.every((tr) => isInlineOnlyChange(tr));
+        // SD-3432: block-node metadata transactions only rewrite
+        // sdBlockId/sdBlockRev (see BLOCK_NODE_METADATA_UPDATE_META), which
+        // numbering does not depend on — but their setNodeMarkup steps are
+        // structural, so without this gate every keystroke's metadata round
+        // defeated the inline-only check and paid two full-document diffs
+        // (findDiffStart/findDiffEnd) for nothing (~16ms/keystroke on a
+        // 776-paragraph document).
+        const numberingIrrelevant = (tr) =>
+          tr.getMeta(BLOCK_NODE_METADATA_UPDATE_META) === true || isInlineOnlyChange(tr);
+        const inlineOnly = transactions.every(numberingIrrelevant);
         if (inlineOnly) {
           return null;
         }

@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createSuperDocMcpServer, MCP_PRESETS, parseMcpPreset, type McpPreset } from './create-server.js';
+import type { SessionManager } from './session-manager.js';
 
 // Validate MCP_PRESET at startup so misconfiguration fails fast instead of
-// silently falling back to 'legacy'. Tool registration is wired to legacy via
-// the static MCP_TOOL_CATALOG + dispatchIntentTool imports in tools/intent.ts;
-// the resolved id is not plumbed further yet. When a non-legacy preset lands,
-// pass the id into registerAllTools() so it can route through the registry.
+// silently falling back to 'legacy'.
 let requestedPreset: McpPreset;
 try {
   requestedPreset = parseMcpPreset(process.env.MCP_PRESET);
@@ -15,10 +13,13 @@ try {
   process.exit(2);
 }
 
-const { server, sessions } = createSuperDocMcpServer({ preset: requestedPreset });
 const transport = new StdioServerTransport();
+let sessions: SessionManager | undefined;
 
 async function main(): Promise<void> {
+  const created = await createSuperDocMcpServer({ preset: requestedPreset });
+  sessions = created.sessions;
+  const { server } = created;
   await server.connect(transport);
 }
 
@@ -28,11 +29,11 @@ main().catch((err) => {
 });
 
 process.on('SIGINT', async () => {
-  await sessions.closeAll();
+  await sessions?.closeAll();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  await sessions.closeAll();
+  await sessions?.closeAll();
   process.exit(0);
 });

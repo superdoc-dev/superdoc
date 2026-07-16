@@ -4,11 +4,19 @@ import net from 'node:net';
 import { createAuthPlugin, createYHub } from '@y/hub';
 import * as Y from '@y/y';
 import postgres from 'postgres';
+import {
+  BASE_PATH,
+  ORG,
+  YHUB_INTERNAL_HOST,
+  YHUB_INTERNAL_PORT,
+  buildForwardRequest,
+  formatRoom,
+  parseActivityPath,
+  parseClientPath,
+  writeSseEvent,
+} from './server-utils.mjs';
 
 const PORT = Number(process.env.PORT ?? 8081);
-const YHUB_INTERNAL_PORT = Number(process.env.YHUB_INTERNAL_PORT ?? 8082);
-const YHUB_INTERNAL_HOST = process.env.YHUB_INTERNAL_HOST ?? '127.0.0.1';
-const BASE_PATH = '/v1/collaboration';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
 const REDIS_PREFIX = process.env.REDIS_PREFIX ?? 'superdoc-fastapi';
@@ -17,7 +25,6 @@ const POSTGRES_URL =
 const EPHEMERAL = process.env.EPHEMERAL !== '0';
 const AUTH_TOKEN = process.env.YHUB_AUTH_TOKEN ?? 'YOUR_PRIVATE_TOKEN';
 
-const ORG = process.env.YHUB_ORG ?? 'superdoc';
 const EXAMPLE_DOC_ID = process.env.YHUB_DOC_ID ?? 'superdoc-dev-room';
 const roomUpdateCount = new Map();
 const ACTIVITY_MAX_EVENTS_PER_ROOM = 250;
@@ -29,13 +36,6 @@ const roomUpdateInspectors = new Map();
 let yhub = null;
 let proxyServer = null;
 let activityEventSequence = 0;
-
-function formatRoom(room) {
-  const org = room?.org ?? 'unknown-org';
-  const docid = room?.docid ?? 'unknown-doc';
-  const branch = room?.branch ?? 'main';
-  return `${org}/${docid}@${branch}`;
-}
 
 function createActivityEventId() {
   activityEventSequence += 1;
@@ -294,11 +294,6 @@ function getActivityRoomBucket(roomKey) {
   return next;
 }
 
-function writeSseEvent(response, eventName, payload) {
-  response.write(`event: ${eventName}\n`);
-  response.write(`data: ${JSON.stringify(payload)}\n\n`);
-}
-
 function publishActivityEvent(room, event) {
   const roomKey = formatRoom(room);
   const bucket = getActivityRoomBucket(roomKey);
@@ -431,55 +426,6 @@ async function clearRedisPrefix(redisClient, prefix) {
   }
 }
 
-function parseClientPath(requestUrl) {
-  const url = new URL(requestUrl, 'http://localhost');
-  const prefix = `${BASE_PATH}/`;
-  if (!url.pathname.startsWith(prefix)) {
-    return { ok: false, statusCode: 404, reason: 'expected /v1/collaboration/:documentId' };
-  }
-
-  const encodedDocumentId = url.pathname.slice(prefix.length);
-  if (!encodedDocumentId) {
-    return { ok: false, statusCode: 400, reason: 'missing documentId path segment' };
-  }
-
-  try {
-    const documentId = decodeURIComponent(encodedDocumentId);
-    if (!documentId) {
-      return { ok: false, statusCode: 400, reason: 'empty documentId' };
-    }
-
-    const targetPath = `/ws/${encodeURIComponent(ORG)}/${encodeURIComponent(documentId)}${url.search}`;
-    return { ok: true, documentId, targetPath };
-  } catch {
-    return { ok: false, statusCode: 400, reason: 'invalid encoded documentId' };
-  }
-}
-
-function parseActivityPath(requestUrl, tailSegment) {
-  const url = new URL(requestUrl, 'http://localhost');
-  const prefix = `${BASE_PATH}/`;
-  if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(tailSegment)) {
-    return { ok: false };
-  }
-
-  const encodedDocumentId = url.pathname.slice(prefix.length, url.pathname.length - tailSegment.length);
-  if (!encodedDocumentId) {
-    return { ok: false, statusCode: 400, reason: 'missing documentId path segment' };
-  }
-
-  try {
-    const documentId = decodeURIComponent(encodedDocumentId);
-    if (!documentId) {
-      return { ok: false, statusCode: 400, reason: 'empty documentId' };
-    }
-    const branch = url.searchParams.get('branch') || 'main';
-    return { ok: true, documentId, branch };
-  } catch {
-    return { ok: false, statusCode: 400, reason: 'invalid encoded documentId' };
-  }
-}
-
 function writeJsonResponse(response, statusCode, payload) {
   response.writeHead(statusCode, {
     'content-type': 'application/json',
@@ -535,7 +481,8 @@ function handleActivityStreamRequest(request, response) {
   });
   response.flushHeaders?.();
 
-  response.write(`: connected room=${roomKey}\n\n`);
+  response.write(': connected\n\n');
+  writeSseEvent(response, 'connected', { room });
 
   const bufferedEvents = roomActivityEvents.get(roomKey) ?? [];
   bufferedEvents.forEach((event) => {
@@ -565,31 +512,6 @@ function handleActivityStreamRequest(request, response) {
 function writeUpgradeError(socket, statusCode, statusText) {
   socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`);
   socket.destroy();
-}
-
-function buildForwardRequest(request, targetPath) {
-  const requestLine = `${request.method ?? 'GET'} ${targetPath} HTTP/${request.httpVersion}\r\n`;
-  let hasHostHeader = false;
-  const headerLines = [];
-
-  for (let i = 0; i < request.rawHeaders.length; i += 2) {
-    const key = request.rawHeaders[i];
-    const value = request.rawHeaders[i + 1] ?? '';
-
-    if (key.toLowerCase() === 'host') {
-      hasHostHeader = true;
-      headerLines.push(`Host: ${YHUB_INTERNAL_HOST}:${YHUB_INTERNAL_PORT}`);
-      continue;
-    }
-
-    headerLines.push(`${key}: ${value}`);
-  }
-
-  if (!hasHostHeader) {
-    headerLines.push(`Host: ${YHUB_INTERNAL_HOST}:${YHUB_INTERNAL_PORT}`);
-  }
-
-  return `${requestLine}${headerLines.join('\r\n')}\r\n\r\n`;
 }
 
 function startPublicProxyServer() {
@@ -638,7 +560,15 @@ function startPublicProxyServer() {
         port: YHUB_INTERNAL_PORT,
       },
       () => {
-        const forwardedRequest = buildForwardRequest(request, parsed.targetPath);
+        let forwardedRequest;
+        try {
+          forwardedRequest = buildForwardRequest(request, parsed.targetPath);
+        } catch (error) {
+          console.error('[yjs-hub] rejected upgrade: invalid forward request', error);
+          if (!socket.destroyed) writeUpgradeError(socket, 400, 'Bad Request');
+          upstream.destroy();
+          return;
+        }
         upstream.write(forwardedRequest);
         if (head.length > 0) {
           upstream.write(head);

@@ -1,6 +1,0 @@
-*-snapshots/
-screenshots/
-playwright-report/
-test-results/
-test-data/
-.baselines-version

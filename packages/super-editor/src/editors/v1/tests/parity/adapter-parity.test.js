@@ -5,7 +5,7 @@ import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpe
 import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphReference.js';
 import { zipFolderToBuffer } from '@tests/helpers/zipFolderToBuffer.js';
 import { Editor } from '@core/Editor.js';
-import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
+import { computeParagraphAttrs } from '@core/layout-adapter/attributes/paragraph.js';
 import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

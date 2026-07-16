@@ -12,8 +12,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { performance } from 'perf_hooks';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
-import type { PMNode } from '../../pm-adapter/src/index.js';
+import { toFlowBlocks } from './test-helpers/to-flow-blocks.js';
+import type { PMNode } from '@core/layout-adapter';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 import fs from 'fs';
 import path from 'path';

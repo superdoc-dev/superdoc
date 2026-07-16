@@ -6,6 +6,7 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@superdoc-dev/fonts": "workspace:*",
     "superdoc": "latest",
     "vue": "^3.5.0"
   },

@@ -11,6 +11,7 @@ function makeMetadata(overrides: Partial<ContextMetadata> = {}): ContextMetadata
     dirty: false,
     revision: 0,
     sessionType: 'local',
+    runtime: 'v1',
     openedAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -71,6 +72,28 @@ describe('normalizeContextMetadata', () => {
       const metadata = makeMetadata();
       const result = normalizeContextMetadata(metadata);
       expect(result.user).toBeUndefined();
+    });
+  });
+
+  describe('runtime normalization', () => {
+    test('preserves the supported v1 runtime', () => {
+      const result = normalizeContextMetadata(makeMetadata({ runtime: 'v1' }));
+      expect(result.runtime).toBe('v1');
+    });
+
+    test('defaults an absent runtime to v1', () => {
+      const result = normalizeContextMetadata(makeMetadata({ runtime: undefined as any }));
+      expect(result.runtime).toBe('v1');
+    });
+
+    test('normalizes stale unsupported runtime metadata to v1', () => {
+      const metadata = makeMetadata({ runtime: 'legacy-runtime' as any });
+      expect(normalizeContextMetadata(metadata).runtime).toBe('v1');
+    });
+
+    test('normalizes any unknown runtime value to v1', () => {
+      const metadata = makeMetadata({ runtime: 'v3' as any });
+      expect(normalizeContextMetadata(metadata).runtime).toBe('v1');
     });
   });
 

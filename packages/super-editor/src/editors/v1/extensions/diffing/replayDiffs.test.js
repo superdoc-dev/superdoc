@@ -5,6 +5,8 @@ import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
+import DocxZipper from '@core/DocxZipper.js';
+import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { computeDiff } from './computeDiff';
 
 /**
@@ -29,6 +31,35 @@ const getEditorFromFixture = async (name, user = undefined) => {
     annotations: true,
     user,
   });
+};
+
+/**
+ * Collects tracked text grouped by mark id so multi-run changes can be asserted
+ * as whole replacement fragments.
+ *
+ * @param {import('prosemirror-state').EditorState} state
+ * @returns {Array<{ type: string; text: string; id: string }>}
+ */
+const collectTrackedTextChanges = (state) => {
+  const grouped = new Map();
+
+  getTrackChanges(state).forEach(({ mark, node }) => {
+    const key = `${mark.type.name}:${mark.attrs.id}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.text += node.textContent;
+      return;
+    }
+
+    grouped.set(key, {
+      type: mark.type.name,
+      id: mark.attrs.id,
+      text: node.textContent,
+    });
+  });
+
+  return [...grouped.values()];
 };
 
 /**
@@ -513,6 +544,61 @@ describe('replayDiffs tracked append regression', () => {
     }
   });
 });
+describe('replayDiffs SD-2787', () => {
+  it('replays word replacements as tracked delete/insert text changes', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('word/sd_2787_source.docx', testUser);
+    const afterEditor = await getEditorFromFixture('word/sd_2787_target.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+
+      const trackedTextChanges = collectTrackedTextChanges(beforeEditor.state);
+      const deletedTexts = trackedTextChanges.filter(({ type }) => type === 'trackDelete').map(({ text }) => text);
+      const insertedTexts = trackedTextChanges.filter(({ type }) => type === 'trackInsert').map(({ text }) => text);
+
+      expect(deletedTexts).toEqual(expect.arrayContaining(['sentence', 'a test', 'some ', 'neighborhood']));
+      expect(insertedTexts).toEqual(expect.arrayContaining(['phrase', 'an examination', 'barrio']));
+
+      expect(beforeEditor.commands.acceptAllTrackedChanges()).toBe(true);
+      expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
+describe('replayDiffs multi-run word replacements', () => {
+  it('tracks the full electronic to electric replacement across split runs', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('word/doc_a1.docx', testUser);
+    const afterEditor = await getEditorFromFixture('word/doc_b1.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+
+      const trackedTextChanges = collectTrackedTextChanges(beforeEditor.state);
+      const deletedTexts = trackedTextChanges.filter(({ type }) => type === 'trackDelete').map(({ text }) => text);
+      const insertedTexts = trackedTextChanges.filter(({ type }) => type === 'trackInsert').map(({ text }) => text);
+
+      expect(deletedTexts).toEqual(expect.arrayContaining(['Electronic']));
+      expect(insertedTexts).toEqual(expect.arrayContaining(['Electric']));
+      expect(deletedTexts).not.toEqual(expect.arrayContaining(['Electron']));
+
+      expect(beforeEditor.commands.acceptAllTrackedChanges()).toBe(true);
+      expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
 describe('replayDiffs table style', () => {
   it('replays table style changes when tracked replay is enabled', async () => {
     await expectReplayPreservesTableStyle('diff_before16.docx', 'diff_after16.docx', true);
@@ -575,5 +661,122 @@ describe('parts-aware replay', () => {
 
   it('populates body media when replaying tracked direct diffs for diff_before19/diff_after19', async () => {
     await expectDirectReplayPopulatesBodyMedia('diff_before19.docx', 'diff_after19.docx', true);
+  });
+});
+
+const TARGET_TRACK_NAMES = new Set(['w:ins', 'w:del']);
+
+const collectTrackNodes = (node, tracker) => {
+  if (!node || typeof node !== 'object') return;
+  if (TARGET_TRACK_NAMES.has(node.name)) tracker[node.name].push(node);
+  if (Array.isArray(node.elements)) node.elements.forEach((child) => collectTrackNodes(child, tracker));
+};
+
+const getExportedDocBody = async (exportedBuffer) => {
+  const zipper = new DocxZipper();
+  const files = await zipper.getDocxData(exportedBuffer, true);
+  const entry = files.find((f) => f.name === 'word/document.xml');
+  expect(entry).toBeDefined();
+  const json = parseXmlToJson(entry.content);
+  const doc = json.elements?.find((el) => el.name === 'w:document');
+  const body = doc?.elements?.find((el) => el.name === 'w:body');
+  expect(body).toBeDefined();
+  return body;
+};
+
+describe('replayDiffs DOCX export roundtrip — SD-3339 (IT-1132 rsid churn)', () => {
+  it('produces no tracked changes in DOCX when only run-level rsid attrs differ', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('word/it_1132_base.docx', testUser);
+    const afterEditor = await getEditorFromFixture('word/it_1132_edited.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+      expect(getTrackChanges(beforeEditor.state)).toHaveLength(0);
+
+      const exportedBuffer = await beforeEditor.exportDocx({ isFinalDoc: false });
+      const body = await getExportedDocBody(exportedBuffer);
+      const tracker = { 'w:ins': [], 'w:del': [] };
+      collectTrackNodes(body, tracker);
+
+      expect(tracker['w:ins']).toHaveLength(0);
+      expect(tracker['w:del']).toHaveLength(0);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
+
+describe('replayDiffs DOCX export roundtrip — IT-1029 real edits', () => {
+  it('produces tracked insert and delete marks in DOCX for real text edits', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('word/it_1029_source.docx', testUser);
+    const afterEditor = await getEditorFromFixture('word/it_1029_target.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+      expect(getTrackChanges(beforeEditor.state).length).toBeGreaterThan(0);
+
+      const exportedBuffer = await beforeEditor.exportDocx({ isFinalDoc: false });
+      const body = await getExportedDocBody(exportedBuffer);
+      const tracker = { 'w:ins': [], 'w:del': [] };
+      collectTrackNodes(body, tracker);
+
+      // The IT-1029 edits are text insertions — expect tracked inserts in the DOCX.
+      expect(tracker['w:ins'].length).toBeGreaterThan(0);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
+
+describe('replayDiffs — structuredContent (SDT) boundary leak regression', () => {
+  it('sdt_a/sdt_b: replay without tracked changes produces the correct final text content', async () => {
+    await expectReplayMatchesFixture('word/sdt_a.docx', 'word/sdt_b.docx');
+  });
+
+  it('sdt_a/sdt_b: tracked replay marks the changed SDT paragraph and leaves unchanged text outside the SDT untracked', async () => {
+    const testUser = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await getEditorFromFixture('word/sdt_a.docx', testUser);
+    const afterEditor = await getEditorFromFixture('word/sdt_b.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+
+      const state = beforeEditor.state;
+
+      // Find the paragraph containing "my field 2" SDT: "Linked Master [SDT]".
+      // Only the SDT content changed; "Linked Master" text must not carry a track mark.
+      let linkedMasterHasTrackMark = false;
+      state.doc.descendants((node) => {
+        if (!node.isText) return;
+        if (node.text !== 'Linked' && node.text !== 'Master') return;
+        const hasTrackMark = node.marks.some((m) => m.type.name === 'trackInsert' || m.type.name === 'trackDelete');
+        if (hasTrackMark) linkedMasterHasTrackMark = true;
+      });
+
+      // Before the SDT boundary leak fix, the pre-fix double-tokenization path
+      // caused tracked text marks to appear outside the SDT (e.g. " edit" inserted
+      // at a position past the SDT closing boundary). Plain surrounding text that
+      // was not part of the edit must remain untracked.
+      expect(linkedMasterHasTrackMark).toBe(false);
+
+      // The diff must have produced at least one tracked change (the SDT content changed).
+      expect(getTrackChanges(state).length).toBeGreaterThan(0);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
   });
 });

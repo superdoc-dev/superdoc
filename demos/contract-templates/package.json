@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter superdoc build",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"

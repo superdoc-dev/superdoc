@@ -152,6 +152,55 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(firstIndexAfter).toBeGreaterThanOrEqual(firstIndexBefore);
   });
 
+  it('releases virtualization listeners on dispose', () => {
+    const secondMount = document.createElement('div');
+    Object.assign(secondMount.style, { height: '600px', overflow: 'auto' });
+    document.body.appendChild(secondMount);
+
+    const mountAddSpy = vi.spyOn(mount, 'addEventListener');
+    const mountRemoveSpy = vi.spyOn(mount, 'removeEventListener');
+    const winAddSpy = vi.spyOn(window, 'addEventListener');
+    const winRemoveSpy = vi.spyOn(window, 'removeEventListener');
+
+    try {
+      const painter = createTestPainter({
+        blocks: [block],
+        measures: [measure],
+        virtualization: { enabled: true, window: 5, overscan: 0, gap: 72, paddingTop: 0 },
+      });
+      const layout = makeLayout(10);
+
+      painter.paint(layout, mount);
+
+      expect(mountAddSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+      expect(winAddSpy).toHaveBeenCalledWith('scroll', expect.any(Function), { passive: true });
+      expect(winAddSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+      painter.dispose();
+
+      expect(mountRemoveSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+      expect(winRemoveSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+      expect(winRemoveSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+      expect(mount.innerHTML).toBe('');
+      expect(painter.getMountedPageIndices()).toEqual([]);
+
+      mountRemoveSpy.mockClear();
+      winRemoveSpy.mockClear();
+
+      painter.paint(layout, secondMount);
+
+      expect(secondMount.querySelectorAll('.superdoc-page').length).toBeGreaterThan(0);
+      expect(mountRemoveSpy).not.toHaveBeenCalled();
+      expect(winRemoveSpy).not.toHaveBeenCalled();
+    } finally {
+      mountAddSpy.mockRestore();
+      mountRemoveSpy.mockRestore();
+      winAddSpy.mockRestore();
+      winRemoveSpy.mockRestore();
+      secondMount.remove();
+    }
+  });
+
   it('restores block SDT label when a virtualized start fragment remounts', () => {
     Object.defineProperty(mount, 'clientHeight', { value: 600, configurable: true });
     Object.defineProperty(mount, 'scrollHeight', { value: 12000, configurable: true });

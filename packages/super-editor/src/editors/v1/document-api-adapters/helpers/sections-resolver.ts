@@ -4,12 +4,14 @@ import type {
   SectionDomain,
   SectionInfo,
   SectionPageMargins,
+  SectionPageNumbering,
+  SectionPageNumberingFormat,
   SectionsListQuery,
   SectionsListResult,
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@superdoc/document-api';
-import { analyzeSectionRanges } from '@superdoc/pm-adapter/sections/analysis.js';
-import { SectionType, type SectionRange } from '@superdoc/pm-adapter/sections/types.js';
+import { analyzeSectionRanges, type PMNode } from '@core/layout-adapter';
+import { SectionType, type SectionRange } from '@core/layout-adapter/sections/types.js';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { getRevision } from '../plan-engine/revision-tracker.js';
@@ -65,10 +67,43 @@ interface ConverterWithSections {
 }
 
 const PIXELS_PER_INCH = 96;
+const SECTION_PAGE_NUMBER_FORMATS: readonly SectionPageNumberingFormat[] = [
+  'decimal',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+  'numberInDash',
+] as const;
 
 function pxToInches(value: number | null | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return value / PIXELS_PER_INCH;
+}
+
+function toSectionPageNumbering(numbering: SectionRange['numbering']): SectionPageNumbering | undefined {
+  if (!numbering) return undefined;
+
+  const format = SECTION_PAGE_NUMBER_FORMATS.includes(numbering.format as SectionPageNumberingFormat)
+    ? (numbering.format as SectionPageNumberingFormat)
+    : undefined;
+  const result: SectionPageNumbering = {
+    start: numbering.start,
+    format,
+    chapterStyle: numbering.chapterStyle,
+    chapterSeparator: numbering.chapterSeparator,
+  };
+
+  if (
+    result.start === undefined &&
+    result.format === undefined &&
+    result.chapterStyle === undefined &&
+    result.chapterSeparator === undefined
+  ) {
+    return undefined;
+  }
+
+  return result;
 }
 
 function buildSectionId(index: number): string {
@@ -117,7 +152,7 @@ function collectParagraphSnapshots(editor: Editor): ParagraphSnapshot[] {
   return snapshots;
 }
 
-function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): Parameters<typeof analyzeSectionRanges>[0] {
+function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): unknown {
   return {
     type: 'doc',
     content: paragraphs.map((paragraph) => ({
@@ -127,10 +162,7 @@ function buildAnalysisDocFromParagraphs(paragraphs: ParagraphSnapshot[]): Parame
   };
 }
 
-function resolveAnalysisDoc(
-  editor: Editor,
-  paragraphs: ParagraphSnapshot[],
-): Parameters<typeof analyzeSectionRanges>[0] {
+function resolveAnalysisDoc(editor: Editor, paragraphs: ParagraphSnapshot[]): unknown {
   const maybeJsonDoc = (editor.state.doc as unknown as { toJSON?: () => unknown }).toJSON?.();
   if (
     maybeJsonDoc &&
@@ -138,7 +170,7 @@ function resolveAnalysisDoc(
     typeof (maybeJsonDoc as { type?: unknown }).type === 'string' &&
     Array.isArray((maybeJsonDoc as { content?: unknown[] }).content)
   ) {
-    return maybeJsonDoc as Parameters<typeof analyzeSectionRanges>[0];
+    return maybeJsonDoc;
   }
 
   return buildAnalysisDocFromParagraphs(paragraphs);
@@ -304,7 +336,7 @@ function sectionRangeToSectionDomain(
     headerFooterMargins: hasHeaderFooterMargins ? headerFooterMargins : undefined,
     columns: hasColumns ? columns : undefined,
     lineNumbering: parsedLineNumbering,
-    pageNumbering: range.numbering ?? parsedPageNumbering,
+    pageNumbering: toSectionPageNumbering(range.numbering) ?? parsedPageNumbering,
     titlePage: range.titlePg,
     oddEvenHeadersFooters,
     verticalAlign: range.vAlign ?? parsedVerticalAlign,
@@ -320,7 +352,7 @@ export function resolveSectionProjections(editor: Editor): SectionProjection[] {
   const bodySectPr = getBodySectPrFromEditor(editor);
   const oddEvenHeadersFooters = readOddEvenHeadersFlag(editor);
   const analysisDoc = resolveAnalysisDoc(editor, paragraphs);
-  const analyzed = analyzeSectionRanges(analysisDoc, bodySectPr ?? undefined);
+  const analyzed = analyzeSectionRanges(analysisDoc as PMNode, bodySectPr ?? undefined);
   const ranges = analyzed.length > 0 ? analyzed : [createSyntheticRange(bodySectPr, paragraphs.length)];
 
   return ranges.map((range, index) => {

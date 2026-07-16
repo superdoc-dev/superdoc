@@ -9,71 +9,61 @@ import type {
   BlocksDeleteRangeResult,
 } from '../types/blocks.types.js';
 import { BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES } from '../types/base.js';
+import { storyLocatorToKey, type StoryLocator } from '../types/story.types.js';
 import { DocumentApiValidationError } from '../errors.js';
-
+import { validateStoryLocator } from '../validation/story-validator.js';
 // ---------------------------------------------------------------------------
 // Public API surface
 // ---------------------------------------------------------------------------
-
 export interface BlocksApi {
   list(input?: BlocksListInput): BlocksListResult;
   delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult;
   deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult;
 }
-
 export interface BlocksAdapter {
   list(input?: BlocksListInput): BlocksListResult;
   delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult;
   deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult;
 }
-
 // ---------------------------------------------------------------------------
 // Shared constants
 // ---------------------------------------------------------------------------
-
 const SUPPORTED_DELETE_NODE_TYPES = new Set<string>(DELETABLE_BLOCK_NODE_TYPES);
 const REJECTED_DELETE_NODE_TYPES = new Set(['tableRow', 'tableCell']);
 const VALID_BLOCK_NODE_TYPES = new Set<string>(BLOCK_NODE_TYPES);
-
+const BODY_STORY_LOCATOR: StoryLocator = { kind: 'story', storyType: 'body' };
 // ---------------------------------------------------------------------------
 // blocks.list validation
 // ---------------------------------------------------------------------------
-
 function normalizeBlocksListInput(input?: BlocksListInput): BlocksListInput | undefined {
   if (!input) return input;
-
   // Treat limit=0 as "all blocks" (same as omitting)
   if (input.limit != null && input.limit === 0) {
     const { limit: _, ...rest } = input;
     input = Object.keys(rest).length > 0 ? rest : undefined;
     if (!input) return input;
   }
-
   // Treat empty nodeTypes array as "no filter" (same as omitting)
   if (Array.isArray(input.nodeTypes) && input.nodeTypes.length === 0) {
     const { nodeTypes: _, ...rest } = input;
     input = Object.keys(rest).length > 0 ? rest : undefined;
     if (!input) return input;
   }
-
   return input;
 }
-
 function validateBlocksListInput(input?: BlocksListInput): void {
   if (!input) return;
-
+  validateStoryLocator(input.in, 'in');
   if (input.offset != null && (typeof input.offset !== 'number' || input.offset < 0)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.list offset must be a non-negative number.', {
       fields: ['offset'],
     });
   }
-
   if (input.limit != null && (typeof input.limit !== 'number' || input.limit < 1)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.list limit must be a positive number.', {
       fields: ['limit'],
     });
   }
-
   if (input.nodeTypes != null) {
     if (!Array.isArray(input.nodeTypes) || input.nodeTypes.length === 0) {
       throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.list nodeTypes must be a non-empty array.', {
@@ -89,45 +79,39 @@ function validateBlocksListInput(input?: BlocksListInput): void {
       }
     }
   }
-
   if (input.includeText != null && typeof input.includeText !== 'boolean') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.list includeText must be a boolean.', {
       fields: ['includeText'],
     });
   }
+  validateStoryLocator(input.in, 'in');
 }
-
 // ---------------------------------------------------------------------------
 // blocks.delete validation
 // ---------------------------------------------------------------------------
-
 function validateBlocksDeleteInput(input: BlocksDeleteInput): void {
   if (!input || typeof input !== 'object') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.delete requires an input object.', {
       fields: ['input'],
     });
   }
-
   if (!input.target) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.delete requires a target.', {
       fields: ['target'],
     });
   }
-
   if (input.target.kind !== 'block') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.delete target must have kind "block".', {
       fields: ['target.kind'],
     });
   }
-
   if (!input.target.nodeId || typeof input.target.nodeId !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.delete target requires a nodeId string.', {
       fields: ['target.nodeId'],
     });
   }
-
+  validateStoryLocator(input.target.story, 'target.story');
   const { nodeType } = input.target;
-
   if (REJECTED_DELETE_NODE_TYPES.has(nodeType)) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
@@ -135,7 +119,6 @@ function validateBlocksDeleteInput(input: BlocksDeleteInput): void {
       { fields: ['target.nodeType'], nodeType },
     );
   }
-
   if (!SUPPORTED_DELETE_NODE_TYPES.has(nodeType)) {
     throw new DocumentApiValidationError('INVALID_TARGET', `blocks.delete does not support "${nodeType}" targets.`, {
       fields: ['target.nodeType'],
@@ -143,60 +126,67 @@ function validateBlocksDeleteInput(input: BlocksDeleteInput): void {
     });
   }
 }
-
 // ---------------------------------------------------------------------------
 // blocks.deleteRange validation
 // ---------------------------------------------------------------------------
-
 function validateBlockNodeAddress(address: unknown, label: string): void {
   if (!address || typeof address !== 'object') {
     throw new DocumentApiValidationError('INVALID_INPUT', `blocks.deleteRange requires a ${label} address.`, {
       fields: [label],
     });
   }
-
   const addr = address as Record<string, unknown>;
-
   if (addr.kind !== 'block') {
     throw new DocumentApiValidationError('INVALID_INPUT', `blocks.deleteRange ${label} must have kind "block".`, {
       fields: [`${label}.kind`],
     });
   }
-
   if (!addr.nodeId || typeof addr.nodeId !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', `blocks.deleteRange ${label} requires a nodeId string.`, {
       fields: [`${label}.nodeId`],
     });
   }
-
   if (!addr.nodeType || typeof addr.nodeType !== 'string') {
     throw new DocumentApiValidationError('INVALID_INPUT', `blocks.deleteRange ${label} requires a nodeType string.`, {
       fields: [`${label}.nodeType`],
     });
   }
+  validateStoryLocator(addr.story, `${label}.story`);
 }
-
+function validateBlocksDeleteRangeStoryConsistency(input: BlocksDeleteRangeInput): void {
+  const startStory = input.start.story ?? BODY_STORY_LOCATOR;
+  const endStory = input.end.story ?? BODY_STORY_LOCATOR;
+  const startKey = storyLocatorToKey(startStory);
+  const endKey = storyLocatorToKey(endStory);
+  if (startKey !== endKey) {
+    throw new DocumentApiValidationError(
+      'STORY_MISMATCH',
+      `blocks.deleteRange start and end must target the same story (${startKey} vs ${endKey}).`,
+      {
+        startStory: startKey,
+        endStory: endKey,
+      },
+    );
+  }
+}
 function validateBlocksDeleteRangeInput(input: BlocksDeleteRangeInput): void {
   if (!input || typeof input !== 'object') {
     throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.deleteRange requires an input object.', {
       fields: ['input'],
     });
   }
-
   validateBlockNodeAddress(input.start, 'start');
   validateBlockNodeAddress(input.end, 'end');
+  validateBlocksDeleteRangeStoryConsistency(input);
 }
-
 // ---------------------------------------------------------------------------
 // Execute functions
 // ---------------------------------------------------------------------------
-
 export function executeBlocksList(adapter: BlocksAdapter, input?: BlocksListInput): BlocksListResult {
   const normalized = normalizeBlocksListInput(input);
   validateBlocksListInput(normalized);
   return adapter.list(normalized);
 }
-
 export function executeBlocksDelete(
   adapter: BlocksAdapter,
   input: BlocksDeleteInput,
@@ -205,7 +195,6 @@ export function executeBlocksDelete(
   validateBlocksDeleteInput(input);
   return adapter.delete(input, normalizeMutationOptions(options));
 }
-
 export function executeBlocksDeleteRange(
   adapter: BlocksAdapter,
   input: BlocksDeleteRangeInput,

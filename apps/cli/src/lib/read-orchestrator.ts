@@ -3,17 +3,20 @@
  *
  * Replaces the per-operation runReadOperation() calls scattered across
  * operation-extra-invokers.ts with a single generic path.
+ *
+ * Dispatches through {@link OpenedRuntimeDocument}; engine specifics
+ * (`editor.*`) MUST stay out of this file.
  */
 
 import { SUCCESS_VERB } from '../cli/operation-hints.js';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { cliCommandTokens } from '../cli/operation-set.js';
 import { withActiveContext } from './context.js';
-import { openDocument, openSessionDocument, type EditorWithDoc } from './document.js';
+import { openDocument, openSessionDocument, type OpenedRuntimeDocument } from './document.js';
 import { mapInvokeError } from './error-mapping.js';
 import { resolveResponseEnvelopeKey } from './response-envelope.js';
 import { formatOutput } from './output-formatters.js';
-import { syncCollaborativeSessionSnapshot } from './session-collab.js';
+import { syncCollaborativeSessionSnapshotFromOpened } from './session-collab.js';
 import { PRE_INVOKE_HOOKS, POST_INVOKE_HOOKS } from './special-handlers.js';
 import type { CommandExecution } from './types.js';
 import type { DocOperationRequest } from './generic-dispatch.js';
@@ -31,19 +34,24 @@ function deriveCommandName(operationId: CliExposedOperationId): string {
   return cliCommandTokens(`doc.${operationId}` as `doc.${CliExposedOperationId}`).join(' ');
 }
 
-function invokeOperation(
-  editor: EditorWithDoc,
+function invokeOpenedDocumentOperation(
+  opened: OpenedRuntimeDocument,
   operationId: CliExposedOperationId,
   input: Record<string, unknown>,
   commandName?: string,
 ): unknown {
   const apiInput = extractInvokeInput(operationId, input);
+  const invoke = (request: { operationId: string; input?: unknown; options?: unknown }) => opened.doc.invoke(request);
+  // AIDEV-NOTE: Key per-document hook state by the stable opened.doc handle, not
+  // the per-call `invoke` closure, so reads and mutations in the same host
+  // session share one scope. See mutation-orchestrator.ts for the full rationale.
+  const hookContext = { invoke, editor: { doc: opened.doc } };
   const preHook = PRE_INVOKE_HOOKS[operationId];
-  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, { editor }) : apiInput;
+  const transformedInput = preHook ? preHook(apiInput as Record<string, unknown>, hookContext) : apiInput;
 
   let result: unknown;
   try {
-    result = editor.doc.invoke({
+    result = opened.doc.invoke({
       operationId,
       input: transformedInput,
     });
@@ -52,7 +60,7 @@ function invokeOperation(
   }
 
   const postHook = POST_INVOKE_HOOKS[operationId];
-  return postHook ? postHook(result, { editor, apiInput: transformedInput }) : result;
+  return postHook ? postHook(result, { ...hookContext, apiInput: transformedInput }) : result;
 }
 
 /**
@@ -109,7 +117,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
     const source = doc === '-' ? 'stdin' : 'path';
     const opened = await openDocument(doc, context.io);
     try {
-      const result = invokeOperation(opened.editor, operationId, input, commandName);
+      const result = invokeOpenedDocumentOperation(opened, operationId, input, commandName);
       const document: DocumentPayload = {
         path: source === 'path' ? doc : undefined,
         source,
@@ -141,12 +149,12 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
       });
 
       try {
-        const result = invokeOperation(opened.editor, operationId, input, commandName);
+        const result = invokeOpenedDocumentOperation(opened, operationId, input, commandName);
 
         // For oneshot collab reads, sync snapshot to keep working.docx current
         const isHostMode = context.executionMode === 'host' && context.sessionPool != null;
         if (!isHostMode && metadata.sessionType === 'collab') {
-          const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);
+          const synced = await syncCollaborativeSessionSnapshotFromOpened(context.io, metadata, paths, opened);
           const document: DocumentPayload = {
             path: synced.updatedMetadata.sourcePath,
             source: synced.updatedMetadata.source,

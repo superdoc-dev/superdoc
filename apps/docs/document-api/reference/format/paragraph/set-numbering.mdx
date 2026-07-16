@@ -1,0 +1,374 @@
+---
+title: format.paragraph.setNumbering
+sidebarTitle: format.paragraph.setNumbering
+description: Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property; the node and its style are otherwise unchanged, though any direct paragraph indent is cleared so the numbering level controls indentation. Direct edits only; tracked mode is unsupported.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property; the node and its style are otherwise unchanged, though any direct paragraph indent is cleared so the numbering level controls indentation. Direct edits only; tracked mode is unsupported.
+
+- Operation ID: `format.paragraph.setNumbering`
+- API member path: `editor.doc.format.paragraph.setNumbering(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ParagraphMutationResult; reports NO_OP if the block already carries this numbering. On a successful apply, resolution.target reflects the post-mutation address (a numbered plain paragraph re-resolves to listItem; a heading stays a heading); a dryRun returns the input target.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `level` | integer | no |  |
+| `numId` | integer | yes |  |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Example request
+
+```json
+{
+  "level": 1,
+  "numId": 1,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resolution` | object | yes |  |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `true` | yes | Constant: `true` |
+| `target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.target` | ParagraphAddress \| HeadingAddress \| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "resolution": {
+    "target": {
+      "kind": "block",
+      "nodeId": "node-def456",
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
+    }
+  },
+  "success": true,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "level": {
+      "maximum": 8,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "numId": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParagraphAddress"
+        },
+        {
+          "$ref": "#/$defs/HeadingAddress"
+        },
+        {
+          "$ref": "#/$defs/ListItemAddress"
+        }
+      ]
+    }
+  },
+  "required": [
+    "target",
+    "numId"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ParagraphAddress"
+                },
+                {
+                  "$ref": "#/$defs/HeadingAddress"
+                },
+                {
+                  "$ref": "#/$defs/ListItemAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "success",
+        "target",
+        "resolution"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ParagraphAddress"
+                },
+                {
+                  "$ref": "#/$defs/HeadingAddress"
+                },
+                {
+                  "$ref": "#/$defs/ListItemAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "target": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ParagraphAddress"
+        },
+        {
+          "$ref": "#/$defs/HeadingAddress"
+        },
+        {
+          "$ref": "#/$defs/ListItemAddress"
+        }
+      ]
+    }
+  },
+  "required": [
+    "success",
+    "target",
+    "resolution"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ParagraphAddress"
+            },
+            {
+              "$ref": "#/$defs/HeadingAddress"
+            },
+            {
+              "$ref": "#/$defs/ListItemAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

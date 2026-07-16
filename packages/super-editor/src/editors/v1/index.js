@@ -49,6 +49,7 @@ import { Decoration, DecorationSet } from 'prosemirror-view';
 import { seedEditorStateToYDoc } from './extensions/collaboration/seed-editor-to-ydoc.js';
 import { onCollaborationProviderSynced } from './core/helpers/collaboration-provider-sync.js';
 import { resolveSelectionTarget } from './document-api-adapters/helpers/selection-target-resolver.js';
+import { encodeCollaborationCursorFromSelectionTarget } from './document-api-adapters/helpers/collaboration-cursor-encoder.js';
 import { resolveDefaultInsertTarget } from './document-api-adapters/helpers/adapter-utils.js';
 import { resolveTrackedChangeInStory } from './document-api-adapters/helpers/tracked-change-resolver.js';
 import { syncCommentEntitiesFromCollaboration } from './document-api-adapters/helpers/comment-entity-store.js';
@@ -155,6 +156,8 @@ export {
   // CLI/document-api bridge helpers
   /** @internal */
   resolveSelectionTarget,
+  /** @internal */
+  encodeCollaborationCursorFromSelectionTarget,
   /** @internal */
   resolveDefaultInsertTarget,
   /** @internal */

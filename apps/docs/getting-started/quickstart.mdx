@@ -14,12 +14,12 @@ By the end of this page you'll have a working DOCX editor in your app: load a Wo
 <Tabs>
   <Tab title="npm">
     ```bash
-    npm install superdoc
+    npm install superdoc @superdoc-dev/fonts
     ```
   </Tab>
   <Tab title="React">
     ```bash
-    npm install @superdoc-dev/react
+    npm install @superdoc-dev/react @superdoc-dev/fonts
     ```
   </Tab>
   <Tab title="CDN">
@@ -31,6 +31,10 @@ By the end of this page you'll have a working DOCX editor in your app: load a Wo
   </Tab>
 </Tabs>
 
+<Info>
+  `@superdoc-dev/fonts` serves SuperDoc's bundled fallback fonts so Word fonts render without copying assets. It's optional. See [Font support](/getting-started/fonts).
+</Info>
+
 ## 2. Render the editor
 
 <Tabs>
@@ -40,10 +44,12 @@ By the end of this page you'll have a working DOCX editor in your app: load a Wo
 
     <script type="module">
       import { SuperDoc } from 'superdoc';
+      import { superdocFonts } from '@superdoc-dev/fonts';
       import 'superdoc/style.css';
 
       const superdoc = new SuperDoc({
         selector: '#editor',
+        fonts: superdocFonts,
       });
     </script>
     ```
@@ -51,10 +57,11 @@ By the end of this page you'll have a working DOCX editor in your app: load a Wo
   <Tab title="React">
     ```jsx
     import { SuperDocEditor } from '@superdoc-dev/react';
+    import { superdocFonts } from '@superdoc-dev/fonts';
     import '@superdoc-dev/react/style.css';
 
     export default function App() {
-      return <SuperDocEditor />;
+      return <SuperDocEditor fonts={superdocFonts} />;
     }
     ```
   </Tab>

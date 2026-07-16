@@ -133,8 +133,8 @@ const doc = await client.open({ doc: './contract.docx' });
 const result = await dispatchSuperDocTool(doc, toolName, args);
 ```
 
-The current catalog contains 9 grouped tools:
-`superdoc_get_content`, `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`, `superdoc_track_changes`, `superdoc_search`, and `superdoc_mutations`.
+The current catalog contains 10 grouped tools:
+`superdoc_get_content`, `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_table`, `superdoc_comment`, `superdoc_track_changes`, `superdoc_search`, and `superdoc_mutations`.
 
 Multi-action tools use an `action` field to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
 

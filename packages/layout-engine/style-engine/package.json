@@ -13,6 +13,18 @@
     "./ooxml": {
       "source": "./src/ooxml/index.ts",
       "default": "./src/ooxml/index.ts"
+    },
+    "./normalize": {
+      "source": "./src/normalize/index.ts",
+      "default": "./src/normalize/index.ts"
+    },
+    "./ooxml/word-style-model/parse-xml": {
+      "source": "./src/ooxml/word-style-model/parse-xml.ts",
+      "default": "./src/ooxml/word-style-model/parse-xml.ts"
+    },
+    "./ooxml/word-style-model/parse-theme": {
+      "source": "./src/ooxml/word-style-model/parse-theme.ts",
+      "default": "./src/ooxml/word-style-model/parse-theme.ts"
     }
   },
   "scripts": {
@@ -21,7 +33,8 @@
   },
   "dependencies": {
     "@superdoc/contracts": "workspace:*",
-    "@superdoc/font-utils": "workspace:*"
+    "@superdoc/font-utils": "workspace:*",
+    "xml-js": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",

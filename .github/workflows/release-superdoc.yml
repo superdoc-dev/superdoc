@@ -100,16 +100,8 @@ jobs:
 
       - name: Install canvas system dependencies
         run: |
-          mkdir -p ~/apt-cache
-          sudo apt-get update
-          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
-            build-essential \
-            libcairo2-dev \
-            libpango1.0-dev \
-            libjpeg-dev \
-            libgif-dev \
-            librsvg2-dev \
-            libpixman-1-dev
+          export APT_ARCHIVE_CACHE_DIR="$HOME/apt-cache"
+          bash scripts/install-canvas-system-dependencies.sh
 
       - name: Install dependencies
         run: pnpm install

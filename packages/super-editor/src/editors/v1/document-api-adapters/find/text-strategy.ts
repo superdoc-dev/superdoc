@@ -19,6 +19,8 @@ import { addDiagnostic, findCandidateByPos, paginate, resolveWithinScope } from 
 import { buildTextContext, toTextAddress } from './common.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
+import type { TextOffsetModel } from '../helpers/text-offset-resolver.js';
+import { compileSafeTextRegex, MAX_TEXT_REGEX_PATTERN_LENGTH } from '../helpers/safe-regex.js';
 
 /** Shape returned by `editor.commands.search`. */
 type SearchMatch = {
@@ -28,22 +30,18 @@ type SearchMatch = {
   ranges?: Array<{ from: number; to: number }>;
 };
 
-/** Maximum allowed pattern length to guard against ReDoS and excessive memory usage. */
-const MAX_PATTERN_LENGTH = 1024;
+export type TextSelectorSearchModel = Extract<TextOffsetModel, 'raw' | 'visible'>;
+export type ExecuteTextSelectorOptions = {
+  searchModel?: TextSelectorSearchModel;
+};
 
 function compileRegex(selector: TextSelector, diagnostics: UnknownNodeDiagnostic[]): RegExp | null {
-  if (selector.pattern.length > MAX_PATTERN_LENGTH) {
-    addDiagnostic(diagnostics, `Text query regex pattern exceeds ${MAX_PATTERN_LENGTH} characters.`);
+  const result = compileSafeTextRegex(selector.pattern, { caseSensitive: selector.caseSensitive });
+  if ('reason' in result) {
+    addDiagnostic(diagnostics, result.reason);
     return null;
   }
-  const flags = selector.caseSensitive ? 'g' : 'gi';
-  try {
-    return new RegExp(selector.pattern, flags);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    addDiagnostic(diagnostics, `Invalid text query regex: ${reason}`);
-    return null;
-  }
+  return result.regex;
 }
 
 function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiagnostic[]): RegExp | null {
@@ -51,8 +49,8 @@ function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiag
   if (mode === 'regex') {
     return compileRegex(selector, diagnostics);
   }
-  if (selector.pattern.length > MAX_PATTERN_LENGTH) {
-    addDiagnostic(diagnostics, `Text query pattern exceeds ${MAX_PATTERN_LENGTH} characters.`);
+  if (selector.pattern.length > MAX_TEXT_REGEX_PATTERN_LENGTH) {
+    addDiagnostic(diagnostics, `Text query pattern exceeds ${MAX_TEXT_REGEX_PATTERN_LENGTH} characters.`);
     return null;
   }
   // Compile as an escaped RegExp to guarantee literal matching. Passing a raw
@@ -81,6 +79,7 @@ export function executeTextSelector(
   index: BlockIndex,
   query: Query,
   diagnostics: UnknownNodeDiagnostic[],
+  options: ExecuteTextSelectorOptions = {},
 ): QueryResult {
   if (query.select.type !== 'text') {
     addDiagnostic(diagnostics, `Text strategy received a non-text selector (type="${query.select.type}").`);
@@ -100,12 +99,15 @@ export function executeTextSelector(
   if (!pattern) return { matches: [], total: 0 };
 
   const search = requireEditorCommand(editor.commands?.search, 'find (search)');
+  const searchModel = options.searchModel ?? (selector.includeDeletedText ? 'raw' : 'visible');
+  const textOffsetOptions = { textModel: searchModel };
 
+  pattern.lastIndex = 0;
   const rawResult = search(pattern, {
     highlight: false,
     caseSensitive: selector.caseSensitive ?? false,
     maxMatches: Infinity,
-    searchModel: 'visible',
+    searchModel,
   });
 
   if (!Array.isArray(rawResult)) {
@@ -114,9 +116,9 @@ export function executeTextSelector(
       'Editor search command returned an unexpected result format.',
     );
   }
-  const allMatches = rawResult as SearchMatch[];
 
   const scopeRange = scope.range;
+  const allMatches = rawResult as SearchMatch[];
   const matches = scopeRange
     ? allMatches.filter((m) => m.from >= scopeRange.start && m.to <= scopeRange.end)
     : allMatches;
@@ -133,7 +135,7 @@ export function executeTextSelector(
         const block = findCandidateByPos(textBlocks, range.from);
         if (!block) return undefined;
         if (!source) source = block;
-        return toTextAddress(editor, block, range);
+        return toTextAddress(editor, block, range, textOffsetOptions);
       })
       .filter((range): range is TextAddress => Boolean(range));
 
@@ -144,7 +146,7 @@ export function executeTextSelector(
 
     const address = toBlockAddress(source);
     addresses.push(address);
-    contexts.push(buildTextContext(editor, address, match.from, match.to, textRanges));
+    contexts.push(buildTextContext(editor, address, match.from, match.to, textRanges, textOffsetOptions));
   }
 
   const paged = paginate(addresses, query.offset, query.limit);

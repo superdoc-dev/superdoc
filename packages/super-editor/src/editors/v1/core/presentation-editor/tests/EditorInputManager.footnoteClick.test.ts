@@ -443,6 +443,152 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(activateRenderedNoteSession).not.toHaveBeenCalled();
   });
 
+  describe('SD-3400: double-click a body footnote/endnote reference navigates to the note', () => {
+    const makeRefSpan = (pmStart: number, text: string) => {
+      const refEl = document.createElement('span');
+      refEl.setAttribute('data-pm-start', String(pmStart));
+      refEl.setAttribute('data-pm-end', String(pmStart + 1));
+      refEl.textContent = text;
+      viewportHost.appendChild(refEl);
+      return refEl;
+    };
+
+    it('activates the footnote session for the referenced note', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 38 ? { type: { name: 'footnoteReference' }, attrs: { id: '3' } } : null;
+      const refEl = makeRefSpan(38, '3');
+
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }),
+      );
+
+      expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+        { storyType: 'footnote', noteId: '3' },
+        expect.objectContaining({ clientX: 5, clientY: 5 }),
+      );
+    });
+
+    it('activates the endnote session for a body endnote reference', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 50 ? { type: { name: 'endnoteReference' }, attrs: { id: '2' } } : null;
+      const refEl = makeRefSpan(50, 'ii');
+
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 7, clientY: 9 }),
+      );
+
+      expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+        { storyType: 'endnote', noteId: '2' },
+        expect.objectContaining({ clientX: 7, clientY: 9 }),
+      );
+    });
+
+    it('activates via elementsFromPoint when the event target is the selection overlay (real pointer path)', () => {
+      // Real double-clicks land on the transparent selection overlay above the
+      // pages, so event.target has no data-pm-start ancestor. The resolver must
+      // fall back to the elementsFromPoint hit chain. (Manual-testing regression:
+      // double-click on a body reference did nothing.)
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 38 ? { type: { name: 'footnoteReference' }, attrs: { id: '4' } } : null;
+      const refEl = makeRefSpan(38, '4');
+
+      const overlay = document.createElement('div');
+      overlay.className = 'presentation-editor__selection-overlay';
+      viewportHost.appendChild(overlay);
+
+      const originalElementsFromPoint = document.elementsFromPoint?.bind(document);
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: () => [overlay, refEl],
+      });
+      try {
+        overlay.dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 21, clientY: 33 }),
+        );
+
+        expect(activateRenderedNoteSession).toHaveBeenCalledWith(
+          { storyType: 'footnote', noteId: '4' },
+          expect.objectContaining({ clientX: 21, clientY: 33 }),
+        );
+      } finally {
+        Object.defineProperty(document, 'elementsFromPoint', {
+          configurable: true,
+          value: originalElementsFromPoint,
+        });
+      }
+    });
+
+    it('does not activate when double-clicking ordinary body text', () => {
+      (mockEditor.state.doc as unknown as { nodeAt: (pos: number) => unknown }).nodeAt = (pos: number) =>
+        pos === 12 ? { type: { name: 'text' }, attrs: {} } : null;
+      const refEl = makeRefSpan(12, 'word');
+
+      refEl.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, button: 0, clientX: 5, clientY: 5 }),
+      );
+
+      expect(activateRenderedNoteSession).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps backward (right-to-left) drag selection symmetric inside an active note (SD-3400)', () => {
+    // Pins the ticket's "selection consistent in both directions" requirement.
+    // Browser verification on footnote-tests.docx showed LTR and RTL drags
+    // produce the same range with anchor/head swapped; this test keeps the
+    // drag path direction-agnostic: anchor stays at the mousedown hit, head
+    // follows the pointer even when it moves backward.
+    const activeNoteEditor = createActiveSessionEditor();
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '6' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+    // Story-surface hit test: right side of the note resolves to pos 40,
+    // left side to pos 10.
+    mockCallbacks.hitTest = vi.fn((clientX: number) => ({
+      pos: clientX > 100 ? 40 : 10,
+      layoutEpoch: 7,
+      pageIndex: 0,
+      blockId: 'footnote-6-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+    manager.setCallbacks(mockCallbacks);
+
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-6-0');
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    // Mouse down at the END of the text (pos 40)…
+    fragmentEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 120,
+        clientY: 16,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+    // …then drag LEFT past the threshold to the start (pos 10).
+    viewportHost.dispatchEvent(
+      new PointerEventImpl('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        buttons: 1,
+        clientX: 20,
+        clientY: 16,
+        pointerId: 1,
+      } as PointerEventInit),
+    );
+
+    // The selection extends backward: anchor stays at 40, head moves to 10.
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalledWith(activeNoteEditor.state.doc, 40, 10);
+    expect(activeNoteEditor.view.dispatch).toHaveBeenCalled();
+  });
   it('does not activate a note session on semantic footnotes heading click', () => {
     (resolvePointerPositionHit as unknown as Mock).mockReturnValue(null);
 

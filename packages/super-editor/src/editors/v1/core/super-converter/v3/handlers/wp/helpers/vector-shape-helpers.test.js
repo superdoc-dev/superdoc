@@ -7,12 +7,14 @@ import {
   extractStrokeColor,
   extractFillColor,
   extractLineEnds,
+  extractShapeEffects,
   extractCustomGeometry,
 } from './vector-shape-helpers.js';
-import { emuToPixels } from '@converter/helpers.js';
+import { emuToPixels, rotToDegrees } from '@converter/helpers.js';
 
 vi.mock('@converter/helpers.js', () => ({
   emuToPixels: vi.fn(),
+  rotToDegrees: vi.fn(),
 }));
 
 describe('getThemeColor', () => {
@@ -516,10 +518,122 @@ describe('extractFillColor', () => {
   });
 });
 
+describe('extractShapeEffects', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    emuToPixels.mockImplementation((emu) => Number(emu) / 9525);
+    rotToDegrees.mockImplementation((rot) => Number(rot) / 60000);
+  });
+
+  it('returns null when effectLst is missing', () => {
+    expect(extractShapeEffects({ elements: [] })).toBeNull();
+  });
+
+  it('returns null when outerShdw is missing', () => {
+    const spPr = {
+      elements: [{ name: 'a:effectLst', elements: [] }],
+    };
+
+    expect(extractShapeEffects(spPr)).toBeNull();
+  });
+
+  it('parses fixture-like scheme color outer shadow', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { blurRad: '63500', dist: '63500', dir: '2700000', algn: 'tl', rotWithShape: '0' },
+              elements: [
+                {
+                  name: 'a:schemeClr',
+                  attributes: { val: 'bg1' },
+                  elements: [
+                    { name: 'a:lumMod', attributes: { val: '65000' } },
+                    { name: 'a:alpha', attributes: { val: '40000' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractShapeEffects(spPr);
+
+    expect(result?.outerShadow).toEqual(
+      expect.objectContaining({
+        type: 'outerShadow',
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+      }),
+    );
+    expect(result?.outerShadow.blurRadius).toBeCloseTo(6.6667, 4);
+    expect(result?.outerShadow.distance).toBeCloseTo(6.6667, 4);
+  });
+
+  it('parses srgbClr outer shadows', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { blurRad: '9525', dist: '19050', dir: '5400000' },
+              elements: [{ name: 'a:srgbClr', attributes: { val: '112233' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractShapeEffects(spPr)?.outerShadow).toEqual({
+      type: 'outerShadow',
+      blurRadius: 1,
+      distance: 2,
+      direction: 90,
+      color: '#112233',
+      opacity: 1,
+    });
+  });
+
+  it('omits unused outer shadow transform fields', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:effectLst',
+          elements: [
+            {
+              name: 'a:outerShdw',
+              attributes: { algn: 'tl', rotWithShape: '1', sx: '120000', sy: '80000', kx: '180000', ky: '240000' },
+              elements: [{ name: 'a:srgbClr', attributes: { val: '000000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractShapeEffects(spPr)?.outerShadow).toEqual({
+      type: 'outerShadow',
+      blurRadius: 0,
+      distance: 0,
+      direction: 0,
+      color: '#000000',
+      opacity: 1,
+    });
+  });
+});
+
 describe('namespace prefix tolerance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     emuToPixels.mockImplementation((emu) => parseInt(emu, 10) / 12700);
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
   });
 
   // Recursively rewrite every DrawingML node prefix from `a:` to the given replacement.

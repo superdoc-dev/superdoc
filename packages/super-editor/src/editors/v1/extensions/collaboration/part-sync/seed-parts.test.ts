@@ -4,8 +4,11 @@ import { seedPartsFromEditor } from './seed-parts.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';
 import { PARTS_MAP_KEY, META_MAP_KEY, META_PARTS_CAPABILITY_KEY, META_PARTS_SCHEMA_VERSION_KEY } from './constants.js';
 
-function createMockEditor(convertedXml: Record<string, unknown>) {
-  return { converter: { convertedXml } } as any;
+function createMockEditor(
+  convertedXml: Record<string, unknown>,
+  sessionManagedNoteIds?: { footnotes: Set<string>; endnotes: Set<string> },
+) {
+  return { converter: { convertedXml, sessionManagedNoteIds } } as any;
 }
 
 describe('seedPartsFromEditor', () => {
@@ -98,15 +101,21 @@ describe('seedPartsFromEditor', () => {
   it('replaceExisting: true overwrites all keys and prunes stale ones', () => {
     // Pre-populate with a stale part
     const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    const metaMap = ydoc.getMap(META_MAP_KEY);
     const stale = new Y.Map();
     stale.set('v', 1);
     stale.set('clientId', 0);
     stale.set('data', new Y.Map());
     partsMap.set('word/stale-part.xml', stale);
+    metaMap.set('noteTombstone:footnote:7', true);
+    metaMap.set('bodySectPr', { pgSz: { w: 12240, h: 15840 } });
 
-    const editor = createMockEditor({
-      'word/styles.xml': { type: 'element', name: 'fresh' },
-    });
+    const editor = createMockEditor(
+      {
+        'word/styles.xml': { type: 'element', name: 'fresh' },
+      },
+      { footnotes: new Set(['9']), endnotes: new Set(['3']) },
+    );
 
     seedPartsFromEditor(editor, ydoc, { replaceExisting: true });
 
@@ -117,6 +126,12 @@ describe('seedPartsFromEditor', () => {
     expect(partsMap.has('word/styles.xml')).toBe(true);
     const envelope = decodeYjsToEnvelope(partsMap.get('word/styles.xml') as Y.Map<unknown>);
     expect((envelope?.data as Record<string, unknown>)?.name).toBe('fresh');
+
+    // Prior-document tombstones must be cleared, but unrelated meta survives.
+    expect(metaMap.has('noteTombstone:footnote:7')).toBe(false);
+    expect(metaMap.get('noteTombstone:footnote:9')).toBe(true);
+    expect(metaMap.get('noteTombstone:endnote:3')).toBe(true);
+    expect(metaMap.get('bodySectPr')).toEqual({ pgSz: { w: 12240, h: 15840 } });
   });
 
   it('sets envelope version to 1', () => {

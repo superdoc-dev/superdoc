@@ -9,6 +9,7 @@ import { replaceAroundStep } from './replaceAroundStep.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import {
   getCurrentUserIdentity,
@@ -41,6 +42,7 @@ const TRACKABLE_META_KEYS = [
   'superdocSlicePaste',
   'forceTrackChanges',
   'protectTrackedReviewState',
+  CustomSelectionPluginKey.key,
 ];
 
 const PASSTHROUGH_META_KEYS = [
@@ -51,6 +53,7 @@ const PASSTHROUGH_META_KEYS = [
   'composition',
   'addToHistory',
   'superdocSlicePaste',
+  CustomSelectionPluginKey.key,
 ];
 
 const ALLOWED_META_KEYS = new Set([...TRACKABLE_META_KEYS, ySyncPluginKey.key]);
@@ -178,7 +181,14 @@ const createNormalizedSlice = ({ step, normalizedText, doc }) => {
   return null;
 };
 
-const isCompositionTransaction = (tr) =>
+/**
+ * True for transactions produced by IME composition input. Exported so the
+ * editor dispatch path can defer tracked-transaction rewriting while a
+ * composition is in flight (SD-2368): rewriting preedit updates into tracked
+ * inserts restructures the composing DOM text node (mark spans + decorations),
+ * which makes Chrome abort the composition on every keystroke.
+ */
+export const isCompositionTransaction = (tr) =>
   tr.getMeta('composition') !== undefined || COMPOSITION_INPUT_TYPES.has(tr.getMeta('inputType'));
 
 const getCandidatePlaceholderPositions = ({ step, pendingDeadKeyPlaceholder, isReplacement }) => {
@@ -380,13 +390,27 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
   const pendingDeadKeyPlaceholder = TrackChangesBasePluginKey.getState(state)?.pendingDeadKeyPlaceholder ?? null;
   const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !ALLOWED_META_KEYS.has(meta));
+  // Runtime block-identity repair (`plan-engine/repair-block-identities.ts`)
+  // dispatches a metadata-only transaction that rewrites duplicate paraId /
+  // sdBlockId values via `tr.setNodeAttribute`. The repair is
+  // remediation — not a user edit — so it must bypass track-changes
+  // wrapping, exactly as Yjs and acceptReject do. Checked explicitly so the
+  // bypass is intentional at this call site rather than implicit via the
+  // disallowed-meta fall-through. The legacy `hasDisallowedMeta` branch
+  // would otherwise still catch this key; keeping the explicit check keeps
+  // the contract documented at both ends.
+  const isBlockIdentityRepair = Boolean(tr.getMeta('superdoc/block-identity-repair'));
 
   if (
     ySyncMeta?.isChangeOrigin || // Skip Yjs-origin transactions (remote/rehydration).
     !tr.steps.length ||
+    isBlockIdentityRepair || // Skip runtime paraId/sdBlockId repair.
     (hasDisallowedMeta && !isProgrammaticInput) ||
     notAllowedMeta.includes(tr.getMeta('inputType')) ||
-    tr.getMeta(CommentsPluginKey) // Skip if it's a comment transaction.
+    tr.getMeta(CommentsPluginKey) || // Skip if it's a comment transaction.
+    // SD-2368: the post-composition flush applies trackInsert marks itself;
+    // re-rewriting it here would corrupt the marks it carries.
+    tr.getMeta('compositionTrackingFlush') === true
   ) {
     if (pendingDeadKeyPlaceholder && !isCompositionTransaction(tr)) {
       mergeTrackChangesMeta(tr, { pendingDeadKeyPlaceholder: null });

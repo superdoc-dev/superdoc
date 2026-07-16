@@ -252,13 +252,17 @@ class _LegacyPreset:
     )
     supports_cache_control: bool = True
 
-    def get_tools(self, provider: ToolProvider, *, cache: bool = False) -> Dict[str, Any]:
+    def get_tools(self, provider: ToolProvider, *, cache: bool = False, **_ignored: Any) -> Dict[str, Any]:
+        # `exclude_actions` is a core-preset option; legacy has no action
+        # surface and ignores it (mirrors the Node legacy preset).
         return _legacy_get_tools(provider, cache=cache)
 
     def get_catalog(self) -> Dict[str, Any]:
         return _legacy_get_catalog()
 
-    def get_system_prompt(self) -> str:
+    def get_system_prompt(self, **_ignored: Any) -> str:
+        # Exclusion options are core-preset features; legacy's prompt has no
+        # per-action lines to filter (mirrors the Node legacy preset).
         return _legacy_get_system_prompt()
 
     def get_mcp_prompt(self) -> str:
@@ -270,7 +274,10 @@ class _LegacyPreset:
         tool_name: str,
         args: Optional[Dict[str, Any]] = None,
         invoke_options: Optional[Dict[str, Any]] = None,
+        **_ignored: Any,
     ) -> Any:
+        # `exclude_actions` is a core-preset option; legacy ignores it
+        # (mirrors the Node legacy preset).
         return _legacy_dispatch(document_handle, tool_name, args, invoke_options)
 
     def dispatch_async(
@@ -279,6 +286,7 @@ class _LegacyPreset:
         tool_name: str,
         args: Optional[Dict[str, Any]] = None,
         invoke_options: Optional[Dict[str, Any]] = None,
+        **_ignored: Any,
     ) -> Awaitable[Any]:
         return _legacy_dispatch_async(document_handle, tool_name, args, invoke_options)
 

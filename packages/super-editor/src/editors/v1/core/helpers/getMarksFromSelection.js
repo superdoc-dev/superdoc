@@ -32,6 +32,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const context = getParagraphRunContext($pos, editor);
   const currentRunProperties = context?.runProperties || null;
   const cursorMarks = $pos.marks();
+  const directMarkRunProperties = decodeRPrFromMarks(cursorMarks);
   const hasStoredMarks = storedMarks !== null;
   const hasExplicitEmptyStoredMarks = hasStoredMarks && storedMarks.length === 0;
   const resolvedMarks = [];
@@ -62,6 +63,8 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
       resolvedRunProperties: {},
       inlineRunProperties: {},
       styleRunProperties: {},
+      directMarkRunProperties: {},
+      mixedRunProperties: null,
     };
   }
 
@@ -86,6 +89,8 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
+    directMarkRunProperties,
+    mixedRunProperties: null,
   };
 }
 
@@ -109,9 +114,14 @@ export function getFormattingStateForRange(state, from, to, editor) {
 }
 
 function aggregateFormattingSegments(state, editor, segments) {
-  const resolvedRunProperties = intersectRunProperties(segments.map((segment) => segment.resolvedRunProperties));
-  const inlineRunProperties = intersectRunProperties(segments.map((segment) => segment.inlineRunProperties));
-  const styleRunProperties = intersectRunProperties(segments.map((segment) => segment.styleRunProperties));
+  const resolvedRunPropertiesList = segments.map((segment) => segment.resolvedRunProperties);
+  const inlineRunPropertiesList = segments.map((segment) => segment.inlineRunProperties);
+  const styleRunPropertiesList = segments.map((segment) => segment.styleRunProperties);
+  const directMarkRunPropertiesList = segments.map((segment) => segment.directMarkRunProperties);
+  const resolvedRunProperties = intersectRunProperties(resolvedRunPropertiesList);
+  const inlineRunProperties = intersectRunProperties(inlineRunPropertiesList);
+  const styleRunProperties = intersectRunProperties(styleRunPropertiesList);
+  const directMarkRunProperties = intersectRunProperties(directMarkRunPropertiesList);
   const resolvedMarks = createMarksFromRunProperties(state, resolvedRunProperties, editor);
   const inlineMarks = createMarksFromRunProperties(state, inlineRunProperties, editor);
 
@@ -121,6 +131,8 @@ function aggregateFormattingSegments(state, editor, segments) {
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
+    directMarkRunProperties,
+    mixedRunProperties: getMixedRunProperties(resolvedRunPropertiesList, directMarkRunPropertiesList),
   };
 }
 
@@ -148,6 +160,53 @@ function intersectRunProperties(runPropertiesList) {
   });
 
   return Object.keys(intersection).length ? intersection : null;
+}
+
+function getMixedRunProperties(runPropertiesList, directRunPropertiesList = []) {
+  const filtered = runPropertiesList.filter((props) => props && typeof props === 'object');
+  if (filtered.length <= 1) return null;
+
+  const keys = new Set(filtered.flatMap((props) => Object.keys(props)));
+  const mixed = {};
+  keys.forEach((key) => {
+    if (key === 'fontFamily' && hasUniformDirectFontFamily(directRunPropertiesList)) {
+      return;
+    }
+
+    const values = filtered.map((props) => (Object.prototype.hasOwnProperty.call(props, key) ? props[key] : undefined));
+    const first = JSON.stringify(values[0]);
+    if (values.some((value) => JSON.stringify(value) !== first)) {
+      mixed[key] = true;
+    }
+  });
+
+  return Object.keys(mixed).length ? mixed : null;
+}
+
+function hasUniformDirectFontFamily(runPropertiesList) {
+  if (runPropertiesList.length <= 1) return false;
+
+  let firstValue;
+  let hasFirstValue = false;
+
+  for (const props of runPropertiesList) {
+    if (!props || typeof props !== 'object' || !Object.prototype.hasOwnProperty.call(props, 'fontFamily')) {
+      return false;
+    }
+
+    const value = props.fontFamily;
+    if (!hasFirstValue) {
+      firstValue = value;
+      hasFirstValue = true;
+      continue;
+    }
+
+    if (JSON.stringify(value) !== JSON.stringify(firstValue)) {
+      return false;
+    }
+  }
+
+  return hasFirstValue;
 }
 
 /**

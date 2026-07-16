@@ -10,7 +10,7 @@ export type ImageLayoutContext = {
   columns: NormalizedColumns;
   ensurePage: () => PageState;
   advanceColumn: (state: PageState) => PageState;
-  columnX: (columnIndex: number) => number;
+  columnX: (state: PageState, columnIndex?: number) => number;
 };
 
 export function layoutImageBlock({
@@ -75,7 +75,7 @@ export function layoutImageBlock({
   const fragment: ImageFragment = {
     kind: 'image',
     blockId: block.id,
-    x: columnX(state.columnIndex) + marginLeft,
+    x: columnX(state) + marginLeft,
     y: state.cursorY + marginTop,
     width,
     height,

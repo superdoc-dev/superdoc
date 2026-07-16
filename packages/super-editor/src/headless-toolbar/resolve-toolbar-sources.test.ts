@@ -181,4 +181,24 @@ describe('resolveToolbarSources', () => {
     expect(legacyGetPresentationEditor).not.toHaveBeenCalled();
     expect(result.presentationEditor).toBe(narrowPresentationEditor);
   });
+
+  it('ignores an active editor that exposes no v1 command surface', () => {
+    const result = resolveToolbarSources({
+      activeEditor: {
+        options: {
+          documentId: 'doc-without-commands',
+          documentMode: 'editing',
+        },
+        commands: null,
+        state: null,
+        view: null,
+      },
+    });
+
+    expect(result).toEqual({
+      activeEditor: null,
+      presentationEditor: null,
+      context: null,
+    });
+  });
 });

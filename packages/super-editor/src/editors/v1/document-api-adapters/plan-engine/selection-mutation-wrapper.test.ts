@@ -121,7 +121,38 @@ describe('selectionMutationWrapper', () => {
     expect(mockedDeps.compilePlan).toHaveBeenCalledWith(
       mockedDeps.resolveStoryRuntime.mock.results[0].value.editor,
       expect.any(Array),
+      undefined,
     );
+  });
+
+  it('checks expectedRevision BEFORE compilePlan so a stale request cannot trigger the identity repair', () => {
+    // compilePlan can dispatch the block-identity repair transaction on a
+    // duplicate-laden doc. A stale optimistic-concurrency request must be
+    // rejected before compile runs, otherwise the caller's intent is refused
+    // but the document is still mutated. Mirrors the executePlan guard.
+    const hostEditor = { id: 'host-editor' } as any;
+    const ref = makeRef(headerStory);
+
+    mockedDeps.checkRevision.mockImplementation(() => {
+      throw new Error('REVISION_MISMATCH — stale');
+    });
+
+    expect(() =>
+      selectionMutationWrapper(
+        hostEditor,
+        {
+          kind: 'replace',
+          ref,
+          text: 'Updated header',
+        },
+        { expectedRevision: 'stale-rev' },
+      ),
+    ).toThrow(/REVISION_MISMATCH/);
+
+    // The load-bearing assertion: compile (and with it the repair dispatch)
+    // never ran.
+    expect(mockedDeps.compilePlan).not.toHaveBeenCalled();
+    expect(mockedDeps.executeCompiledPlan).not.toHaveBeenCalled();
   });
 
   it('rejects ref-only mutations whose explicit input.in conflicts with the ref story semantics', () => {

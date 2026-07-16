@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DOCX, PDF } from '@superdoc/common';
+import { createFakeV1Runtime } from './editor-runtime/conformance/fake-v1-runtime.js';
+import { createV1EditorRuntimeAdapter } from './editor-runtime/v1/v1-editor-runtime-adapter.js';
+import { markRuntimeRoot } from './editor-runtime/root-marker.js';
 
 // Mock must be defined before imports that use it
 vi.mock('@superdoc/common/collaboration/awareness', () => ({
@@ -24,6 +27,7 @@ class MockToolbar {
     this.activeEditor = null;
     this.updateToolbarState = toolbarUpdateSpy;
     this.destroy = vi.fn();
+    this._boundTransaction = null;
   }
 
   on(event, handler) {
@@ -35,8 +39,16 @@ class MockToolbar {
   }
 
   setActiveEditor(editor) {
+    if (this.activeEditor && this._boundTransaction && typeof this.activeEditor.off === 'function') {
+      this.activeEditor.off('transaction', this._boundTransaction);
+      this._boundTransaction = null;
+    }
     this.activeEditor = editor;
     toolbarSetActiveSpy(editor);
+    if (editor && typeof editor.on === 'function') {
+      this._boundTransaction = () => this.updateToolbarState();
+      editor.on('transaction', this._boundTransaction);
+    }
   }
 }
 
@@ -133,6 +145,8 @@ const createAppHarness = () => {
     reset: vi.fn(),
     setExceptionHandler: vi.fn(),
     activeZoom: 100,
+    zoomMode: 'manual',
+    viewportMetrics: null,
   };
 
   const commentsStore = {
@@ -420,6 +434,23 @@ describe('SuperDoc core', () => {
       modules: { comments: {}, toolbar: {} },
       user: null,
       onException: vi.fn(),
+    });
+
+    await flushMicrotasks();
+
+    expect(instance.config.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+    expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
+  });
+
+  it('keeps legacy default-user behavior for an explicitly empty user name', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      user: { name: '', email: null },
     });
 
     await flushMicrotasks();
@@ -853,6 +884,233 @@ describe('SuperDoc core', () => {
     expect(readySpy).toHaveBeenCalledTimes(1);
   });
 
+  describe('fonts-changed relay', () => {
+    const makeEmitterEditor = (overrides = {}) => {
+      const listeners = {};
+      return {
+        options: { documentId: 'doc-1' },
+        on: vi.fn((event, cb) => {
+          (listeners[event] ||= []).push(cb);
+        }),
+        emit: (event, payload) => (listeners[event] || []).forEach((cb) => cb(payload)),
+        ...overrides,
+      };
+    };
+    const makeInstance = async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        colors: ['red'],
+        user: { name: 'Jane', email: 'jane@example.com' },
+        onException: vi.fn(),
+      });
+      await flushMicrotasks();
+      return instance;
+    };
+
+    it('relays an editor fonts-changed event up to the SuperDoc surface', async () => {
+      const instance = await makeInstance();
+      const editor = makeEmitterEditor();
+      const received = [];
+      instance.on('fonts-changed', (p) => received.push(p));
+      instance.broadcastEditorCreate(editor);
+      const payload = {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'late-load',
+        version: 1,
+      };
+      editor.emit('fonts-changed', payload);
+      expect(received).toContainEqual(payload);
+    });
+
+    it('replays the presentation editor cached report when the relay subscribes after emission', async () => {
+      const instance = await makeInstance();
+      const cached = {
+        documentFonts: ['Aptos'],
+        resolutions: [],
+        missingFonts: ['Aptos'],
+        loadSummary: { loaded: 0, failed: 0, timedOut: 0, fallbackUsed: 1, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      const editor = makeEmitterEditor({ presentationEditor: { getLastFontsChangedPayload: () => cached } });
+      const received = [];
+      instance.on('fonts-changed', (p) => received.push(p));
+      instance.broadcastEditorCreate(editor);
+      expect(received).toContainEqual(cached);
+    });
+
+    it('does not throw for an editor without .on, and wires the relay at most once', async () => {
+      const instance = await makeInstance();
+      expect(() => instance.broadcastEditorCreate({})).not.toThrow();
+
+      const editor = makeEmitterEditor();
+      instance.broadcastEditorCreate(editor);
+      instance.broadcastEditorCreate(editor);
+      const fontsChangedSubscriptions = editor.on.mock.calls.filter((call) => call[0] === 'fonts-changed').length;
+      expect(fontsChangedSubscriptions).toBe(1);
+    });
+
+    it('fonts.onReport delivers the current report immediately, then streams changes until unsubscribed', async () => {
+      const instance = await makeInstance();
+      const initial = {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      const editor = makeEmitterEditor({ presentationEditor: { getLastFontsChangedPayload: () => initial } });
+      instance.broadcastEditorCreate(editor); // delivers `initial`, caching it on the instance
+
+      const received = [];
+      const unsubscribe = instance.fonts.onReport((p) => received.push(p));
+      expect(received).toEqual([initial]); // immediate snapshot, even though we subscribed late
+
+      const next = { ...initial, source: 'late-load', version: 1, missingFonts: ['Aptos'] };
+      editor.emit('fonts-changed', next);
+      expect(received).toEqual([initial, next]); // streamed
+
+      unsubscribe();
+      editor.emit('fonts-changed', { ...initial, version: 2 });
+      expect(received).toHaveLength(2); // silent after unsubscribe
+    });
+
+    it('fonts.onReport never replays a prior editor report after an active-editor switch', async () => {
+      const instance = await makeInstance();
+      const reportA = {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      const editorA = makeEmitterEditor({ presentationEditor: { getLastFontsChangedPayload: () => reportA } });
+      instance.activeEditor = editorA;
+      instance.broadcastEditorCreate(editorA); // delivers reportA + populates the instance cache
+
+      // Switch the active editor to B, which has not produced a report yet.
+      const editorB = makeEmitterEditor({ presentationEditor: { getLastFontsChangedPayload: () => null } });
+      instance.activeEditor = editorB;
+
+      const received = [];
+      instance.fonts.onReport((p) => received.push(p));
+      expect(received).toEqual([]); // B has no report yet -> deliver nothing, never the stale A
+
+      const reportB = {
+        documentFonts: ['Cambria'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      instance.broadcastEditorCreate(editorB);
+      editorB.emit('fonts-changed', reportB);
+      expect(received).toEqual([reportB]); // only B, via the subscription
+    });
+
+    it('fonts.getReport / getMissingFonts / getDocumentFonts read the active editor report', async () => {
+      const instance = await makeInstance();
+      const report = [
+        { logicalFamily: 'Calibri', physicalFamily: 'Carlito', status: 'loaded' },
+        { logicalFamily: 'Aptos', physicalFamily: 'Aptos', status: 'fallback' },
+      ];
+      const editor = makeEmitterEditor({
+        presentationEditor: {
+          getFontReport: () => report,
+          getMissingFonts: () => ['Aptos'],
+          getLastFontsChangedPayload: () => null,
+        },
+      });
+      instance.activeEditor = editor;
+
+      expect(instance.fonts.getReport()).toBe(report);
+      expect(instance.fonts.getMissingFonts()).toEqual(['Aptos']);
+      // getDocumentFonts maps the report to logical family names.
+      expect(instance.fonts.getDocumentFonts()).toEqual(['Calibri', 'Aptos']);
+    });
+
+    it('fonts.* return empty arrays when no editor is active', async () => {
+      const instance = await makeInstance();
+      instance.activeEditor = null;
+
+      expect(instance.fonts.getReport()).toEqual([]);
+      expect(instance.fonts.getMissingFonts()).toEqual([]);
+      expect(instance.fonts.getDocumentFonts()).toEqual([]);
+    });
+
+    it('does not relay fonts-changed from an editor that is no longer active', async () => {
+      const instance = await makeInstance();
+      const oldEditor = makeEmitterEditor();
+      const newEditor = makeEmitterEditor();
+      instance.broadcastEditorCreate(oldEditor);
+      instance.broadcastEditorCreate(newEditor);
+      instance.activeEditor = newEditor; // document swap: newEditor is the active document
+
+      const received = [];
+      instance.on('fonts-changed', (p) => received.push(p));
+
+      // The old (inactive) editor finishes a timed-out font and emits late.
+      oldEditor.emit('fonts-changed', {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'late-load',
+        version: 9,
+      });
+      expect(received).toEqual([]); // dropped: not the active editor
+
+      // The active editor's report still surfaces.
+      const activePayload = {
+        documentFonts: ['Cambria'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'late-load',
+        version: 1,
+      };
+      newEditor.emit('fonts-changed', activePayload);
+      expect(received).toEqual([activePayload]);
+    });
+
+    it('does not replay a cached report when an inactive editor is created', async () => {
+      const instance = await makeInstance();
+      const activeEditor = makeEmitterEditor();
+      instance.activeEditor = activeEditor;
+      instance.broadcastEditorCreate(activeEditor); // active editor, no cached payload
+
+      const received = [];
+      instance.on('fonts-changed', (p) => received.push(p));
+
+      // A different, non-active editor is created and already has a cached report. Its
+      // replay-on-wire must obey the same active-editor rule as the live event.
+      const stale = {
+        documentFonts: ['Calibri'],
+        resolutions: [],
+        missingFonts: [],
+        loadSummary: { loaded: 1, failed: 0, timedOut: 0, fallbackUsed: 0, results: [] },
+        source: 'initial',
+        version: 0,
+      };
+      const inactiveEditor = makeEmitterEditor({
+        presentationEditor: { getLastFontsChangedPayload: () => stale },
+      });
+      instance.broadcastEditorCreate(inactiveEditor);
+
+      expect(received).toEqual([]); // cached replay from the inactive editor dropped
+    });
+  });
+
   it('uses visible search model in SuperDoc.search()', async () => {
     createAppHarness();
 
@@ -974,6 +1232,91 @@ describe('SuperDoc core', () => {
 
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     expect(results).toEqual([originalBlob]);
+  });
+
+  it('falls back to original document data and keeps sibling exports when an editor export rejects', async () => {
+    createAppHarness();
+    const onException = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException,
+    });
+    await flushMicrotasks();
+
+    const exportError = new Error('export failed');
+    const originalBlob = new Blob(['fallback'], { type: DOCX });
+    const siblingBlob = new Blob(['exported'], { type: DOCX });
+    const failedExportDocxMock = vi.fn().mockRejectedValue(exportError);
+    const siblingExportDocxMock = vi.fn().mockResolvedValue(siblingBlob);
+    const failedDoc = {
+      id: 'doc-1',
+      type: DOCX,
+      data: originalBlob,
+      getEditor: () => ({ exportDocx: failedExportDocxMock }),
+    };
+    const siblingDoc = {
+      id: 'doc-2',
+      type: DOCX,
+      data: null,
+      getEditor: () => ({ exportDocx: siblingExportDocxMock }),
+    };
+
+    instance.superdocStore.documents = [failedDoc, siblingDoc];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(failedExportDocxMock).toHaveBeenCalledTimes(1);
+    expect(siblingExportDocxMock).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([originalBlob, siblingBlob]);
+    expect(onException).toHaveBeenCalledTimes(1);
+    expect(onException).toHaveBeenCalledWith({ error: exportError, document: failedDoc });
+  });
+
+  it('does not emit a duplicate wrapper exception when the editor already bridged the export error', async () => {
+    createAppHarness();
+    const onException = vi.fn();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException,
+    });
+    await flushMicrotasks();
+
+    const exportError = new Error('export failed');
+    const originalBlob = new Blob(['fallback'], { type: DOCX });
+    const editor = {
+      exportDocx: vi.fn(async () => {
+        instance.emit('exception', { error: exportError, editor });
+        throw exportError;
+      }),
+    };
+
+    instance.superdocStore.documents = [
+      {
+        id: 'doc-1',
+        type: DOCX,
+        data: originalBlob,
+        getEditor: () => editor,
+      },
+    ];
+
+    const results = await instance.exportEditorsToDOCX();
+
+    expect(editor.exportDocx).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([originalBlob]);
+    expect(onException).toHaveBeenCalledTimes(1);
+    expect(onException).toHaveBeenCalledWith({ error: exportError, editor });
   });
 
   it('drops non-DOCX fallback data when an editor export yields no blob', async () => {
@@ -1573,6 +1916,99 @@ describe('SuperDoc core', () => {
     expect(setDocumentMode).toHaveBeenLastCalledWith('suggesting');
   });
 
+  it('routes document mode changes through registered runtimes and their presentation editors before legacy fallback', async () => {
+    const { superdocStore } = createAppHarness();
+    const legacyDocMode = vi.fn();
+    const runtimeBackedEditorMode = vi.fn();
+    const runtimeBackedPresentationMode = vi.fn();
+    superdocStore.documents = [
+      {
+        id: 'doc-1',
+        removeComments: vi.fn(),
+        restoreComments: vi.fn(),
+        getEditor: vi.fn(() => ({ setDocumentMode: runtimeBackedEditorMode })),
+        getPresentationEditor: vi.fn(() => ({ setDocumentMode: runtimeBackedPresentationMode })),
+      },
+      {
+        id: 'doc-2',
+        removeComments: vi.fn(),
+        restoreComments: vi.fn(),
+        getEditor: vi.fn(() => ({ setDocumentMode: legacyDocMode })),
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const runtimeA = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1' });
+    const runtimeB = createFakeV1Runtime({ id: 'v1-b', documentId: 'doc-1' });
+    const setModeA = vi.spyOn(runtimeA, 'setDocumentMode');
+    const setModeB = vi.spyOn(runtimeB, 'setDocumentMode');
+    instance.registerEditorRuntime(runtimeA);
+    instance.registerEditorRuntime(runtimeB);
+
+    instance.setDocumentMode('suggesting');
+
+    expect(setModeA).toHaveBeenCalledWith('suggesting');
+    expect(setModeB).toHaveBeenCalledWith('suggesting');
+    expect(runtimeBackedEditorMode).not.toHaveBeenCalled();
+    expect(runtimeBackedPresentationMode).toHaveBeenCalledWith('suggesting');
+    expect(legacyDocMode).toHaveBeenCalledWith('suggesting');
+  });
+
+  it('syncs a stale presentation host class after runtime document-mode propagation', async () => {
+    const { superdocStore } = createAppHarness();
+    const presentationElement = document.createElement('div');
+    presentationElement.className = 'presentation-editor';
+    const presentationEditor = {
+      element: presentationElement,
+      setDocumentMode: vi.fn((mode) => {
+        presentationElement.classList.toggle('presentation-editor--viewing', mode === 'viewing');
+      }),
+    };
+    superdocStore.documents = [
+      {
+        id: 'doc-1',
+        removeComments: vi.fn(),
+        restoreComments: vi.fn(),
+        getEditor: vi.fn(() => null),
+        getPresentationEditor: vi.fn(() => presentationEditor),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const runtime = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1' });
+    const setMode = vi.spyOn(runtime, 'setDocumentMode');
+    instance.registerEditorRuntime(runtime);
+
+    instance.setDocumentMode('viewing');
+
+    expect(setMode).toHaveBeenCalledWith('viewing');
+    expect(presentationEditor.setDocumentMode).toHaveBeenCalledWith('viewing');
+    expect(presentationElement.classList.contains('presentation-editor--viewing')).toBe(true);
+  });
+
   it('updates viewing comment options for presentation editors', async () => {
     const { superdocStore } = createAppHarness();
     const setViewingCommentOptions = vi.fn();
@@ -2156,7 +2592,185 @@ describe('SuperDoc core', () => {
 
       instance.setZoom(200);
 
-      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200 });
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200, mode: 'manual' });
+    });
+
+    it('setZoom switches zoom mode to manual', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      superdocStore.zoomMode = 'fit-width';
+      instance.setZoom(125);
+
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
+    it('setZoomMode switches between manual and fit-width and rejects invalid values', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoomMode('fit-width');
+      expect(superdocStore.zoomMode).toBe('fit-width');
+
+      instance.setZoomMode('manual');
+      expect(superdocStore.zoomMode).toBe('manual');
+
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      instance.setZoomMode('fit-page');
+      expect(superdocStore.zoomMode).toBe('manual');
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('setZoom and setZoomMode before initialization warn and emit nothing', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      // No flushMicrotasks: async #init has not attached superdocStore yet.
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      instance.setZoom(150);
+      instance.setZoomMode('fit-width');
+
+      // Neither call may advertise a change that was never persisted.
+      expect(zoomChangeSpy).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+
+      await flushMicrotasks();
+      expect(instance.getZoom()).toBe(100);
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
+    it('setZoomMode emits zoomChange for mode-only transitions and no-ops on the same mode', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+
+      // Mode change with an unchanged value is observable.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'fit-width' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      // Same-mode call is a no-op: no state churn, no event.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      instance.setZoomMode('manual');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'manual' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('getZoomState reports mode, value, fitZoom, and effective bounds', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 35, max: 150 } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'manual',
+        value: 100,
+        fitZoom: null,
+        min: 35,
+        max: 150,
+      });
+
+      superdocStore.zoomMode = 'fit-width';
+      superdocStore.activeZoom = 74;
+      superdocStore.viewportMetrics = { availableWidth: 600, documentWidth: 816, fitZoom: 74 };
+
+      expect(instance.getZoomState()).toEqual({
+        mode: 'fit-width',
+        value: 74,
+        fitZoom: 74,
+        min: 35,
+        max: 150,
+      });
+    });
+
+    it('getZoomState falls back to default bounds and reorders swapped min/max', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 150, max: 35 } },
+      });
+      await flushMicrotasks();
+
+      const state = instance.getZoomState();
+      expect(state.min).toBe(35);
+      expect(state.max).toBe(150);
+
+      const defaultsInstance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const defaults = defaultsInstance.getZoomState();
+      expect(defaults.min).toBe(10);
+      expect(defaults.max).toBe(100);
+    });
+
+    it('getZoomState uses default bounds for invalid fit-width fields', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 'narrow', max: -1, padding: 'wide' } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toMatchObject({
+        min: 10,
+        max: 100,
+      });
+    });
+
+    it('getViewportMetrics returns null before the first measurement, then the stored metrics', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.getViewportMetrics()).toBeNull();
+
+      const metrics = { availableWidth: 935, documentWidth: 816, fitZoom: 115 };
+      superdocStore.viewportMetrics = metrics;
+
+      expect(instance.getViewportMetrics()).toEqual(metrics);
     });
 
     it('getZoom reflects value set by setZoom', async () => {
@@ -2230,6 +2844,43 @@ describe('SuperDoc core', () => {
 
       instance.setZoom(125);
 
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledTimes(1);
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
+    });
+
+    it('activeZoom watcher routes to PresentationEditor', async () => {
+      const { superdocStore } = createAppHarness();
+      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          type: DOCX,
+          getPresentationEditor: vi.fn(() => mockPresentationEditor),
+        },
+      ];
+
+      let activeZoom = 100;
+      Object.defineProperty(superdocStore, 'activeZoom', {
+        configurable: true,
+        get: () => activeZoom,
+        set: (value) => {
+          activeZoom = value;
+          const zoomMultiplier = (value ?? 100) / 100;
+          superdocStore.documents.forEach((doc) => {
+            const presentationEditor = doc.getPresentationEditor?.();
+            presentationEditor?.setZoom?.(zoomMultiplier);
+          });
+        },
+      });
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(125);
       expect(mockPresentationEditor.setZoom).toHaveBeenCalledTimes(1);
       expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
     });
@@ -2878,13 +3529,427 @@ describe('SuperDoc core', () => {
       createAppHarness();
       const instance = new SuperDoc({ ...basePreReadyConfig(), documentMode: 'editing' });
 
-      // Guard fires before `this.config.documentMode = type` and
-      // before `#syncViewingVisibility()` is invoked.
       const before = instance.config.documentMode;
       expect(() => instance.setDocumentMode('viewing')).toThrow(
         /SuperDoc: setDocumentMode requires the instance to be ready/,
       );
       expect(instance.config.documentMode).toBe(before);
+    });
+  });
+
+  describe('editor runtime registry integration', () => {
+    const makeFakeEditor = (documentId = 'doc-1', selectionText = '') => {
+      const handlers = new Map();
+      return {
+        options: { documentId },
+        state: {
+          doc: { textBetween: () => selectionText },
+          selection: { from: 0, to: selectionText.length, empty: selectionText.length === 0 },
+        },
+        commands: {
+          insertContent: vi.fn(() => true),
+          search: vi.fn(() => [{ documentId }]),
+          goToSearchResult: vi.fn(() => true),
+        },
+        view: { focus: vi.fn() },
+        focus: vi.fn(),
+        on(event, handler) {
+          if (!handlers.has(event)) handlers.set(event, new Set());
+          handlers.get(event).add(handler);
+        },
+        off(event, handler) {
+          handlers.get(event)?.delete(handler);
+        },
+        emit(event, ...args) {
+          for (const handler of Array.from(handlers.get(event) ?? [])) handler(...args);
+        },
+        async exportDocx() {
+          return new ArrayBuffer(0);
+        },
+      };
+    };
+
+    it('projects activeEditor from a v1 runtime and rebinds the toolbar on activation', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      toolbarSetActiveSpy.mockClear();
+      const runtime = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-1', root: document.createElement('div') });
+
+      instance.registerEditorRuntime(runtime);
+      instance.setActiveRuntime('v1-a', 'focus');
+
+      expect(instance.activeEditor).toMatchObject({ legacy: 'v1-editor' });
+      expect(toolbarSetActiveSpy).toHaveBeenCalledWith(instance.activeEditor);
+      expect(instance.activeEditor.toolbar).toBe(instance.toolbar);
+      expect(instance.getActiveRuntime()).toBe(runtime);
+    });
+
+    it('unregistering the active runtime clears activeEditor without promoting another runtime', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const a = createFakeV1Runtime({ id: 'v1-a', documentId: 'doc-a', root: document.createElement('div') });
+      const b = createFakeV1Runtime({ id: 'v1-b', documentId: 'doc-b', root: document.createElement('div') });
+      instance.registerEditorRuntime(a);
+      instance.registerEditorRuntime(b);
+      instance.setActiveRuntime('v1-a', 'focus');
+
+      instance.unregisterEditorRuntime('v1-a');
+
+      expect(instance.getActiveRuntime()).toBeNull();
+      expect(instance.activeEditor).toBeNull();
+      expect(instance.toolbar.activeEditor).toBeNull();
+    });
+
+    it('focus routes through the active v1 runtime adapter when one is active', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const editor = makeFakeEditor();
+      const { runtime, attachPresentationEditor } = createV1EditorRuntimeAdapter({
+        id: 'v1-focus',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor,
+      });
+      const presentationFocus = vi.fn();
+      attachPresentationEditor({ focus: presentationFocus, setZoom: vi.fn(), on: vi.fn(), off: vi.fn() });
+
+      instance.registerEditorRuntime(runtime);
+      instance.setActiveRuntime('v1-focus', 'v1-editor-create');
+      instance.focus();
+
+      expect(presentationFocus).toHaveBeenCalledTimes(1);
+      expect(editor.focus).not.toHaveBeenCalled();
+    });
+
+    it('focus falls back to the active legacy editor when no focusable runtime is active', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focus = vi.fn();
+      instance.activeEditor = { focus };
+
+      instance.focus();
+
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
+
+    it('focus warns when the active runtime rejects focus', async () => {
+      createAppHarness();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const focusError = new Error('focus failed');
+      const runtime = createFakeV1Runtime({
+        id: 'v1-focus-fail',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+      });
+      vi.spyOn(runtime, 'focus').mockRejectedValue(focusError);
+
+      try {
+        instance.registerEditorRuntime(runtime);
+        instance.setActiveRuntime('v1-focus-fail', 'focus');
+
+        instance.focus();
+        await flushMicrotasks();
+
+        expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] active editor runtime focus failed', focusError);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('focus falls back to the first document editor when no runtime or active editor is available', async () => {
+      const { superdocStore } = createAppHarness();
+      const instance = new SuperDoc({ selector: '#host', document: 'https://example.com/doc.docx' });
+      await flushMicrotasks();
+
+      const firstFocus = vi.fn();
+      const secondFocus = vi.fn();
+      superdocStore.documents = [
+        { id: 'doc-a', getEditor: vi.fn(() => null) },
+        { id: 'doc-b', getEditor: vi.fn(() => ({ focus: firstFocus })) },
+        { id: 'doc-c', getEditor: vi.fn(() => ({ focus: secondFocus })) },
+      ];
+
+      instance.focus();
+
+      expect(firstFocus).toHaveBeenCalledTimes(1);
+      expect(secondFocus).not.toHaveBeenCalled();
+    });
+
+    it('event-target activation routes shell commands to the selected v1 root', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const rootA = document.createElement('div');
+      const rootB = document.createElement('div');
+      const innerA = document.createElement('span');
+      const innerB = document.createElement('span');
+      rootA.appendChild(innerA);
+      rootB.appendChild(innerB);
+      document.body.append(rootA, rootB);
+
+      const editorA = makeFakeEditor('doc-a', 'alpha selection');
+      const editorB = makeFakeEditor('doc-b', 'beta selection');
+      const a = createV1EditorRuntimeAdapter({
+        id: 'v1:doc-a',
+        documentId: 'doc-a',
+        root: rootA,
+        editor: editorA,
+        onUnregister: (id) => instance.unregisterEditorRuntime(id),
+      });
+      const b = createV1EditorRuntimeAdapter({
+        id: 'v1:doc-b',
+        documentId: 'doc-b',
+        root: rootB,
+        editor: editorB,
+        onUnregister: (id) => instance.unregisterEditorRuntime(id),
+      });
+
+      try {
+        markRuntimeRoot(rootA, a.runtime.id);
+        markRuntimeRoot(rootB, b.runtime.id);
+        instance.registerEditorRuntime(a.runtime);
+        instance.registerEditorRuntime(b.runtime);
+
+        instance.activateRuntimeFromEventTarget(innerA, 'focusin');
+        expect(instance.getActiveRuntime()).toBe(a.runtime);
+        expect(instance.activeEditor).toBe(editorA);
+        instance.search('alpha');
+        expect(editorA.commands.search).toHaveBeenCalledWith('alpha', { searchModel: 'visible' });
+        expect(editorB.commands.search).not.toHaveBeenCalled();
+
+        instance.activateRuntimeFromEventTarget(innerB, 'pointerdown');
+        expect(instance.getActiveRuntime()).toBe(b.runtime);
+        expect(instance.activeEditor).toBe(editorB);
+        instance.search('beta');
+        expect(editorB.commands.search).toHaveBeenCalledWith('beta', { searchModel: 'visible' });
+        expect(editorA.commands.search).toHaveBeenCalledTimes(1);
+
+        expect(instance.getActiveRuntime().getSelectedText()).toBe('beta selection');
+      } finally {
+        rootA.remove();
+        rootB.remove();
+        instance.destroy();
+      }
+    });
+
+    // The invariant SuperDoc owns: `activeEditor` is the active runtime's
+    // command-capable projection, or null when the active runtime has no
+    // supported legacy projection.
+    const expectActiveEditorInvariant = (instance) => {
+      const runtime = instance.getActiveRuntime();
+      const projection = runtime?.getLegacyEditorProjection?.() ?? null;
+      const supported =
+        runtime?.kind === 'v1' &&
+        !!projection &&
+        typeof projection === 'object' &&
+        !!projection.commands &&
+        typeof projection.commands === 'object';
+      expect(instance.activeEditor).toBe(supported ? projection : null);
+    };
+
+    const makeV1Adapter = (instance, id, documentId, selectionText = '') => {
+      const editor = makeFakeEditor(documentId, selectionText);
+      const adapter = createV1EditorRuntimeAdapter({
+        id,
+        documentId,
+        root: document.createElement('div'),
+        editor,
+        onUnregister: (rid) => instance.unregisterEditorRuntime(rid),
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+      return { editor, adapter };
+    };
+
+    it('holds the activeEditor/active-runtime invariant across activation, switch, setActiveEditor, and unregister', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: editorA } = makeV1Adapter(instance, 'v1-a', 'doc-a', 'alpha');
+      const { editor: editorB, adapter: bAdapter } = makeV1Adapter(instance, 'v1-b', 'doc-b', 'beta');
+
+      // Activation by runtime id.
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+
+      // Switching via the LEGACY entry point routes through the registry so the
+      // active runtime follows activeEditor (no drift).
+      instance.setActiveEditor(editorB);
+      expect(instance.getActiveRuntime()).toBe(bAdapter.runtime);
+      expect(instance.activeEditor).toBe(editorB);
+      expectActiveEditorInvariant(instance);
+
+      // Unregistering the active runtime clears activeEditor without promoting.
+      instance.unregisterEditorRuntime('v1-b');
+      expect(instance.getActiveRuntime()).toBeNull();
+      expect(instance.activeEditor).toBeNull();
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('document-id fallback activates the runtime but keeps activeEditor on its canonical projection', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: bodyEditor, adapter } = makeV1Adapter(instance, 'v1-a', 'doc-1');
+      const sameDocumentEditor = makeFakeEditor('doc-1', 'header');
+
+      instance.setActiveEditor(sameDocumentEditor);
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(bodyEditor);
+      expectActiveEditorInvariant(instance);
+
+      // Repeat while already active to cover the idempotent registry path.
+      instance.setActiveEditor(sameDocumentEditor);
+      expect(instance.activeEditor).toBe(bodyEditor);
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('rebinds the v1 toolbar to the active runtime and detaches the previous editor', async () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+      });
+      await flushMicrotasks();
+
+      const { editor: editorA } = makeV1Adapter(instance, 'v1-a', 'doc-a');
+      const { editor: editorB } = makeV1Adapter(instance, 'v1-b', 'doc-b');
+
+      instance.setActiveRuntime('v1-a', 'focus');
+      expect(instance.toolbar.activeEditor).toBe(editorA);
+
+      toolbarUpdateSpy.mockClear();
+      instance.setActiveRuntime('v1-b', 'focus');
+      expect(instance.toolbar.activeEditor).toBe(editorB);
+
+      // The previous editor no longer drives the toolbar; only the new one does.
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).not.toHaveBeenCalled();
+      editorB.emit('transaction');
+      expect(toolbarUpdateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('activates the chosen runtime on editing/suggesting mode changes (no drift)', async () => {
+      const { superdocStore } = createAppHarness();
+      const editorA = makeFakeEditor('doc-1');
+      editorA.setDocumentMode = vi.fn();
+      superdocStore.documents = [
+        {
+          getEditor: vi.fn(() => editorA),
+          getPresentationEditor: vi.fn(() => null),
+          restoreComments: vi.fn(),
+          removeComments: vi.fn(),
+        },
+      ];
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+        role: 'editor',
+      });
+      await flushMicrotasks();
+
+      const adapter = createV1EditorRuntimeAdapter({
+        id: 'v1-a',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor: editorA,
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+
+      instance.setDocumentMode('editing');
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+
+      instance.setDocumentMode('suggesting');
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+      expectActiveEditorInvariant(instance);
+    });
+
+    it('viewing-mode policy: keeps the active runtime + activeEditor, detaches only the toolbar', async () => {
+      // Policy decision (documented + tested): viewing mode is read-only for the
+      // toolbar, but search/navigation/read APIs must still resolve, so the
+      // active runtime and `activeEditor` persist while the toolbar detaches.
+      const { superdocStore } = createAppHarness();
+      const editorA = makeFakeEditor('doc-1');
+      editorA.setDocumentMode = vi.fn();
+      superdocStore.documents = [
+        {
+          getEditor: vi.fn(() => editorA),
+          getPresentationEditor: vi.fn(() => null),
+          restoreComments: vi.fn(),
+          removeComments: vi.fn(),
+        },
+      ];
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        modules: { toolbar: {} },
+        role: 'editor',
+      });
+      await flushMicrotasks();
+
+      const adapter = createV1EditorRuntimeAdapter({
+        id: 'v1-a',
+        documentId: 'doc-1',
+        root: document.createElement('div'),
+        editor: editorA,
+      });
+      instance.registerEditorRuntime(adapter.runtime);
+
+      instance.setDocumentMode('editing');
+      expect(instance.activeEditor).toBe(editorA);
+
+      instance.setDocumentMode('viewing');
+      expect(instance.toolbar.activeEditor).toBeNull();
+      expect(instance.getActiveRuntime()).toBe(adapter.runtime);
+      expect(instance.activeEditor).toBe(editorA);
+
+      toolbarUpdateSpy.mockClear();
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).not.toHaveBeenCalled();
+
+      instance.setDocumentMode('editing');
+      expect(instance.toolbar.activeEditor).toBe(editorA);
+      editorA.emit('transaction');
+      expect(toolbarUpdateSpy).toHaveBeenCalledTimes(1);
     });
   });
 

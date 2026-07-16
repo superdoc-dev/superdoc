@@ -1,6 +1,7 @@
 import type { ImageBlock, ImageDrawing } from '@superdoc/contracts';
-import { buildImageFilters } from '../runs/image-run.js';
+import { buildImageFilters, resolveImageOpacity } from '../runs/image-run.js';
 import { applyImageClipPath, readImageClipPathValue } from './image-clip-path.js';
+import { applyImageObjectFit } from './object-fit.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 
 type BlockImageSource = ImageBlock | ImageDrawing;
@@ -27,6 +28,14 @@ export const resolveBlockImageClipPath = (block: unknown): string => {
   return readImageClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
 
+export const resolveBlockImageShapeClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  const attrs =
+    record.attrs && typeof record.attrs === 'object' ? (record.attrs as Record<string, unknown>) : undefined;
+  return readImageClipPathValue(record.shapeClipPath) || readImageClipPathValue(attrs?.shapeClipPath);
+};
+
 export const createBlockImageContent = ({
   doc,
   block,
@@ -46,17 +55,40 @@ export const createBlockImageContent = ({
   img.alt = block.alt ?? '';
   img.style.width = '100%';
   img.style.height = '100%';
-  img.style.objectFit = block.objectFit ?? 'contain';
-  if (block.objectFit === 'cover') {
-    img.style.objectPosition = 'left top';
+  applyImageObjectFit(img, block.objectFit ?? 'contain');
+  const shapeClipPath = resolveBlockImageShapeClipPath(block);
+  // Without a caller-supplied clip container, the shape mask still needs an
+  // element distinct from the img so srcRect cropping keeps its own clip-path.
+  const ownShapeClipContainer = shapeClipPath && !clipContainer ? doc.createElement('div') : undefined;
+  if (ownShapeClipContainer) {
+    ownShapeClipContainer.style.width = '100%';
+    ownShapeClipContainer.style.height = '100%';
   }
-  applyImageClipPath(img, resolveBlockImageClipPath(block), clipContainer ? { clipContainer } : undefined);
+  const shapeClipContainer = clipContainer ?? ownShapeClipContainer;
+  if (shapeClipPath && shapeClipContainer) {
+    shapeClipContainer.style.clipPath = shapeClipPath;
+    shapeClipContainer.style.overflow = 'hidden';
+  }
+  applyImageClipPath(
+    img,
+    resolveBlockImageClipPath(block),
+    shapeClipContainer ? { clipContainer: shapeClipContainer } : undefined,
+  );
   img.style.display = imageDisplay ?? (block.display === 'inline' ? 'inline-block' : 'block');
 
   const filters = buildImageFilters(block);
   if (filters.length > 0) {
     img.style.filter = filters.join(' ');
   }
+  const opacity = resolveImageOpacity(block);
+  if (opacity != null) {
+    img.style.opacity = opacity;
+  }
 
-  return buildImageHyperlinkAnchor?.(img, block.hyperlink, hyperlinkDisplay) ?? img;
+  const content = buildImageHyperlinkAnchor?.(img, block.hyperlink, hyperlinkDisplay) ?? img;
+  if (ownShapeClipContainer) {
+    ownShapeClipContainer.appendChild(content);
+    return ownShapeClipContainer;
+  }
+  return content;
 };

@@ -30,8 +30,9 @@ import { decodeRef, type StoryRefV4 } from '../story-runtime/story-ref-codec.js'
 import { planError } from './errors.js';
 import { hasStepExecutor } from './executor-registry.js';
 import { captureRunsInRange, checkUniformity, type CapturedStyle } from './style-resolver.js';
-import { getBlockIndex } from '../helpers/index-cache.js';
+import { getBlockIndex, clearIndexCache } from '../helpers/index-cache.js';
 import { getRevision } from './revision-tracker.js';
+import { repairDuplicateBlockIdentities } from './repair-block-identities.js';
 import { executeTextSelector } from '../find/text-strategy.js';
 import { executeBlockSelector } from '../find/block-strategy.js';
 import {
@@ -40,7 +41,12 @@ import {
   type BlockCandidate,
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
-import { resolveTextRangeInBlock } from '../helpers/text-offset-resolver.js';
+import {
+  resolveTextRangeInBlock,
+  textContentInBlock,
+  type TextOffsetModel,
+  type TextOffsetOptions,
+} from '../helpers/text-offset-resolver.js';
 import { resolveSelectionTarget, resolveSelectionPointPosition } from '../helpers/selection-target-resolver.js';
 import { expandDeleteSelection } from '../helpers/expand-delete-selection.js';
 
@@ -238,6 +244,30 @@ interface ResolvedAddress {
   text: string;
   marks: readonly unknown[];
   blockPos: number;
+  textModel: TextOffsetModel;
+}
+
+export interface CompilePlanOptions {
+  /**
+   * Text model used only for `where.by = "select"` text selectors.
+   *
+   * Public discovery refs and explicit SelectionTargets stay visible-offset
+   * based. Tracked authoring selectors can opt into raw/review text so they
+   * can address unresolved deletion text without changing public read APIs.
+   */
+  selectTextModel?: TextOffsetModel;
+
+  /**
+   * When true, the duplicate block-identity repair pass does NOT dispatch a
+   * transaction. The compiler still detects duplicates and throws
+   * `DOCUMENT_IDENTITY_CONFLICT` if any are found, so callers that need a
+   * read-only signal (notably `previewPlan`, which must never mutate the
+   * editor) can surface the conflict without rewriting paraIds.
+   *
+   * The production mutation path (`executeCompiledPlan` → `mutations.apply`)
+   * leaves this unset / false so the repair runs and the mutation succeeds.
+   */
+  skipIdentityRepair?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +280,9 @@ function resolveAbsoluteRange(
   from: number,
   to: number,
   stepId: string,
+  options?: TextOffsetOptions,
 ): { absFrom: number; absTo: number } {
-  const resolved = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: from, end: to });
+  const resolved = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: from, end: to }, options);
   if (!resolved) {
     throw planError('INVALID_INPUT', `text offset [${from}, ${to}) out of range in block`, stepId);
   }
@@ -381,10 +412,11 @@ function buildRangeTarget(
   addr: ResolvedAddress,
   candidate: Pick<BlockCandidate, 'node' | 'pos'>,
 ): CompiledRangeTarget {
-  const abs = resolveAbsoluteRange(editor, candidate, addr.from, addr.to, step.id);
+  const textOffsetOptions = { textModel: addr.textModel };
+  const abs = resolveAbsoluteRange(editor, candidate, addr.from, addr.to, step.id, textOffsetOptions);
   const capturedStyle =
     step.op === 'text.rewrite' || step.op === 'format.apply'
-      ? captureRunsInRange(editor, candidate.pos, addr.from, addr.to)
+      ? captureRunsInRange(editor, candidate.pos, addr.from, addr.to, textOffsetOptions)
       : undefined;
 
   return {
@@ -412,6 +444,7 @@ function buildSpanTarget(
   step: MutationStep,
   segments: Array<{ blockId: string; from: number; to: number }>,
   matchId: string,
+  textModel: TextOffsetModel = 'visible',
 ): CompiledSpanTarget {
   // Validate segment ordering and contiguity in document order
   validateSegmentOrder(editor, index, segments, step.id);
@@ -426,7 +459,8 @@ function buildSpanTarget(
       throw planError('INVALID_INPUT', `block "${seg.blockId}" not found for span segment`, step.id);
     }
 
-    const abs = resolveAbsoluteRange(editor, candidate, seg.from, seg.to, step.id);
+    const textOffsetOptions = { textModel };
+    const abs = resolveAbsoluteRange(editor, candidate, seg.from, seg.to, step.id, textOffsetOptions);
     compiledSegments.push({
       blockId: seg.blockId,
       from: seg.from,
@@ -435,11 +469,11 @@ function buildSpanTarget(
       absTo: abs.absTo,
     });
 
-    const blockText = getBlockText(editor, candidate);
+    const blockText = getBlockText(editor, candidate, textOffsetOptions);
     textParts.push(blockText.slice(seg.from, seg.to));
 
     if (step.op === 'text.rewrite' || step.op === 'format.apply') {
-      capturedStyles.push(captureRunsInRange(editor, candidate.pos, seg.from, seg.to));
+      capturedStyles.push(captureRunsInRange(editor, candidate.pos, seg.from, seg.to, textOffsetOptions));
     }
   }
 
@@ -516,15 +550,17 @@ function resolveTextSelector(
   selector: TextSelector | NodeSelector,
   within: import('@superdoc/document-api').BlockNodeAddress | undefined,
   stepId: string,
-  options?: { allBlockTypes?: boolean },
+  options?: { allBlockTypes?: boolean; textModel?: TextOffsetModel },
 ): { addresses: ResolvedAddress[] } {
+  const textModel = options?.textModel ?? 'visible';
+  const textOffsetOptions = { textModel };
   if (selector.type === 'text') {
     const query = {
       select: selector,
       within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
       includeNodes: false,
     };
-    const result = executeTextSelector(editor, index, query, []);
+    const result = executeTextSelector(editor, index, query, [], { searchModel: textModel });
 
     const addresses: ResolvedAddress[] = [];
 
@@ -536,9 +572,9 @@ function resolveTextSelector(
         const candidate = index.candidates.find((c) => c.nodeId === coalesced.blockId);
         if (!candidate) continue;
 
-        const blockText = getBlockText(editor, candidate);
+        const blockText = getBlockText(editor, candidate, textOffsetOptions);
         const matchText = blockText.slice(coalesced.from, coalesced.to);
-        const captured = captureRunsInRange(editor, candidate.pos, coalesced.from, coalesced.to);
+        const captured = captureRunsInRange(editor, candidate.pos, coalesced.from, coalesced.to, textOffsetOptions);
 
         addresses.push({
           blockId: coalesced.blockId,
@@ -547,6 +583,7 @@ function resolveTextSelector(
           text: matchText,
           marks: captured.runs.length > 0 ? captured.runs[0].marks : [],
           blockPos: candidate.pos,
+          textModel,
         });
       }
     }
@@ -573,7 +610,7 @@ function resolveTextSelector(
     if (!candidate) continue;
 
     if (isTextBlockCandidate(candidate)) {
-      const blockText = getBlockText(editor, candidate);
+      const blockText = getBlockText(editor, candidate, textOffsetOptions);
       addresses.push({
         blockId: match.nodeId,
         from: 0,
@@ -581,6 +618,7 @@ function resolveTextSelector(
         text: blockText,
         marks: [],
         blockPos: candidate.pos,
+        textModel,
       });
     } else {
       // Non-text block (table, image wrapper, etc.): no text offsets needed.
@@ -592,6 +630,7 @@ function resolveTextSelector(
         text: '',
         marks: [],
         blockPos: candidate.pos,
+        textModel,
       });
     }
   }
@@ -599,7 +638,14 @@ function resolveTextSelector(
   return { addresses };
 }
 
-function getBlockText(editor: Editor, candidate: { pos: number; end: number }): string {
+function getBlockText(
+  editor: Editor,
+  candidate: { node?: BlockCandidate['node']; pos: number; end: number },
+  options: TextOffsetOptions = { textModel: 'visible' },
+): string {
+  if (candidate.node && candidate.node.childCount > 0) {
+    return textContentInBlock(candidate.node, options);
+  }
   const blockStart = candidate.pos + 1;
   const blockEnd = candidate.end - 1;
   return editor.state.doc.textBetween(blockStart, blockEnd, '\n', '\ufffc');
@@ -655,6 +701,7 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
       text: matchText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
 
     const target = buildRangeTarget(editor, step, addr, candidate);
@@ -663,7 +710,7 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
   }
 
   // Multi-segment match refs → span target
-  return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId, 'visible')];
 }
 
 /**
@@ -728,6 +775,7 @@ function resolveV4TextRef(
       text: matchText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
 
     const target = buildRangeTarget(editor, step, addr, candidate);
@@ -736,7 +784,7 @@ function resolveV4TextRef(
   }
 
   // Multi-segment → span target
-  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`)];
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`, 'visible')];
 }
 
 function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -778,6 +826,7 @@ function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, 
     text: blockText,
     marks: [],
     blockPos: candidate.pos,
+    textModel: 'visible',
   };
 
   return [buildRangeTarget(editor, step, addr, candidate)];
@@ -902,6 +951,7 @@ function buildWholeBlockRangeTarget(
       text: blockText,
       marks: [],
       blockPos: candidate.pos,
+      textModel: 'visible',
     };
     return buildRangeTarget(editor, step, addr, candidate);
   }
@@ -1010,7 +1060,12 @@ function captureStyleAtAbsoluteRange(editor: Editor, absFrom: number, absTo: num
 // Step target resolution
 // ---------------------------------------------------------------------------
 
-function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationStep): CompiledTarget[] {
+function resolveStepTargets(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  options: CompilePlanOptions = {},
+): CompiledTarget[] {
   const where = step.where;
   const refWhere = isRefWhere(where) ? where : undefined;
   const selectWhere = isSelectWhere(where) ? where : undefined;
@@ -1030,6 +1085,7 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
     const isStructuralOp = step.op === 'structural.insert' || step.op === 'structural.replace';
     const resolved = resolveTextSelector(editor, index, selectWhere.select, selectWhere.within, step.id, {
       allBlockTypes: isStructuralOp,
+      textModel: options.selectTextModel ?? 'visible',
     });
     targets = resolved.addresses.map((addr) => {
       const candidate = index.candidates.find((c) => c.nodeId === addr.blockId);
@@ -1454,6 +1510,10 @@ function validateStepInteractions(steps: CompiledStep[], index: BlockIndex): voi
 /**
  * Detects duplicate block IDs in the block index before compilation.
  * Throws `DOCUMENT_IDENTITY_CONFLICT` if any two blocks share the same ID.
+ *
+ * The error message embeds the colliding IDs and the duplicate count because
+ * the Python SDK error surface drops `details`; only the message string
+ * survives across that boundary.
  */
 function assertNoDuplicateBlockIds(index: BlockIndex): void {
   const seen = new Map<string, number>();
@@ -1466,14 +1526,16 @@ function assertNoDuplicateBlockIds(index: BlockIndex): void {
   }
 
   if (duplicates.length > 0) {
+    const preview = duplicates.slice(0, 4).join(', ');
+    const previewSuffix = duplicates.length > 4 ? `, +${duplicates.length - 4} more` : '';
     throw planError(
       'DOCUMENT_IDENTITY_CONFLICT',
-      'Document contains blocks with duplicate identities. This must be resolved before mutations can be applied.',
+      `Document contains ${duplicates.length} block identit${duplicates.length === 1 ? 'y' : 'ies'} shared by multiple blocks (${preview}${previewSuffix}). Re-import the document via doc.open to assign unique identities.`,
       undefined,
       {
         duplicateBlockIds: duplicates,
         blockCount: duplicates.length,
-        remediation: 'Re-import the document or call document.repair() to assign unique identities.',
+        remediation: 'Re-import the document via doc.open to assign unique identities.',
       },
     );
   }
@@ -1518,18 +1580,154 @@ function assertSingleStoryKey(steps: MutationStep[]): void {
   }
 }
 
-export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
+/**
+ * Collect every block id a step's `where` clause references explicitly —
+ * decoded text-ref segments (V3 + V4), V4 node-scope ids, raw block refs,
+ * `by: 'block'` addresses, and SelectionTarget text/nodeEdge points.
+ * Selector-based wheres (`by: 'select'`) re-resolve against the current doc
+ * and are inherently repair-safe, so they contribute nothing here.
+ */
+function collectReferencedBlockIds(step: MutationStep): string[] {
+  const where = step.where;
+  const ids: string[] = [];
+
+  // `within` scoping (select/ref/assert wheres) carries a pre-minted
+  // BlockNodeAddress — a renamed duplicate would silently re-scope the
+  // selector to the surviving block, so it is just as stale as a direct ref.
+  const withinNodeId = (where as { within?: { nodeId?: string } }).within?.nodeId;
+  if (withinNodeId) ids.push(withinNodeId);
+
+  if (isRefWhere(where)) {
+    const ref = where.ref;
+    if (ref.startsWith('text:')) {
+      const decoded = decodeRef(ref);
+      if (decoded) {
+        for (const seg of decoded.segments ?? []) {
+          if (seg?.blockId) ids.push(seg.blockId);
+        }
+        const nodeId = (decoded as StoryRefV4).node?.nodeId;
+        if (nodeId) ids.push(nodeId);
+      }
+    } else {
+      // Raw block refs: the ref string IS the nodeId.
+      ids.push(ref);
+    }
+    return ids;
+  }
+
+  if (isBlockWhere(where)) {
+    ids.push(where.nodeId);
+    return ids;
+  }
+
+  if (isTargetWhere(where)) {
+    for (const point of [where.target?.start, where.target?.end]) {
+      // `kind: 'text'` points carry a top-level blockId.
+      const blockId = (point as { blockId?: string } | undefined)?.blockId;
+      if (blockId) ids.push(blockId);
+      // `kind: 'nodeEdge'` points nest the id at `node.nodeId`
+      // (SelectionEdgeNodeAddress).
+      const edgeNodeId = (point as { node?: { nodeId?: string } } | undefined)?.node?.nodeId;
+      if (edgeNodeId) ids.push(edgeNodeId);
+    }
+  }
+
+  return ids;
+}
+
+/**
+ * After the runtime identity repair has renamed duplicate block ids, any step
+ * whose `where` references one of the ORIGINAL colliding ids is ambiguous —
+ * the id now names only the first occurrence, and the ref may have meant a
+ * renamed one. Throws `STALE_REF` so the caller re-runs discovery instead of
+ * silently mutating the surviving block.
+ */
+function assertNoStaleRefsAfterRepair(steps: MutationStep[], repairedIds: ReadonlySet<string>): void {
+  if (repairedIds.size === 0) return;
+
+  for (const step of steps) {
+    for (const blockId of collectReferencedBlockIds(step)) {
+      if (!repairedIds.has(blockId)) continue;
+      throw planError(
+        'STALE_REF',
+        `Step "${step.id}" references block id "${blockId}", which was duplicated in this document and has just ` +
+          `been repaired (the duplicate occurrence was renamed). The reference is ambiguous — it may have pointed ` +
+          `at the renamed block. Re-run query.match / doc.find against the repaired document and retry with a fresh ref.`,
+        step.id,
+        {
+          blockId,
+          repairedBlockIds: [...repairedIds],
+          remediation: 'Re-run query.match() or doc.find() to obtain fresh refs, then retry the mutation.',
+        },
+      );
+    }
+  }
+}
+
+export function compilePlan(editor: Editor, steps: MutationStep[], options: CompilePlanOptions = {}): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
     throw planError('INVALID_INPUT', `plan contains ${steps.length} steps, maximum is ${MAX_PLAN_STEPS}`);
   }
 
-  // Capture revision at compile start — single read point for consistency (D3)
+  let index = getBlockIndex(editor);
+
+  // E1: Pre-compilation identity integrity check.
+  //
+  // Yjs restores and `loadFromSchema` JSON loaders bypass the import-time
+  // `normalizeDuplicateBlockIdentitiesInContent` pass, so a long-lived collab
+  // session can carry duplicate `paraId` values forward from a base document
+  // imported by an older SuperDoc build. Repair in place using the same
+  // deterministic allocator as the import pass, then rebuild the index before
+  // the assertion fires.
+  //
+  // The fast-path early-exit for clean docs lives inside `planRepairs` itself:
+  // it walks the explicit identity attrs (the same set the planner inspects)
+  // and returns immediately if none collide. That is the single source of
+  // truth for "the doc has duplicates to repair" — and it avoids the false
+  // negative an `index.candidates[].nodeId`-based gate would have on
+  // `sdBlockId`-only collisions, because `resolveBlockNodeId` projects via
+  // paraId first and the index-level scan never observes the sdBlockId.
+  if (!options.skipIdentityRepair) {
+    const repair = repairDuplicateBlockIdentities(editor);
+    if (repair) {
+      // `dispatch` swapped `editor.state.doc`, so the cached block index is
+      // stale. Force a rebuild from the freshly repaired doc.
+      clearIndexCache(editor);
+      index = getBlockIndex(editor);
+      // Best-effort signal so we can measure how often the runtime safety net
+      // fires in production. Kept as console.warn to avoid coupling the plan
+      // engine to a specific telemetry transport — matches the convention used
+      // by header-footer-slot-materialization.
+      console.warn(
+        `[plan-engine] Repaired ${repair.repairedBlockCount} block(s) with duplicate identities ` +
+          `before plan compilation. Original ids: ${repair.duplicateBlockIds.slice(0, 4).join(', ')}` +
+          `${repair.duplicateBlockIds.length > 4 ? `, +${repair.duplicateBlockIds.length - 4} more` : ''}.`,
+      );
+      // Refs minted against the pre-repair doc carry only a blockId — no
+      // occurrence index — so a ref naming a just-renamed duplicate is
+      // ambiguous: it may have meant the occurrence that no longer carries
+      // that id. Resolving it against the surviving block would silently
+      // mutate the wrong content. Reject loudly instead; the caller re-runs
+      // discovery against the now-clean doc and retries.
+      //
+      // This one-compile guard closes the entire wrong-block window: the
+      // repair is revision-invisible, but any *successful* mutation bumps the
+      // revision, so refs from earlier calls already die in the existing
+      // `rev` checks of resolveV3TextRef / resolveV4TextRef.
+      assertNoStaleRefsAfterRepair(steps, new Set(repair.duplicateBlockIds));
+    }
+  }
+
+  // Capture revision AFTER any repair dispatch. The repair transaction is
+  // tagged with `superdoc/block-identity-repair` and is therefore exempt from
+  // the revision tracker (`revision-tracker.ts` short-circuits on that meta),
+  // so the captured value here is the same as it would have been pre-repair.
+  // The ordering is preserved defensively: should the repair tr ever lose its
+  // meta tag, capturing after avoids `REVISION_CHANGED_SINCE_COMPILE` failures
+  // on every corrupted doc.
   const compiledRevision = getRevision(editor);
 
-  const index = getBlockIndex(editor);
-
-  // E1: Pre-compilation identity integrity check
   assertNoDuplicateBlockIds(index);
   const mutationSteps: CompiledStep[] = [];
   const assertSteps: AssertStep[] = [];
@@ -1576,7 +1774,7 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
       validateCreateStepPosition(step);
     }
 
-    const targets = resolveStepTargets(editor, index, step);
+    const targets = resolveStepTargets(editor, index, step, options);
 
     // Validate insertion context for create ops (B0 invariant 5)
     if (isCreateOp(step.op) && targets.length > 0) {

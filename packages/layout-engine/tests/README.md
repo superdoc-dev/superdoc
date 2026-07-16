@@ -54,7 +54,7 @@ Key settings:
 
 ## Dependencies
 
-- Relies on `@superdoc/pm-adapter`, `@superdoc/style-engine`, `@superdoc/layout-engine`, `@superdoc/painter-dom`.
+- Relies on `@core/layout-adapter`, `@superdoc/style-engine`, `@superdoc/layout-engine`, `@superdoc/painter-dom`.
 - Runner: Vitest (`happy-dom` by default).
 
 ## Debugging
@@ -63,12 +63,12 @@ If tests fail after SDT schema changes:
 
 1. **Check contracts** (`@superdoc/contracts`) - ensure `SdtMetadata` union types are up to date
 2. **Check style-engine** (`@superdoc/style-engine/src/index.ts`) - verify normalization helpers match new attrs
-3. **Check PM adapter** (`@superdoc/pm-adapter/src/index.ts`) - confirm SDT unwrapping assigns metadata to blocks/runs
+3. **Check v1 layout adapter** (`super-editor`'s layout-adapter index) - confirm SDT unwrapping assigns metadata to blocks/runs
 4. **Inspect snapshot diffs** - Vitest will show what changed in the summarized output
 
 ## Related Documentation
 
 - Layout engine contracts: `packages/layout-engine/contracts/src/index.ts`
 - Style engine SDT parsing: `packages/layout-engine/style-engine/src/index.ts`
-- PM adapter SDT handling: `packages/layout-engine/pm-adapter/src/index.ts` (search for `resolveNodeSdtMetadata`)
+- v1 layout adapter SDT handling: `packages/super-editor/src/editors/v1/core/layout-adapter/index.ts` (search for `resolveNodeSdtMetadata`)
 - Planning docs: `packages/layout-engine/plan/fields-annotations-*.md`

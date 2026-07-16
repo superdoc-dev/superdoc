@@ -1,6 +1,5 @@
+import { resolveColumnCount } from '@superdoc/contracts';
 import type { ColumnLayout, Page, PageMargins } from '@superdoc/contracts';
-
-export type NormalizedColumns = ColumnLayout & { width: number };
 
 export type ConstraintBoundary = {
   y: number;
@@ -24,6 +23,35 @@ export type PageState = {
    *  Used when starting a mid-page region so the new section begins below
    *  all column content, not just the current column's cursor. */
   maxCursorY: number;
+  /**
+   * SD-3049: Page-level footnote reserve already baked into `contentBottom`
+   * via `getActiveBottomMargin`. The block-aware break decision compares
+   * `footnoteDemandThisPage` against this; only the excess shrinks the body.
+   */
+  pageFootnoteReserve: number;
+  /**
+   * SD-3049: Accumulated measured body height of footnote refs anchored on
+   * fragments already committed to this page (and column-wide). Used by the
+   * paragraph break decision so the body packs tight to footnote demand
+   * instead of relying solely on the post-hoc page-level reserve.
+   */
+  footnoteDemandThisPage: number;
+  /**
+   * SD-2656: Number of distinct footnote refs anchored on this page so far.
+   * Drives the slicer's band-overhead computation (separator + per-extra-ref
+   * gap + safety margin), which must match the planner's reserve formula.
+   */
+  footnoteRefsThisPage: number;
+  /**
+   * SD-2656: ordered list of footnote anchors committed to this page (by
+   * document/PM order). The body slicer pushes a new entry when it accepts a
+   * candidate line that introduces a new anchor. The list drives the ordered-
+   * cluster demand formula:
+   *   demand = sum(fullHeight of cluster[0..N-1]) + firstLineHeight(cluster[N-1])
+   * i.e. all anchors except the last must fit fully; only the last may split.
+   * Identified by refId so callers can dedupe and walk in document order.
+   */
+  footnoteAnchorsThisPage: Array<{ pmPos: number; refId: string; fullHeight: number; firstLineHeight: number }>;
 };
 
 export type PaginatorOptions = {
@@ -35,9 +63,14 @@ export type PaginatorOptions = {
   getActivePageSize(): { w: number; h: number };
   getDefaultPageSize(): { w: number; h: number };
   getActiveColumns(): ColumnLayout;
-  getCurrentColumns(): NormalizedColumns;
   createPage(number: number, pageMargins: PageMargins, pageSizeOverride?: { w: number; h: number }): Page;
   onNewPage?: (state: PageState) => void;
+  /**
+   * SD-3049: per-page footnote reserve (the value already added to
+   * `getActiveBottomMargin`). Returned by index for the page about to be
+   * created. Defaults to 0 when not provided.
+   */
+  getFootnoteReserveForPage?: (pageIndex: number) => number;
 };
 
 export function createPaginator(opts: PaginatorOptions) {
@@ -56,19 +89,6 @@ export function createPaginator(opts: PaginatorOptions) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
     }
     return opts.getActiveColumns();
-  };
-
-  const columnX = (columnIndex: number): number => {
-    const cols = opts.getCurrentColumns();
-    const widths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
-    if (!widths) {
-      return opts.margins.left + columnIndex * (cols.width + cols.gap);
-    }
-    let x = opts.margins.left;
-    for (let index = 0; index < columnIndex; index += 1) {
-      x += (widths[index] ?? cols.width) + cols.gap;
-    }
-    return x;
   };
 
   const startNewPage = (): PageState => {
@@ -100,8 +120,10 @@ export function createPaginator(opts: PaginatorOptions) {
     const pageSizeOverride =
       currentPageSize.w !== defaultPageSize.w || currentPageSize.h !== defaultPageSize.h ? currentPageSize : undefined;
 
+    const pageIndex = pages.length;
+    const pageFootnoteReserve = opts.getFootnoteReserveForPage?.(pageIndex) ?? 0;
     const state: PageState = {
-      page: opts.createPage(pages.length + 1, pageMargins, pageSizeOverride),
+      page: opts.createPage(pageIndex + 1, pageMargins, pageSizeOverride),
       cursorY: topMargin,
       columnIndex: 0,
       topMargin,
@@ -112,6 +134,10 @@ export function createPaginator(opts: PaginatorOptions) {
       lastParagraphStyleId: undefined,
       lastParagraphContextualSpacing: false,
       maxCursorY: topMargin,
+      pageFootnoteReserve,
+      footnoteDemandThisPage: 0,
+      footnoteRefsThisPage: 0,
+      footnoteAnchorsThisPage: [],
     };
     states.push(state);
     pages.push(state.page);
@@ -127,7 +153,10 @@ export function createPaginator(opts: PaginatorOptions) {
 
   const advanceColumn = (state: PageState): PageState => {
     const activeCols = getActiveColumnsForState(state);
-    if (state.columnIndex < activeCols.count - 1) {
+    // Use the RESOLVED count (clamped to usable explicit widths), not the raw w:num, so the fill
+    // loop and the width math (normalizeColumnLayout) agree on how many columns exist. Without this
+    // the loop advances into columns that have no width (the SD-2629 two-track count bug).
+    if (state.columnIndex < resolveColumnCount(activeCols) - 1) {
       // Snapshot max Y before resetting cursor for the next column
       state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       state.columnIndex += 1;
@@ -139,6 +168,10 @@ export function createPaginator(opts: PaginatorOptions) {
       state.trailingSpacing = 0;
       state.lastParagraphStyleId = undefined;
       state.lastParagraphContextualSpacing = false;
+      // Footnotes are reserved per-column; the body slicer's demand formula
+      // must reset per-column. Field names retain "ThisPage" for back-compat.
+      state.footnoteAnchorsThisPage = [];
+      state.footnoteRefsThisPage = 0;
       return state;
     }
     return startNewPage();
@@ -154,7 +187,6 @@ export function createPaginator(opts: PaginatorOptions) {
     startNewPage,
     ensurePage,
     advanceColumn,
-    columnX,
     getActiveColumnsForState,
     getPageByNumber,
     pruneTrailingEmptyPages,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 
@@ -26,11 +26,33 @@ vi.mock('../../extensions/paragraph/resolvedPropertiesCache.js', () => ({
   calculateResolvedParagraphProperties: vi.fn((_editor, node) => node?.attrs?.paragraphProperties ?? {}),
 }));
 
+// Mock the low-level numbering mutation so the wrapper test focuses on
+// orchestration (resolve, validate, dispatch, post-mutation re-resolution).
+// The mock mutates the node's attrs so getBlockIndex re-resolution observes the
+// reclassification (plain paragraph -> listItem). The real helper's behavior
+// (indent strip, listRendering) is covered in changeListLevel.test.js.
+vi.mock('../../core/commands/changeListLevel.js', async (importActual) => {
+  const actual = await importActual<typeof import('../../core/commands/changeListLevel.js')>();
+  return {
+    ...actual,
+    updateNumberingProperties: vi.fn(
+      (numbering: { numId: number; ilvl: number }, node: { attrs: Record<string, unknown> }) => {
+        const pProps = (node.attrs.paragraphProperties as Record<string, unknown>) ?? {};
+        node.attrs.paragraphProperties = { ...pProps, numberingProperties: numbering };
+        node.attrs.numberingProperties = numbering;
+      },
+    ),
+  };
+});
+
 import {
   paragraphsSetIndentationWrapper,
   paragraphsSetStyleWrapper,
   paragraphsSetAlignmentWrapper,
+  paragraphsSetNumberingWrapper,
 } from './paragraphs-wrappers.js';
+import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
 
 type MockNode = {
   type: { name: 'paragraph' | 'text' };
@@ -225,6 +247,125 @@ describe('paragraphsSetStyleWrapper', () => {
     });
     expect(removeMark).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('paragraphsSetNumberingWrapper', () => {
+  beforeEach(() => {
+    vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    vi.mocked(updateNumberingProperties).mockClear();
+  });
+
+  it('attaches numbering and dispatches for a numbered-heading target', () => {
+    const { editor, dispatch } = makeEditor({ styleId: 'Heading3' });
+
+    const result = paragraphsSetNumberingWrapper(editor, {
+      target: { kind: 'block', nodeType: 'heading', nodeId: 'p1' },
+      numId: 2,
+      level: 1,
+    });
+
+    expect(updateNumberingProperties).toHaveBeenCalledWith(
+      { numId: 2, ilvl: 1 },
+      expect.anything(),
+      expect.any(Number),
+      editor,
+      expect.anything(),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults the level to 0 when omitted', () => {
+    const { editor } = makeEditor({ styleId: 'Heading3' });
+
+    paragraphsSetNumberingWrapper(editor, {
+      target: { kind: 'block', nodeType: 'heading', nodeId: 'p1' },
+      numId: 2,
+    });
+
+    expect(updateNumberingProperties).toHaveBeenCalledWith(
+      { numId: 2, ilvl: 0 },
+      expect.anything(),
+      expect.any(Number),
+      editor,
+      expect.anything(),
+    );
+  });
+
+  it('rejects a numId that resolves to no definition', () => {
+    vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(false);
+    const { editor, dispatch } = makeEditor({ styleId: 'Heading3' });
+
+    expect(() =>
+      paragraphsSetNumberingWrapper(editor, {
+        target: { kind: 'block', nodeType: 'heading', nodeId: 'p1' },
+        numId: 99,
+      }),
+    ).toThrow(/No numbering definition/);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects tracked mode', () => {
+    const { editor } = makeEditor({ styleId: 'Heading3' });
+
+    expect(() =>
+      paragraphsSetNumberingWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'heading', nodeId: 'p1' }, numId: 2 },
+        { changeMode: 'tracked' },
+      ),
+    ).toThrow();
+  });
+
+  it('returns NO_OP when the block already carries this numbering', () => {
+    const { editor, dispatch } = makeEditor({ numberingProperties: { numId: 2, ilvl: 0 } });
+
+    const result = paragraphsSetNumberingWrapper(editor, {
+      target: { kind: 'block', nodeType: 'listItem', nodeId: 'p1' },
+      numId: 2,
+      level: 0,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      failure: { code: 'NO_OP', message: 'format.paragraph.setNumbering produced no changes.' },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('treats an absent existing ilvl as level 0 in the no-op check', () => {
+    // A block with numId but no ilvl (which blocks.list reports as level 0),
+    // re-numbered to level 0, must be a NO_OP rather than a silent rewrite that
+    // strips the block's direct indent.
+    const { editor, dispatch } = makeEditor({ numberingProperties: { numId: 2 } });
+
+    const result = paragraphsSetNumberingWrapper(editor, {
+      target: { kind: 'block', nodeType: 'listItem', nodeId: 'p1' },
+      numId: 2,
+      level: 0,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      failure: { code: 'NO_OP', message: 'format.paragraph.setNumbering produced no changes.' },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('returns the post-mutation address when a plain paragraph reclassifies to listItem', () => {
+    const { editor } = makeEditor({});
+
+    const result = paragraphsSetNumberingWrapper(editor, {
+      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+      numId: 2,
+      level: 0,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.target.nodeType).toBe('listItem');
+    }
   });
 });
 

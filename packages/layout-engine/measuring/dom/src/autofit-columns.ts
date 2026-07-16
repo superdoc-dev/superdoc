@@ -45,6 +45,8 @@ export type AutoFitCellInput = {
   maxContentWidth?: number;
   /** Preferred width hint equivalent to `tcW`, in pixels. */
   preferredWidth?: number;
+  /** Horizontal padding + cell-border insets baked into the content widths, in pixels. */
+  horizontalInsets?: number;
 };
 
 /**
@@ -76,6 +78,8 @@ export type AutoFitContentMetricsCell = {
   minContentWidth: number;
   /** Maximum outer cell width, in pixels. */
   maxContentWidth: number;
+  /** Horizontal padding + cell-border insets baked into the content widths, in pixels. */
+  horizontalInsets?: number;
 };
 
 /**
@@ -166,6 +170,7 @@ type NormalizedCell = {
   preferredWidth?: number;
   minContentWidth: number;
   maxContentWidth: number;
+  horizontalInsets: number;
 };
 
 type NormalizedRow = {
@@ -214,6 +219,7 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
   const currentWidths = fixedLayout.columnWidths.slice(0, gridColumnCount);
   const minBounds = new Array<number>(gridColumnCount).fill(0);
   const maxBounds = new Array<number>(gridColumnCount).fill(0);
+  const textBounds = new Array<number>(gridColumnCount).fill(0);
   const preferredOverrides = new Array<number | undefined>(gridColumnCount).fill(undefined);
   const multiSpanCells: NormalizedCell[] = [];
 
@@ -221,6 +227,7 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     rows: normalizedRows,
     minBounds,
     maxBounds,
+    textBounds,
     preferredOverrides,
     multiSpanCells,
   });
@@ -254,7 +261,40 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
   } else {
     targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
-    if (!shouldPreservePreferredGrid) {
+    if (workingInput.contentSizeAutoTable === true) {
+      // Pure-auto tables content-size like Word: each column takes its max-content
+      // width and the table ends at the content demand, capped by the available
+      // width (the shrink below redistributes overflow). The authored grid sum is
+      // deliberately ignored here; it is not a Word layout cache for this shape.
+      // (SD-3309)
+      const columnBandAllowances = workingInput.columnBandAllowances;
+      // Word band rule (SD-3308 probes): the column grows by half a band per edge
+      // (the allowance); the painted band then consumes the other half from the
+      // padding. Padding compresses but TEXT never clips, so the column is floored
+      // at text + the full bands (2x the allowance).
+      resolvedWidths = maxBounds.map((max, index) => {
+        const allowance = columnBandAllowances?.[index] ?? 0;
+        const withAllowance = Math.max(max, minBounds[index]) + allowance;
+        const textFloor = textBounds[index] + allowance * 2;
+        return Math.max(withAllowance, textFloor);
+      });
+      // Spanning cells must keep their max-content demand: the proportional spread in
+      // applyMultiSpanMaximums can leave the covered columns collectively short (span
+      // padding is per cell, not per column), which wraps the span text where Word
+      // keeps one line. Top up the covered columns evenly. (SD-3309)
+      for (const spanCell of multiSpanCells) {
+        const covered = resolvedWidths.slice(spanCell.startColumn, spanCell.startColumn + spanCell.span);
+        const currentTotal = sumWidths(covered);
+        const demand = spanCell.preferredWidth ?? spanCell.maxContentWidth;
+        if (currentTotal < demand && covered.length > 0) {
+          const topUp = (demand - currentTotal) / covered.length;
+          for (let index = 0; index < covered.length; index++) {
+            resolvedWidths[spanCell.startColumn + index] += topUp;
+          }
+        }
+      }
+      targetTableWidth = Math.min(sumWidths(resolvedWidths), maxResolvedTableWidth);
+    } else if (!shouldPreservePreferredGrid) {
       resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
       resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
     }
@@ -334,6 +374,7 @@ function resolveAutoFitContext(input: AutoFitInput): AutoFitContext {
       preferredWidth: cell.preferredWidth,
       minContentWidth: cell.minContentWidth,
       maxContentWidth: cell.maxContentWidth,
+      horizontalInsets: cell.horizontalInsets,
     })),
   }));
 
@@ -382,6 +423,7 @@ function normalizeLegacyRows(rows: AutoFitRowInput[]): NormalizedRow[] {
         preferredWidth: sanitizeOptionalWidth(cell.preferredWidth),
         minContentWidth: Math.max(0, cell.minContentWidth ?? 0),
         maxContentWidth: Math.max(0, cell.maxContentWidth ?? cell.minContentWidth ?? 0),
+        horizontalInsets: Math.max(0, cell.horizontalInsets ?? 0),
       });
       columnIndex += span;
     }
@@ -429,6 +471,7 @@ function buildNormalizedRows(
           preferredWidth: sanitizeOptionalWidth(metrics?.preferredWidth ?? placedCell.preferredWidth),
           minContentWidth: Math.max(0, metrics?.minContentWidth ?? 0),
           maxContentWidth: Math.max(0, metrics?.maxContentWidth ?? metrics?.minContentWidth ?? 0),
+          horizontalInsets: Math.max(0, metrics?.horizontalInsets ?? 0),
         };
       }),
       skippedColumns: (workingRow.skippedColumns ?? []).map((skipped) => ({
@@ -449,10 +492,11 @@ function accumulateBounds(args: {
   rows: NormalizedRow[];
   minBounds: number[];
   maxBounds: number[];
+  textBounds: number[];
   preferredOverrides: Array<number | undefined>;
   multiSpanCells: NormalizedCell[];
 }): void {
-  const { rows, minBounds, maxBounds, preferredOverrides, multiSpanCells } = args;
+  const { rows, minBounds, maxBounds, textBounds, preferredOverrides, multiSpanCells } = args;
 
   for (const row of rows) {
     for (const skipped of row.skippedColumns) {
@@ -467,6 +511,13 @@ function accumulateBounds(args: {
       if (cell.span === 1) {
         minBounds[cell.startColumn] = Math.max(minBounds[cell.startColumn], cell.minContentWidth);
         maxBounds[cell.startColumn] = Math.max(maxBounds[cell.startColumn], cell.maxContentWidth);
+        // Text-only demand (content width minus padding/cell-border insets), used by
+        // the content-size band floor: padding may compress under a fat border band
+        // but the text itself never loses space. (SD-3308)
+        textBounds[cell.startColumn] = Math.max(
+          textBounds[cell.startColumn],
+          Math.max(0, cell.maxContentWidth - cell.horizontalInsets),
+        );
         if (preferredOverrides[cell.startColumn] == null && cell.preferredWidth != null) {
           preferredOverrides[cell.startColumn] = cell.preferredWidth;
         }
@@ -843,8 +894,12 @@ function redistributeTowardContentWeightedShape(widths: number[], minBounds: num
     return widths;
   }
 
-  const demandWeights = widths.map((width, index) => {
-    const demand = Math.max(maxBounds[index], width, minBounds[index], 1);
+  const demandValues = widths.map((width, index) => Math.max(maxBounds[index], width, minBounds[index], 1));
+  if (areWidthsEffectivelyUniform(demandValues, 0.001)) {
+    return widths;
+  }
+
+  const demandWeights = demandValues.map((demand) => {
     return demand * demand;
   });
   const totalDemandWeight = demandWeights.reduce((sum, weight) => sum + weight, 0);
@@ -1187,6 +1242,16 @@ function sumWidths(widths: number[]): number {
   return widths.reduce((sum, width) => sum + Math.max(0, width), 0);
 }
 
+function areWidthsEffectivelyUniform(widths: number[], tolerance: number): boolean {
+  if (widths.length <= 1) {
+    return true;
+  }
+
+  const minWidth = Math.min(...widths);
+  const maxWidth = Math.max(...widths);
+  return maxWidth - minWidth <= tolerance;
+}
+
 function scaleToTargetWidth(widths: number[], targetWidth: number): number[] {
   const currentTotal = sumWidths(widths);
   if (currentTotal <= 0 || targetWidth <= 0) {
@@ -1219,10 +1284,24 @@ function finalizeResult(layoutMode: AutoFitLayoutMode, widths: number[], minColu
     return buildFallbackResult(layoutMode, minColumnWidth);
   }
 
+  const finalizedWidths = normalizeNearIntegerWidthVector(widths);
+
   return {
     layoutMode,
-    columnWidths: widths,
-    totalWidth: sumWidths(widths),
-    gridColumnCount: widths.length,
+    columnWidths: finalizedWidths,
+    totalWidth: sumWidths(finalizedWidths),
+    gridColumnCount: finalizedWidths.length,
   };
+}
+
+function normalizeNearIntegerWidthVector(widths: number[]): number[] {
+  const totalWidth = sumWidths(widths);
+  const roundedTotalWidth = Math.round(totalWidth);
+  if (Math.abs(totalWidth - roundedTotalWidth) > 1e-9) {
+    return widths;
+  }
+
+  const next = widths.slice();
+  next[next.length - 1] = Math.max(0, next[next.length - 1] + (roundedTotalWidth - totalWidth));
+  return next;
 }

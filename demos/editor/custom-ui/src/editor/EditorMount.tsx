@@ -45,10 +45,12 @@ const TELEMETRY = { enabled: false as const };
  */
 export function EditorMount() {
   const setSuperDoc = useSetSuperDoc();
+  const params = new URLSearchParams(window.location.search);
+  const documentUrl = params.get('document') || '/sample-review.docx';
 
   return (
     <SuperDocEditor
-      document="/sample-review.docx"
+      document={documentUrl}
       documentMode="editing"
       user={CURRENT_USER}
       modules={MODULES}

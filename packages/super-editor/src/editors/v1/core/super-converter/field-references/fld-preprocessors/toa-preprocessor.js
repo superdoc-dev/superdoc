@@ -1,3 +1,5 @@
+import { buildBlockFieldNode } from './build-block-field-node.js';
+
 /**
  * Processes a TOA (Table of Authorities) instruction and creates an `sd:tableOfAuthorities` node.
  *
@@ -5,20 +7,10 @@
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
  * @param {string} instrText The instruction text.
- * @param {import('../../v2/docxHelper').ParsedDocx} [_docx] The docx object (unused).
- * @param {Array<{type: string, text?: string}>} [instructionTokens] Raw instruction tokens.
+ * @param {{ instructionTokens?: Array<{type: string, text?: string}> | null }} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessToaInstruction(nodesToCombine, instrText, _docx, instructionTokens = null) {
-  return [
-    {
-      name: 'sd:tableOfAuthorities',
-      type: 'element',
-      attributes: {
-        instruction: instrText,
-        ...(instructionTokens ? { instructionTokens } : {}),
-      },
-      elements: nodesToCombine,
-    },
-  ];
+export function preProcessToaInstruction(nodesToCombine, instrText, options = {}, legacyInstructionTokens = null) {
+  const instructionTokens = options?.instructionTokens ?? legacyInstructionTokens;
+  return buildBlockFieldNode('sd:tableOfAuthorities', nodesToCombine, instrText, instructionTokens);
 }

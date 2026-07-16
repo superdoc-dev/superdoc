@@ -9,7 +9,7 @@ SuperDoc works with Nuxt 4+ as a client-side Vue component. Set `ssr: false` in 
 ## Install
 
 ```bash
-npm install superdoc
+npm install superdoc @superdoc-dev/fonts
 ```
 
 ## Configure Nuxt
@@ -33,6 +33,7 @@ Nuxt auto-imports Vue's `ref`, `watch`, and lifecycle hooks: no manual imports n
 ```vue app/pages/index.vue
 <script setup lang="ts">
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc-dev/fonts';
 
 const container = ref<HTMLDivElement | null>(null);
 const file = ref<File | null>(null);
@@ -50,6 +51,7 @@ const initEditor = () => {
   superdoc = new SuperDoc({
     selector: container.value,
     document: file.value,
+    fonts: superdocFonts,
   });
 };
 

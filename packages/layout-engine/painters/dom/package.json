@@ -10,6 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./ruler-core": {
+      "types": "./src/ruler/ruler-core.ts",
+      "default": "./src/ruler/ruler-core.ts"
     }
   },
   "scripts": {
@@ -20,6 +24,7 @@
     "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
     "@superdoc/font-utils": "workspace:*",
     "@superdoc/preset-geometry": "workspace:*",
     "@superdoc/url-validation": "workspace:*"

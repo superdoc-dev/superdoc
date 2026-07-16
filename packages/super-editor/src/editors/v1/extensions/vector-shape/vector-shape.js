@@ -88,6 +88,11 @@ export const VectorShape = Node.create({
         rendered: false,
       },
 
+      effects: {
+        default: null,
+        rendered: false,
+      },
+
       rotation: {
         default: 0,
         renderDOM: (attrs) => {

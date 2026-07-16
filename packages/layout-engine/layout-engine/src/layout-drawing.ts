@@ -1,4 +1,4 @@
-import type { DrawingBlock, DrawingMeasure, DrawingFragment } from '@superdoc/contracts';
+import type { DrawingBlock, DrawingMeasure, DrawingFragment, ParagraphMeasure } from '@superdoc/contracts';
 import type { NormalizedColumns } from './layout-image.js';
 import type { PageState } from './paginator.js';
 import { extractBlockPmRange } from './layout-utils.js';
@@ -22,8 +22,10 @@ export type DrawingLayoutContext = {
   ensurePage: () => PageState;
   /** Advances to the next column or page, returning the new page state */
   advanceColumn: (state: PageState) => PageState;
-  /** Computes the X coordinate for a given column index */
-  columnX: (columnIndex: number) => number;
+  /** Computes the X coordinate for a column in the given page state (SD-2629). */
+  columnX: (state: PageState, columnIndex?: number) => number;
+  /** Optional textbox paragraph measurements carried alongside textbox drawings. */
+  textboxContentMeasures?: ParagraphMeasure[];
 };
 
 /**
@@ -66,6 +68,7 @@ export function layoutDrawingBlock({
   ensurePage,
   advanceColumn,
   columnX,
+  textboxContentMeasures,
 }: DrawingLayoutContext): void {
   if (block.anchor?.isAnchored) {
     return;
@@ -86,7 +89,10 @@ export function layoutDrawingBlock({
   const maxWidthForBlock =
     attrs?.isFullWidth === true && maxWidth > 0 ? Math.max(1, maxWidth - indentLeft - indentRight) : maxWidth;
   const rawWrap = attrs?.wrap as { type?: unknown } | undefined;
-  const isInlineShapeGroup = block.drawingKind === 'shapeGroup' && rawWrap?.type === 'Inline';
+  // Inline shape groups and textboxes render at their authored width, so a centered or
+  // right-aligned host paragraph must offset the whole box within the column (SD: IT-1140).
+  const isInlineAlignableDrawing =
+    (block.drawingKind === 'shapeGroup' || block.drawingKind === 'textboxShape') && rawWrap?.type === 'Inline';
   const inlineParagraphAlignment =
     attrs?.inlineParagraphAlignment === 'center' || attrs?.inlineParagraphAlignment === 'right'
       ? attrs.inlineParagraphAlignment
@@ -113,8 +119,8 @@ export function layoutDrawingBlock({
   }
 
   const pmRange = extractBlockPmRange(block);
-  let x = columnX(state.columnIndex) + marginLeft + indentLeft;
-  if (isInlineShapeGroup && inlineParagraphAlignment) {
+  let x = columnX(state) + marginLeft + indentLeft;
+  if (isInlineAlignableDrawing && inlineParagraphAlignment) {
     const pIndentLeft = typeof attrs?.paragraphIndentLeft === 'number' ? attrs.paragraphIndentLeft : 0;
     const pIndentRight = typeof attrs?.paragraphIndentRight === 'number' ? attrs.paragraphIndentRight : 0;
     const alignBox = Math.max(0, maxWidthForBlock - pIndentLeft - pIndentRight);
@@ -138,6 +144,10 @@ export function layoutDrawingBlock({
     pmEnd: pmRange.pmEnd,
     sourceAnchor: block.sourceAnchor,
   };
+
+  if (textboxContentMeasures) {
+    (fragment as DrawingFragment & { contentMeasures?: ParagraphMeasure[] }).contentMeasures = textboxContentMeasures;
+  }
 
   state.page.fragments.push(fragment);
   state.cursorY += requiredHeight;

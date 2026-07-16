@@ -91,6 +91,12 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Paragraph style reference operations (set/clear w:pStyle).',
     pagePath: 'styles/paragraph/index.mdx',
   },
+  templates: {
+    title: 'Templates',
+    description:
+      'Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, custom XML) from a source package onto the current document while preserving body content.',
+    pagePath: 'templates/index.mdx',
+  },
   tables: {
     title: 'Tables',
     description: 'Table structure, layout, styling, and cell operations.',

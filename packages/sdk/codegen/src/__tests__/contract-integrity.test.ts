@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
 const CONTRACT_PATH = path.join(REPO_ROOT, 'apps/cli/generated/sdk-contract.json');
 const CATALOG_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json');
 const NODE_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated/client.ts');
+const execFileAsync = promisify(execFile);
 const CLI_ONLY_OPERATIONS = new Set([
   'doc.open',
   'doc.save',
@@ -19,6 +22,15 @@ const CLI_ONLY_OPERATIONS = new Set([
   'doc.session.save',
   'doc.session.close',
   'doc.session.setDefault',
+  // CLI/SDK-only session op: model-authored JS against the live editor.doc.
+  'doc.executeCode',
+  // LLM-tools preset proxies (cross-language surface for the Python SDK).
+  'doc.preset.list',
+  'doc.preset.getCatalog',
+  'doc.preset.getTools',
+  'doc.preset.getSystemPrompt',
+  'doc.preset.getMcpPrompt',
+  'doc.preset.dispatch',
 ]);
 
 async function loadJson<T>(filePath: string): Promise<T> {
@@ -474,6 +486,10 @@ describe('agentVisible param annotation integrity', () => {
 describe('Response envelope key integrity', () => {
   const NODE_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated/client.ts');
   const PYTHON_CLIENT_PATH = path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/generated/client.py');
+
+  test('generated Python client compiles', async () => {
+    await execFileAsync('python3', ['-m', 'py_compile', PYTHON_CLIENT_PATH], { cwd: REPO_ROOT });
+  });
 
   test('every document-surface operation has a responseEnvelopeKey field', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);

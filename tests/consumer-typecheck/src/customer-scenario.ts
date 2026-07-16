@@ -871,6 +871,10 @@ import {
   type CommentsSlice,
   type EntityAddress as UIEntityAddress,
   type EqualityFn,
+  type FontFamilyOption as UIFontFamilyOption,
+  type FontsHandle,
+  type FontSizeOption as UIFontSizeOption,
+  type FontsSlice,
   type Receipt as UIReceipt,
   type ScrollIntoViewInput as UIScrollIntoViewInput,
   type ScrollIntoViewOutput as UIScrollIntoViewOutput,
@@ -885,6 +889,7 @@ import {
   type SuperDocUIState,
   type TextTarget as UITextTarget,
   type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangePointHit,
   type TrackChangesHandle,
   type TrackChangesItem,
   type TrackChangesListResult as UITrackChangesListResult,
@@ -908,6 +913,7 @@ function testSuperDocUISubEntry() {
     toolbar: SuperDocUI['toolbar'];
     commands: SuperDocUI['commands'];
     comments: CommentsHandle;
+    fonts: FontsHandle;
     trackChanges: TrackChangesHandle;
     viewport: ViewportHandle;
     state: SuperDocUIState;
@@ -915,6 +921,9 @@ function testSuperDocUISubEntry() {
   type AssertSlices = {
     selection: SelectionSlice;
     comments: CommentsSlice;
+    fonts: FontsSlice;
+    fontFamilyOption: UIFontFamilyOption;
+    fontSizeOption: UIFontSizeOption;
     trackChanges: TrackChangesSlice;
     trackChangesItem: TrackChangesItem;
   };
@@ -1037,6 +1046,22 @@ function testSuperDocUISubEntry() {
     void result;
   }
   void exerciseCommandDiscovery;
+
+  // SD-3469: point hit-test + UI-active activation on the track-changes handle.
+  function exerciseTrackChangePointHit(ui: SuperDocUI): void {
+    const hit: TrackChangePointHit | null = ui.trackChanges.getAt({ x: 100, y: 200 });
+    if (hit) {
+      const id: string = hit.id;
+      const item: TrackChangesItem = hit.item;
+      void id;
+      void item;
+      const setActive: boolean = ui.trackChanges.setActive(hit.id);
+      void setActive;
+    }
+    const cleared: boolean = ui.trackChanges.setActive(null);
+    void cleared;
+  }
+  void exerciseTrackChangePointHit;
 }
 
 export {

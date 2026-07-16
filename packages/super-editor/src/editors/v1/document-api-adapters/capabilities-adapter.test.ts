@@ -300,12 +300,8 @@ describe('getDocumentApiCapabilities', () => {
   });
 
   it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
-    const editor = makeEditor({
-      commands: {
-        deleteBlockNodeById: vi.fn(() => true),
-      } as unknown as Editor['commands'],
-    });
-    // editor has the command but no helpers.blockNode.getBlockNodeById
+    const editor = makeEditor();
+    // editor has no helpers.blockNode.getBlockNodeById
     const capabilities = getDocumentApiCapabilities(editor);
 
     expect(capabilities.operations['blocks.delete'].available).toBe(false);
@@ -314,13 +310,8 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations['blocks.delete'].reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 
-  it('marks blocks.delete as available when both command and helper are present', () => {
-    const editor = makeEditor({
-      commands: {
-        deleteBlockNodeById: vi.fn(() => true),
-      } as unknown as Editor['commands'],
-    });
-    // Add the required helper
+  it('marks blocks.delete as available when the blockNode helper is present', () => {
+    const editor = makeEditor();
     (editor as any).helpers = {
       blockNode: { getBlockNodeById: vi.fn(() => []) },
     };
@@ -328,7 +319,7 @@ describe('getDocumentApiCapabilities', () => {
 
     expect(capabilities.operations['blocks.delete'].available).toBe(true);
     expect(capabilities.operations['blocks.delete'].dryRun).toBe(true);
-    expect(capabilities.operations['blocks.delete'].tracked).toBe(false);
+    expect(capabilities.operations['blocks.delete'].tracked).toBe(true);
   });
 
   it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for non-command-backed availability failures', () => {
@@ -677,6 +668,45 @@ describe('getDocumentApiCapabilities', () => {
 
     const capabilities = getDocumentApiCapabilities(editor);
     const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  // --- templates.apply capability tests ---
+
+  it('marks templates.apply as available when converter can read XML parts', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+      parseXmlToJson: vi.fn(() => ({ elements: [] })),
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['templates.apply'].available).toBe(true);
+    expect(capabilities.operations['templates.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['templates.apply'].reasons).toBeUndefined();
+  });
+
+  it('marks templates.apply unavailable without reporting COMMAND_UNAVAILABLE', () => {
+    const editor = makeEditor();
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['templates.apply'].reasons ?? [];
+    expect(capabilities.operations['templates.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks templates.apply unavailable when converter cannot parse XML parts', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+      parseXmlToJson: undefined,
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['templates.apply'].reasons ?? [];
+    expect(capabilities.operations['templates.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
     expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 

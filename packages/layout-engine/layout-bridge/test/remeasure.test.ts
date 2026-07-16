@@ -1329,7 +1329,7 @@ describe('remeasureParagraph', () => {
       expect(measure.lines.length).toBeGreaterThan(1);
     });
 
-    it('falls back to wordLayout.marker.textStartX when wordLayout.textStartPx is missing', () => {
+    it('uses rendered first-line tab stop when wordLayout.textStartPx is missing', () => {
       const block = createBlock([textRun('A'.repeat(60))], {
         indent: { left: 10 },
         wordLayout: { firstLineIndentMode: true, marker: { textStartX: 50 } },
@@ -1337,11 +1337,11 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, 100);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(50);
+      expect(measure.lines[0].maxWidth).toBe(52);
       expect(measure.lines[1].maxWidth).toBe(90);
     });
 
-    it('prefers shared resolved text start over top-level textStartPx when both exist', () => {
+    it('uses rendered first-line tab stop over stale textStart targets when both exist', () => {
       const block = createBlock([textRun('A'.repeat(60))], {
         indent: { left: 10 },
         wordLayout: {
@@ -1353,8 +1353,29 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, 100);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(50);
+      expect(measure.lines[0].maxWidth).toBe(52);
       expect(measure.lines[1].maxWidth).toBe(90);
+    });
+
+    it('remeasures SD-3426 first-line list tabs from the rendered tab stop', () => {
+      const block = createBlock([textRun('A'.repeat(60))], {
+        indent: { left: 0, firstLine: 48 },
+        wordLayout: {
+          firstLineIndentMode: true,
+          marker: {
+            markerX: 48,
+            glyphWidthPx: 18.65625,
+            textStartX: 66,
+            gutterWidthPx: 8,
+            justification: 'left',
+            suffix: 'tab',
+          },
+        },
+      });
+      const measure = remeasureParagraph(block, 624);
+
+      expect(measure.lines[0].maxWidth).toBeCloseTo(528, 5);
+      expect(measure.marker?.markerTextWidth).toBeCloseTo(18.65625, 5);
     });
 
     it('handles hanging indent with left indent for list formatting', () => {
@@ -1615,6 +1636,127 @@ describe('remeasureParagraph', () => {
       expect(measure.lines).toHaveLength(1);
       // Unicode chars should be handled by JavaScript's toUpperCase
       expect(measure.lines[0].width).toBeGreaterThan(0);
+    });
+  });
+
+  describe('atomic runs', () => {
+    it('does not retain image line height after rewinding past an inline image break point', () => {
+      const block = createBlock([
+        textRun('A '),
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,abc',
+          width: 179,
+          height: 179,
+          pmStart: 3,
+          pmEnd: 4,
+        },
+        textRun('B'.repeat(30)),
+      ]);
+
+      // Fits "A " + image, then overflows on following text and rewinds to the space.
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].toChar).toBe(2);
+      expect(measure.lines[0].maxImageHeight).toBeUndefined();
+      expect(measure.lines[0].lineHeight).toBeCloseTo(16 * 1.2);
+      expect(measure.lines[1].maxImageHeight).toBe(179);
+    });
+
+    it('measures image-only paragraphs with correct width and line height', () => {
+      const block = createBlock([
+        {
+          kind: 'image',
+          src: 'data:image/png;base64,abc',
+          width: 179,
+          height: 179,
+          pmStart: 1,
+          pmEnd: 2,
+        },
+      ]);
+      block.attrs = { alignment: 'center' };
+
+      const measure = remeasureParagraph(block, 179.8);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(179);
+      expect(measure.lines[0].lineHeight).toBe(179);
+      expect(measure.lines[0].maxImageHeight).toBe(179);
+      expect(measure.totalHeight).toBe(179);
+    });
+
+    it('sizes field annotation pills from displayLabel + padding (not run.width/height)', () => {
+      // Regression: field annotation runs carry no top-level width/height, so the old
+      // atomic sizing measured them 0x0 and the pill collapsed. The shared sizer now
+      // measures the label (4 chars * 10px) + pill padding (8px) = 48px wide.
+      const block = createBlock([
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Name',
+          fontSize: 16,
+          pmStart: 1,
+          pmEnd: 2,
+        } as unknown as Run,
+      ]);
+
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(48);
+      // Pill height = fontSize * 1.2 + vertical padding (6) = 25.2, taller than the
+      // 16px-text line height, so it drives both maxImageHeight and lineHeight.
+      expect(measure.lines[0].maxImageHeight).toBeCloseTo(16 * 1.2 + 6);
+      expect(measure.lines[0].lineHeight).toBeCloseTo(16 * 1.2 + 6);
+    });
+
+    it('sizes math runs from precomputed dimensions without adding dist* margins', () => {
+      const block = createBlock([
+        {
+          kind: 'math',
+          ommlJson: {},
+          textContent: '',
+          width: 30,
+          height: 24,
+          // dist* is not part of the math box; it must be ignored.
+          distLeft: 9,
+          distTop: 9,
+          pmStart: 1,
+          pmEnd: 2,
+        } as unknown as Run,
+      ]);
+
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].width).toBe(30);
+      expect(measure.lines[0].maxImageHeight).toBe(24);
+    });
+
+    it('right-aligns a field annotation following an end tab (atomic group sizing)', () => {
+      // Regression: the tab look-ahead measured the field with getRunWidth (0), so the
+      // group width was zero and the aligned branch was skipped, leaving the pill at the
+      // tab stop instead of ending on it. The pill is 'AB' (2*10) + 8 padding = 28px, so
+      // a right (end) stop at 100px must start it at 72px.
+      const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
+      const field = {
+        kind: 'fieldAnnotation',
+        variant: 'text',
+        displayLabel: 'AB',
+        fontSize: 16,
+        pmStart: 3,
+        pmEnd: 4,
+      } as unknown as Run;
+      const block = createBlock([textRun('X'), tabRun(), field], { tabs: [tabStop] });
+
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      const fieldSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 2);
+      expect(fieldSegment?.width).toBe(28);
+      expect(fieldSegment?.x).toBeCloseTo(72, 1);
     });
   });
 });

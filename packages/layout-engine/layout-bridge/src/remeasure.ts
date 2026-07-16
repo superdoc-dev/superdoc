@@ -18,6 +18,12 @@ import {
   DEFAULT_TAB_INTERVAL_PX as _DEFAULT_TAB_INTERVAL_PX,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import {
+  isAtomicLayoutRun,
+  getAtomicRunLayoutSize,
+  type MeasureAtomicText,
+  type MinimalAtomicRun,
+} from '@superdoc/common/atomic-run-size';
 
 /**
  * Type definition for paragraph block attributes that include indentation and tab stops.
@@ -350,6 +356,49 @@ const getRunWidth = (run: Run): number => {
 };
 
 /**
+ * Measures field annotation label text on the shared canvas. Mirrors the run's
+ * font properties so the pill width tracks the painted glyphs. Falls back to a
+ * proportional estimate when no canvas context is available (SSR), matching how
+ * {@link measureRunSliceWidth} approximates ordinary text.
+ */
+const measureAtomicText: MeasureAtomicText = (text, run, fontSize) => {
+  const family = (run.fontFamily as string | undefined) || 'Arial';
+  const context = getCtx();
+  if (!context) {
+    return Math.max(0, text.length * (fontSize * 0.6));
+  }
+  const italic = run.italic ? 'italic ' : '';
+  const bold = run.bold ? 'bold ' : '';
+  context.font = `${italic}${bold}${fontSize}px ${family}`.trim();
+  return context.measureText(text).width;
+};
+
+const getAtomicRunLayoutWidth = (run: Run): number =>
+  getAtomicRunLayoutSize(run as MinimalAtomicRun, measureAtomicText).width;
+
+const getAtomicRunLayoutHeight = (run: Run): number =>
+  getAtomicRunLayoutSize(run as MinimalAtomicRun, measureAtomicText).height;
+
+/** Max atomic (image/math/field) height for runs actually included on [fromRun, toRun]. */
+const getLineMaxAtomicHeight = (
+  runs: Run[],
+  fromRun: number,
+  fromChar: number,
+  toRun: number,
+  toChar: number,
+): number => {
+  let max = 0;
+  for (let r = fromRun; r <= toRun; r += 1) {
+    const run = runs[r];
+    if (!isAtomicLayoutRun(run)) continue;
+    if (r === toRun && toChar === 0) continue;
+    if (r === fromRun && r === toRun && toChar <= fromChar) continue;
+    max = Math.max(max, getAtomicRunLayoutHeight(run));
+  }
+  return max;
+};
+
+/**
  * Checks if a break run is a line break (as opposed to page/column break).
  *
  * @param run - The run to check
@@ -672,7 +721,10 @@ const scanTabAlignmentGroup = (
 
     const text = runText(run);
     if (!text) {
-      const runWidth = getRunWidth(run);
+      // Atomic runs (image/math/field annotation) carry their box in the shared sizer,
+      // not in `run.width` — field annotations in particular are 0 via getRunWidth, which
+      // would zero out the group and skip center/right/decimal alignment.
+      const runWidth = isAtomicLayoutRun(run) ? getAtomicRunLayoutWidth(run) : getRunWidth(run);
       if (runWidth > 0) {
         totalWidth += runWidth;
         endRun = r;
@@ -742,7 +794,7 @@ const measureTabAlignmentGroupInLine = (
 
     const text = runText(run);
     if (!text) {
-      totalWidth += getRunWidth(run);
+      totalWidth += isAtomicLayoutRun(run) ? getAtomicRunLayoutWidth(run) : getRunWidth(run);
       continue;
     }
 
@@ -1001,7 +1053,27 @@ const applyTabLayoutToLines = (
 
       const text = runText(run);
       if (!text) {
-        cursorX += getRunWidth(run);
+        const atomicWidth = isAtomicLayoutRun(run) ? getAtomicRunLayoutWidth(run) : getRunWidth(run);
+        // Position atomic runs (image/math/field annotation) that follow an
+        // end/center/decimal tab so the pill aligns to the stop, matching the DOM
+        // measurer. Without this the pending alignment would leak to a later text run.
+        const pendingTabAlign = consumePendingTabAlignStart();
+        if (pendingTabAlign != null) {
+          const segment: LineSegment = {
+            runIndex,
+            fromChar: 0,
+            toChar: 1,
+            width: atomicWidth,
+            x: pendingTabAlign.paintX,
+            ...(pendingTabAlign.precedingTabEndX !== undefined
+              ? { precedingTabEndX: pendingTabAlign.precedingTabEndX }
+              : {}),
+          };
+          cursorX = pendingTabAlign.layoutX + atomicWidth;
+          segments.push(segment);
+        } else {
+          cursorX += atomicWidth;
+        }
         lineWidth = Math.max(lineWidth, cursorX);
         continue;
       }
@@ -1395,6 +1467,17 @@ export function remeasureParagraph(
         endChar = text.length > 0 ? text.length : start + 1;
         continue;
       }
+      if (text.length === 0 && isAtomicLayoutRun(run)) {
+        const atomicWidth = getAtomicRunLayoutWidth(run);
+        if (width > 0 && width + atomicWidth > effectiveMaxWidth - WIDTH_FUDGE_PX) {
+          didBreakInThisLine = true;
+          break;
+        }
+        width += atomicWidth;
+        endRun = r;
+        endChar = 1;
+        continue;
+      }
       for (let c = start; c < text.length; c += 1) {
         const ch = text[c];
         if (ch === '\t') {
@@ -1488,6 +1571,8 @@ export function remeasureParagraph(
       endChar = startChar + 1;
     }
 
+    const lineMaxAtomicHeight = getLineMaxAtomicHeight(runs, startRun, startChar, endRun, endChar);
+
     const line: Line = {
       fromRun: startRun,
       fromChar: startChar,
@@ -1496,8 +1581,9 @@ export function remeasureParagraph(
       width,
       ascent: 0,
       descent: 0,
-      lineHeight: lineHeightForRuns(runs, startRun, endRun, lastMeasuredFontSize),
+      lineHeight: Math.max(lineHeightForRuns(runs, startRun, endRun, lastMeasuredFontSize), lineMaxAtomicHeight),
       maxWidth: effectiveMaxWidth,
+      ...(lineMaxAtomicHeight > 0 ? { maxImageHeight: lineMaxAtomicHeight } : {}),
     };
     lines.push(line);
     if (lineMaxTextFontSize > 0) {
@@ -1550,10 +1636,14 @@ export function remeasureParagraph(
 
   // Build marker info if this is a list paragraph
   const marker = wordLayout?.marker;
+  const markerTextWidth =
+    typeof marker?.glyphWidthPx === 'number' && Number.isFinite(marker.glyphWidthPx) && marker.glyphWidthPx >= 0
+      ? marker.glyphWidthPx
+      : (measuredMarkerTextWidth ?? 0);
   const markerInfo = marker
     ? {
         markerWidth: indentHanging ?? 0,
-        markerTextWidth: measuredMarkerTextWidth ?? 0,
+        markerTextWidth,
         indentLeft,
         gutterWidth: marker.gutterWidthPx,
       }

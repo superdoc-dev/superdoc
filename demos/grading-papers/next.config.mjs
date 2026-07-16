@@ -1,8 +1,11 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const appRoot = dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = resolve(appRoot, '../..');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -10,17 +13,9 @@ const nextConfig = {
     unoptimized: true,
   },
   trailingSlash: true,
-  
-  webpack(cfg) {
-    cfg.module.rules.push({
-      test: /\.docx$/i,
-      type: 'asset/resource',
-      generator: { filename: 'static/docs/[hash][ext]' },
-    });
-    return cfg;
+  turbopack: {
+    root: workspaceRoot,
   },
-
-
   async headers() {
     return [
       {

@@ -139,6 +139,33 @@ describe('createHiddenHost', () => {
     });
   });
 
+  describe('IME composition stylesheet (SD-2368)', () => {
+    it('injects a stylesheet forcing sd-paragraph-content to display: block in hidden hosts', () => {
+      createHiddenHost(mockDocument, 800);
+
+      const style = mockDocument.getElementById('sd-presentation-hidden-host-styles');
+      expect(style).not.toBeNull();
+      expect(style!.textContent).toContain('.presentation-editor__hidden-host .sd-paragraph-content');
+      expect(style!.textContent).toContain('display: block');
+    });
+
+    it('injects the stylesheet only once per document', () => {
+      createHiddenHost(mockDocument, 800);
+      createHiddenHost(mockDocument, 612);
+
+      const styles = mockDocument.querySelectorAll('#sd-presentation-hidden-host-styles');
+      expect(styles.length).toBe(1);
+    });
+
+    it('injects per document, not globally', () => {
+      const otherDoc = document.implementation.createHTMLDocument('other');
+      createHiddenHost(mockDocument, 800);
+
+      expect(mockDocument.getElementById('sd-presentation-hidden-host-styles')).not.toBeNull();
+      expect(otherDoc.getElementById('sd-presentation-hidden-host-styles')).toBeNull();
+    });
+  });
+
   describe('document isolation', () => {
     it('creates elements in the provided document context', () => {
       const customDoc = document.implementation.createHTMLDocument('custom');

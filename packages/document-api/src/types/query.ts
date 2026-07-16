@@ -6,11 +6,12 @@ import type { StoryLocator } from './story.types.js';
 
 export interface TextSelector {
   type: 'text';
+  /** Text to match. In regex mode, patterns are validated for syntax, length, and safety before execution. */
   pattern: string;
   /**
    * Controls text matching strategy.
-   * - `contains`: literal substring matching (default)
-   * - `regex`: regular expression matching
+   * - `contains`: literal substring matching (default). Use this for literal text.
+   * - `regex`: regular expression matching. Patterns are validated for syntax, maximum length, and safety.
    */
   mode?: 'contains' | 'regex';
   /**
@@ -18,6 +19,20 @@ export interface TextSelector {
    * Defaults to false (case-insensitive).
    */
   caseSensitive?: boolean;
+  /**
+   * When true, matches must start and end on a word boundary.
+   * Defaults to false.
+   */
+  wholeWord?: boolean;
+  /**
+   * When true, includes text from pending tracked deletions in search results.
+   * Defaults to false (Word-compatible behavior: deleted text is not searchable).
+   *
+   * Note: this flag controls match discovery only. The `node` payload in each
+   * result item is still projected using the visible text model, so deleted runs
+   * will not appear in `item.node` even when they caused the match.
+   */
+  includeDeletedText?: boolean;
 }
 
 export interface NodeSelector {

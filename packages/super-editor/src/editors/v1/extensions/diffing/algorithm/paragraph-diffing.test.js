@@ -16,7 +16,8 @@ import { semanticInlineNodeKey } from './semantic-normalization.ts';
  * @param {Record<string, unknown>} attrs Run attributes to attach.
  * @returns {Array<Record<string, unknown>>}
  */
-const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, runAttrs: attrs, kind: 'text' }));
+const buildRuns = (text, attrs = {}) =>
+  text.split('').map((char) => ({ text: char, length: 1, runAttrs: attrs, kind: 'text' }));
 
 /**
  * Builds marked text tokens with offsets for paragraph diff tests.
@@ -29,7 +30,8 @@ const buildRuns = (text, attrs = {}) => text.split('').map((char) => ({ char, ru
  */
 const buildMarkedRuns = (text, marks, attrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
-    char,
+    text: char,
+    length: 1,
     runAttrs: attrs,
     kind: 'text',
     marks,
@@ -85,12 +87,12 @@ const createParagraphNode = (overrides = {}) => {
  */
 /**
  * Derives a content signature from tokens, matching the real buildContentSignature logic.
- * Text tokens contribute their char; inline node tokens contribute a normalized JSON key.
+ * Text tokens contribute their text; inline node tokens contribute a normalized JSON key.
  */
 const deriveContentSignature = (tokens) =>
   tokens
     .map((token) => {
-      if (token.kind === 'text') return token.char;
+      if (token.kind === 'text') return token.text;
       if (token.kind === 'inlineNode' && token.node) {
         return `\0${semanticInlineNodeKey(token.node)}\0`;
       }
@@ -142,6 +144,27 @@ describe('shouldProcessEqualAsModification', () => {
   it('returns false when serialized nodes are identical', () => {
     const node = { toJSON: () => ({ attrs: { bold: true } }) };
     expect(shouldProcessEqualAsModification({ node }, { node })).toBe(false);
+  });
+
+  it('returns false when runs differ only in volatile rsid attrs (SD-3339 — Word save reassigns rsids)', () => {
+    // When Word saves a document without any visible edit, it may reassign rsidR/rsidRPr
+    // on unchanged runs. These paragraphs must not produce false modifications.
+    const makePara = (rsidR) => ({
+      node: {
+        toJSON: () => ({
+          type: 'paragraph',
+          attrs: { paraId: 'P1', align: 'left' },
+          content: [
+            {
+              type: 'run',
+              attrs: { rsidR, rsidRPr: rsidR, styleId: 'Normal' },
+              content: [{ type: 'text', text: 'Unchanged paragraph content.' }],
+            },
+          ],
+        }),
+      },
+    });
+    expect(shouldProcessEqualAsModification(makePara('00112233'), makePara('00AABBCC'))).toBe(false);
   });
 });
 

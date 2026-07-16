@@ -148,4 +148,48 @@ describe('document-api story: header/footer diff roundtrip', () => {
     });
     expect(reopenHeaderText).toContain(headerText);
   });
+
+  it('emits a diagnostics warning when header/footer changes are applied in tracked mode', async () => {
+    const baseSessionId = sid('hf-tracked-base');
+    const targetSessionId = sid('hf-tracked-target');
+
+    const bodyText = 'Contract body text for tracked mode test.';
+    const headerText = 'Header added in tracked mode test.';
+
+    await client.doc.open({ sessionId: baseSessionId, contentOverride: bodyText, overrideType: 'text' });
+    await client.doc.open({ sessionId: targetSessionId, contentOverride: bodyText, overrideType: 'text' });
+
+    const sectionsResult = unwrapNamed<any>(await client.doc.sections.list({ sessionId: targetSessionId }), 'result');
+    const firstSection = requireFirstSectionAddress(sectionsResult);
+    const headerStory = createHeaderStoryLocator(firstSection);
+
+    await client.doc.insert({ sessionId: targetSessionId, in: headerStory, value: headerText });
+
+    const snapshot = unwrapNamed<any>(await client.doc.diff.capture({ sessionId: targetSessionId }), 'snapshot');
+    await client.doc.close({ sessionId: targetSessionId, discard: true });
+
+    const diff = unwrapNamed<any>(
+      await client.doc.diff.compare({ sessionId: baseSessionId, targetSnapshot: snapshot }),
+      'diff',
+    );
+    expect(diff.summary.headerFooters.hasChanges).toBe(true);
+
+    const applyResult = unwrapNamed<any>(
+      await client.doc.diff.apply({ sessionId: baseSessionId, diff, changeMode: 'tracked' }),
+      'result',
+    );
+    expect(applyResult.appliedOperations).toBeGreaterThan(0);
+
+    // Header/footer changes are applied directly even in tracked mode.
+    // The diagnostics array must contain the canonical warning string.
+    expect(applyResult.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          'Header/footer replay applied directly because tracked header/footer replay is not supported.',
+        ),
+      ]),
+    );
+
+    await client.doc.close({ sessionId: baseSessionId, discard: true });
+  });
 });

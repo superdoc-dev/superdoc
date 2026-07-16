@@ -28,9 +28,11 @@ Returns a FieldInfo object with the field's instruction, result text, and nestin
 | --- | --- | --- | --- |
 | `target` | object(kind="field") | yes |  |
 | `target.blockId` | string | yes |  |
+| `target.fieldId` | string | no |  |
 | `target.kind` | `"field"` | yes | Constant: `"field"` |
 | `target.nestingDepth` | integer | no |  |
 | `target.occurrenceIndex` | integer | yes |  |
+| `target.storyId` | string | no |  |
 
 ### Example request
 
@@ -40,7 +42,8 @@ Returns a FieldInfo object with the field's instruction, result text, and nestin
     "blockId": "block-abc123",
     "kind": "field",
     "nestingDepth": 1,
-    "occurrenceIndex": 1
+    "occurrenceIndex": 1,
+    "storyId": "example"
   }
 }
 ```
@@ -77,6 +80,9 @@ _No fields._
         "blockId": {
           "type": "string"
         },
+        "fieldId": {
+          "type": "string"
+        },
         "kind": {
           "const": "field"
         },
@@ -85,6 +91,9 @@ _No fields._
         },
         "occurrenceIndex": {
           "type": "integer"
+        },
+        "storyId": {
+          "type": "string"
         }
       },
       "required": [

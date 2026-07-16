@@ -1,8 +1,10 @@
 import type { EditorState } from 'prosemirror-state';
-import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
-import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import type { FlowBlock, Run as LayoutRun, TextRun, TrackChangeAuthorColorResolver } from '@superdoc/contracts';
+import { toFlowBlocks } from '@core/layout-adapter';
+import type { ConverterContext } from '@core/layout-adapter/converter-context.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@core/layout-adapter/constants.js';
+import { formatFootnoteCardinal } from '@core/layout-adapter/footnote-formatting.js';
+import { isCustomMarkFollows } from './computeNoteNumbering.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
@@ -29,15 +31,20 @@ export function buildEndnoteBlocks(
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
   renderOverride: NoteRenderOverride | null = null,
+  resolveTrackedChangeColor?: TrackChangeAuthorColorResolver,
 ): FlowBlock[] {
   if (!editorState) return [];
 
   const endnoteNumberById = converterContext?.endnoteNumberById;
+  const endnoteNumberFormat = converterContext?.endnoteNumberFormat;
+  const endnoteFormatById = converterContext?.endnoteFormatById;
   const importedEndnotes = Array.isArray(converter?.endnotes) ? converter.endnotes : [];
   if (importedEndnotes.length === 0) return [];
 
   const orderedEndnoteIds: string[] = [];
   const seen = new Set<string>();
+  // §17.11.14 — customMarkFollows refs render the literal symbol in body; no body marker.
+  const customMarkIds = new Set<string>();
 
   editorState.doc.descendants((node) => {
     if (node.type?.name !== 'endnoteReference') return;
@@ -47,6 +54,7 @@ export function buildEndnoteBlocks(
     if (!key || seen.has(key)) return;
     seen.add(key);
     orderedEndnoteIds.push(key);
+    if (isCustomMarkFollows(node.attrs?.customMarkFollows)) customMarkIds.add(key);
   });
 
   if (orderedEndnoteIds.length === 0) return [];
@@ -64,10 +72,15 @@ export function buildEndnoteBlocks(
         enableRichHyperlinks: true,
         themeColors: themeColors as never,
         converterContext: converterContext as never,
+        resolveTrackedChangeColor,
       });
 
       if (result?.blocks?.length) {
-        ensureEndnoteMarker(result.blocks, id, endnoteNumberById);
+        if (!customMarkIds.has(id)) {
+          // §17.11.11 — per-id format from section override wins over document default.
+          const numFmtForId = endnoteFormatById?.[id] ?? endnoteNumberFormat;
+          ensureEndnoteMarker(result.blocks, id, endnoteNumberById, numFmtForId);
+        }
         blocks.push(...result.blocks);
       }
     } catch {}
@@ -108,20 +121,18 @@ function resolveMarkerBaseFontSize(firstTextRun: TextRun | undefined): number {
 }
 
 function buildMarkerRun(markerText: string, firstTextRun: TextRun | undefined): TextRun {
+  // EndnoteReference rStyle is independent of the first body run's formatting,
+  // matching FootnotesBuilder. Trailing NBSP mirrors the literal space run Word
+  // emits between <w:endnoteRef/> and body text.
   const markerRun: TextRun = {
     kind: 'text',
-    text: markerText,
+    text: `${markerText}\u00A0`,
     dataAttrs: { [ENDNOTE_MARKER_DATA_ATTR]: 'true' },
     fontFamily: resolveMarkerFontFamily(firstTextRun),
     fontSize: resolveMarkerBaseFontSize(firstTextRun) * SUBSCRIPT_SUPERSCRIPT_SCALE,
     vertAlign: 'superscript',
   };
 
-  if (typeof firstTextRun?.bold === 'boolean') markerRun.bold = firstTextRun.bold;
-  if (typeof firstTextRun?.italic === 'boolean') markerRun.italic = firstTextRun.italic;
-  if (typeof firstTextRun?.letterSpacing === 'number' && Number.isFinite(firstTextRun.letterSpacing)) {
-    markerRun.letterSpacing = firstTextRun.letterSpacing;
-  }
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
 
   return markerRun;
@@ -176,6 +187,7 @@ function ensureEndnoteMarker(
   blocks: FlowBlock[],
   id: string,
   endnoteNumberById: Record<string, number> | undefined,
+  endnoteNumberFormat: string | undefined,
 ): void {
   const firstParagraph = blocks.find((block): block is ParagraphBlock => block.kind === 'paragraph');
   if (!firstParagraph) return;
@@ -186,7 +198,8 @@ function ensureEndnoteMarker(
   const firstTextRun = runs.find(
     (run): run is TextRun => isTextRun(run) && !isEndnoteMarker(run) && run.text.length > 0,
   );
-  const markerRun = buildMarkerRun(String(resolveDisplayNumber(id, endnoteNumberById)), firstTextRun);
+  const markerText = formatFootnoteCardinal(resolveDisplayNumber(id, endnoteNumberById), endnoteNumberFormat);
+  const markerRun = buildMarkerRun(markerText, firstTextRun);
 
   if (runs[0] && isTextRun(runs[0]) && isEndnoteMarker(runs[0])) {
     syncMarkerRun(runs[0], markerRun);

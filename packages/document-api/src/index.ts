@@ -1,14 +1,13 @@
 /**
  * Engine-agnostic Document API surface.
  */
-
 import { DocumentApiValidationError } from './errors.js';
-
 export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
 export type { DiffAdapter, DiffApi } from './diff/diff.js';
 export * from './diff/diff.types.js';
 export type {
@@ -40,8 +39,13 @@ export type {
   MarkdownToFragmentAdapter,
 } from './markdown-to-fragment/markdown-to-fragment.js';
 export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
-export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './history/history.types.js';
-
+export type {
+  HistoryState,
+  HistoryActionResult,
+  HistoryNoopReason,
+  SDHistoryStatus,
+  SDHistoryCollaborationMeta,
+} from './history/history.types.js';
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
@@ -114,6 +118,14 @@ import type {
   StylesApplyReceipt,
 } from './styles/index.js';
 import { executeStylesApply } from './styles/index.js';
+import type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplyReceipt,
+} from './templates/index.js';
+import { executeTemplatesApply } from './templates/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGet, type GetAdapter } from './get/get.js';
@@ -327,6 +339,11 @@ import {
   executeTrackChangesList,
   executeTrackChangesDecide,
 } from './track-changes/track-changes.js';
+export {
+  executeTrackChangesGet,
+  executeTrackChangesList,
+  executeTrackChangesDecide,
+} from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import type { SelectionMutationAdapter } from './selection-mutation.js';
 import {
@@ -337,6 +354,19 @@ import {
 import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
+import { createPlanApi, type PlanApi } from './plan/plan.js';
+export {
+  type PlanApi,
+  type PlanExecuteInput,
+  type PlanExecuteEntry,
+  type PlanExecuteEntryExpect,
+  type PlanExecuteResult,
+  type PlanEntryReceipt,
+  type PlanEntryReceiptStatus,
+  type PlanExecuteFailure,
+  type PlanCaptureRefMarker,
+  type PlanProjectTextOffsetMarker,
+} from './plan/plan.js';
 import type { HistoryAdapter, HistoryApi } from './history/history.js';
 import type { HistoryState, HistoryActionResult } from './history/history.types.js';
 import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
@@ -352,6 +382,7 @@ import type {
 } from './diff/diff.types.js';
 import {
   executeTableLocatorOp,
+  executeTablesSetLayoutOp,
   executeRowLocatorOp,
   executeCellOrTableScopedCellLocatorOp,
   executeDocumentLevelTableOp,
@@ -385,6 +416,7 @@ import type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphMutationResult,
 } from './paragraphs/paragraphs.js';
 import {
@@ -409,6 +441,7 @@ import {
   executeParagraphsClearShading,
   executeParagraphsSetDirection,
   executeParagraphsClearDirection,
+  executeParagraphsSetNumbering,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
@@ -688,7 +721,6 @@ import type {
   BookmarkRemoveInput,
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
-
 import type { CustomXmlApi, CustomXmlAdapter } from './customXml/customXml.js';
 import {
   executeCustomXmlPartsList,
@@ -730,7 +762,6 @@ import type {
   AnchoredMetadataMutationResult,
   AnchoredMetadataResolveInfo,
 } from './metadata/anchored-metadata.types.js';
-
 import type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 import {
   executeProtectionGet,
@@ -763,7 +794,6 @@ import type {
   PermissionRangeMutationResult,
   PermissionRangeRemoveResult,
 } from './permission-ranges/permission-ranges.types.js';
-
 import type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 import {
   executeFootnotesList,
@@ -951,7 +981,6 @@ import type {
   AuthorityEntryRemoveInput,
   AuthorityEntryMutationResult,
 } from './authorities/authorities.types.js';
-
 export type { GetAdapter } from './get/get.js';
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -1029,9 +1058,43 @@ export type {
   StylesApplyReceiptFailure,
   NormalizedStylesApplyOptions,
 } from './styles/index.js';
-export type { CreateAdapter } from './create/create.js';
+export type {
+  TemplatesAdapter,
+  TemplatesApi,
+  TemplatesApplyInput,
+  TemplatesApplyOptions,
+  TemplatesApplySource,
+  TemplatesApplySourcePath,
+  TemplatesApplySourceBase64,
+  TemplateBodyPolicy,
+  TemplateScope,
+  NormalizedTemplatesApplyOptions,
+  TemplateScopeReport,
+  TemplateSkipReason,
+  TemplateScopeSkip,
+  TemplateUnsupportedItem,
+  TemplateChangeKind,
+  TemplateChangedPart,
+  TemplateIdMapping,
+  TemplateApplyWarning,
+  TemplatesApplySourceInfo,
+  TemplatesApplyReceiptSuccess,
+  TemplatesApplyFailureCode,
+  TemplatesApplyReceiptFailure,
+  TemplatesApplyReceipt,
+} from './templates/index.js';
+export { executeTemplatesApply } from './templates/index.js';
+export type { CreateAdapter, CreateApi } from './create/create.js';
+export {
+  executeCreateParagraph,
+  executeCreateHeading,
+  executeCreateTable,
+  executeCreateSectionBreak,
+  executeCreateTableOfContents,
+} from './create/create.js';
 export type {
   TrackChangesAdapter,
+  TrackChangesApi,
   TrackChangesGetInput,
   TrackChangesListInput,
   TrackChangesAcceptInput,
@@ -1040,8 +1103,12 @@ export type {
   TrackChangesRejectAllInput,
   TrackChangesRangeInput,
   ReviewDecideInput,
+  ReviewDecideRangeInput,
+  ReviewDecideTarget,
+  LegacyReviewDecideTarget,
   ReviewDecisionTarget,
 } from './track-changes/track-changes.js';
+export { validateReviewDecideInput } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
 export type {
@@ -1095,13 +1162,10 @@ export type {
   CustomXmlPartsAdapter,
 } from './customXml/customXml.js';
 export type { AnchoredMetadataApi, AnchoredMetadataAdapter } from './metadata/anchored-metadata.js';
-
 export type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 export * from './protection/protection.types.js';
-
 export type { PermissionRangesApi, PermissionRangesAdapter } from './permission-ranges/permission-ranges.js';
 export type * from './permission-ranges/permission-ranges.types.js';
-
 export type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 export type { CrossRefsApi, CrossRefsAdapter } from './cross-refs/cross-refs.js';
 export type { IndexApi, IndexAdapter } from './index/index.js';
@@ -1264,7 +1328,6 @@ export type {
 export type * from './bookmarks/bookmarks.types.js';
 export type * from './customXml/customXml.types.js';
 export type * from './metadata/anchored-metadata.types.js';
-
 export type * from './footnotes/footnotes.types.js';
 export type * from './cross-refs/cross-refs.types.js';
 export type * from './index/index.types.js';
@@ -1309,6 +1372,7 @@ export type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphDirection,
   AlignmentPolicy,
 } from './paragraphs/paragraphs.js';
@@ -1413,6 +1477,7 @@ export type {
   SectionAddress,
   SectionBorderSpec,
   SectionBreakCreateLocation,
+  SectionBreakRepresentation,
   SectionBreakType,
   SectionColumns,
   SectionDirection,
@@ -1429,6 +1494,7 @@ export type {
   SectionPageBorders,
   SectionPageMargins,
   SectionPageNumbering,
+  SectionPageNumberingChapterSeparator,
   SectionPageNumberingFormat,
   SectionPageSetup,
   SectionRangeDomain,
@@ -1460,7 +1526,12 @@ export type {
   CommentsPatchInput,
   CommentsDeleteInput,
   CommentsAdapter,
+  CommentsApi,
   GetCommentInput,
+  // Tracked-change comment target convenience.
+  TrackedChangeCommentTarget,
+  TrackedChangeCommentTargetSide,
+  TextSearchCommentTarget,
   // Legacy input types: exported for internal adapter use, not part of the contract.
   AddCommentInput,
   EditCommentInput,
@@ -1473,14 +1544,25 @@ export type {
   GoToCommentInput,
   SetCommentActiveInput,
 } from './comments/comments.js';
+export {
+  executeCommentsCreate,
+  executeCommentsPatch,
+  executeCommentsDelete,
+  executeGetComment,
+  executeListComments,
+} from './comments/comments.js';
 export type {
   CommentInfo,
-  CommentTarget,
+  CommentDomain,
   CommentsListQuery,
   CommentsListResult,
+  CommentTrackedChangeSide,
   CommentTrackedChangeLink,
-  TrackedChangeCommentTarget,
+  CommentTarget,
 } from './comments/comments.types.js';
+export type { BlocksApi } from './blocks/blocks.js';
+export { executeBlocksList, executeBlocksDelete, executeBlocksDeleteRange } from './blocks/blocks.js';
+export { executeListsIndent, executeListsOutdent } from './lists/lists.js';
 export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
@@ -1488,10 +1570,10 @@ export { isBlockNodeAddress } from './validation-primitives.js';
 export type { InsertInput, InsertContentType, TextInsertInput, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
-export { isStructuralReplaceInput } from './replace/replace.js';
+export { executeReplace, isStructuralReplaceInput } from './replace/replace.js';
+export { executeFind } from './find/find.js';
 export { validateDocumentFragment, validateSDFragment } from './validation/fragment-validator.js';
 export type { DeleteInput } from './delete/delete.js';
-
 export interface TablesApi {
   convertFromText(input: TablesConvertFromTextInput, options?: MutationOptions): TableMutationResult;
   delete(input: TableLocator, options?: MutationOptions): TableMutationResult;
@@ -1541,9 +1623,7 @@ export interface TablesApi {
   setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
   clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
 }
-
 export type TablesAdapter = TablesApi;
-
 /**
  * Callable capability accessor returned by `createDocumentApi`.
  *
@@ -1553,36 +1633,29 @@ export interface CapabilitiesApi {
   (): DocumentApiCapabilities;
   get(): DocumentApiCapabilities;
 }
-
 export interface QueryApi {
   /** Canonical nested input. */
   match(input: QueryMatchInput): QueryMatchOutput;
   /** TS shorthand: pass a TextSelector or NodeSelector directly (normalized to `{ select: ... }` internally). */
   match(selector: TextSelector | NodeSelector): QueryMatchOutput;
 }
-
 export interface MutationsApi {
   preview(input: MutationsPreviewInput): MutationsPreviewOutput;
   apply(input: MutationsApplyInput): PlanReceipt;
 }
-
 export interface RangesApi {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
 }
-
 export interface RangesAdapter {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
 }
-
 export interface QueryAdapter {
   match(input: QueryMatchInput): QueryMatchOutput;
 }
-
 export interface MutationsAdapter {
   preview(input: MutationsPreviewInput): MutationsPreviewOutput;
   apply(input: MutationsApplyInput): PlanReceipt;
 }
-
 /**
  * The Document API interface for querying and inspecting document nodes.
  */
@@ -1671,6 +1744,10 @@ export interface DocumentApi {
    * Stylesheet operations (docDefaults, style definitions, paragraph style references).
    */
   styles: StylesApi & { paragraph: ParagraphStylesApi };
+  /**
+   * Template/substrate operations (apply detected DOCX substrate from a source package).
+   */
+  templates: TemplatesApi;
   /**
    * Tracked-change operations (list, get, decide).
    */
@@ -1765,6 +1842,10 @@ export interface DocumentApi {
    */
   mutations: MutationsApi;
   /**
+   * Throughput-oriented batch executor with stepwise operation semantics.
+   */
+  plan: PlanApi;
+  /**
    * Snapshot-based document comparison and replay.
    */
   diff: DiffApi;
@@ -1813,7 +1894,6 @@ export interface DocumentApi {
   invoke<T extends OperationId>(request: InvokeRequest<T>): InvokeResult<T>;
   invoke(request: DynamicInvokeRequest): unknown;
 }
-
 export interface DocumentApiAdapters {
   get: GetAdapter;
   find: FindAdapter;
@@ -1830,6 +1910,7 @@ export interface DocumentApiAdapters {
   write: WriteAdapter;
   selectionMutation: SelectionMutationAdapter;
   styles: StylesAdapter;
+  templates: TemplatesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   blocks: BlocksAdapter;
@@ -1843,7 +1924,6 @@ export interface DocumentApiAdapters {
   headerFooters: HeaderFootersAdapter;
   contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
   bookmarks?: BookmarksAdapter;
-
   footnotes?: FootnotesAdapter;
   crossRefs?: CrossRefsAdapter;
   index?: IndexAdapter;
@@ -1873,7 +1953,6 @@ export interface DocumentApiAdapters {
    */
   metadata?: AnchoredMetadataAdapter;
 }
-
 /**
  * Creates a Document API instance from the provided adapters.
  *
@@ -1928,6 +2007,7 @@ function executeQueryMatch(
               pattern: rawInput.pattern as string,
               ...(rawInput.mode !== undefined ? { mode: rawInput.mode as TextSelector['mode'] } : {}),
               ...(rawInput.caseSensitive !== undefined ? { caseSensitive: rawInput.caseSensitive as boolean } : {}),
+              ...(rawInput.wholeWord !== undefined ? { wholeWord: rawInput.wholeWord as boolean } : {}),
             },
             ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
             ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
@@ -1955,7 +2035,6 @@ function executeQueryMatch(
   validateStoryLocator(normalized.in, 'in');
   return adapter.match(normalized);
 }
-
 function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
   if (!adapter) {
     throw new DocumentApiValidationError(
@@ -1965,7 +2044,6 @@ function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
   }
   return adapter;
 }
-
 function buildFormatInlineAliasApi(adapter: SelectionMutationAdapter): FormatInlineAliasApi {
   return Object.fromEntries(
     INLINE_PROPERTY_REGISTRY.map((entry) => {
@@ -1976,7 +2054,6 @@ function buildFormatInlineAliasApi(adapter: SelectionMutationAdapter): FormatInl
     }),
   ) as FormatInlineAliasApi;
 }
-
 /** Namespace prefixes whose operations are gated on optional adapter presence. */
 const ADAPTER_GATED_PREFIXES = [
   'bookmarks',
@@ -1988,7 +2065,6 @@ const ADAPTER_GATED_PREFIXES = [
   'citations',
   'authorities',
 ] as const;
-
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const rawCapFn = () => executeCapabilities(adapters.capabilities);
   const capFn = (): DocumentApiCapabilities => {
@@ -2008,7 +2084,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   };
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
   const inlineAliasApi = buildFormatInlineAliasApi(adapters.selectionMutation);
-
   const api: DocumentApi = {
     get(input: SDGetInput): SDDocument {
       return executeGet(adapters.get, input);
@@ -2154,6 +2229,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearDirection(adapters.paragraphs, input, options);
         },
+        setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetNumbering(adapters.paragraphs, input, options);
+        },
       },
     },
     styles: {
@@ -2167,6 +2245,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearStyle(adapters.paragraphs, input, options);
         },
+      },
+    },
+    templates: {
+      apply(input: TemplatesApplyInput, options?: TemplatesApplyOptions): Promise<TemplatesApplyReceipt> {
+        return executeTemplatesApply(adapters.templates, input, options);
       },
     },
     trackChanges: {
@@ -2363,7 +2446,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult {
         return executeListsConvertToText(adapters.lists, input, options);
       },
-
       // SD-1973 formatting operations
       applyTemplate(input: ListsApplyTemplateInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsApplyTemplate(adapters.lists, input, options);
@@ -2401,11 +2483,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsClearLevelOverrides(adapters.lists, input, options);
       },
-
       setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetType(adapters.lists, input, options);
       },
-
       // SD-2025 user-facing operations
       getStyle(input: ListsGetStyleInput): ListsGetStyleResult {
         return executeListsGetStyle(adapters.lists, input);
@@ -2527,12 +2607,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setLayout(input, options?) {
-        return executeTableLocatorOp(
-          'tables.setLayout',
-          adapters.tables.setLayout.bind(adapters.tables),
-          input,
-          options,
-        );
+        return executeTablesSetLayoutOp(adapters.tables.setLayout.bind(adapters.tables), input, options);
       },
       insertRow(input, options?) {
         return executeRowLocatorOp(
@@ -3075,7 +3150,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         },
       },
     },
-
     bookmarks: {
       list(query?: BookmarkListInput): BookmarksListResult {
         return executeBookmarksList(requireAdapter(adapters.bookmarks, 'bookmarks'), query);
@@ -3322,6 +3396,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return adapters.mutations.apply(input);
       },
     },
+    plan: createPlanApi((operationId, input, options) =>
+      api.invoke({ operationId, input, options } as DynamicInvokeRequest),
+    ),
     diff: {
       capture(): DiffSnapshot {
         return executeDiffCapture(adapters.diff);
@@ -3427,8 +3504,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return handler(request.input, request.options);
     },
   };
-
   const dispatch = buildDispatchTable(api);
-
   return api;
 }

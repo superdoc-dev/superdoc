@@ -33,12 +33,12 @@ import { SuperDoc } from 'superdoc';
 const superdoc = new SuperDoc({
   selector: '#editor',
   document: docxArrayBuffer,
-  mode: 'edit', // or 'view'
+  documentMode: 'editing', // or 'viewing' | 'suggesting'
   // ... options
 });
 
 // Key methods
-superdoc.setMode('view');
+superdoc.setDocumentMode('viewing');
 superdoc.getDocument();
 superdoc.destroy();
 ```

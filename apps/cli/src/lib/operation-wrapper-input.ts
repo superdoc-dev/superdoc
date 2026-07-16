@@ -156,6 +156,8 @@ export async function parseWrapperOperationInput(
       commandName,
       extraOptionSpecs: [
         { name: 'input-file', type: 'string' },
+        { name: 'in-json', type: 'string' },
+        { name: 'in-file', type: 'string' },
         { name: 'text', type: 'string' },
         { name: 'at', type: 'string' },
         { name: 'at-json', type: 'string' },

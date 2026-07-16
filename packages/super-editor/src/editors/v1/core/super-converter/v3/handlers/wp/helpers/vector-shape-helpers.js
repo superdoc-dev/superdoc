@@ -1,3 +1,4 @@
+import { emuToPixels, rotToDegrees } from '@converter/helpers.js';
 import { findChildByLocalName, filterChildrenByLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
 
 /**
@@ -336,6 +337,38 @@ export function extractLineEnds(spPr) {
 
   if (!headConfig && !tailConfig) return null;
   return { head: headConfig ?? undefined, tail: tailConfig ?? undefined };
+}
+
+export function extractShapeEffects(spPr) {
+  const outerShadow = extractOuterShadowEffect(spPr);
+  if (!outerShadow) return null;
+  return { outerShadow };
+}
+
+function extractOuterShadowEffect(spPr) {
+  const effectLst = findChildByLocalName(spPr?.elements, 'effectLst');
+  const outerShdw = findChildByLocalName(effectLst?.elements, 'outerShdw');
+  if (!outerShdw) return null;
+
+  const colorResult = extractColorFromElement(outerShdw);
+  if (!colorResult) return null;
+
+  return stripUndefined({
+    type: 'outerShadow',
+    blurRadius: finiteNumberOrZero(emuToPixels(outerShdw.attributes?.blurRad)),
+    distance: finiteNumberOrZero(emuToPixels(outerShdw.attributes?.dist)),
+    direction: finiteNumberOrZero(rotToDegrees(outerShdw.attributes?.dir)),
+    color: colorResult.color,
+    opacity: colorResult.alpha ?? 1,
+  });
+}
+
+function finiteNumberOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function stripUndefined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined));
 }
 
 /**

@@ -1,41 +1,89 @@
-export const TOOLBAR_FONTS = [
-  {
-    label: 'Georgia',
-    key: 'Georgia, serif',
+import {
+  BASELINE_BUNDLED,
+  fontOfferingRenderStack,
+  fontOfferingStack,
+  getBuiltInToolbarFontOfferings,
+} from '@superdoc/font-system';
+
+/**
+ * Build the built-in toolbar font dropdown options for a bundled-font activation, DERIVED from the
+ * shared font-offering registry (`@superdoc/font-system`). Without a configured pack this is the
+ * conservative baseline; with one it is the curated rich set.
+ *
+ * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
+ * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that
+ * actually paints (e.g. Carlito), so the dropdown looks like the rendered result.
+ *
+ * @param {import('@superdoc/font-system').BundledActivation} [activation]
+ */
+export function toolbarFontOptionsFor(activation = BASELINE_BUNDLED) {
+  return getBuiltInToolbarFontOfferings(activation).map((offering) => ({
+    label: offering.logicalFamily,
+    key: fontOfferingStack(offering),
     fontWeight: 400,
     props: {
-      style: { fontFamily: 'Georgia, serif' },
+      style: { fontFamily: fontOfferingRenderStack(offering) },
       'data-item': 'btn-fontFamily-option',
     },
-  },
-  {
-    label: 'Arial',
-    key: 'Arial, sans-serif',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Arial, sans-serif' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-  {
-    label: 'Courier New',
-    key: 'Courier New, monospace',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Courier New, monospace' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-  {
-    label: 'Times New Roman',
-    key: 'Times New Roman, serif',
-    fontWeight: 400,
-    props: {
-      style: { fontFamily: 'Times New Roman, serif' },
-      'data-item': 'btn-fontFamily-option',
-    },
-  },
-];
+  }));
+}
+
+/**
+ * Static baseline dropdown options (no pack configured). The fallback when a toolbar has no live
+ * activation to build from; the live path uses {@link composeToolbarFontOptions} with the document's
+ * activation so a configured pack shows the rich set.
+ */
+export const TOOLBAR_FONTS = toolbarFontOptionsFor(BASELINE_BUNDLED);
+
+function normalizeToolbarFamily(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+function compareToolbarFontOptions(a, b) {
+  return String(a.label ?? '')
+    .trim()
+    .localeCompare(String(b.label ?? '').trim(), 'en', { sensitivity: 'base' });
+}
+
+/**
+ * The single seam that composes the font dropdown options: it turns the active document's
+ * {@link import('@superdoc/font-system').DocumentFontOption}s into toolbar font options, unions them
+ * with the activation-gated built-in base (baseline without a configured pack, the curated rich set
+ * with one), dedupes by normalized logical family, and sorts by visible name. A consumer-provided
+ * `configFonts` list is returned unchanged. Returns `undefined` only when the base is the baseline and
+ * there are no document fonts, so the caller can keep the equal static {@link TOOLBAR_FONTS} const.
+ *
+ * @param {ReadonlyArray<import('@superdoc/font-system').DocumentFontOption>} documentOptions
+ * @param {Array} [configFonts] - the consumer's `fonts` config, if any
+ * @param {import('@superdoc/font-system').BundledActivation} [activation] - the document's bundled-font activation
+ * @returns {Array|undefined}
+ */
+export function composeToolbarFontOptions(documentOptions, configFonts, activation = BASELINE_BUNDLED) {
+  if (configFonts) return configFonts;
+  // Baseline base AND no document fonts is identical to the static TOOLBAR_FONTS const: let the
+  // caller keep that const instead of rebuilding an equal array.
+  if (!activation.packConfigured && !documentOptions?.length) return undefined;
+  const base = toolbarFontOptionsFor(activation);
+  const seen = new Set(base.map((option) => normalizeToolbarFamily(option.label)));
+  const merged = [...base];
+  for (const option of documentOptions ?? []) {
+    const dedupeKey = normalizeToolbarFamily(option.logicalFamily);
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    merged.push({
+      label: option.logicalFamily,
+      key: option.logicalFamily,
+      fontWeight: 400,
+      props: {
+        style: { fontFamily: option.previewFamily || option.logicalFamily },
+        'data-item': 'btn-fontFamily-option',
+      },
+    });
+  }
+  return merged.sort(compareToolbarFontOptions);
+}
 
 export const TOOLBAR_FONT_SIZES = [
   { label: '8', key: '8pt', props: { 'data-item': 'btn-fontSize-option' } },

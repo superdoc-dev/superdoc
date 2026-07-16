@@ -51,6 +51,7 @@ Patterns for the browser editor surface.
 | [comments](./editor/built-in-ui/comments) | [docs](https://docs.superdoc.dev/editor/built-in-ui/comments) |
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
+| [responsive-zoom](./editor/built-in-ui/responsive-zoom) | [docs](https://docs.superdoc.dev/editor/superdoc/configuration#param-zoom) |
 
 ### Custom UI
 
@@ -120,6 +121,7 @@ Document editing through models and agents.
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
 | [redlining](./ai/redlining) | LLM-driven tracked-change review (browser) |
 | [footnote-tool-agent](./ai/footnote-tool-agent) | Real LLM tool-use loop: model picks `addFootnoteCitation`, browser executes against `editor.doc` |
+| [core-actions-agent](./ai/core-actions-agent) | Headless agent on the `core` preset: 2 tools, 40 actions, receipts, tracked-changes redlining (Node + Python) |
 
 ## Advanced
 
@@ -140,6 +142,14 @@ pnpm dev
 ```
 
 For the CDN example, open `index.html` directly or run `npx serve .`.
+
+## Security
+
+Example backend servers (`editor/collaboration/backends/node-sdk`, `editor/collaboration/providers/superdoc-yjs`, `editor/collaboration/providers/hocuspocus`, `ai/footnote-tool-agent`, `ai/streaming`, `editor/collaboration/backends/fastapi`) are for **local development only**. They listen on plain HTTP or unencrypted WebSocket and have no TLS configuration.
+
+**Never expose these servers directly to the internet.** If you need to run an example in a non-local environment, terminate TLS at a reverse proxy in front of the server.
+
+Risk acceptance: HTTP-only transport is an accepted trade-off for local example servers. Production deployments must add TLS termination externally.
 
 ## Documentation
 

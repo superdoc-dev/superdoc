@@ -184,6 +184,21 @@ async function firstTextRange(args: string[]): Promise<TextRange> {
   };
 }
 
+function collapsedTextTarget(range: TextRange) {
+  return {
+    kind: 'text' as const,
+    segments: [
+      {
+        blockId: range.blockId,
+        range: {
+          start: range.range.start,
+          end: range.range.start,
+        },
+      },
+    ],
+  };
+}
+
 function firstInsertedEntityId(result: RunResult): string {
   const envelope = parseJsonOutput<
     SuccessEnvelope<{
@@ -389,6 +404,14 @@ describe('superdoc CLI', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('--target');
     expect(result.stdout).toContain('--value');
+  });
+
+  test('describe command paragraph format ops do not advertise text-range shortcuts', async () => {
+    const result = await runCli(['describe', 'command', 'doc.format.paragraph.setAlignment', '--output', 'pretty']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--block-id');
+    expect(result.stdout).not.toContain('--start');
+    expect(result.stdout).not.toContain('--end');
   });
 
   test('call executes an operation from canonical input payload', async () => {
@@ -677,7 +700,7 @@ describe('superdoc CLI', () => {
     expect(envelope.ok).toBe(true);
     expect(envelope.command).toBe('find');
     expect(envelope.data.result.total).toBeGreaterThan(0);
-    expect(envelope.data.result.items[0].node.kind).toBe('run');
+    expect(envelope.data.result.items[0].address.nodeType).toBe('run');
   });
 
   test('find rejects legacy query.include payloads', async () => {
@@ -1620,6 +1643,59 @@ describe('superdoc CLI', () => {
     expect(envelope.error.code).toBe('INVALID_ARGUMENT');
   });
 
+  test('fields insert succeeds for the supported rebuild flow', async () => {
+    const fieldsSource = join(TEST_DIR, 'fields-insert-source.docx');
+    const fieldsOut = join(TEST_DIR, 'fields-insert-out.docx');
+    await copyFile(SAMPLE_DOC, fieldsSource);
+
+    const baseTarget = await firstTextRange(['find', fieldsSource, '--type', 'text', '--pattern', 'Wilde']);
+    const result = await runCli([
+      'fields',
+      'insert',
+      fieldsSource,
+      '--mode-json',
+      '"raw"',
+      '--instruction',
+      'PAGE',
+      '--update-policy',
+      'rebuild',
+      '--at-json',
+      JSON.stringify(collapsedTextTarget(baseTarget)),
+      '--out',
+      fieldsOut,
+    ]);
+
+    expect(result.code).toBe(0);
+    await access(fieldsOut);
+    expect(await readDocxPart(fieldsOut, 'word/document.xml')).toContain('PAGE');
+  });
+
+  test('footnotes insert succeeds for string content on the v1 runtime', async () => {
+    const footnotesSource = join(TEST_DIR, 'footnotes-insert-source.docx');
+    const footnotesOut = join(TEST_DIR, 'footnotes-insert-out.docx');
+    await copyFile(SAMPLE_DOC, footnotesSource);
+
+    const baseTarget = await firstTextRange(['find', footnotesSource, '--type', 'text', '--pattern', 'Wilde']);
+    const result = await runCli([
+      'footnotes',
+      'insert',
+      footnotesSource,
+      '--type',
+      'footnote',
+      '--at-json',
+      JSON.stringify(collapsedTextTarget(baseTarget)),
+      '--content',
+      'Example footnote content.',
+      '--out',
+      footnotesOut,
+    ]);
+
+    expect(result.code).toBe(0);
+    await access(footnotesOut);
+    expect(await readDocxPart(footnotesOut, 'word/footnotes.xml')).toContain('Example footnote content.');
+    expect(await readDocxPart(footnotesOut, 'word/document.xml')).toContain('footnoteReference');
+  });
+
   test('track-changes list is capability-aware', async () => {
     const result = await runCli(['track-changes', 'list', SAMPLE_DOC]);
     if (result.code === 0) {
@@ -2276,6 +2352,59 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
+  test('expected revision protects execute code and preset dispatch', async () => {
+    await runCli(['open', SAMPLE_DOC, '--session', 'llm-guard']);
+
+    const advance = await runCli([
+      'execute',
+      'code',
+      '--session',
+      'llm-guard',
+      '--code',
+      "doc.create.paragraph({ text: 'REVISION_GUARD_BASELINE' }); return 'ok';",
+    ]);
+    expect(advance.code).toBe(0);
+
+    const staleExecute = await runCli([
+      'execute',
+      'code',
+      '--session',
+      'llm-guard',
+      '--expected-revision',
+      '0',
+      '--code',
+      "doc.create.paragraph({ text: 'STALE_EXECUTE_CODE' }); return 'ok';",
+    ]);
+    expect(staleExecute.code).toBe(1);
+    expect(parseJsonOutput<ErrorEnvelope>(staleExecute).error.code).toBe('REVISION_MISMATCH');
+
+    const stalePreset = await runCli([
+      'preset',
+      'dispatch',
+      '--session',
+      'llm-guard',
+      '--preset',
+      'core',
+      '--tool-name',
+      'superdoc_perform_action',
+      '--args-json',
+      JSON.stringify({ action: 'insert_paragraphs', text: 'STALE_PRESET_DISPATCH' }),
+      '--expected-revision',
+      '0',
+    ]);
+    expect(stalePreset.code).toBe(1);
+    expect(parseJsonOutput<ErrorEnvelope>(stalePreset).error.code).toBe('REVISION_MISMATCH');
+
+    const textResult = await runCli(['get-text', '--session', 'llm-guard']);
+    expect(textResult.code).toBe(0);
+    expect(textResult.stdout).toContain('REVISION_GUARD_BASELINE');
+    expect(textResult.stdout).not.toContain('STALE_EXECUTE_CODE');
+    expect(textResult.stdout).not.toContain('STALE_PRESET_DISPATCH');
+
+    const closeResult = await runCli(['close', '--discard', '--session', 'llm-guard']);
+    expect(closeResult.code).toBe(0);
+  });
+
   test('session use switches default session', async () => {
     const alphaOpen = await runCli(['open', SAMPLE_DOC, '--session', 'alpha']);
     expect(alphaOpen.code).toBe(0);
@@ -2365,6 +2494,99 @@ describe('superdoc CLI', () => {
     const documentXml = await readDocxPart(savedOut, 'word/document.xml');
     expect(documentXml).not.toContain('<w:ins');
     expect(documentXml).not.toContain('<w:del');
+  });
+
+  test('save --mode original preserves the original OOXML instead of session mutations', async () => {
+    const originalSource = join(TEST_DIR, 'save-original-source.docx');
+    const savedOut = join(TEST_DIR, 'save-original-output.docx');
+    const insertToken = `ORIGINAL_MODE_TOKEN_${Date.now()}`;
+    await copyFile(SAMPLE_DOC, originalSource);
+    const originalDocumentXml = await readDocxPart(originalSource, 'word/document.xml');
+
+    const openResult = await runCli(['open', originalSource, '--session', 'original-export']);
+    expect(openResult.code).toBe(0);
+    const openEnvelope = parseJsonOutput<SuccessEnvelope<{ contextId: string }>>(openResult);
+    const contextDir = join(STATE_DIR, 'contexts', openEnvelope.data.contextId);
+    const metadataPath = join(contextDir, 'metadata.json');
+    const workingDocPath = join(contextDir, 'working.docx');
+
+    const insertResult = await runCli(['insert', '--session', 'original-export', '--value', insertToken]);
+    expect(insertResult.code).toBe(0);
+
+    const saveResult = await runCli([
+      'save',
+      '--session',
+      'original-export',
+      '--mode',
+      'original',
+      '--out',
+      savedOut,
+      '--force',
+    ]);
+    expect(saveResult.code).toBe(0);
+
+    const saveEnvelope = parseJsonOutput<SuccessEnvelope<{ mode: string; output: { path: string } }>>(saveResult);
+    expect(saveEnvelope.data.mode).toBe('original');
+    expect(saveEnvelope.data.output.path).toBe(savedOut);
+
+    const savedDocumentXml = await readDocxPart(savedOut, 'word/document.xml');
+    expect(savedDocumentXml).toBe(originalDocumentXml);
+    expect(savedDocumentXml).not.toContain(insertToken);
+
+    const workingDocumentXml = await readDocxPart(workingDocPath, 'word/document.xml');
+    expect(workingDocumentXml).toContain(insertToken);
+
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+      sourcePath?: string;
+      dirty?: boolean;
+    };
+    expect(metadata.sourcePath).toBe(originalSource);
+    expect(metadata.dirty).toBe(true);
+  });
+
+  test('save --mode review-preserving writes the same bytes as the default save path', async () => {
+    const source = join(TEST_DIR, 'save-review-preserving-source.docx');
+    const defaultOut = join(TEST_DIR, 'save-review-preserving-default.docx');
+    const explicitOut = join(TEST_DIR, 'save-review-preserving-explicit.docx');
+    const insertToken = `REVIEW_PRESERVING_TOKEN_${Date.now()}`;
+    await copyFile(SAMPLE_DOC, source);
+
+    const openResult = await runCli(['open', source, '--session', 'review-preserving-export']);
+    expect(openResult.code).toBe(0);
+    const openEnvelope = parseJsonOutput<SuccessEnvelope<{ contextId: string }>>(openResult);
+    const workingDocPath = join(STATE_DIR, 'contexts', openEnvelope.data.contextId, 'working.docx');
+
+    const insertResult = await runCli(['insert', '--session', 'review-preserving-export', '--value', insertToken]);
+    expect(insertResult.code).toBe(0);
+
+    const defaultSave = await runCli(['save', '--session', 'review-preserving-export', '--out', defaultOut, '--force']);
+    expect(defaultSave.code).toBe(0);
+
+    const explicitSave = await runCli([
+      'save',
+      '--session',
+      'review-preserving-export',
+      '--mode',
+      'review-preserving',
+      '--out',
+      explicitOut,
+      '--force',
+    ]);
+    expect(explicitSave.code).toBe(0);
+
+    const explicitEnvelope =
+      parseJsonOutput<SuccessEnvelope<{ mode?: string; output: { path: string } }>>(explicitSave);
+    expect(explicitEnvelope.data.mode).toBe('review-preserving');
+    expect(explicitEnvelope.data.output.path).toBe(explicitOut);
+
+    const [workingBytes, defaultBytes, explicitBytes] = await Promise.all([
+      readFile(workingDocPath),
+      readFile(defaultOut),
+      readFile(explicitOut),
+    ]);
+    expect(defaultBytes.equals(workingBytes)).toBe(true);
+    expect(explicitBytes.equals(workingBytes)).toBe(true);
+    expect(explicitBytes.equals(defaultBytes)).toBe(true);
   });
 
   test('save --in-place detects source drift unless forced', async () => {

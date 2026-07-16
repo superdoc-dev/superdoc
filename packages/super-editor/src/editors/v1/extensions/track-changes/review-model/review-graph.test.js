@@ -252,16 +252,24 @@ describe('review-graph: invariants', () => {
     expect(warnings.some((d) => d.code === 'INV_CHILD_MISSING_PARENT')).toBe(true);
   });
 
-  it('warns when a replacement is missing one side', () => {
-    // Force a "replacement" type with only an inserted side by setting
-    // explicit changeType on the mark.
+  it('downgrades a one-sided "replacement" (side-reject survivor) to a plain insertion — no missing-side warning', () => {
+    // Editor-created replacements persist changeType:"replacement" on each half.
+    // After one side is resolved, the survivor still reports that type with one
+    // empty side. The classifier downgrades it to the plain insertion it now is,
+    // so it resolves normally (accept/reject) instead of being flagged as a
+    // malformed one-sided replacement that the decision engine then rejects.
     const { state } = stateFromTrackedSpans({
       schema,
       spans: [{ text: 'incomplete', marks: [insertMark({ id: 'r2', changeType: CanonicalChangeType.Replacement })] }],
     });
     const graph = buildReviewGraph({ state });
+    const change = graph.changes.get('r2');
+    expect(change.type, 'downgraded to insertion').toBe(CanonicalChangeType.Insertion);
+    expect(change.replacement, 'no replacement projection').toBeNull();
+    expect(change.insertedSegments).toHaveLength(1);
+    expect(change.deletedSegments).toHaveLength(0);
     const warnings = runGraphInvariants(graph).warnings;
-    expect(warnings.some((d) => d.code === 'INV_REPLACEMENT_MISSING_SIDE')).toBe(true);
+    expect(warnings.some((d) => d.code === 'INV_REPLACEMENT_MISSING_SIDE')).toBe(false);
   });
 });
 

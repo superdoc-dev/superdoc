@@ -1,4 +1,5 @@
 import type { BlockNodeAddress } from '../types/index.js';
+import type { ReceiptInsert } from '../types/receipt.js';
 import type { StoryLocator } from '../types/story.types.js';
 import type {
   ImageProperties,
@@ -282,6 +283,7 @@ export interface ImagesListResult {
 export interface ImagesMutationSuccessResult {
   success: true;
   image: ImageAddress;
+  trackedChangeRefs?: ReceiptInsert[];
 }
 
 export interface ImagesMutationFailureResult {

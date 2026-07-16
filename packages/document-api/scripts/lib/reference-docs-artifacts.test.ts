@@ -11,13 +11,20 @@ describe('reference docs artifacts', () => {
 
     const trackedChangeGet = artifacts.get('apps/docs/document-api/reference/track-changes/get.mdx');
     expect(trackedChangeGet).toBeDefined();
-    expect(trackedChangeGet!).toContain('| `pairedWithChangeId` | string \\| null | no |  |');
-    expect(trackedChangeGet!).toContain('"pairedWithChangeId": null');
+    expect(trackedChangeGet!).toContain('| `pairedWithChangeId` | string \\| null | no | One of: string, null |');
 
     const trackedChangeList = artifacts.get('apps/docs/document-api/reference/track-changes/list.mdx');
     expect(trackedChangeList).toBeDefined();
     expect(trackedChangeList!).toContain('| `in` | StoryLocator \\| `"all"` | no | One of: StoryLocator, `"all"` |');
-    expect(trackedChangeList!).toContain('"pairedWithChangeId": null');
+
+    // Nullable-primitive example values are rendered as `null`. (track-changes
+    // examples no longer surface a nullable primitive once `subtype` joined the
+    // optional-field budget, so assert this on header-footers/get, which still
+    // surfaces the nullable `refId` in its generated example.)
+    const headerFooterGet = artifacts.get('apps/docs/document-api/reference/header-footers/get.mdx');
+    expect(headerFooterGet).toBeDefined();
+    expect(headerFooterGet!).toContain('| `refId` | string \\| null | no |  |');
+    expect(headerFooterGet!).toContain('"refId": null');
 
     const commentsGet = artifacts.get('apps/docs/document-api/reference/comments/get.mdx');
     expect(commentsGet).toBeDefined();
@@ -45,5 +52,14 @@ describe('reference docs artifacts', () => {
     expect(formatApply).toBeDefined();
     expect(formatApply!).toContain('title: format.apply');
     expect(formatApply!).toContain('- Operation ID: `format.apply`');
+  });
+
+  it('uses a valid raw TOC instruction in create.tableOfContents example requests', () => {
+    const artifacts = artifactContentByPath();
+
+    const createTocDoc = artifacts.get('apps/docs/document-api/reference/create/table-of-contents.mdx');
+    expect(createTocDoc).toBeDefined();
+    expect(createTocDoc!).toContain('"instruction": "TOC \\\\o \\"1-3\\" \\\\u \\\\h \\\\z"');
+    expect(createTocDoc!).not.toContain('"instruction": "example"');
   });
 });

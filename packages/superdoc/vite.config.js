@@ -32,6 +32,10 @@ const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package
 const repoRequire = createRequire(path.resolve(__dirname, '../../package.json'));
 const superEditorRequire = createRequire(path.resolve(__dirname, '../super-editor/package.json'));
 const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
+const nodePolyfillShimAliases = ['buffer', 'global', 'process'].map((name) => ({
+  find: `vite-plugin-node-polyfills/shims/${name}`,
+  replacement: fileURLToPath(import.meta.resolve(`vite-plugin-node-polyfills/shims/${name}`)),
+}));
 
 const resolvePackageEsmEntry = (pkg, resolver = repoRequire) => {
   const resolved = resolver.resolve(pkg);
@@ -71,6 +75,7 @@ const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'sto
 export const getAliases = (_isDev) => {
   const aliases = [
     ...proseMirrorSingletonAliases,
+    ...nodePolyfillShimAliases,
 
     // Workspace packages (source paths for dev)
     { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },
@@ -340,7 +345,22 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     resolve: {
-      alias: getAliases(isDev),
+      // Under Vitest and the dev server (command 'serve'), alias @superdoc/font-system to its
+      // source: cdn-entry.test.js needs it for the import cdn-entry.js makes, and the dev
+      // playground imports it transitively via layout-engine/super-editor source. font-system
+      // lives under shared/, so it is NOT covered by vite.sourceResolve's packages/** aliases.
+      // The production CDN build aliases it in vite.config.cdn.js; the ES build never imports
+      // cdn-entry. Kept OUT of getAliases so the vite-plugin-dts build (command 'build') is
+      // unaffected - an alias there makes it emit unresolvable source paths. /bundled precedes the bare one.
+      alias: [
+        ...(process.env.VITEST || isDev
+          ? [
+              { find: '@superdoc/font-system/bundled', replacement: path.resolve(__dirname, '../../shared/font-system/src/bundled.ts') },
+              { find: '@superdoc/font-system', replacement: path.resolve(__dirname, '../../shared/font-system/src/index.ts') },
+            ]
+          : []),
+        ...getAliases(isDev),
+      ],
       dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],

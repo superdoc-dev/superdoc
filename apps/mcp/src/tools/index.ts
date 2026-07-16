@@ -3,9 +3,18 @@ import type { SessionManager } from '../session-manager.js';
 import { registerLifecycleTools } from './lifecycle.js';
 import { registerIntentTools } from './intent.js';
 import { registerCollabTools } from './collab.js';
+import { registerCoreTools } from './core.js';
 
-export function registerAllTools(server: McpServer, sessions: SessionManager): void {
+export async function registerAllTools(
+  server: McpServer,
+  sessions: SessionManager,
+  presetId: 'legacy' | 'core' = 'legacy',
+): Promise<void> {
   registerLifecycleTools(server, sessions);
+  if (presetId === 'core') {
+    await registerCoreTools(server, sessions);
+    return;
+  }
   registerIntentTools(server, sessions);
   registerCollabTools(server, sessions);
 }

@@ -1,7 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createSuperDocUI } from './create-super-doc-ui.js';
 import type { SuperDocLike } from './types.js';
+import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
+import { buildTrackedChangeCanonicalIdMap } from '../editors/v1/document-api-adapters/helpers/tracked-change-resolver.js';
+
+// getRect's text-target path resolves block ids against the real editor's
+// block index, which the lightweight stubs here don't model. Stub just
+// that resolver; keep the module's other exports intact.
+vi.mock('../editors/v1/document-api-adapters/helpers/adapter-utils.js', async (importActual) => {
+  const actual = await importActual<typeof import('../editors/v1/document-api-adapters/helpers/adapter-utils.js')>();
+  return { ...actual, resolveTextTarget: vi.fn() };
+});
+const mockResolveTextTarget = vi.mocked(resolveTextTarget);
+
+vi.mock('../editors/v1/document-api-adapters/helpers/tracked-change-resolver.js', async (importActual) => {
+  const actual =
+    await importActual<typeof import('../editors/v1/document-api-adapters/helpers/tracked-change-resolver.js')>();
+  return { ...actual, buildTrackedChangeCanonicalIdMap: vi.fn() };
+});
+const mockBuildTrackedChangeCanonicalIdMap = vi.mocked(buildTrackedChangeCanonicalIdMap);
+
+beforeEach(() => {
+  mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(new Map());
+});
 
 /**
  * Stub for `ui.viewport` tests. Models the minimal surface the
@@ -22,14 +44,26 @@ function makeStubs(
         height: number;
       }>
     >;
+    trackedChanges?: Array<{ id: string }>;
   } = {},
 ) {
   const rectsById = initial.rectsById ?? {};
+  const trackedChanges = initial.trackedChanges ?? [];
 
   const getEntityRects = vi.fn((target: { entityType?: unknown; entityId?: unknown; story?: unknown }) => {
     if (typeof target.entityId !== 'string') return [];
     return rectsById[target.entityId] ?? [];
   });
+  type StubRect = {
+    pageIndex: number;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
+  const getBodyRangeRects = vi.fn((_from: number, _to: number): StubRect[] => []);
   const navigateTo = vi.fn(async (_target: unknown) => true);
 
   const editor: {
@@ -39,8 +73,10 @@ function makeStubs(
     presentationEditor:
       | {
           getEntityRects: typeof getEntityRects;
+          getBodyRangeRects: typeof getBodyRangeRects;
           navigateTo: typeof navigateTo;
           getActiveEditor: () => unknown;
+          visibleHost?: HTMLElement;
         }
       | undefined;
   } = {
@@ -59,9 +95,18 @@ function makeStubs(
       trackChanges: {
         list: vi.fn(() => ({
           evaluatedRevision: 'r1',
-          total: 0,
-          items: [],
-          page: { limit: 0, offset: 0, returned: 0 },
+          total: trackedChanges.length,
+          items: trackedChanges.map((change) => ({
+            id: change.id,
+            handle: {
+              ref: `tracked-change:${change.id}`,
+              refStability: 'stable' as const,
+              targetKind: 'trackedChange' as const,
+            },
+            address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: change.id },
+            type: 'insert' as const,
+          })),
+          page: { limit: 0, offset: 0, returned: trackedChanges.length },
         })),
       },
     },
@@ -71,6 +116,7 @@ function makeStubs(
   // same stub editor the toolbar source resolver expects when present.
   editor.presentationEditor = {
     getEntityRects,
+    getBodyRangeRects,
     navigateTo,
     getActiveEditor: () => editor,
   };
@@ -82,7 +128,19 @@ function makeStubs(
     off: vi.fn(),
   };
 
-  return { superdoc, editor, mocks: { getEntityRects, navigateTo } };
+  return { superdoc, editor, mocks: { getEntityRects, getBodyRangeRects, navigateTo } };
+}
+
+function withElementFromPoint(hit: Element | null, run: () => void) {
+  const docAny = document as unknown as { elementFromPoint?: (x: number, y: number) => Element | null };
+  const original = docAny.elementFromPoint;
+  docAny.elementFromPoint = () => hit;
+  try {
+    run();
+  } finally {
+    if (original) docAny.elementFromPoint = original;
+    else delete docAny.elementFromPoint;
+  }
 }
 
 describe('ui.viewport.getRect — entity targets', () => {
@@ -191,12 +249,12 @@ describe('ui.viewport.getRect — entity targets', () => {
     ui.destroy();
   });
 
-  it('returns invalid-target for text-anchored targets (deferred path)', () => {
+  it('returns invalid-target for an unknown target kind (neither entity nor text)', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
     const result = ui.viewport.getRect({
-      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } } as never,
+      target: { kind: 'mystery', id: 'x' } as never,
     });
 
     expect(result).toEqual({ success: false, reason: 'invalid-target' });
@@ -272,6 +330,318 @@ describe('ui.viewport.getRect — entity targets', () => {
     if (!result.success) return;
     expect(result.rect.width).toBe(20);
     expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('accepts public tracked-change ids by retrying rendered aliases', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(
+      new Map([
+        ['rendered-1', 'public-1'],
+        ['public-1', 'public-1'],
+      ]),
+    );
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'public-1' }],
+      rectsById: {
+        'rendered-1': [{ pageIndex: 0, left: 10, top: 20, right: 30, bottom: 40, width: 20, height: 20 }],
+      },
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'trackedChange', entityId: 'public-1' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.getEntityRects).toHaveBeenNthCalledWith(1, {
+      entityType: 'trackedChange',
+      entityId: 'public-1',
+      story: undefined,
+    });
+    expect(mocks.getEntityRects).toHaveBeenNthCalledWith(2, {
+      entityType: 'trackedChange',
+      entityId: 'rendered-1',
+      story: undefined,
+    });
+    ui.destroy();
+  });
+
+  it('uses direct public tracked-change geometry without alias retry', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(new Map([['rendered-1', 'public-1']]));
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'public-1' }],
+      rectsById: {
+        'public-1': [{ pageIndex: 0, left: 10, top: 20, right: 30, bottom: 40, width: 20, height: 20 }],
+      },
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'trackedChange', entityId: 'public-1' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+    expect(mocks.getEntityRects).toHaveBeenCalledWith({
+      entityType: 'trackedChange',
+      entityId: 'public-1',
+      story: undefined,
+    });
+    ui.destroy();
+  });
+
+  it('returns not-mounted when direct and alias tracked-change rect lookups fail', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(
+      new Map([
+        ['rendered-1', 'public-1'],
+        ['public-1', 'public-1'],
+      ]),
+    );
+    const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'public-1' }] });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'trackedChange', entityId: 'public-1' },
+    });
+
+    expect(result).toEqual({ success: false, reason: 'not-mounted' });
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(2);
+    ui.destroy();
+  });
+
+  it('does not alias-retry comments or content controls', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(new Map([['rendered-1', 'public-1']]));
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'public-1' }],
+      rectsById: {
+        c1: [{ pageIndex: 0, left: 10, top: 20, right: 30, bottom: 40, width: 20, height: 20 }],
+        sdt1: [{ pageIndex: 0, left: 12, top: 22, right: 32, bottom: 42, width: 20, height: 20 }],
+      },
+    });
+    const ui = createSuperDocUI({ superdoc });
+    mockBuildTrackedChangeCanonicalIdMap.mockClear();
+
+    expect(ui.viewport.getRect({ target: { kind: 'entity', entityType: 'comment', entityId: 'c1' } }).success).toBe(
+      true,
+    );
+    expect(
+      ui.viewport.getRect({ target: { kind: 'entity', entityType: 'contentControl', entityId: 'sdt1' } }).success,
+    ).toBe(true);
+
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(2);
+    expect(mockBuildTrackedChangeCanonicalIdMap).not.toHaveBeenCalled();
+    ui.destroy();
+  });
+
+  it('forwards story on every tracked-change alias retry', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(
+      new Map([
+        ['rendered-header', 'public-header'],
+        ['public-header', 'public-header'],
+      ]),
+    );
+    const story = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId1' };
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'public-header' }],
+      rectsById: {
+        'rendered-header': [{ pageIndex: 1, left: 10, top: 20, right: 30, bottom: 40, width: 20, height: 20 }],
+      },
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'public-header',
+        story,
+      } as never,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.getEntityRects).toHaveBeenNthCalledWith(1, {
+      entityType: 'trackedChange',
+      entityId: 'public-header',
+      story,
+    });
+    expect(mocks.getEntityRects).toHaveBeenNthCalledWith(2, {
+      entityType: 'trackedChange',
+      entityId: 'rendered-header',
+      story,
+    });
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.getRect — text targets (SD-3329)', () => {
+  const rect = (pageIndex: number, top: number) => ({
+    pageIndex,
+    left: 10,
+    top,
+    right: 110,
+    bottom: top + 20,
+    width: 100,
+    height: 20,
+  });
+
+  beforeEach(() => {
+    mockResolveTextTarget.mockReset();
+  });
+
+  it('resolves a TextAddress to rects and returns { rect, rects, pageIndex }', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue({ from: 5, to: 10 });
+    mocks.getBodyRangeRects.mockReturnValue([rect(0, 200)]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rect).toEqual({ top: 200, left: 10, width: 100, height: 20, pageIndex: 0 });
+    expect(result.rects).toHaveLength(1);
+    expect(result.pageIndex).toBe(0);
+    // Resolved against the text address; body-surface rects requested for the range.
+    expect(mockResolveTextTarget).toHaveBeenCalledWith(expect.anything(), {
+      kind: 'text',
+      blockId: 'b1',
+      range: { start: 0, end: 5 },
+    });
+    expect(mocks.getBodyRangeRects).toHaveBeenCalledWith(5, 10);
+
+    ui.destroy();
+  });
+
+  it('resolves a multi-segment TextTarget per segment and concatenates rects', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValueOnce({ from: 5, to: 10 }).mockReturnValueOnce({ from: 40, to: 55 });
+    mocks.getBodyRangeRects.mockReturnValueOnce([rect(0, 200)]).mockReturnValueOnce([rect(1, 300)]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'text',
+        segments: [
+          { blockId: 'b1', range: { start: 0, end: 5 } },
+          { blockId: 'b2', range: { start: 0, end: 8 } },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rects).toHaveLength(2);
+    expect(result.rect.pageIndex).toBe(0); // primary = first segment's first rect
+    expect(result.rects[1].pageIndex).toBe(1);
+    expect(mocks.getBodyRangeRects).toHaveBeenNthCalledWith(1, 5, 10);
+    expect(mocks.getBodyRangeRects).toHaveBeenNthCalledWith(2, 40, 55);
+
+    ui.destroy();
+  });
+
+  it('returns unresolved when a segment block id cannot be resolved', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue(null);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'gone', range: { start: 0, end: 5 } },
+    });
+
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns a structured failure (does not throw) when resolveTextTarget throws (ambiguous block id)', () => {
+    const { superdoc, mocks } = makeStubs();
+    // resolveTextTarget throws DocumentApiAdapterError('INVALID_TARGET') on
+    // ambiguous block ids; a public geometry read must not throw out.
+    mockResolveTextTarget.mockImplementation(() => {
+      throw new Error('Block ID "b1" is ambiguous: matched 2 text blocks.');
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    let result: ReturnType<typeof ui.viewport.getRect> | undefined;
+    expect(() => {
+      result = ui.viewport.getRect({
+        target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+      });
+    }).not.toThrow();
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns not-mounted when the range resolves but paints no rects (virtualized)', () => {
+    const { superdoc, mocks } = makeStubs();
+    mockResolveTextTarget.mockReturnValue({ from: 5, to: 10 });
+    mocks.getBodyRangeRects.mockReturnValue([]);
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'text', blockId: 'b1', range: { start: 0, end: 5 } },
+    });
+
+    expect(result).toEqual({ success: false, reason: 'not-mounted' });
+
+    ui.destroy();
+  });
+
+  it('returns invalid-target for a malformed text target (missing block id / range)', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({ target: { kind: 'text' } as never });
+
+    expect(result).toEqual({ success: false, reason: 'invalid-target' });
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('returns unresolved for a non-body story target (story-aware text rects deferred)', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'text',
+        blockId: 'h1',
+        range: { start: 0, end: 5 },
+        story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId1' },
+      } as never,
+    });
+
+    expect(result).toEqual({ success: false, reason: 'unresolved' });
+    // Short-circuits before touching the resolver / rect engine.
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('leaves entity-target behavior unchanged', () => {
+    const { superdoc, mocks } = makeStubs({
+      rectsById: { c1: [rect(0, 200)] },
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'comment', entityId: 'c1' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+    // The text path must not run for entity targets.
+    expect(mockResolveTextTarget).not.toHaveBeenCalled();
+    expect(mocks.getBodyRangeRects).not.toHaveBeenCalled();
 
     ui.destroy();
   });
@@ -361,6 +731,101 @@ describe('ui.viewport.entityAt — host scoping', () => {
     host.remove();
     ui.destroy();
   });
+
+  it('maps rendered tracked-change ids to public ids', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(new Map([['rendered-1', 'public-1']]));
+    const { superdoc } = makeStubs({ trackedChanges: [{ id: 'public-1' }] });
+    const host = document.createElement('div');
+    const hit = document.createElement('span');
+    hit.setAttribute('data-track-change-id', 'rendered-1');
+    host.appendChild(hit);
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+    const ui = createSuperDocUI({ superdoc });
+
+    withElementFromPoint(hit, () => {
+      expect(ui.viewport.entityAt({ x: 10, y: 20 })).toEqual([{ type: 'trackedChange', id: 'public-1' }]);
+    });
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('maps comma-separated tracked-change ids and dedupes aliases', () => {
+    mockBuildTrackedChangeCanonicalIdMap.mockReturnValue(
+      new Map([
+        ['raw-insert', 'public-replacement'],
+        ['raw-delete', 'public-replacement'],
+      ]),
+    );
+    const { superdoc } = makeStubs({ trackedChanges: [{ id: 'public-replacement' }] });
+    const host = document.createElement('div');
+    const hit = document.createElement('span');
+    hit.setAttribute('data-track-change-ids', 'raw-insert,raw-delete');
+    host.appendChild(hit);
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+    const ui = createSuperDocUI({ superdoc });
+
+    withElementFromPoint(hit, () => {
+      expect(ui.viewport.entityAt({ x: 10, y: 20 })).toEqual([{ type: 'trackedChange', id: 'public-replacement' }]);
+    });
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('drops unmapped tracked-change hits instead of leaking raw ids', () => {
+    const { superdoc } = makeStubs({ trackedChanges: [{ id: 'public-1' }] });
+    const host = document.createElement('div');
+    const hit = document.createElement('span');
+    hit.setAttribute('data-track-change-id', 'raw-unknown');
+    host.appendChild(hit);
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+    const ui = createSuperDocUI({ superdoc });
+
+    withElementFromPoint(hit, () => {
+      expect(ui.viewport.entityAt({ x: 10, y: 20 })).toEqual([]);
+    });
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('leaves comments and content controls unchanged when dropping unmapped tracked changes', () => {
+    const { superdoc } = makeStubs({ trackedChanges: [{ id: 'public-1' }] });
+    const host = document.createElement('div');
+    const hit = document.createElement('span');
+    hit.setAttribute('data-track-change-id', 'raw-unknown');
+    hit.setAttribute('data-comment-ids', 'c1');
+    hit.setAttribute('data-sdt-id', 'sdt1');
+    hit.setAttribute('data-sdt-type', 'structuredContent');
+    hit.setAttribute('data-sdt-scope', 'inline');
+    hit.setAttribute('data-sdt-tag', 'Customer');
+    host.appendChild(hit);
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+    const ui = createSuperDocUI({ superdoc });
+
+    withElementFromPoint(hit, () => {
+      expect(ui.viewport.entityAt({ x: 10, y: 20 })).toEqual([
+        { type: 'comment', id: 'c1' },
+        { type: 'contentControl', id: 'sdt1', scope: 'inline', tag: 'Customer' },
+      ]);
+    });
+
+    host.remove();
+    ui.destroy();
+  });
 });
 
 describe('ui.viewport.getHost', () => {
@@ -384,6 +849,42 @@ describe('ui.viewport.getHost', () => {
     (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
     const ui = createSuperDocUI({ superdoc });
     expect(ui.viewport.getHost()).toBeNull();
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.getScrollContainer', () => {
+  it('returns the resolved scroll container when one is mounted', () => {
+    const { superdoc } = makeStubs();
+    const scroller = document.createElement('div');
+    document.body.appendChild(scroller);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement } }
+    ).presentationEditor.scrollContainer = scroller;
+
+    const ui = createSuperDocUI({ superdoc });
+    // Distinct from getHost(): the scroller is not the painted host.
+    expect(ui.viewport.getScrollContainer()).toBe(scroller);
+
+    scroller.remove();
+    ui.destroy();
+  });
+
+  it('returns null when the document/window scrolls (no element scroller)', () => {
+    const { superdoc } = makeStubs();
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement | null } }
+    ).presentationEditor.scrollContainer = null;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
+    ui.destroy();
+  });
+
+  it('returns null when no editor is mounted', () => {
+    const { superdoc } = makeStubs();
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
     ui.destroy();
   });
 });
@@ -628,8 +1129,18 @@ function makeEmitter() {
 function makeGeometryStub() {
   const sd = makeEmitter();
   const pres = makeEmitter();
-  const emptyList = () => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } });
-  const editor: { on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn>; doc: unknown; presentationEditor: unknown } = {
+  const emptyList = () => ({
+    evaluatedRevision: 'r1',
+    total: 0,
+    items: [],
+    page: { limit: 0, offset: 0, returned: 0 },
+  });
+  const editor: {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    doc: unknown;
+    presentationEditor: unknown;
+  } = {
     on: vi.fn(),
     off: vi.fn(),
     doc: {
@@ -683,6 +1194,21 @@ describe('ui.viewport.observe — repaint reason (SD-3311 regression)', () => {
 
     emitPresentation('layoutUpdated');
     emitPresentation('paginationUpdate');
+    await nextFrame();
+
+    expect(events).toEqual([{ reason: 'layout' }]);
+    ui.destroy();
+  });
+
+  it('fires a geometry invalidation on sidebar-toggle (reason "layout")', async () => {
+    // The comments rail toggling shifts geometry without a guaranteed
+    // layout repaint; observe must still notify so cached rects re-query.
+    const { superdoc, emitSuperdoc } = makeGeometryStub();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    emitSuperdoc('sidebar-toggle', true);
     await nextFrame();
 
     expect(events).toEqual([{ reason: 'layout' }]);

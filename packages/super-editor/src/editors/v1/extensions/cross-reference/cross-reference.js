@@ -14,6 +14,15 @@ export const CrossReference = Node.create({
 
   draggable: false,
 
+  // The visible text representation of this leaf. The resolved field result
+  // (e.g. "9.1") lives only in the `resolvedText` attribute — the node has no
+  // text children — so without this, flattening APIs (getText via
+  // `textBetweenWithTabs`, `node.textContent`, SearchIndex, the rewrite
+  // char-diff via `charOffsetToDocPos`) drop the reference entirely while the
+  // rendered document shows it. Mirrors `renderDOM` below and the `lineBreak` /
+  // `noBreakHyphen` leaves.
+  leafText: (node) => node.attrs.resolvedText || node.attrs.target || '',
+
   addOptions() {
     return {
       htmlAttributes: {

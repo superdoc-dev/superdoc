@@ -8,7 +8,7 @@
  */
 
 import type { PMNode, FlowBlock, SectionBreakBlock, Measure, Layout, Page } from '@superdoc/contracts';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from './to-flow-blocks.js';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';

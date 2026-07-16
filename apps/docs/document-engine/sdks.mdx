@@ -574,14 +574,16 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+| `doc.plan.execute` | `plan execute` | Execute a compiled batch of plan-safe operation entries with per-entry transactions, capture resolution between entries, and keep-prefix-and-continue failure semantics. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
 | `doc.hyperlinks.list` | `hyperlinks list` | List all hyperlinks in the document, with optional filtering by href, anchor, or display text. |
 | `doc.hyperlinks.get` | `hyperlinks get` | Retrieve details of a specific hyperlink by its inline address. |
@@ -610,7 +612,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.contentControls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
 | `doc.contentControls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
 | `doc.contentControls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
-| `doc.contentControls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.contentControls.move` | `content-controls move` | Move a content control to a new position. Direct moves preserve the original ID; tracked-mode authoring supports safe top-level block SDTs and remaps the destination SDT ID to avoid duplicate live anchors. |
 | `doc.contentControls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
 | `doc.contentControls.setLockMode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
 | `doc.contentControls.setType` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
@@ -660,8 +662,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
 | `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
 | `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
-| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. |
-| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is not available in this v1-only branch; those shapes return `CAPABILITY_UNAVAILABLE`. |
+| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. Structured `body` content is not available in this v1-only branch; those shapes return `CAPABILITY_UNAVAILABLE`. |
 | `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
 | `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
 | `doc.crossRefs.list` | `cross-refs list` | List all cross-reference fields in the document. |
@@ -688,7 +690,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.captions.configure` | `captions configure` | Configure numbering format for a caption label. |
 | `doc.fields.list` | `fields list` | List all fields in the document. |
 | `doc.fields.get` | `fields get` | Get detailed information about a specific field. |
-| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location. |
+| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location, optionally preserving cached result text. The current v1 runtime supports rebuild flows; `cachedResultText` / `updatePolicy: "preserveCached"` currently return `CAPABILITY_UNAVAILABLE`. |
 | `doc.fields.rebuild` | `fields rebuild` | Rebuild (recalculate) a field. |
 | `doc.fields.remove` | `fields remove` | Remove a field from the document. |
 | `doc.citations.list` | `citations list` | List all citation marks in the document. |
@@ -741,6 +743,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insertTab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insertLineBreak` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.executeCode` | `execute code` | Run model-authored JavaScript IN-HOST against the live, SYNCHRONOUS Document API for the open session. Two globals are injected: `doc` (the synchronous Document API — do NOT await doc.* calls) and `console`. `return` a short summary; logs and the return value come back structured as { ok, result, logs, error }. Use for complex/multi-step workflows (loops, per-item branching, extract-then-generate) in ONE call instead of chaining many narrow tools. Large code can be passed on stdin. |
+| `doc.preset.dispatch` | `preset dispatch` | Dispatch an LLM tool call through the named preset's dispatcher against the active session's live document. Used by cross-language SDKs (e.g. Python) to proxy preset behavior over the CLI. |
 
 #### Format
 
@@ -797,13 +801,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values. |
 | `doc.format.paragraph.clearAlignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
-| `doc.format.paragraph.setIndentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
+| `doc.format.paragraph.setIndentation` | `format paragraph set-indentation` | Set paragraph indentation properties (signed left/right, firstLine, hanging) in twips. |
 | `doc.format.paragraph.clearIndentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |
 | `doc.format.paragraph.setSpacing` | `format paragraph set-spacing` | Set paragraph spacing properties (before, after, line, lineRule) in twips. |
 | `doc.format.paragraph.clearSpacing` | `format paragraph clear-spacing` | Remove all direct paragraph spacing. |
 | `doc.format.paragraph.setKeepOptions` | `format paragraph set-keep-options` | Set keep-with-next, keep-lines-together, and widow/orphan control flags. |
 | `doc.format.paragraph.setOutlineLevel` | `format paragraph set-outline-level` | Set the paragraph outline level (0–9) or null to clear. |
-| `doc.format.paragraph.setFlowOptions` | `format paragraph set-flow-options` | Set contextual spacing, page-break-before, and suppress-auto-hyphens flags. |
+| `doc.format.paragraph.setFlowOptions` | `format paragraph set-flow-options` | Set paragraph flow flags: contextual spacing, page-break-before, suppress-auto-hyphens, and the advanced layout toggles auto-space-DE, auto-space-DN, adjust-right-indent, and snap-to-grid. |
 | `doc.format.paragraph.setTabStop` | `format paragraph set-tab-stop` | Add or replace a tab stop at a given position. |
 | `doc.format.paragraph.clearTabStop` | `format paragraph clear-tab-stop` | Remove a tab stop at a given position. |
 | `doc.format.paragraph.clearAllTabStops` | `format paragraph clear-all-tab-stops` | Remove all tab stops from a paragraph. |
@@ -813,6 +817,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clearShading` | `format paragraph clear-shading` | Remove all paragraph shading. |
 | `doc.format.paragraph.setDirection` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
 | `doc.format.paragraph.clearDirection` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
+| `doc.format.paragraph.setNumbering` | `format paragraph set-numbering` | Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property; the node and its style are otherwise unchanged, though any direct paragraph indent is cleared so the numbering level controls indentation. Direct edits only; tracked mode is unsupported. |
 
 #### Create
 
@@ -837,7 +842,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.setPageSetup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
 | `doc.sections.setColumns` | `sections set-columns` | Set column configuration for a section. |
 | `doc.sections.setLineNumbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
-| `doc.sections.setPageNumbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.setPageNumbering` | `sections set-page-numbering` | Set page numbering format/start and chapter numbering settings for a section. |
 | `doc.sections.setTitlePage` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
 | `doc.sections.setOddEvenHeadersFooters` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
 | `doc.sections.setVerticalAlign` | `sections set-vertical-align` | Set vertical page alignment for a section. |
@@ -856,7 +861,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
-| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. With changeMode:"tracked" the former (unnumbered) paragraph properties are recorded as a w:pPrChange so a reviewer can accept/reject the numbering. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -966,7 +971,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.images.list` | `images list` | List all images in the document. |
 | `doc.images.get` | `images get` | Get details for a specific image by its stable ID. |
 | `doc.images.delete` | `images delete` | Delete an image from the document. |
-| `doc.images.move` | `images move` | Move an image to a new location in the document. |
+| `doc.images.move` | `images move` | Move an image to a new location in the document. Tracked-mode authoring supports safe sole inline-image body paragraphs and emits paired `<w:moveFrom>` / `<w:moveTo>` wrappers with explicit move range marker identity. |
 | `doc.images.convertToInline` | `images convert-to-inline` | Convert a floating image to inline placement. |
 | `doc.images.convertToFloating` | `images convert-to-floating` | Convert an inline image to floating placement. |
 | `doc.images.setSize` | `images set-size` | Set explicit width/height for an image. |
@@ -995,9 +1000,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
-| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
-| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). Accepts TextAddress / TextTarget anchors, or a TrackedChangeCommentTarget that names a logical tracked-change id. The tracked-change target accepts both the explicit kind form and the Labs-compatible trackedChangeId-only form; the adapter normalizes it to a Word-compatible content anchor on the requested revision side. |
+| `doc.comments.patch` | `comments patch` | Patch exactly one field on an existing comment (`text`, `target`, or `status`). The `target` branch accepts a plain TextAddress or a TrackedChangeCommentTarget, with or without `kind: "trackedChange"`, that names a logical tracked-change id. The legacy `isInternal` input is preserved in the schema for v1 backward compatibility but is not supported for new patch behavior and fails with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). Multi-field patches and no-op edits are rejected with `INVALID_INPUT`; reply target / status patches are rejected with `INVALID_CONTEXT`. |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. Deleting a root cascades through every descendant reply. |
 | `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
 | `doc.comments.list` | `comments list` | List all comment threads in the document. |
 
@@ -1005,9 +1010,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
-| `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story). |
+| `doc.trackChanges.list` | `track-changes list` | List tracked changes in the document. Body-only by default; pass `in: <StoryLocator>` or `in: "all"` to widen scope. |
+| `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by SuperDoc logical id. |
+| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject tracked changes by logical id, by selected text range, by logical anchor range ({ anchor, relativeStart, relativeEnd }), or every active change in the document. Range targets may include overlap / side selectors and may partially resolve a change, splitting surviving content into new fragments with stable ids. Legacy `{ id, range: { kind: "partial", ... } }` targets are promoted only when the active adapter supports `decide()`; legacy fallback adapters fail closed with `INVALID_INPUT`. `input.expectedRevision` is accepted as a compatibility alias for mutation options. |
 
 #### History
 
@@ -1021,8 +1026,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes. |
+| `client.open` | `open` | Open a document and create a persistent editing session. Collaboration supports the `y-websocket`, `hocuspocus`, and `liveblocks` providers. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving, final, and original export modes. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
 
 #### Client
@@ -1031,6 +1036,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `client.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `client.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
+| `doc.preset.list` | `preset list` | List the LLM-tools preset ids registered in the Node SDK preset registry, plus the default preset id. |
+| `doc.preset.getCatalog` | `preset get-catalog` | Return the full tool catalog for an LLM-tools preset (defaults to the registered default preset). |
+| `doc.preset.getTools` | `preset get-tools` | Return the provider-shaped tool array (openai\|anthropic\|vercel\|generic) for an LLM-tools preset, plus the active cache strategy. |
+| `doc.preset.getSystemPrompt` | `preset get-system-prompt` | Return the SDK-style system prompt for an LLM-tools preset. |
+| `doc.preset.getMcpPrompt` | `preset get-mcp-prompt` | Return the MCP-flavored system prompt for an LLM-tools preset. |
 
   </Tab>
   <Tab title="Python">
@@ -1053,14 +1063,16 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
 | `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
-| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Text, previews, lengths, and formatting hints use the VISIBLE model: pending tracked deletions are excluded (matching how edit refs resolve), and inline atoms render as a single placeholder character. Supports pagination via offset/limit, optional nodeType filtering, and single-story scoping via `in: <StoryLocator>`. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.templates.apply` | `templates apply` | Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+| `doc.plan.execute` | `plan execute` | Execute a compiled batch of plan-safe operation entries with per-entry transactions, capture resolution between entries, and keep-prefix-and-continue failure semantics. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
 | `doc.hyperlinks.list` | `hyperlinks list` | List all hyperlinks in the document, with optional filtering by href, anchor, or display text. |
 | `doc.hyperlinks.get` | `hyperlinks get` | Retrieve details of a specific hyperlink by its inline address. |
@@ -1089,7 +1101,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.content_controls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
 | `doc.content_controls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
 | `doc.content_controls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
-| `doc.content_controls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.content_controls.move` | `content-controls move` | Move a content control to a new position. Direct moves preserve the original ID; tracked-mode authoring supports safe top-level block SDTs and remaps the destination SDT ID to avoid duplicate live anchors. |
 | `doc.content_controls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
 | `doc.content_controls.set_lock_mode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
 | `doc.content_controls.set_type` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
@@ -1139,8 +1151,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
 | `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
 | `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
-| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. |
-| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location or the current selection. Structured `body` content is not available in this v1-only branch; those shapes return `CAPABILITY_UNAVAILABLE`. |
+| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. Structured `body` content is not available in this v1-only branch; those shapes return `CAPABILITY_UNAVAILABLE`. |
 | `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
 | `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
 | `doc.cross_refs.list` | `cross-refs list` | List all cross-reference fields in the document. |
@@ -1167,7 +1179,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.captions.configure` | `captions configure` | Configure numbering format for a caption label. |
 | `doc.fields.list` | `fields list` | List all fields in the document. |
 | `doc.fields.get` | `fields get` | Get detailed information about a specific field. |
-| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location. |
+| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location, optionally preserving cached result text. The current v1 runtime supports rebuild flows; `cachedResultText` / `updatePolicy: "preserveCached"` currently return `CAPABILITY_UNAVAILABLE`. |
 | `doc.fields.rebuild` | `fields rebuild` | Rebuild (recalculate) a field. |
 | `doc.fields.remove` | `fields remove` | Remove a field from the document. |
 | `doc.citations.list` | `citations list` | List all citation marks in the document. |
@@ -1220,6 +1232,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.metadata.resolve` | `metadata resolve` | Find where an anchored-metadata entry is anchored in the document. Returns the SelectionTarget covering the anchor content. |
 | `doc.insert_tab` | `insert tab` | Insert a real Word tab node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
 | `doc.insert_line_break` | `insert line-break` | Insert a real Word line-break node at a collapsed text insertion point. Accepts the same target/ref shortcuts as insert, but only for point inserts. |
+| `doc.execute_code` | `execute code` | Run model-authored JavaScript IN-HOST against the live, SYNCHRONOUS Document API for the open session. Two globals are injected: `doc` (the synchronous Document API — do NOT await doc.* calls) and `console`. `return` a short summary; logs and the return value come back structured as { ok, result, logs, error }. Use for complex/multi-step workflows (loops, per-item branching, extract-then-generate) in ONE call instead of chaining many narrow tools. Large code can be passed on stdin. |
+| `doc.preset.dispatch` | `preset dispatch` | Dispatch an LLM tool call through the named preset's dispatcher against the active session's live document. Used by cross-language SDKs (e.g. Python) to proxy preset behavior over the CLI. |
 
 #### Format
 
@@ -1276,13 +1290,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set visual paragraph alignment on a paragraph-like block. For RTL paragraphs, left/right are translated to Word-compatible stored justification values. |
 | `doc.format.paragraph.clear_alignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
-| `doc.format.paragraph.set_indentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
+| `doc.format.paragraph.set_indentation` | `format paragraph set-indentation` | Set paragraph indentation properties (signed left/right, firstLine, hanging) in twips. |
 | `doc.format.paragraph.clear_indentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |
 | `doc.format.paragraph.set_spacing` | `format paragraph set-spacing` | Set paragraph spacing properties (before, after, line, lineRule) in twips. |
 | `doc.format.paragraph.clear_spacing` | `format paragraph clear-spacing` | Remove all direct paragraph spacing. |
 | `doc.format.paragraph.set_keep_options` | `format paragraph set-keep-options` | Set keep-with-next, keep-lines-together, and widow/orphan control flags. |
 | `doc.format.paragraph.set_outline_level` | `format paragraph set-outline-level` | Set the paragraph outline level (0–9) or null to clear. |
-| `doc.format.paragraph.set_flow_options` | `format paragraph set-flow-options` | Set contextual spacing, page-break-before, and suppress-auto-hyphens flags. |
+| `doc.format.paragraph.set_flow_options` | `format paragraph set-flow-options` | Set paragraph flow flags: contextual spacing, page-break-before, suppress-auto-hyphens, and the advanced layout toggles auto-space-DE, auto-space-DN, adjust-right-indent, and snap-to-grid. |
 | `doc.format.paragraph.set_tab_stop` | `format paragraph set-tab-stop` | Add or replace a tab stop at a given position. |
 | `doc.format.paragraph.clear_tab_stop` | `format paragraph clear-tab-stop` | Remove a tab stop at a given position. |
 | `doc.format.paragraph.clear_all_tab_stops` | `format paragraph clear-all-tab-stops` | Remove all tab stops from a paragraph. |
@@ -1292,6 +1306,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clear_shading` | `format paragraph clear-shading` | Remove all paragraph shading. |
 | `doc.format.paragraph.set_direction` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
 | `doc.format.paragraph.clear_direction` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
+| `doc.format.paragraph.set_numbering` | `format paragraph set-numbering` | Attach numbering (numId + level) to an existing paragraph or heading so it joins a numbered sequence. Numbering is a paragraph property; the node and its style are otherwise unchanged, though any direct paragraph indent is cleared so the numbering level controls indentation. Direct edits only; tracked mode is unsupported. |
 
 #### Create
 
@@ -1316,7 +1331,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.set_page_setup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
 | `doc.sections.set_columns` | `sections set-columns` | Set column configuration for a section. |
 | `doc.sections.set_line_numbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
-| `doc.sections.set_page_numbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.set_page_numbering` | `sections set-page-numbering` | Set page numbering format/start and chapter numbering settings for a section. |
 | `doc.sections.set_title_page` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
 | `doc.sections.set_odd_even_headers_footers` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
 | `doc.sections.set_vertical_align` | `sections set-vertical-align` | Set vertical page alignment for a section. |
@@ -1335,7 +1350,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
-| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. With changeMode:"tracked" the former (unnumbered) paragraph properties are recorded as a w:pPrChange so a reviewer can accept/reject the numbering. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1445,7 +1460,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.images.list` | `images list` | List all images in the document. |
 | `doc.images.get` | `images get` | Get details for a specific image by its stable ID. |
 | `doc.images.delete` | `images delete` | Delete an image from the document. |
-| `doc.images.move` | `images move` | Move an image to a new location in the document. |
+| `doc.images.move` | `images move` | Move an image to a new location in the document. Tracked-mode authoring supports safe sole inline-image body paragraphs and emits paired `<w:moveFrom>` / `<w:moveTo>` wrappers with explicit move range marker identity. |
 | `doc.images.convert_to_inline` | `images convert-to-inline` | Convert a floating image to inline placement. |
 | `doc.images.convert_to_floating` | `images convert-to-floating` | Convert an inline image to floating placement. |
 | `doc.images.set_size` | `images set-size` | Set explicit width/height for an image. |
@@ -1474,9 +1489,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
-| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
-| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). Accepts TextAddress / TextTarget anchors, or a TrackedChangeCommentTarget that names a logical tracked-change id. The tracked-change target accepts both the explicit kind form and the Labs-compatible trackedChangeId-only form; the adapter normalizes it to a Word-compatible content anchor on the requested revision side. |
+| `doc.comments.patch` | `comments patch` | Patch exactly one field on an existing comment (`text`, `target`, or `status`). The `target` branch accepts a plain TextAddress or a TrackedChangeCommentTarget, with or without `kind: "trackedChange"`, that names a logical tracked-change id. The legacy `isInternal` input is preserved in the schema for v1 backward compatibility but is not supported for new patch behavior and fails with `CAPABILITY_UNAVAILABLE` (kernel reason `internal-comments-unsupported`). Multi-field patches and no-op edits are rejected with `INVALID_INPUT`; reply target / status patches are rejected with `INVALID_CONTEXT`. |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. Deleting a root cascades through every descendant reply. |
 | `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
 | `doc.comments.list` | `comments list` | List all comment threads in the document. |
 
@@ -1484,9 +1499,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.track_changes.list` | `track-changes list` | List all tracked changes in the document. |
-| `doc.track_changes.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.track_changes.decide` | `track-changes decide` | Accept or reject tracked changes by ID, range, or scope: all (optionally filtered by story). |
+| `doc.track_changes.list` | `track-changes list` | List tracked changes in the document. Body-only by default; pass `in: <StoryLocator>` or `in: "all"` to widen scope. |
+| `doc.track_changes.get` | `track-changes get` | Retrieve a single tracked change by SuperDoc logical id. |
+| `doc.track_changes.decide` | `track-changes decide` | Accept or reject tracked changes by logical id, by selected text range, by logical anchor range ({ anchor, relativeStart, relativeEnd }), or every active change in the document. Range targets may include overlap / side selectors and may partially resolve a change, splitting surviving content into new fragments with stable ids. Legacy `{ id, range: { kind: "partial", ... } }` targets are promoted only when the active adapter supports `decide()`; legacy fallback adapters fail closed with `INVALID_INPUT`. `input.expectedRevision` is accepted as a compatibility alias for mutation options. |
 
 #### History
 
@@ -1500,8 +1515,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving and final export modes. |
+| `client.open` | `open` | Open a document and create a persistent editing session. Collaboration supports the `y-websocket`, `hocuspocus`, and `liveblocks` providers. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `doc.save` | `save` | Save the current session to the original file or a new path. Supports explicit review-preserving, final, and original export modes. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
 
 #### Client
@@ -1510,6 +1525,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `client.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `client.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
+| `doc.preset.list` | `preset list` | List the LLM-tools preset ids registered in the Node SDK preset registry, plus the default preset id. |
+| `doc.preset.get_catalog` | `preset get-catalog` | Return the full tool catalog for an LLM-tools preset (defaults to the registered default preset). |
+| `doc.preset.get_tools` | `preset get-tools` | Return the provider-shaped tool array (openai\|anthropic\|vercel\|generic) for an LLM-tools preset, plus the active cache strategy. |
+| `doc.preset.get_system_prompt` | `preset get-system-prompt` | Return the SDK-style system prompt for an LLM-tools preset. |
+| `doc.preset.get_mcp_prompt` | `preset get-mcp-prompt` | Return the MCP-flavored system prompt for an LLM-tools preset. |
 
   </Tab>
 </Tabs>

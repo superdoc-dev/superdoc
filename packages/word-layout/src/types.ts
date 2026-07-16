@@ -92,6 +92,7 @@ export type WordParagraphLayoutInput = {
 export type WordListMarkerLayout = {
   markerText: string;
   markerBoxWidthPx?: number;
+  glyphWidthPx?: number;
   gutterWidthPx?: number;
   justification: WordListJustification;
   markerX?: number;

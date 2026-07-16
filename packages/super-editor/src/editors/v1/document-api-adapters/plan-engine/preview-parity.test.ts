@@ -83,6 +83,16 @@ beforeEach(() => {
   mockedDeps.getRevision.mockReturnValue('0');
   mockedDeps.incrementRevision.mockReturnValue('1');
   mockedDeps.mapBlockNodeType.mockReturnValue(undefined);
+  mockedDeps.applyDirectMutationMeta.mockImplementation((tr) => {
+    tr.setMeta('inputType', 'programmatic');
+    tr.setMeta('skipTrackChanges', true);
+    return tr;
+  });
+  mockedDeps.applyTrackedMutationMeta.mockImplementation((tr) => {
+    tr.setMeta('inputType', 'programmatic');
+    tr.setMeta('forceTrackChanges', true);
+    return tr;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -102,6 +112,7 @@ function makeEditor(text = 'Hello'): {
   dispatch: ReturnType<typeof vi.fn>;
 } {
   const boldMark = mockMark('bold');
+  const meta = new Map<string, unknown>();
   const tr = {
     replaceWith: vi.fn(),
     delete: vi.fn(),
@@ -109,6 +120,7 @@ function makeEditor(text = 'Hello'): {
     addMark: vi.fn(),
     removeMark: vi.fn(),
     setMeta: vi.fn(),
+    getMeta: vi.fn(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
@@ -124,7 +136,11 @@ function makeEditor(text = 'Hello'): {
   tr.insert.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
   tr.removeMark.mockReturnValue(tr);
-  tr.setMeta.mockReturnValue(tr);
+  tr.setMeta.mockImplementation((key: string, value: unknown) => {
+    meta.set(key, value);
+    return tr;
+  });
+  tr.getMeta.mockImplementation((key: string) => meta.get(key));
 
   const dispatch = vi.fn();
 
@@ -211,6 +227,7 @@ function makeTextStyleEditor(textStyleAttrNames: string[]): {
   };
 
   const textNode = { isText: true, nodeSize: 5, marks: [] as unknown[] };
+  const meta = new Map<string, unknown>();
   const doc = {
     textContent: 'Hello',
     textBetween: vi.fn(() => 'Hello'),
@@ -227,6 +244,7 @@ function makeTextStyleEditor(textStyleAttrNames: string[]): {
     addMark: vi.fn(),
     removeMark: vi.fn(),
     setMeta: vi.fn(),
+    getMeta: vi.fn(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
@@ -243,7 +261,11 @@ function makeTextStyleEditor(textStyleAttrNames: string[]): {
   tr.insert.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
   tr.removeMark.mockReturnValue(tr);
-  tr.setMeta.mockReturnValue(tr);
+  tr.setMeta.mockImplementation((key: string, value: unknown) => {
+    meta.set(key, value);
+    return tr;
+  });
+  tr.getMeta.mockImplementation((key: string) => meta.get(key));
 
   const dispatch = vi.fn();
 
@@ -308,6 +330,38 @@ describe('previewPlan: non-mutating guarantee', () => {
     previewPlan(editor, { steps: [makeCompiledPlan().mutationSteps[0].step, formatStep] });
 
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('applies tracked rewrite batch metadata for multi-target previews', () => {
+    const { editor } = makeEditor('foo bar baz');
+    const step: TextRewriteStep = {
+      id: 'rewrite-all',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'foo bar baz' }, require: 'all' },
+      args: { replacement: { text: 'foo qux baz zap' } },
+    };
+
+    mockedDeps.compilePlan.mockReturnValue(
+      makeCompiledPlan({
+        mutationSteps: [
+          {
+            step,
+            targets: [
+              makeTarget({ stepId: step.id, text: 'foo bar baz', absFrom: 1, absTo: 12 }),
+              makeTarget({ stepId: step.id, blockId: 'p2', text: 'foo bar baz', absFrom: 14, absTo: 25 }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    previewPlan(editor, { steps: [step], changeMode: 'tracked' });
+
+    expect(mockedDeps.applyTrackedMutationMeta).toHaveBeenCalledWith(editor.state.tr);
+    expect(editor.state.tr.setMeta).toHaveBeenCalledWith('documentApiTrackedRewriteBatch', true);
+    expect(editor.state.tr.getMeta('documentApiTrackedRewriteBatch')).toBe(true);
+    expect(editor.state.tr.replaceWith).toHaveBeenCalledTimes(2);
+    expect(editor.state.tr.insert).not.toHaveBeenCalled();
   });
 
   it('does not dispatch even when the plan would fail at compile', () => {
@@ -459,6 +513,44 @@ describe('previewPlan: success/failure shape parity', () => {
     expect(result.evaluatedRevision).toBeTruthy();
     // The mutation step + assert step should be in results
     expect(result.steps.length).toBeGreaterThan(0);
+  });
+
+  it('treats unsafe assert regex as zero matches in preview', () => {
+    const { editor } = makeEditor('aaaaaaaaaaaaaaaaaaaaaaaa');
+
+    const assertStep: AssertStep = {
+      id: 'assert-unsafe',
+      op: 'assert',
+      where: {
+        by: 'select',
+        select: { type: 'text', pattern: '^(a+)+$', mode: 'regex' },
+      },
+      args: { expectCount: 1 },
+    };
+
+    mockedDeps.compilePlan.mockReturnValue(
+      makeCompiledPlan({
+        assertSteps: [assertStep],
+      }),
+    );
+
+    const result = previewPlan(editor, {
+      steps: [
+        {
+          id: 's1',
+          op: 'text.rewrite',
+          where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+          args: { replacement: { text: 'Hi' } },
+        },
+        assertStep,
+      ],
+    });
+
+    expect(result.evaluatedRevision).toBeTruthy();
+    expect(result.valid).toBe(false);
+    expect(result.failures).toBeDefined();
+    expect(result.failures![0].code).toBe('PRECONDITION_FAILED');
+    expect(result.failures![0].details).toEqual({ expectedCount: 1, actualCount: 0 });
   });
 
   it('execute-phase capability failures are reported when textStyle attrs are missing', () => {

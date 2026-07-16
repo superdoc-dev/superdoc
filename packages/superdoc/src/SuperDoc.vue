@@ -33,6 +33,7 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
 import {
   SuperEditor,
   AIWriter,
@@ -53,7 +54,11 @@ import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
+import { useViewportFit } from './composables/use-viewport-fit.js';
+import { createV1EditorRuntimeAdapter } from './core/editor-runtime/v1/v1-editor-runtime-adapter.js';
+import { markRuntimeRoot, unmarkRuntimeRoot } from './core/editor-runtime/root-marker.js';
 import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
+import { transactionTouchesStructuralChange } from './helpers/transaction-touches-structural-change.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 import {
   DEFAULT_COMMENTS_DISPLAY_MODE,
@@ -77,6 +82,8 @@ const {
   selectionPosition,
   activeSelection,
   activeZoom,
+  zoomMode,
+  viewportMetrics,
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
 
@@ -217,6 +224,7 @@ const superdocStyleVars = computed(() => {
 // Refs
 const superdocRoot = ref(null);
 const layers = ref(null);
+const rightSidebarRef = ref(null);
 const pdfViewerRef = ref(null);
 const pendingReplayTrackedChangeSync = ref(false);
 const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
@@ -231,9 +239,6 @@ const {
   layers,
 });
 
-// Comments layer
-const commentsLayer = ref(null);
-
 // Create a ref to pass to the composable
 const activeEditorRef = computed(() => proxy.$superdoc.activeEditor);
 
@@ -245,8 +250,11 @@ const findReplace = useFindReplace({
   getFindReplaceConfig: () => proxy.$superdoc?.config?.modules?.surfaces?.findReplace,
 });
 
-// Use the composable to get the selected text
-const { selectedText } = useSelectedText(activeEditorRef);
+// Use the active runtime for selected text when available; fall back to the
+// legacy active editor during startup and in tests.
+const { selectedText } = useSelectedText(activeEditorRef, {
+  getActiveRuntime: () => proxy.$superdoc?.getActiveRuntime?.(),
+});
 
 // Use the AI composable
 const {
@@ -261,9 +269,6 @@ const {
 } = useAi({
   activeEditorRef,
 });
-
-// Hrbr Fields
-const hrbrFieldsLayer = ref(null);
 
 const pdfConfig = proxy.$superdoc.config.modules?.pdf || {};
 
@@ -342,6 +347,7 @@ const handleDocumentReady = (documentId, container) => {
     if (!proxy.$superdoc.config.collaboration) isReady.value = true;
   }
 
+  ensureInitialFallbackZoom();
   isFloatingCommentsReady.value = true;
   hasInitializedLocations.value = true;
   proxy.$superdoc.broadcastPdfDocumentReady();
@@ -358,9 +364,14 @@ const getPendingCommentTargetClientY = () => {
   return layers.value.getBoundingClientRect().top + top * zoom;
 };
 
+const handleCommentToolClick = () => {
+  const result = showAddComment(proxy.$superdoc, getPendingCommentTargetClientY());
+  if (result?.ok === false) return;
+};
+
 const handleToolClick = (tool) => {
   const toolOptions = {
-    comments: () => showAddComment(proxy.$superdoc, getPendingCommentTargetClientY()),
+    comments: () => handleCommentToolClick(),
     ai: () => handleAiToolClick(),
   };
 
@@ -372,15 +383,7 @@ const handleToolClick = (tool) => {
   toolsMenuPosition.top = null;
 };
 
-const handleDocumentMouseDown = (e) => {
-  if (pendingComment.value) return;
-};
-
 const handleHighlightClick = () => (toolsMenuPosition.top = null);
-const cancelPendingComment = (e) => {
-  if (e.target.classList.contains('comments-dropdown__option-label')) return;
-  commentsStore.removePendingComment(proxy.$superdoc);
-};
 
 const onCommentsLoaded = ({ editor, comments, replacedFile }) => {
   if (editor.options.shouldLoadComments || replacedFile) {
@@ -412,10 +415,66 @@ const onEditorContentControlClick = (payload) => {
   proxy.$superdoc.emit('content-control:click', payload);
 };
 
+// Shell-owned per-document state for the v1 runtime adapter.
+const subDocumentRoots = new Map();
+const v1Runtimes = new Map();
+let v1RuntimeSeq = 0;
+
+/**
+ * Store the shell-owned wrapper for a document editor. This wrapper is outside
+ * painter DOM and is the only element stamped with the runtime marker.
+ * @param {Object} doc - the document model
+ * @param {HTMLElement|null} el - the wrapper element, or null on unmount
+ */
+const setSubDocumentRoot = (doc, el) => {
+  if (!doc?.id) return;
+  if (el) subDocumentRoots.set(doc.id, el);
+  else subDocumentRoots.delete(doc.id);
+};
+
+/**
+ * Register a pending v1 runtime at editor creation. The visible
+ * PresentationEditor is attached later from onEditorReady.
+ * @param {string} documentId
+ * @param {Object} editor - the live v1 Editor instance
+ */
+const registerV1Runtime = (documentId, editor) => {
+  const root = subDocumentRoots.get(documentId);
+  if (!root) {
+    console.warn('[SuperDoc] v1 runtime host root unavailable; skipping runtime registration for', documentId);
+    return;
+  }
+
+  const existing = v1Runtimes.get(documentId);
+  if (existing) existing.adapter.runtime.dispose();
+
+  const runtimeId = `v1:${documentId}:${++v1RuntimeSeq}`;
+  const adapter = createV1EditorRuntimeAdapter({
+    id: runtimeId,
+    documentId,
+    root,
+    editor,
+    setGlobalZoom: (factor) => PresentationEditor.setGlobalZoom(factor),
+    onUnregister: (id) => {
+      proxy.$superdoc.unregisterEditorRuntime(id);
+      const current = v1Runtimes.get(documentId);
+      if (current && current.runtimeId === id) v1Runtimes.delete(documentId);
+      const hostRoot = subDocumentRoots.get(documentId);
+      if (hostRoot) unmarkRuntimeRoot(hostRoot);
+    },
+  });
+
+  markRuntimeRoot(root, runtimeId);
+  proxy.$superdoc.registerEditorRuntime(adapter.runtime);
+  v1Runtimes.set(documentId, { runtimeId, adapter });
+  proxy.$superdoc.setActiveRuntime(runtimeId, 'v1-editor-create');
+};
+
 const onEditorCreate = ({ editor }) => {
   const { documentId } = editor.options;
   const doc = getDocument(documentId);
   doc.setEditor(editor);
+  registerV1Runtime(documentId, editor);
   proxy.$superdoc.setActiveEditor(editor);
   editor.on?.('contentControlFocus', onEditorContentControlFocus);
   editor.on?.('contentControlBlur', onEditorContentControlBlur);
@@ -432,6 +491,9 @@ const onEditorCreate = ({ editor }) => {
  * @param {PresentationEditor} payload.presentationEditor - The PresentationEditor wrapper
  */
 const onEditorReady = ({ editor, presentationEditor }) => {
+  // Legacy (non-layout-engine) editors return early below; the seeded
+  // initial zoom for their CSS-fallback transform must apply first.
+  ensureInitialFallbackZoom();
   if (!presentationEditor) return;
 
   // Store presentationEditor reference for mode changes
@@ -447,6 +509,9 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // not linger on the reactive document model.
     if (doc.password) doc.password = undefined;
   }
+
+  const v1Runtime = v1Runtimes.get(documentId);
+  if (v1Runtime) v1Runtime.adapter.attachPresentationEditor(presentationEditor);
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
   getTrackedChangeIndex(editor);
 
@@ -502,8 +567,26 @@ const onEditorDestroy = () => {
 };
 
 const onEditorFocus = ({ editor }) => {
+  const documentId = editor?.options?.documentId;
+  const entry = documentId ? v1Runtimes.get(documentId) : null;
+  if (entry) proxy.$superdoc.setActiveRuntime(entry.runtimeId, 'v1-editor-focus');
   proxy.$superdoc.setActiveEditor(editor);
 };
+
+// Shell-owned product DOM hit capture. Real focus/pointer hits inside a marked
+// runtime root activate the owning runtime through the registry. This handler
+// stays deliberately minimal: it resolves a runtime from the event target and
+// does nothing editor-semantic — no painter DOM inspection, no coordinate
+// mapping, no command dispatch, no selection semantics. Activation outside any
+// marked root is a no-op (the registry returns no owner).
+const activateRuntimeFromEvent = (event, reason) => {
+  proxy.$superdoc?.activateRuntimeFromEventTarget?.(event.target, reason);
+};
+const handleRuntimeFocusIn = (event) => activateRuntimeFromEvent(event, 'focusin');
+const handleRuntimePointerDown = (event) => activateRuntimeFromEvent(event, 'pointerdown');
+// `mousedown` is a fallback for environments that do not dispatch pointer
+// events consistently; it routes through the same idempotent activation path.
+const handleRuntimeMouseDown = (event) => activateRuntimeFromEvent(event, 'mousedown');
 
 const onEditorDocumentLocked = ({ editor, isLocked, lockedBy }) => {
   proxy.$superdoc.lockSuperdoc(isLocked, lockedBy);
@@ -707,17 +790,6 @@ const processSelectionChange = (editor, transaction) => {
   handleSelectionChange(selectionResult);
 };
 
-function getSelectionBoundingBox() {
-  const selection = window.getSelection();
-
-  if (selection.rangeCount > 0) {
-    const range = selection.getRangeAt(0);
-    return range.getBoundingClientRect();
-  }
-
-  return null;
-}
-
 const onEditorCollaborationReady = ({ editor }) => {
   proxy.$superdoc.emit('collaboration-ready', { editor });
 
@@ -780,6 +852,8 @@ const editorOptions = (doc) => {
   const ydocHasContent =
     (ydocFragment && ydocFragment.length > 0) || (ydocParts && ydocParts.size > 0) || legacyContent;
   const isNewFile = doc.isNewFile && !ydocHasContent;
+  const benchmarkExecutionMode = proxy.$superdoc.config?.benchmarkExecutionMode;
+  const benchmarkTraceEnabled = proxy.$superdoc.config?.benchmarkTraceEnabled === true;
 
   const options = {
     isDebug: proxy.$superdoc.config.isDebug || false,
@@ -791,6 +865,8 @@ const editorOptions = (doc) => {
     html: doc.html,
     markdown: doc.markdown,
     documentMode: proxy.$superdoc.config.documentMode,
+    ...(benchmarkExecutionMode ? { benchmarkExecutionMode } : {}),
+    ...(benchmarkTraceEnabled ? { benchmarkTraceEnabled: true } : {}),
     allowSelectionInViewMode: proxy.$superdoc.config.allowSelectionInViewMode,
     rulers: doc.rulers,
     rulerContainer: proxy.$superdoc.config.rulerContainer,
@@ -828,6 +904,7 @@ const editorOptions = (doc) => {
     onCommentLocationsUpdate: (payload) => onEditorCommentLocationsUpdate(doc, payload),
     onListDefinitionsChange: onEditorListdefinitionsChange,
     onFontsResolved: onFontsResolvedFn,
+    fontAssets: proxy.$superdoc.config.fonts,
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
@@ -850,6 +927,9 @@ const editorOptions = (doc) => {
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
           enableCommentsInViewing: isViewingCommentsVisible.value,
           contentControlsChrome: proxy.$superdoc.config.modules?.contentControls?.chrome,
+          resolveTrackedChangeColor: composeAuthorColorResolver(
+            proxy.$superdoc.config.modules?.trackChanges?.authorColors,
+          ),
         }
       : undefined,
     permissionResolver: (payload = {}) =>
@@ -1257,14 +1337,14 @@ const collectTouchedChangeIds = (transaction) => {
   return collectTouchedTrackedChangeIds(transaction, { trackChangesPluginKey: TrackChangesBasePluginKey });
 };
 
-const onEditorTransaction = (payload = {}) => {
-  const { editor, transaction } = payload;
+const queueTrackedChangeCommentResyncForTransaction = ({ editor, transaction } = {}) => {
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
 
   // Call sync on editor transaction for undo/redo in both local history
   // and collaboration replay modes.
   if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
+    commentsStore.syncResolvedCommentsWithDocument?.({ documentId, editor });
     syncTrackedChangePositionsWithDocument({ documentId, editor });
     queueTrackedChangeCommentResync({
       editor,
@@ -1272,12 +1352,22 @@ const onEditorTransaction = (payload = {}) => {
       // collaboration comment update is already shared through the comments ydoc.
       broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
     });
+  } else if (transactionTouchesStructuralChange(transaction)) {
+    // Structural row tracked changes (whole-table insert/delete) live on node
+    // attrs, not inline marks, so the id-based targeted resync cannot see them.
+    // Force a full resync so structural bubbles appear/refresh during editing,
+    // not only on import.
+    queueTrackedChangeCommentResync({ editor });
   } else {
     queueTrackedChangeCommentResync({
       editor,
       changeIds: collectTouchedChangeIds(transaction),
     });
   }
+};
+
+const onEditorTransaction = (payload = {}) => {
+  queueTrackedChangeCommentResyncForTransaction(payload);
 
   emitEditorTransaction(buildEditorTransactionPayload(payload));
 };
@@ -1337,6 +1427,20 @@ watch(showCommentsSidebar, (value) => {
   proxy.$superdoc.broadcastSidebarToggle(value);
 });
 
+// Viewport fit tracking: maintains viewport metrics, emits `viewport-change`,
+// and applies the fit-width zoom policy. See composables/use-viewport-fit.js.
+useViewportFit({
+  getSuperdoc: () => proxy.$superdoc,
+  superdocContainerWidth,
+  isReady,
+  activeZoom,
+  zoomMode,
+  viewportMetrics,
+  showCommentsSidebar,
+  rightSidebarRef,
+  superdocRoot,
+  documents,
+});
 /**
  * Scroll the page to a given commentId
  *
@@ -1347,12 +1451,16 @@ const scrollToComment = (commentId) => {
 };
 
 onMounted(() => {
-  const config = commentsModuleConfig.value;
-  if (config && !config.readOnly) {
-    document.addEventListener('mousedown', handleDocumentMouseDown);
-  }
   document.addEventListener('contextmenu', handleDocumentContextMenu, true);
   document.addEventListener('keydown', handleDocumentShortcut, true);
+
+  // Capture-phase product hit routing: activate the owning runtime from real
+  // focus/pointer hits. Capture so a marked root nested under shells that stop
+  // propagation still resolves; the handler is idempotent and a no-op outside
+  // any marked runtime root.
+  document.addEventListener('focusin', handleRuntimeFocusIn, true);
+  document.addEventListener('pointerdown', handleRuntimePointerDown, true);
+  document.addEventListener('mousedown', handleRuntimeMouseDown, true);
 
   recalculateCompactCommentsMode();
   ensureCompactMeasurementObserver();
@@ -1430,9 +1538,16 @@ function handleContainerKeydown(e) {
 onBeforeUnmount(() => {
   passwordPrompt.destroy();
   findReplace.destroy();
-  document.removeEventListener('mousedown', handleDocumentMouseDown);
+  for (const entry of Array.from(v1Runtimes.values())) {
+    entry.adapter.runtime.dispose();
+  }
+  v1Runtimes.clear();
+  subDocumentRoots.clear();
   document.removeEventListener('contextmenu', handleDocumentContextMenu, true);
   document.removeEventListener('keydown', handleDocumentShortcut, true);
+  document.removeEventListener('focusin', handleRuntimeFocusIn, true);
+  document.removeEventListener('pointerdown', handleRuntimePointerDown, true);
+  document.removeEventListener('mousedown', handleRuntimeMouseDown, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;
@@ -1487,7 +1602,7 @@ const handleSelectionChange = (selection) => {
   const selectionIsWideEnough = Math.abs(selectionPosition.value.left - selectionPosition.value.right) > 5;
   const selectionIsTallEnough = Math.abs(selectionPosition.value.top - selectionPosition.value.bottom) > 5;
   if (!selectionIsWideEnough || !selectionIsTallEnough) {
-    selectionLayer.value.style.pointerEvents = 'none';
+    if (selectionLayer.value?.style) selectionLayer.value.style.pointerEvents = 'none';
     resetSelection();
     return;
   }
@@ -1649,6 +1764,43 @@ const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
   handleSelectionChange(selection);
 };
 
+// Web layout without layout engine - apply CSS transform directly
+// to non-PDF sub-document containers so zoom works for PM fallback rendering.
+// PDF documents are excluded because pdfViewer.updateScale() handles their zoom
+// separately; applying both would result in double-zoom.
+const applyFallbackZoomStyles = (zoomFactor) => {
+  const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
+  subDocs?.forEach((el) => {
+    if (el.querySelector('.sd-pdf-viewer')) return;
+    if (zoomFactor === 1) {
+      el.style.transformOrigin = '';
+      el.style.transform = '';
+      el.style.width = '';
+    } else {
+      el.style.transformOrigin = 'top left';
+      el.style.transform = `scale(${zoomFactor})`;
+      el.style.width = `${100 / zoomFactor}%`;
+    }
+  });
+};
+
+// One-time initial application for surfaces that only consume zoom
+// imperatively. A seeded `zoom.initial` never fires the activeZoom watcher
+// (the ref starts at the seeded value), and the fallback transform targets
+// elements that do not exist until documents render - so apply once from
+// the per-document ready hooks. PresentationEditor and PdfViewer take
+// their initial value at creation (layoutEngineOptions.zoom /
+// :initial-scale) and need nothing here.
+let initialFallbackZoomApplied = false;
+const ensureInitialFallbackZoom = () => {
+  if (initialFallbackZoomApplied) return;
+  if (proxy.$superdoc.config.useLayoutEngine !== false) return;
+  const zoomFactor = (activeZoom.value ?? 100) / 100;
+  if (zoomFactor === 1) return;
+  initialFallbackZoomApplied = true;
+  nextTick(() => applyFallbackZoomStyles(zoomFactor));
+};
+
 watch(
   () => activeZoom.value,
   (zoom) => {
@@ -1657,23 +1809,8 @@ watch(
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom(zoomFactor);
     } else {
-      // Web layout without layout engine — apply CSS transform directly
-      // to non-PDF sub-document containers so zoom works for PM fallback rendering.
-      // PDF documents are excluded because pdfViewer.updateScale() handles their zoom
-      // separately below; applying both would result in double-zoom.
-      const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
-      subDocs?.forEach((el) => {
-        if (el.querySelector('.sd-pdf-viewer')) return;
-        if (zoomFactor === 1) {
-          el.style.transformOrigin = '';
-          el.style.transform = '';
-          el.style.width = '';
-        } else {
-          el.style.transformOrigin = 'top left';
-          el.style.transform = `scale(${zoomFactor})`;
-          el.style.width = `${100 / zoomFactor}%`;
-        }
-      });
+      initialFallbackZoomApplied = true;
+      applyFallbackZoomStyles(zoomFactor);
     }
 
     const pdfViewer = getPDFViewer();
@@ -1769,7 +1906,6 @@ const getPDFViewer = () => {
           :fields="modules['hrbr-fields']"
           class="superdoc__comments-layer comments-layer"
           style="z-index: 2"
-          ref="hrbrFieldsLayer"
         />
 
         <!-- On-document comments layer -->
@@ -1777,7 +1913,6 @@ const getPDFViewer = () => {
           v-if="layers"
           class="superdoc__comments-layer comments-layer"
           style="z-index: 3"
-          ref="commentsLayer"
           :parent="layers"
           :user="user"
           @highlight-click="handleHighlightClick"
@@ -1808,12 +1943,14 @@ const getPDFViewer = () => {
           class="superdoc__sub-document sub-document"
           v-for="doc in documents"
           :key="`${doc.id}:${doc.editorMountNonce}`"
+          :ref="(el) => setSubDocumentRoot(doc, el)"
         >
           <!-- PDF renderer -->
           <PdfViewer
             v-if="doc.type === PDF"
             :file="doc.data"
             :file-id="doc.id"
+            :initial-scale="(activeZoom ?? 100) / 100"
             :config="pdfConfig"
             @selection-raw="handlePdfSelectionRaw"
             @bypass-selection="handlePdfClick"
@@ -1844,7 +1981,7 @@ const getPDFViewer = () => {
       </div>
     </div>
 
-    <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
+    <div ref="rightSidebarRef" class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
       <div class="floating-comments">
         <FloatingComments
           v-if="hasInitializedLocations && (floatingComments.length > 0 || pendingComment)"

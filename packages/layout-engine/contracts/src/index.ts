@@ -1,4 +1,5 @@
 import type { TabStop } from './engines/tabs.js';
+import type { PageNumberChapterSeparator, PageNumberFieldFormat, PageNumberFormat } from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -34,11 +35,27 @@ export {
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
+export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
+  type HeaderFooterEffectiveRefResult,
+} from './header-footer-resolution.js';
+
 // Table column rescaling (moved from layout-engine for cross-stage use)
 export { rescaleColumnWidths } from './table-column-rescale.js';
 
 // Cell spacing resolution (moved from measuring-dom for cross-stage use)
 export { getCellSpacingPx } from './cell-spacing.js';
+
+// Border band width (single source of truth for painter CSS width + measuring row reservation)
+export { getBorderBandWidthPx, getBorderBandProfile, isNativeCssDoubleStyle } from './border-band.js';
+export type { BorderBandProfile } from './border-band.js';
 
 // OOXML z-index normalization (moved from pm-adapter for cross-stage use)
 export {
@@ -49,6 +66,14 @@ export {
   resolveFloatingZIndex,
   getFragmentZIndex,
 } from './ooxml-z-index.js';
+
+export {
+  resolveOuterShadowOffset,
+  getOuterShadowStdDeviation,
+  getOuterShadowPaintExtent,
+  type OuterShadowPaintEffect,
+  type PaintEffectExtent,
+} from './shape-effects.js';
 
 // Export justify utilities
 export {
@@ -79,6 +104,13 @@ export {
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 
+export {
+  resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
+  type ColumnLayoutForAnchor,
+  type ResolveAnchoredGraphicYInput,
+} from './graphic-placement.js';
+
 // Editor-neutral layout identity primitives (prep-001).
 // Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
 // alongside these on every fragment/run.
@@ -99,8 +131,31 @@ export type {
   LayoutStoryLocator,
 } from './layout-identity.js';
 import type { LayoutSourceIdentity } from './layout-identity.js';
-export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
-export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  columnRenderLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  resolveColumnCount,
+  resolveColumnLayout,
+  resolveColumnMode,
+  widthsEqual,
+} from './column-layout.js';
+export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
+export {
+  authorFromTrackedChangeMeta,
+  authorIdentityKey,
+  composeAuthorColorResolver,
+  fallbackAuthorColor,
+  stampTrackedChangeColors,
+} from './author-colors.js';
+export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
 export {
   getSdtContainerKey,
   getSdtContainerKeyForBlock,
@@ -108,6 +163,41 @@ export {
   hasExplicitSdtContainerKey,
   isSdtContainerMetadata,
 } from './sdt-container.js';
+export {
+  resolveInheritedHeaderFooterRef,
+  resolveInheritedHeaderFooterRefWithType,
+  type HeaderFooterRefIdentifier,
+  type HeaderFooterRefMap,
+  type ResolvedInheritedHeaderFooterRef,
+  type ResolveInheritedHeaderFooterRefInput,
+} from './header-footer-inheritance.js';
+export {
+  formatChapterPageNumberText,
+  formatIntegerWithNumericPicture,
+  formatPageNumber,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type PageNumberFieldFormat,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+} from './page-number-formatting.js';
+
+export { buildPageRefAnchorMap } from './page-ref-anchor.js';
+export {
+  DRAWING_DIAGNOSTIC_CODES,
+  DRAWING_DIAGNOSTIC_CODE_ALIASES,
+  DRAWING_SUPPORT_TAXONOMY,
+  DRAWING_FAMILIES,
+  canonicalDrawingDiagnosticCode,
+  getDrawingFamilySpec,
+  isSupportedDrawingFamily,
+  type DrawingContractTarget,
+  type DrawingDiagnosticCode,
+  type DrawingFamily,
+  type DrawingFamilySpec,
+  type DrawingSupportLevel,
+  type DrawingTaxonomyDrawingKind,
+} from './drawing-taxonomy.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -206,7 +296,7 @@ export type SdtMetadata =
   | DocumentSectionMetadata
   | DocPartMetadata;
 
-export const CONTRACTS_VERSION = '1.0.0';
+export const CONTRACTS_VERSION = '1.1.0';
 
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;
@@ -255,6 +345,20 @@ export type TrackedChangeKind = 'insert' | 'delete' | 'format';
 
 export type TrackedChangesMode = 'review' | 'original' | 'final' | 'off';
 
+/**
+ * Identity of a tracked-change author, used to resolve a per-author color.
+ *
+ * Mirrors the author metadata carried on {@link TrackedChangeMeta}
+ * (`author` → `name`, `authorEmail` → `email`, `authorImage` → `image`).
+ * Hosts configure per-author colors through this shape (see the
+ * `modules.trackChanges.authorColors` config on the `superdoc` package).
+ */
+export type TrackChangeAuthor = {
+  name?: string;
+  email?: string;
+  image?: string;
+};
+
 /** Formatting mark for track-format metadata. */
 export type RunMark = {
   type: string;
@@ -278,6 +382,15 @@ export type TrackedChangeMeta = {
   author?: string;
   authorEmail?: string;
   authorImage?: string;
+  /**
+   * Paint-ready per-author color, resolved upstream (in/around the
+   * pm-adapter data-preparation pass) from the author identity. DomPainter
+   * reads only this field and stamps the element-scoped tracked-change CSS
+   * variables from it — it never invokes resolvers or touches app config.
+   * Undefined when per-author colors are disabled or unconfigured, in which
+   * case the static default tracked-change palette applies.
+   */
+  color?: string;
   date?: string;
   before?: RunMark[];
   after?: RunMark[];
@@ -302,7 +415,6 @@ export type FlowRunLink = {
 export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
 
 export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
-
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -338,6 +450,26 @@ export type RunMarks = {
   baselineShift?: number;
 };
 
+export type PageReferenceRelativePositionText = 'above' | 'below';
+
+export type FieldResultFormat = 'charformat' | 'mergeformat';
+
+export type NumericPictureFormat = {
+  /** Raw argument after the \# switch, without surrounding quotes. */
+  picture: string;
+};
+
+export interface PageRefLocation {
+  physicalPage: number;
+  displayNumber: number;
+  displayText: string;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+  sectionIndex?: number;
+  pmPosition?: number;
+}
+
 export type TextRun = RunMarks & {
   kind?: 'text';
   text: string;
@@ -359,7 +491,9 @@ export type TextRun = RunMarks & {
   visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
-  token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
+  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount' | 'seq';
+  /** Explicit formatting requested by PAGE/NUMPAGES/SECTIONPAGES field switches. */
+  pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
   /** Absolute ProseMirror position (exclusive) after the last character. */
@@ -368,6 +502,29 @@ export type TextRun = RunMarks & {
   pageRefMetadata?: {
     bookmarkId: string;
     instruction: string;
+    /** True when the instruction has \p. */
+    relativePosition?: boolean;
+    /** General numeric formatting switch for the PAGEREF page value. */
+    pageNumberFieldFormat?: PageNumberFieldFormat;
+    /** Raw numeric picture from \#. */
+    numericPictureFormat?: NumericPictureFormat;
+    /** CHARFORMAT / MERGEFORMAT, if present. */
+    fieldResultFormat?: FieldResultFormat;
+  };
+  /** Metadata for SEQ tokens (resolved by super-editor before layout measurement). */
+  seqMetadata?: {
+    identifier: string;
+    instruction?: string;
+    fieldArgument?: string;
+    sequenceMode?: 'next' | 'current';
+    hideResult?: boolean;
+    restartNumber?: number | null;
+    restartLevel?: number | null;
+    format?: string;
+    hasGeneralFormat?: boolean;
+    pageNumberFieldFormat?: PageNumberFieldFormat | null;
+    numericPictureFormat?: NumericPictureFormat | null;
+    cachedText?: string;
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
@@ -391,6 +548,13 @@ export type TextRun = RunMarks & {
 export type TabRun = RunMarks & {
   kind: 'tab';
   text: '\t';
+  /**
+   * Font of the tab, inherited from the paragraph's resolved run properties. A tab has
+   * no glyphs, but its font drives the line height (so a tab-only line matches a text
+   * line) and the underline weight. Optional: not every producer sets it.
+   */
+  fontFamily?: string;
+  fontSize?: number;
   /** Width in pixels (assigned by measurer/resolver). */
   width?: number;
   tabStops?: TabStop[];
@@ -425,8 +589,16 @@ export type ImageLuminanceAdjustment = {
   contrast?: number;
 };
 
+export type ImageAlphaModFix = {
+  /** OOXML a:alphaModFix/@amt in raw fixed-percentage units (0..100000). */
+  amt: number;
+};
+
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
 export type ImageHyperlink = { url: string; tooltip?: string };
+
+/** CSS object-fit values supported by SuperDoc image rendering paths. */
+export type ObjectFit = 'contain' | 'cover' | 'fill' | 'scale-down';
 
 /**
  * Inline image run for images that flow with text on the same line.
@@ -460,6 +632,10 @@ export type ImageRun = {
   title?: string;
   /** Clip-path value for cropped images. */
   clipPath?: string;
+  /** Clip-path value for preset shape masks applied around the image box. */
+  shapeClipPath?: string;
+  /** CSS object-fit behavior for the painted image inside its layout box. */
+  objectFit?: ObjectFit;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -502,6 +678,7 @@ export type ImageRun = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
 };
@@ -628,13 +805,28 @@ export type BorderStyle =
   | 'single'
   | 'double'
   | 'dashed'
+  | 'dashSmallGap'
   | 'dotted'
   | 'thick'
   | 'triple'
   | 'dotDash'
   | 'dotDotDash'
+  | 'thinThickSmallGap'
+  | 'thickThinSmallGap'
+  | 'thinThickThinSmallGap'
+  | 'thinThickMediumGap'
+  | 'thickThinMediumGap'
+  | 'thinThickThinMediumGap'
+  | 'thinThickLargeGap'
+  | 'thickThinLargeGap'
+  | 'thinThickThinLargeGap'
   | 'wave'
-  | 'doubleWave';
+  | 'doubleWave'
+  | 'dashDotStroked'
+  | 'threeDEmboss'
+  | 'threeDEngrave'
+  | 'outset'
+  | 'inset';
 
 /** Border specification for table and cell borders. */
 export type BorderSpec = {
@@ -729,6 +921,23 @@ export type TableRowAttrs = {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
   };
+  /**
+   * Structural tracked change on the whole row (inserted/deleted row), imported
+   * from `<w:ins>`/`<w:del>` inside `<w:trPr>`. Reuses the same shared
+   * {@link TrackedChangeMeta} shape that inline runs carry, so one painter +
+   * color-stamping system handles both inline and structural tracked changes.
+   * `kind` is `'insert'` for an inserted row and `'delete'` for a deleted row.
+   * `color` is stamped downstream by {@link stampTrackedChangeColors}.
+   */
+  trackedChange?: TrackedChangeMeta;
+  /**
+   * Row-level border override from OOXML `w:tblPrEx/w:tblBorders` (§17.4.61).
+   * Table property exceptions override the table-level borders for this row
+   * only. Rows without a `tblPrEx` border block leave this undefined and fall
+   * through to the table's borders. Resolved (eighth-points → px) by the v1
+   * layout-adapter; the painter merges it over the table borders per edge.
+   */
+  borders?: TableBorders;
 };
 
 export type TableRow = {
@@ -769,6 +978,11 @@ export type PageMargins = {
   gutter?: number;
 };
 
+export type DocumentBackground = {
+  /** Solid page background color as a CSS hex value. */
+  color: string;
+};
+
 export type ImageBlockAttrs = {
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
@@ -783,7 +997,7 @@ export type ImageBlock = {
   height?: number;
   alt?: string;
   title?: string;
-  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
+  objectFit?: ObjectFit;
   display?: 'inline' | 'block';
   padding?: BoxSpacing;
   margin?: BoxSpacing;
@@ -798,6 +1012,7 @@ export type ImageBlock = {
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
   lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
+  alphaModFix?: ImageAlphaModFix; // DrawingML fixed alpha adjustment from a:alphaModFix
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
@@ -807,7 +1022,7 @@ export type ImageBlock = {
   sourceAnchor?: SourceAnchor;
 };
 
-export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
+export type DrawingKind = 'image' | 'vectorShape' | 'textboxShape' | 'shapeGroup' | 'chart';
 
 export type DrawingContentSnapshot = {
   name: string;
@@ -890,12 +1105,19 @@ export type TextFormatting = {
 export type TextPart = {
   text: string;
   formatting?: TextFormatting;
-  /** Optional field token (e.g., PAGE/NUMPAGES) resolved at render time. */
-  fieldType?: 'PAGE' | 'NUMPAGES';
+  /** Optional field token (e.g., PAGE/NUMPAGES/SECTIONPAGES) resolved at render time. */
+  fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES';
+  /** PAGE/SECTIONPAGES field-local value formatting override. */
+  pageNumberFormat?: PageNumberFormat;
   /** Indicates this part represents a line break between paragraphs. */
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
+  /**
+   * True only on the line-break part that separates two logical paragraphs.
+   * Intra-paragraph <w:br> line breaks do not set this flag.
+   */
+  isParagraphBoundary?: boolean;
   /**
    * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
    * content, including paragraphs whose runs carry inline w:drawing
@@ -914,12 +1136,23 @@ export type TextPart = {
   alt?: string;
 };
 
+export type ShapeTextParagraph = {
+  spacing?: {
+    /** CSS pixels. */
+    before?: number;
+    /** CSS pixels. */
+    after?: number;
+  };
+};
+
 /** Text content configuration for shapes. */
 export type ShapeTextContent = {
   /** Array of text parts with individual formatting. */
   parts: TextPart[];
   /** Horizontal text alignment within the shape. */
   horizontalAlign?: 'left' | 'center' | 'right';
+  /** Paragraph metadata aligned to the logical paragraphs in `parts`. */
+  paragraphs?: ShapeTextParagraph[];
 };
 
 export type LineEnd = {
@@ -940,11 +1173,25 @@ export type EffectExtent = {
   bottom: number;
 };
 
+export type ShapeOuterShadowEffect = {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+};
+
+export type ShapeEffects = {
+  outerShadow?: ShapeOuterShadowEffect;
+};
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   textContent?: ShapeTextContent;
   textAlign?: string;
   textVerticalAlign?: 'top' | 'center' | 'bottom';
@@ -967,6 +1214,9 @@ export type ShapeGroupTransform = {
   childHeight?: number;
   childOriginXEmu?: number;
   childOriginYEmu?: number;
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
 };
 
 export type ShapeGroupVectorChild = {
@@ -986,6 +1236,9 @@ export type ShapeGroupImageChild = {
     src: string;
     alt?: string;
     clipPath?: string;
+    alphaModFix?: ImageAlphaModFix;
+    shapeClipPath?: string;
+    objectFit?: ObjectFit;
     imageId?: string;
     imageName?: string;
   };
@@ -1037,6 +1290,7 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;
@@ -1049,9 +1303,35 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   };
 };
 
+export type TextboxDrawing = DrawingBlockBase & {
+  drawingKind: 'textboxShape';
+  geometry: DrawingGeometry;
+  shapeKind?: string;
+  customGeometry?: CustomGeometryData;
+  fillColor?: FillColor;
+  strokeColor?: StrokeColor;
+  strokeWidth?: number;
+  lineEnds?: LineEnds;
+  effects?: ShapeEffects;
+  effectExtent?: EffectExtent;
+  textContent?: ShapeTextContent;
+  textAlign?: string;
+  textVerticalAlign?: 'top' | 'center' | 'bottom';
+  textInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+  contentBlocks: ParagraphBlock[];
+  /** Paragraph layout results for table-cell textboxes; populated by the layout bridge, read by the painter. */
+  contentMeasures?: ParagraphMeasure[];
+};
+
 export type ShapeGroupDrawing = DrawingBlockBase & {
   drawingKind: 'shapeGroup';
   geometry: DrawingGeometry;
+  effectExtent?: EffectExtent;
   groupTransform?: ShapeGroupTransform;
   shapes: ShapeGroupChild[];
   size?: {
@@ -1121,7 +1401,7 @@ export type ChartDrawing = DrawingBlockBase & {
   chartPartPath?: string;
 };
 
-export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
+export type DrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
 
 /**
  * Vertical alignment of content within a section/page.
@@ -1149,10 +1429,7 @@ export type SectionBreakBlock = {
     /** Left page margin */
     left?: number;
   };
-  numbering?: {
-    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-    start?: number;
-  };
+  numbering?: SectionNumbering;
   headerRefs?: {
     default?: string;
     first?: string;
@@ -1191,8 +1468,10 @@ export type SectionRefs = {
 };
 
 export type SectionNumbering = {
-  format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+  format?: PageNumberFormat;
   start?: number;
+  chapterStyle?: number;
+  chapterSeparator?: PageNumberChapterSeparator;
 };
 
 export type SectionMetadata = {
@@ -1574,6 +1853,10 @@ export type ParagraphAttrs = {
   dropCapDescriptor?: DropCapDescriptor;
   frame?: ParagraphFrame;
   numberingProperties?: { ilvl?: number; numId?: number } | null;
+  /** Built-in heading level resolved from style metadata, where 1 means Heading 1. */
+  headingLevel?: number;
+  /** Current list level ordinal from structured numbering metadata. */
+  listLevelOrdinal?: number;
   borders?: ParagraphBorders;
   shading?: ParagraphShading;
   tabs?: TabStop[];
@@ -1614,6 +1897,8 @@ export type ParagraphAttrs = {
   directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
+  /** Stable id shared by every paragraph in the same TOC (docPartObj uniqueId or parent sdBlockId). */
+  tocId?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
   floatAlignment?: 'left' | 'right' | 'center';
   /**
@@ -1683,6 +1968,12 @@ export type ColumnLayout = {
   withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+  /**
+   * Per-column inter-column gaps in px, length `count - 1`: the gap after each column except the
+   * last. Explicit mode (`equalWidth === false`) only, derived from each `<w:col w:space>`; equal
+   * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
+   */
+  gaps?: number[];
 };
 
 /**
@@ -1896,6 +2187,64 @@ export type Measure =
   | ColumnBreakMeasure;
 
 /** A rendered page containing positioned fragments. Page numbers are 1-indexed. */
+/**
+ * SD-2656: per-page footnote planning ledger.
+ *
+ * The single source of truth that body pagination, footnote placement, and
+ * continuation carry must all agree on. Without it the three subsystems read
+ * different numbers (body reserves X, planner paints Y, carry-forward thinks
+ * Z) and the resulting drift compounds across the document.
+ *
+ * Mandatory invariants checked by `tools/sd-2656-footnote-analyzer`:
+ *   1. `actualBandHeight <= appliedBodyReserve`  (band fits)
+ *   2. `mandatorySlices` always equals `full(non-last) + firstLine(last)` of
+ *      the page's anchored cluster (rule).
+ *   3. `continuationIn[P]` matches `continuationOut[P-1]` (carry parity).
+ *   4. `deadReserve = appliedBodyReserve - actualBandHeight` is small (drift
+ *      fuel above ~30 px is a planning bug).
+ */
+export type FootnoteContinuationEntry = {
+  /** Footnote id (OOXML id, not the Word visible number). */
+  id: string;
+  /** How many ranges remain to render. */
+  remainingRangeCount: number;
+  /** Total height of the remaining ranges. */
+  remainingHeightPx: number;
+};
+
+export type FootnotePageLedger = {
+  pageIndex: number;
+  /** Ordered footnote ids whose body refs are anchored on this page. */
+  anchorIds: string[];
+  /** Slices required by the rule: full of non-last + firstLine of last. */
+  mandatorySliceIds: string[];
+  /** Slices for content drained from prior pages. */
+  continuationSliceIds: string[];
+  /** Slices for last-anchor content beyond firstLine (rendered only if there
+   *  is leftover space after mandatory + continuation). */
+  extendedSliceIds: string[];
+  /** Continuations arriving from page-1. */
+  continuationIn: FootnoteContinuationEntry[];
+  /** Continuations deferred to page+1. */
+  continuationOut: FootnoteContinuationEntry[];
+  /** Mandatory-reserve px: mandatorySlices height + overhead. */
+  mandatoryReservePx: number;
+  /** SD-2656 Phase 7: Word-like "preferred" reserve px. Body slicer is allowed
+   *  to reserve this much when doing so does not cause cluster spill or
+   *  continuation overflow. = full(non-last) + asMuchAsFits(last) + overhead. */
+  preferredReservePx: number;
+  /** Total painted band height in px, including separator + gaps. */
+  actualBandHeightPx: number;
+  /** Body's applied reserve (i.e. `page.footnoteReserved`) for this page. */
+  appliedBodyReservePx: number;
+  /** appliedBodyReservePx - actualBandHeightPx — wasted body area. */
+  deadReservePx: number;
+  /** Number of measured lines actually rendered for the LAST anchor on this
+   *  page (0 if there is no cluster anchor). Used to flag "mandatory-only"
+   *  pages where Word would have rendered more. */
+  lastAnchorRenderedLines: number;
+};
+
 export type Page = {
   number: number;
   fragments: Fragment[];
@@ -1906,7 +2255,23 @@ export type Page = {
    * decoration boxes anchored to the real bottom margin while the body shrinks.
    */
   footnoteReserved?: number;
+  /**
+   * SD-2656: page-level footnote planning ledger. Populated by the layout
+   * bridge when footnotes are present. Read by the diagnostic toolkit and
+   * (in later phases) by body pagination itself.
+   */
+  footnoteLedger?: FootnotePageLedger;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
   sectionRefs?: {
@@ -2102,6 +2467,7 @@ export type DrawingFragment = {
   geometry: DrawingGeometry;
   scale: number;
   drawingContentId?: string;
+  contentMeasures?: ParagraphMeasure[];
   pmStart?: number;
   pmEnd?: number;
   sourceAnchor?: SourceAnchor;
@@ -2134,6 +2500,14 @@ export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /**
    * Optional page-local block clones backing this page's resolved fragments.
    * Present when header/footer tokens were laid out per page or per bucket.
@@ -2162,6 +2536,8 @@ export type HeaderFooterLayout = {
 export type Layout = {
   pageSize: { w: number; h: number };
   pages: Page[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
   headerFooter?: Partial<Record<HeaderFooterType, HeaderFooterLayout>>;
   /**

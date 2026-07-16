@@ -14,7 +14,7 @@ interface ProtocolSession extends SuperDocMcpServer {
 
 export interface McpHttpServerOptions {
   port?: number;
-  createMcpServer?: () => SuperDocMcpServer;
+  createMcpServer?: () => SuperDocMcpServer | Promise<SuperDocMcpServer>;
 }
 
 export interface RunningMcpHttpServer {
@@ -58,7 +58,7 @@ interface RouteContext {
   response: ServerResponse;
   token: string;
   sessions: Map<string, ProtocolSession>;
-  createMcpServer: () => SuperDocMcpServer;
+  createMcpServer: () => SuperDocMcpServer | Promise<SuperDocMcpServer>;
 }
 
 async function routeMcpRequest(context: RouteContext): Promise<void> {
@@ -87,7 +87,7 @@ async function handlePost(
   request: IncomingMessage,
   response: ServerResponse,
   sessions: Map<string, ProtocolSession>,
-  createMcpServer: () => SuperDocMcpServer,
+  createMcpServer: () => SuperDocMcpServer | Promise<SuperDocMcpServer>,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const sessionId = headerValue(request.headers['mcp-session-id']);
@@ -101,7 +101,7 @@ async function handlePost(
 
   if (!isInitializeRequest(body)) return sendJsonRpcError(response, 400, 'MCP initialization required');
 
-  const created = createMcpServer();
+  const created = await createMcpServer();
   let protocolSession: ProtocolSession;
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: randomUUID,

@@ -107,6 +107,7 @@ const mountDialog = async ({
   extraComments = [],
   props = {},
   commentsStoreOverrides = {},
+  superdocOverrides = {},
 } = {}) => {
   const baseComment = reactive({
     uid: 'uid-1',
@@ -188,7 +189,6 @@ const mountDialog = async ({
     floatingCommentsOffset: ref(0),
     pendingComment: ref(null),
     currentCommentText: ref('<p>Pending</p>'),
-    isDebugging: ref(false),
     editingCommentId: ref(null),
     editorCommentPositions: ref({}),
     hasSyncedCollaborationComments: ref(false),
@@ -203,24 +203,27 @@ const mountDialog = async ({
     ...commentsStoreOverrides,
   };
 
+  const defaultActiveEditor = {
+    commands: {
+      setCursorById: vi.fn().mockReturnValue(true),
+      setActiveComment: vi.fn(),
+      rejectTrackedChangeById: vi.fn(),
+      acceptTrackedChangeById: vi.fn(),
+      setCommentInternal: vi.fn(),
+      resolveComment: vi.fn(),
+    },
+  };
+  const { activeEditor: activeEditorOverride, ...restSuperdocOverrides } = superdocOverrides;
   const superdocStub = {
     config: { role: 'editor', isInternal: true },
     users: [
       { name: 'Internal', email: 'internal@example.com', access: { role: 'internal' } },
       { name: 'External', email: 'external@example.com', access: { role: 'external' } },
     ],
-    activeEditor: {
-      commands: {
-        setCursorById: vi.fn().mockReturnValue(true),
-        setActiveComment: vi.fn(),
-        rejectTrackedChangeById: vi.fn(),
-        acceptTrackedChangeById: vi.fn(),
-        setCommentInternal: vi.fn(),
-        resolveComment: vi.fn(),
-      },
-    },
+    activeEditor: { ...defaultActiveEditor, ...(activeEditorOverride ?? {}) },
     focus: vi.fn(),
     emit: vi.fn(),
+    ...restSuperdocOverrides,
   };
 
   document.body.innerHTML = '<div id="host"></div>';
@@ -767,6 +770,7 @@ describe('CommentDialog.vue', () => {
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
       superdoc: expect.any(Object),
+      decision: 'accept',
     });
     expect(superdocStub.focus).toHaveBeenCalledTimes(1);
 
@@ -776,6 +780,50 @@ describe('CommentDialog.vue', () => {
       expect.objectContaining({ comment: baseComment, decision: 'reject' }),
     );
     expect(superdocStub.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resolve the tracked-change thread when the decision fails (SD-3386)', async () => {
+    const { wrapper, baseComment } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        trackedChangeText: 'Removed',
+      },
+    });
+    commentsStoreStub.decideTrackedChangeFromSidebar.mockReturnValueOnce({ ok: true, success: false });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('reject');
+    await nextTick();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('labels a rejected tracked change as Rejected, not Accepted (SD-3386)', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        trackedChangeText: 'Removed',
+        resolvedTime: Date.now(),
+        trackedChangeDecision: 'reject',
+      },
+    });
+
+    expect(wrapper.find('.resolved-badge').text()).toContain('Rejected');
+  });
+
+  it('labels an accepted tracked change as Accepted', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+        resolvedTime: Date.now(),
+        trackedChangeDecision: 'accept',
+      },
+    });
+
+    expect(wrapper.find('.resolved-badge').text()).toContain('Accepted');
   });
 
   it('renders hyperlink additions without a format label', async () => {
@@ -810,6 +858,22 @@ describe('CommentDialog.vue', () => {
     expect(trackedChange.text()).toContain('https://new.com');
     expect(trackedChange.text()).not.toContain('Format:');
     expect(trackedChange.text()).not.toContain('underline');
+  });
+
+  it('renders paragraph splits as new-line changes without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'paragraphSplit',
+        trackedChangeText: 'new line',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Added new line');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('formatting');
   });
 
   it('calls custom accept handler instead of default behavior when configured', async () => {
@@ -1375,6 +1439,67 @@ describe('CommentDialog.vue', () => {
     expect(headers[2].props('comment').commentId).toBe('child-2');
   });
 
+  it('re-collapses an expanded thread when active comment leaves the parent thread', async () => {
+    const replyOne = reactive({
+      uid: 'uid-reply-1',
+      commentId: 'reply-1',
+      parentCommentId: 'comment-1',
+      email: 'reply1@example.com',
+      commentText: '<p>First reply</p>',
+      createdTime: 1000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+    const replyTwo = reactive({
+      uid: 'uid-reply-2',
+      commentId: 'reply-2',
+      parentCommentId: 'comment-1',
+      email: 'reply2@example.com',
+      commentText: '<p>Second reply</p>',
+      createdTime: 2000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      extraComments: [replyOne, replyTwo],
+      props: { autoFocus: false },
+    });
+
+    commentsStoreStub.activeComment.value = 'comment-1';
+    await nextTick();
+
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    expect(collapsedPill.exists()).toBe(true);
+    await collapsedPill.trigger('click');
+    await nextTick();
+    expect(wrapper.findAll('.conversation-item')).toHaveLength(3);
+
+    commentsStoreStub.activeComment.value = replyTwo.commentId;
+    await nextTick();
+
+    expect(wrapper.find('.collapsed-replies').exists()).toBe(true);
+    expect(wrapper.findAll('.conversation-item')).toHaveLength(2);
+  });
+
   it('threads range-based comments under tracked change parent', async () => {
     const rangeBasedRoot = reactive({
       uid: 'uid-range-root',
@@ -1445,6 +1570,71 @@ describe('CommentDialog.vue', () => {
     expect(headers[0].props('comment').commentId).toBe('tc-parent');
     expect(headers[1].props('comment').commentId).toBe('range-root');
     expect(headers[2].props('comment').commentId).toBe('range-reply');
+  });
+
+  it('does not collapse tracked-change dialog reply threads', async () => {
+    const rangeBasedRoot = reactive({
+      uid: 'uid-range-root',
+      commentId: 'range-root',
+      parentCommentId: null,
+      trackedChangeParentId: 'tc-parent',
+      email: 'root@example.com',
+      commentText: '<p>Root comment</p>',
+      createdTime: 1000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const replyToRoot = reactive({
+      uid: 'uid-range-reply',
+      commentId: 'range-reply',
+      parentCommentId: 'range-root',
+      trackedChangeParentId: 'tc-parent',
+      email: 'reply@example.com',
+      commentText: '<p>Reply comment</p>',
+      createdTime: 1500,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId: 'tc::body::tc-parent',
+        isFloatingInstanceActive: false,
+      },
+      baseCommentOverrides: {
+        commentId: 'tc-parent',
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+        createdTime: 500,
+      },
+      extraComments: [replyToRoot, rangeBasedRoot],
+    });
+
+    expect(wrapper.classes()).not.toContain('is-active');
+    expect(wrapper.find('.collapsed-replies').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Root comment');
+    expect(wrapper.text()).toContain('Reply comment');
   });
 
   it('calls cancelComment with superdoc instance when cancel button is clicked', async () => {

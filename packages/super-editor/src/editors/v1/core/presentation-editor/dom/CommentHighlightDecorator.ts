@@ -25,7 +25,7 @@ const H = {
 
 const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
-const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
+const TRACK_CHANGE_SELECTOR = '[data-track-change-id], [data-track-change-ids]';
 type InlineStyleProperty = 'backgroundColor' | 'boxShadow';
 
 // ---------------------------------------------------------------------------
@@ -112,6 +112,8 @@ function applyBoxShadow(el: HTMLElement, border: HighlightToken): void {
  */
 export class CommentHighlightDecorator {
   #activeCommentId: string | null = null;
+  #activeTrackChangeIds = new Set<string>();
+  #activeTrackChangeIdsKey = '';
   #container: HTMLElement | null = null;
 
   setContainer(container: HTMLElement | null): void {
@@ -125,6 +127,19 @@ export class CommentHighlightDecorator {
   setActiveComment(commentId: string | null): boolean {
     if (this.#activeCommentId === commentId) return false;
     this.#activeCommentId = commentId;
+    return true;
+  }
+
+  /**
+   * Sets the active tracked-change aliases currently allowed to receive
+   * `track-change-focused`, including rendered DOM ids and public ids.
+   */
+  setActiveTrackChangeIds(ids: readonly string[]): boolean {
+    const nextIds = Array.from(new Set(ids.filter((id) => id.length > 0)));
+    const nextKey = nextIds.join('\u0000');
+    if (this.#activeTrackChangeIdsKey === nextKey) return false;
+    this.#activeTrackChangeIdsKey = nextKey;
+    this.#activeTrackChangeIds = new Set(nextIds);
     return true;
   }
 
@@ -258,16 +273,34 @@ export class CommentHighlightDecorator {
   }
 
   #applyTrackChangeFocus(root: HTMLElement): void {
-    const activeId = this.#activeCommentId;
+    const legacyActiveId = this.#activeCommentId;
+    const activeTrackChangeIds = this.#activeTrackChangeIds;
     const elements = root.querySelectorAll(TRACK_CHANGE_SELECTOR);
 
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i] as HTMLElement;
-      if (activeId && el.dataset.trackChangeId === activeId) {
+      if (this.#matchesActiveTrackChange(el, activeTrackChangeIds, legacyActiveId)) {
         el.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
       } else {
         el.classList.remove(TRACK_CHANGE_FOCUSED_CLASS);
       }
     }
+  }
+
+  #matchesActiveTrackChange(
+    el: HTMLElement,
+    activeTrackChangeIds: ReadonlySet<string>,
+    legacyActiveId: string | null,
+  ): boolean {
+    const ids = [
+      el.dataset.trackChangeId,
+      el.dataset.trackChangePreferredTargetId,
+      ...parseCommaSeparated(el.dataset.trackChangeIds),
+    ].filter((id): id is string => Boolean(id));
+
+    // Preserve the pre-alias behavior where an active comment id could also
+    // focus matching tracked-change DOM.
+    if (legacyActiveId && ids.includes(legacyActiveId)) return true;
+    return ids.some((id) => activeTrackChangeIds.has(id));
   }
 }

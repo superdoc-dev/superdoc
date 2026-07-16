@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/mcp",
-  "version": "0.10.0",
+  "version": "0.17.1",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@superdoc-dev/sdk": "workspace:*",
     "ws": "^8.18.3",
     "y-websocket": "catalog:",
     "yjs": "catalog:",

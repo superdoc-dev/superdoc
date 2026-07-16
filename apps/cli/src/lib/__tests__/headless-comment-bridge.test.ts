@@ -35,20 +35,20 @@ describe('Yjs write helpers', () => {
 
   it('updateYComment replaces existing comment by id', () => {
     const { ydoc, yArray } = createYEnv();
-    addYComment(yArray, ydoc, { commentId: 'c1', text: 'v1' });
-    updateYComment(yArray, ydoc, { commentId: 'c1', text: 'v2' });
+    addYComment(yArray, ydoc, { commentId: 'c1', text: 'initial' });
+    updateYComment(yArray, ydoc, { commentId: 'c1', text: 'updated' });
     const arr = yArrayToJSON(yArray);
     expect(arr).toHaveLength(1);
-    expect(arr[0].text).toBe('v2');
+    expect(arr[0].text).toBe('updated');
   });
 
   it('updateYComment is a no-op for unknown id', () => {
     const { ydoc, yArray } = createYEnv();
-    addYComment(yArray, ydoc, { commentId: 'c1', text: 'v1' });
-    updateYComment(yArray, ydoc, { commentId: 'c999', text: 'v2' });
+    addYComment(yArray, ydoc, { commentId: 'c1', text: 'initial' });
+    updateYComment(yArray, ydoc, { commentId: 'c999', text: 'updated' });
     const arr = yArrayToJSON(yArray);
     expect(arr).toHaveLength(1);
-    expect(arr[0].text).toBe('v1');
+    expect(arr[0].text).toBe('initial');
   });
 
   it('deleteYComment removes comment from array', () => {
@@ -127,7 +127,7 @@ describe('buildHeadlessCommentBridge', () => {
   beforeEach(() => {
     ydoc = new Y.Doc();
     yArray = ydoc.getArray('comments');
-    bridge = buildHeadlessCommentBridge(ydoc, { name: 'Agent', email: 'agent@test.com' }, 'doc-1');
+    bridge = buildHeadlessCommentBridge(ydoc, { name: 'Agent', email: 'agent@test.com' });
   });
 
   it('returns correct editorOptions shape', () => {
@@ -172,12 +172,12 @@ describe('buildHeadlessCommentBridge', () => {
       type: 'trackedChange',
       event: 'update',
       changeId: 'tc-1',
-      trackedChangeText: 'v2',
+      trackedChangeText: 'updated',
     });
 
     const arr = yArrayToJSON(yArray);
     expect(arr).toHaveLength(1);
-    expect(arr[0].trackedChangeText).toBe('v2');
+    expect(arr[0].trackedChangeText).toBe('updated');
   });
 
   it('falls back to Yjs for tracked-change updates when registry misses the id', () => {
@@ -187,7 +187,7 @@ describe('buildHeadlessCommentBridge', () => {
         Object.entries({
           commentId: 'tc-late',
           trackedChange: true,
-          trackedChangeText: 'v1',
+          trackedChangeText: 'initial',
           trackedChangeType: 'trackInsert',
           creatorName: 'Remote Author',
         }),
@@ -198,13 +198,13 @@ describe('buildHeadlessCommentBridge', () => {
       type: 'trackedChange',
       event: 'update',
       changeId: 'tc-late',
-      trackedChangeText: 'v2',
+      trackedChangeText: 'updated',
       trackedChangeType: 'trackInsert',
     });
 
     const arr = yArrayToJSON(yArray);
     expect(arr).toHaveLength(1);
-    expect(arr[0].trackedChangeText).toBe('v2');
+    expect(arr[0].trackedChangeText).toBe('updated');
     // Sparse updates should not clobber existing metadata.
     expect(arr[0].creatorName).toBe('Remote Author');
   });
@@ -355,16 +355,16 @@ describe('buildHeadlessCommentBridge', () => {
   it('updates standard comment in yArray', () => {
     bridge.editorOptions.onCommentsUpdate({
       type: 'add',
-      comment: { commentId: 'c-1', text: 'v1' },
+      comment: { commentId: 'c-1', text: 'initial' },
     });
     bridge.editorOptions.onCommentsUpdate({
       type: 'update',
-      comment: { commentId: 'c-1', text: 'v2' },
+      comment: { commentId: 'c-1', text: 'updated' },
     });
 
     const arr = yArrayToJSON(yArray);
     expect(arr).toHaveLength(1);
-    expect(arr[0].text).toBe('v2');
+    expect(arr[0].text).toBe('updated');
   });
 
   it('deletes standard comment from yArray', () => {

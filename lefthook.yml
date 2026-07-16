@@ -3,12 +3,18 @@ pre-commit:
   commands:
     format:
       glob: "*.{js,jsx,ts,tsx,css,scss,json,vue}"
-      run: pnpm exec prettier --write {staged_files}
+      run: pnpm --silent run format:staged -- {staged_files}
       stage_fixed: true
     lint:
       glob: "*.{js,jsx,ts,tsx}"
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
+    # Architecture boundary guards (~2s full run). Repo-wide invariants, so
+    # they run whole, not per staged file. CI runs the same files in the
+    # other-packages vitest shard.
+    architecture-guards:
+      glob: "{packages,shared,apps}/**/*.{js,jsx,ts,tsx,mjs,cjs,vue}"
+      run: pnpm --dir packages/layout-engine/tests exec vitest run src/architecture-boundaries.test.ts src/workspace-import-boundaries.test.ts --silent=true
     cli-build:
       glob: "apps/cli/**/*.{ts,js}"
       run: pnpm --prefix apps/cli run build

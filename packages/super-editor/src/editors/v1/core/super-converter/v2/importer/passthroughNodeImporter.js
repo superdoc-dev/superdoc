@@ -23,20 +23,27 @@ export const handlePassthroughNode = (params) => {
   const originalElements = originalElementsSource ? carbonCopy(originalElementsSource) : [];
 
   const childElements = Array.isArray(node.elements) ? node.elements : [];
-  let childContent = [];
   if (childElements.length && params.nodeListHandler?.handler) {
-    const childParams = {
+    // Run children for import side effects only (e.g. highlight-color registration on
+    // the converter); the returned nodes are intentionally not used as content. See the
+    // note on `content` below.
+    params.nodeListHandler.handler({
       ...params,
       nodes: childElements,
       path: [...(params.path || []), node],
-    };
-    childContent = params.nodeListHandler.handler(childParams) || [];
+    });
   }
 
   if (originalElements?.length) {
     originalXml.elements = originalElements;
   }
 
+  // AIDEV-NOTE: passthroughInline and passthroughBlock are both atom: true with no
+  // content expression (extensions/passthrough/passthrough.js). Child markup (e.g.
+  // w:instrText for MERGEFIELD) must live ONLY in attrs.originalXml, which export reads
+  // back verbatim. Attaching content makes y-prosemirror drop the node on collab
+  // hydration, so a joining lane loses the field instruction (SD-3363). Do not attach
+  // content to either passthrough type.
   const passthroughNode = {
     type: isInlineContext(params.path, node.name) ? 'passthroughInline' : 'passthroughBlock',
     attrs: {
@@ -44,7 +51,7 @@ export const handlePassthroughNode = (params) => {
       originalXml,
     },
     marks: [],
-    content: childContent,
+    content: undefined,
   };
 
   return {

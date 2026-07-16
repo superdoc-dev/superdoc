@@ -33,6 +33,16 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Stable reason for disabling resolve / reject. When set, the buttons render
+  // in a disabled state and emit nothing.
+  resolveDisabledReason: {
+    type: String,
+    default: null,
+  },
+  rejectDisabledReason: {
+    type: String,
+    default: null,
+  },
 });
 
 const { proxy } = getCurrentInstance();
@@ -151,8 +161,14 @@ const getOverflowOptions = computed(() => {
   return allowedOptions;
 });
 
-const handleResolve = () => emit('resolve');
-const handleReject = () => emit('reject');
+const handleResolve = () => {
+  if (props.resolveDisabledReason) return;
+  emit('resolve');
+};
+const handleReject = () => {
+  if (props.rejectDisabledReason) return;
+  emit('reject');
+};
 const handleSelect = (value) => emit('overflow-select', value);
 
 // Imported comments have `origin` set (e.g. 'word'); imported tracked changes
@@ -196,6 +212,9 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowResolve"
         class="overflow-menu__icon"
+        :class="{ 'sd-is-disabled': Boolean(resolveDisabledReason) }"
+        :data-disabled-reason="resolveDisabledReason || null"
+        :aria-disabled="Boolean(resolveDisabledReason)"
         v-html="superdocIcons.markDone"
         @click.stop.prevent="handleResolve"
       ></div>
@@ -203,6 +222,9 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowReject"
         class="overflow-menu__icon"
+        :class="{ 'sd-is-disabled': Boolean(rejectDisabledReason) }"
+        :data-disabled-reason="rejectDisabledReason || null"
+        :aria-disabled="Boolean(rejectDisabledReason)"
         v-html="superdocIcons.rejectChange"
         @click.stop.prevent="handleReject"
       ></div>
@@ -290,6 +312,14 @@ const getCurrentUser = computed(() => {
 }
 .overflow-menu__icon:hover {
   background-color: var(--sd-ui-comments-separator, #dbdbdb);
+}
+.overflow-menu__icon.sd-is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+.overflow-menu__icon.sd-is-disabled:hover {
+  background-color: transparent;
 }
 .overflow-menu__icon :deep(svg) {
   width: 100%;

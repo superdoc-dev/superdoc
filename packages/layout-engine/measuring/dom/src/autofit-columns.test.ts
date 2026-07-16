@@ -46,6 +46,39 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBe(300);
   });
 
+  // SD-3309: when preserveExplicitAutoGrid fires for a pct-width table whose authored grid sum
+  // (640) exceeds the resolved table width (624), the solver must scale the grid PROPORTIONS to
+  // the table width, not let short content collapse the columns. 30/70 of 624 = ~187/437.
+  it('scales an explicit pct grid to the resolved table width while keeping its proportions', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preserveExplicitAutoGrid: true,
+          preferredTableWidth: 624,
+          maxTableWidth: 624,
+          preferredColumnWidths: [192, 448],
+        }),
+        fixedLayout: {
+          columnWidths: [192, 448],
+          totalWidth: 640,
+          gridColumnCount: 2,
+          preferredTableWidth: 624,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 50 },
+            { min: 40, max: 50 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeCloseTo(624, 0);
+    const col1Pct = (result.columnWidths[0] / result.totalWidth) * 100;
+    expect(col1Pct).toBeGreaterThan(28);
+    expect(col1Pct).toBeLessThan(32);
+  });
+
   it('does not keep authored grid widths as an autofit floor', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

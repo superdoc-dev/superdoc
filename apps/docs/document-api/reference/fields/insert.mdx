@@ -1,14 +1,14 @@
 ---
 title: fields.insert
 sidebarTitle: fields.insert
-description: Insert a raw field code at a target location.
+description: "Insert a raw field code at a target location, optionally preserving cached result text. The current v1 runtime supports rebuild flows; `cachedResultText` / `updatePolicy: \"preserveCached\"` currently return `CAPABILITY_UNAVAILABLE`."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Insert a raw field code at a target location.
+Insert a raw field code at a target location, optionally preserving cached result text. The current v1 runtime supports rebuild flows; `cachedResultText` / `updatePolicy: "preserveCached"` currently return `CAPABILITY_UNAVAILABLE`.
 
 - Operation ID: `fields.insert`
 - API member path: `editor.doc.fields.insert(...)`
@@ -30,8 +30,10 @@ Returns a FieldMutationResult indicating success with the field address or a fai
 | `at.kind` | `"text"` | yes | Constant: `"text"` |
 | `at.segments` | TextSegment[] | yes |  |
 | `at.story` | StoryLocator | no | StoryLocator |
+| `cachedResultText` | string | no |  |
 | `instruction` | string | yes |  |
 | `mode` | `"raw"` | yes | Constant: `"raw"` |
+| `updatePolicy` | enum | no | `"rebuild"`, `"preserveCached"` |
 
 ### Example request
 
@@ -53,8 +55,10 @@ Returns a FieldMutationResult indicating success with the field address or a fai
       "storyType": "body"
     }
   },
+  "cachedResultText": "example",
   "instruction": "example",
-  "mode": "raw"
+  "mode": "raw",
+  "updatePolicy": "rebuild"
 }
 ```
 
@@ -66,9 +70,11 @@ Returns a FieldMutationResult indicating success with the field address or a fai
 | --- | --- | --- | --- |
 | `field` | object(kind="field") | yes |  |
 | `field.blockId` | string | yes |  |
+| `field.fieldId` | string | no |  |
 | `field.kind` | `"field"` | yes | Constant: `"field"` |
 | `field.nestingDepth` | integer | no |  |
 | `field.occurrenceIndex` | integer | yes |  |
+| `field.storyId` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -89,7 +95,8 @@ Returns a FieldMutationResult indicating success with the field address or a fai
     "blockId": "block-abc123",
     "kind": "field",
     "nestingDepth": 1,
-    "occurrenceIndex": 1
+    "occurrenceIndex": 1,
+    "storyId": "example"
   },
   "success": true
 }
@@ -116,11 +123,20 @@ Returns a FieldMutationResult indicating success with the field address or a fai
     "at": {
       "$ref": "#/$defs/TextTarget"
     },
+    "cachedResultText": {
+      "type": "string"
+    },
     "instruction": {
       "type": "string"
     },
     "mode": {
       "const": "raw"
+    },
+    "updatePolicy": {
+      "enum": [
+        "rebuild",
+        "preserveCached"
+      ]
     }
   },
   "required": [
@@ -146,6 +162,9 @@ Returns a FieldMutationResult indicating success with the field address or a fai
             "blockId": {
               "type": "string"
             },
+            "fieldId": {
+              "type": "string"
+            },
             "kind": {
               "const": "field"
             },
@@ -154,6 +173,9 @@ Returns a FieldMutationResult indicating success with the field address or a fai
             },
             "occurrenceIndex": {
               "type": "integer"
+            },
+            "storyId": {
+              "type": "string"
             }
           },
           "required": [
@@ -219,6 +241,9 @@ Returns a FieldMutationResult indicating success with the field address or a fai
         "blockId": {
           "type": "string"
         },
+        "fieldId": {
+          "type": "string"
+        },
         "kind": {
           "const": "field"
         },
@@ -227,6 +252,9 @@ Returns a FieldMutationResult indicating success with the field address or a fai
         },
         "occurrenceIndex": {
           "type": "integer"
+        },
+        "storyId": {
+          "type": "string"
         }
       },
       "required": [

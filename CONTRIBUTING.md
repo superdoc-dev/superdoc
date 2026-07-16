@@ -28,7 +28,7 @@ Our docs live in `apps/docs/` ([docs.superdoc.dev](https://docs.superdoc.dev)) a
 Create example projects showing SuperDoc with different frameworks (Next.js, Nuxt, Remix, etc.) in the `examples/` directory.
 
 **Add test coverage**
-Write unit tests or visual regression tests for existing features. Better test coverage helps everyone.
+Write unit tests or behavior tests for existing features. Better test coverage helps everyone.
 
 **Fix bugs and implement features**
 Check our [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
@@ -47,12 +47,16 @@ SuperDoc uses its own rendering pipeline -- ProseMirror is NOT used for visual o
 ```
 DOCX File
   → super-converter (parse OOXML into ProseMirror document)
-    → pm-adapter (convert PM nodes into FlowBlocks)
+    → v1 layout-adapter (super-editor: convert PM nodes into FlowBlocks)
       → layout-engine (paginate FlowBlocks into Layouts)
         → DomPainter (render Layouts to DOM)
 ```
 
 A hidden ProseMirror `Editor` instance manages document state and editing commands, but its DOM is never shown to the user. All visual rendering goes through DomPainter.
+
+The PM → FlowBlock adapter is owned by `super-editor`
+(`src/editors/v1/core/layout-adapter`), not by `layout-engine`. The layout
+engine packages consume `FlowBlock[]` and shared layout contracts only.
 
 ### Project Structure
 
@@ -64,9 +68,9 @@ packages/
     src/editors/v1/
       core/
         super-converter/ DOCX import/export (OOXML ↔ ProseMirror)
+        layout-adapter/  ProseMirror → FlowBlock[] projection (v1-owned)
       extensions/        Editing behaviors (bold, lists, tables, etc.)
   layout-engine/         Layout & pagination pipeline
-    pm-adapter/          ProseMirror → Layout bridge
     layout-engine/       Pagination algorithms
     painters/dom/        DOM rendering (DomPainter)
     style-engine/        OOXML style resolution & cascade
@@ -75,7 +79,7 @@ packages/
   collaboration-yjs/     Collaboration server
 shared/                  Internal utilities
 examples/                Framework integration examples
-tests/visual/            Visual regression tests (Playwright)
+tests/                   Public test suites and fixtures
 ```
 
 ### Where to Make Changes
@@ -84,12 +88,11 @@ tests/visual/            Visual regression tests (Playwright)
 |--------------------------|---------------|
 | How something looks (visual rendering) | `layout-engine/painters/dom/` |
 | Style resolution (fonts, colors, borders) | `layout-engine/style-engine/` |
-| Data flowing from editor to renderer | `layout-engine/pm-adapter/` |
+| Data flowing from editor to renderer | `super-editor/src/editors/v1/core/layout-adapter/` |
 | Editing behavior (keyboard, commands) | `super-editor/src/editors/v1/extensions/` |
 | DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` |
 | React integration | `packages/react/` |
 | Main entry point (Vue) | `packages/superdoc/` |
-| Visual regression tests | `tests/visual/` |
 
 ### Key Design Principle
 
@@ -105,7 +108,7 @@ These are areas where community contributions are especially welcome. Check [iss
 |------|-----------|---------------|------------|
 | Documentation | Easy | [docs.superdoc.dev](https://docs.superdoc.dev) | Fix gaps, add code examples, improve explanations |
 | Examples | Easy | `examples/` | Create framework integration examples |
-| Test coverage | Easy-Medium | `tests/visual/` | Add tests for existing features |
+| Test coverage | Easy-Medium | `tests/` and package-local `*.test.*` files | Add tests for existing features |
 | Rendering parity | Medium | `layout-engine/painters/dom/` | Open a .docx in Word and SuperDoc, fix visual differences |
 | Browser compatibility | Medium | `super-editor/`, `layout-engine/` | Fix Firefox/Safari-specific bugs |
 | Copy/paste | Medium | `super-editor/src/editors/v1/extensions/` | Fix formatting loss when pasting from Word, Google Docs, browsers |

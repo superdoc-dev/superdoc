@@ -7,6 +7,9 @@ import { levenshteinDistance } from './similarity';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
 const SIMILARITY_THRESHOLD = 0.65;
+// Higher threshold for sequences with repeated-content paragraphs (legal boilerplate, etc.).
+// Repeated paragraphs share incidental character overlap without being semantically related edits.
+const REPEATED_CONTENT_SIMILARITY_THRESHOLD = 0.7;
 const MIN_LENGTH_FOR_SIMILARITY = 4;
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
@@ -99,7 +102,18 @@ export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number,
     depth,
     text,
     endPos: paragraphPos + 1 + paragraph.content.size,
-    fullText: text.map((token) => (token.kind === 'text' ? token.char : '')).join(''),
+    fullText: text
+      .map((token) => {
+        if (token.kind === 'text') return token.text;
+        // Recover visible text from atomic inline containers (structuredContent)
+        // so that paragraph similarity scoring and oldText/newText summaries
+        // include SDT content rather than treating the control as empty.
+        if (token.kind === 'inlineNode' && token.nodeType === 'structuredContent') {
+          return token.node.textContent;
+        }
+        return '';
+      })
+      .join(''),
     contentSignature: buildContentSignature(text),
   };
 }
@@ -116,7 +130,7 @@ function buildContentSignature(tokens: InlineDiffToken[]): string {
   return tokens
     .map((token) => {
       if (token.kind === 'text') {
-        return token.char;
+        return token.text;
       }
       // Null bytes delimit inline node keys so they can't collide with text
       return `\0${semanticInlineNodeKey(token.node)}\0`;
@@ -229,8 +243,16 @@ export function buildModifiedParagraphDiff(
 
 /**
  * Decides whether a delete/insert pair should be reinterpreted as a modification to minimize noisy diff output.
+ *
+ * @param hasRepeatedContent When true, applies a stricter similarity threshold to avoid false pairings
+ *   in documents with many repeated paragraphs (e.g. legal boilerplate). Repeated paragraphs share
+ *   incidental character overlap that would otherwise pull unrelated paragraphs into a "modified" pairing.
  */
-export function canTreatAsModification(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
+export function canTreatAsModification(
+  oldParagraph: ParagraphNodeInfo,
+  newParagraph: ParagraphNodeInfo,
+  hasRepeatedContent = false,
+): boolean {
   if (oldParagraph?.depth !== newParagraph?.depth) {
     return false;
   }
@@ -245,8 +267,9 @@ export function canTreatAsModification(oldParagraph: ParagraphNodeInfo, newParag
     return false;
   }
 
+  const threshold = hasRepeatedContent ? REPEATED_CONTENT_SIMILARITY_THRESHOLD : SIMILARITY_THRESHOLD;
   const similarity = getTextSimilarityScore(oldText, newText);
-  return similarity >= SIMILARITY_THRESHOLD;
+  return similarity >= threshold;
 }
 
 /**

@@ -328,6 +328,28 @@ describe('CommentHighlightDecorator', () => {
 
       expect(tc.classList.contains('track-change-focused')).toBe(false);
     });
+
+    it('adds track-change-focused class when active tracked-change aliases match a rendered raw id', () => {
+      const tc = trackChangeSpan('raw-tc-1');
+      container.appendChild(tc);
+
+      decorator.setActiveTrackChangeIds(['public-tc-1', 'raw-tc-1']);
+      decorator.apply();
+
+      expect(tc.classList.contains('track-change-focused')).toBe(true);
+    });
+
+    it('matches comma-separated rendered tracked-change ids and preferred target ids', () => {
+      const tc = trackChangeSpan('raw-parent');
+      tc.dataset.trackChangeIds = 'raw-parent,raw-child';
+      tc.dataset.trackChangePreferredTargetId = 'raw-child';
+      container.appendChild(tc);
+
+      decorator.setActiveTrackChangeIds(['raw-child']);
+      decorator.apply();
+
+      expect(tc.classList.contains('track-change-focused')).toBe(true);
+    });
   });
 
   // ── destroy ────────────────────────────────────────────────────────

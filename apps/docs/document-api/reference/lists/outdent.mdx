@@ -14,7 +14,7 @@ Decrease the indentation level of a list item.
 - API member path: `editor.doc.lists.outdent(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -30,6 +30,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -38,7 +39,11 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -53,6 +58,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 | `item.kind` | `"block"` | yes | Constant: `"block"` |
 | `item.nodeId` | string | yes |  |
 | `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `item.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -72,7 +78,11 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
   "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true
 }

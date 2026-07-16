@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { InMemorySessionPool, type SessionPoolDeps } from './session-pool';
-import type { OpenedDocument } from '../lib/document';
+import type { OpenedDocument, OpenedRuntimeDocument } from '../lib/document';
 import type { CliIO } from '../lib/types';
 
 // ---------------------------------------------------------------------------
@@ -21,10 +21,15 @@ function createFakeOpened(label = 'default'): {
   disposeCount: { count: number };
 } {
   const disposeCount = { count: 0 };
+  const editor = { id: label } as unknown as OpenedDocument['editor'];
   return {
     opened: {
-      editor: { id: label } as unknown as OpenedDocument['editor'],
+      runtime: 'v1',
+      editor,
       meta: { source: 'path', path: `/tmp/${label}.docx`, byteLength: 1 },
+      doc: { invoke: () => undefined },
+      exportBytes: () => new Uint8Array(),
+      exportToPath: async (path) => ({ path, byteLength: 1 }),
       dispose: () => {
         disposeCount.count += 1;
       },
@@ -33,31 +38,41 @@ function createFakeOpened(label = 'default'): {
   };
 }
 
+function asV1Lease(opened: OpenedRuntimeDocument): OpenedDocument {
+  return opened as OpenedDocument;
+}
+
 function createPool(overrides: SessionPoolDeps = {}): {
   pool: InMemorySessionPool;
   openLocalCalls: number[];
   openCollabCalls: number[];
+  openLocalOptions: Array<{ user?: unknown; editorOpenOptions?: unknown } | undefined>;
+  openCollabOptions: Array<{ user?: unknown; editorOpenOptions?: unknown } | undefined>;
 } {
   const openLocalCalls: number[] = [];
   const openCollabCalls: number[] = [];
+  const openLocalOptions: Array<{ user?: unknown; editorOpenOptions?: unknown } | undefined> = [];
+  const openCollabOptions: Array<{ user?: unknown; editorOpenOptions?: unknown } | undefined> = [];
 
   const pool = new InMemorySessionPool({
-    openLocal: async () => {
+    openLocal: async (_docPath, _io, options) => {
       openLocalCalls.push(1);
+      openLocalOptions.push(options);
       return createFakeOpened(`local-${openLocalCalls.length}`).opened;
     },
-    openCollaborative: async () => {
+    openCollaborative: async (_docPath, _io, _profile, options) => {
       openCollabCalls.push(1);
+      openCollabOptions.push(options);
       return createFakeOpened(`collab-${openCollabCalls.length}`).opened;
     },
-    exportToPath: async (_editor, docPath) => ({ path: docPath, byteLength: 100 }),
+    exportToPath: async (_opened, docPath) => ({ path: docPath, byteLength: 100 }),
     now: () => 1000,
     createTimer: overrides.createTimer ?? (() => 0 as unknown as ReturnType<typeof setTimeout>),
     clearTimer: overrides.clearTimer ?? NOOP,
     ...overrides,
   });
 
-  return { pool, openLocalCalls, openCollabCalls };
+  return { pool, openLocalCalls, openCollabCalls, openLocalOptions, openCollabOptions };
 }
 
 const LOCAL_METADATA = {
@@ -79,6 +94,11 @@ const COLLAB_METADATA = {
   collaboration: COLLAB_PROFILE,
 };
 
+const TRACK_CHANGES_METADATA = {
+  ...LOCAL_METADATA,
+  trackChanges: { replacements: 'independent' as const },
+};
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -92,9 +112,9 @@ describe('InMemorySessionPool', () => {
     test('returns same editor for same sessionId (local reuse)', async () => {
       const { pool, openLocalCalls } = createPool();
 
-      const first = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       first.dispose(); // release lease
-      const second = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
 
       expect(openLocalCalls.length).toBe(1);
       expect(first.editor).toBe(second.editor);
@@ -106,6 +126,22 @@ describe('InMemorySessionPool', () => {
       await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
 
       expect(openLocalCalls.length).toBe(1);
+    });
+
+    test('forwards v1 track-changes open config when opening a pooled local session', async () => {
+      const { pool, openLocalOptions } = createPool();
+
+      await pool.acquire('s1', TRACK_CHANGES_METADATA, TEST_IO);
+
+      expect(openLocalOptions).toEqual([
+        {
+          editorOpenOptions: {
+            trackChanges: { replacements: 'independent' },
+            modules: { trackChanges: { replacements: 'independent' } },
+          },
+          user: undefined,
+        },
+      ]);
     });
 
     test('discards and reopens collab session on fingerprint mismatch', async () => {
@@ -147,9 +183,9 @@ describe('InMemorySessionPool', () => {
     test('reuses collab session when fingerprint matches', async () => {
       const { pool, openCollabCalls } = createPool();
 
-      const first = await pool.acquire('s1', COLLAB_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', COLLAB_METADATA, TEST_IO));
       first.dispose();
-      const second = await pool.acquire('s1', COLLAB_METADATA, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', COLLAB_METADATA, TEST_IO));
 
       expect(openCollabCalls.length).toBe(1);
       expect(first.editor).toBe(second.editor);
@@ -164,13 +200,13 @@ describe('InMemorySessionPool', () => {
       });
 
       // Acquire with revision 1
-      const first = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       pool.markDirty('s1');
       first.dispose();
 
       // Acquire with drifted revision (revision 5 — out-of-band mutation)
       const driftedMetadata = { ...LOCAL_METADATA, metadataRevision: 5 };
-      const second = await pool.acquire('s1', driftedMetadata, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', driftedMetadata, TEST_IO));
 
       // Should have opened a fresh session, not checkpointed the stale one
       expect(first.editor).not.toBe(second.editor);
@@ -179,9 +215,9 @@ describe('InMemorySessionPool', () => {
     test('reuses local session when metadataRevision matches', async () => {
       const { pool, openLocalCalls } = createPool();
 
-      const first = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       first.dispose();
-      const second = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
 
       expect(openLocalCalls.length).toBe(1);
     });
@@ -195,14 +231,14 @@ describe('InMemorySessionPool', () => {
     test('keeps pool in sync — no spurious drift-triggered reopens', async () => {
       const { pool, openLocalCalls } = createPool();
 
-      const first = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       first.dispose();
 
       // Simulate mutation: bump revision in pool
       pool.updateMetadataRevision('s1', 2);
 
       // Next acquire with updated revision should reuse
-      const second = await pool.acquire('s1', { ...LOCAL_METADATA, metadataRevision: 2 }, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', { ...LOCAL_METADATA, metadataRevision: 2 }, TEST_IO));
 
       expect(openLocalCalls.length).toBe(1);
       expect(first.editor).toBe(second.editor);
@@ -219,7 +255,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openLocal: async () => createFakeOpened('local').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -243,7 +279,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openLocal: async () => createFakeOpened('local').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -269,7 +305,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openCollaborative: async () => createFakeOpened('collab').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -294,7 +330,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openLocal: async () => createFakeOpened('local').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -317,7 +353,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openCollaborative: async () => createFakeOpened('collab').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -364,7 +400,7 @@ describe('InMemorySessionPool', () => {
         metadataRevision: 1,
       });
 
-      const acquired = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const acquired = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       expect(openLocalCalls.length).toBe(0);
       expect(acquired.editor).toBe(opened.editor);
     });
@@ -388,7 +424,7 @@ describe('InMemorySessionPool', () => {
 
       expect(firstDispose.count).toBe(1);
 
-      const acquired = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const acquired = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       expect(acquired.editor).toBe(second.editor);
     });
   });
@@ -408,13 +444,13 @@ describe('InMemorySessionPool', () => {
         metadataRevision: 1,
       });
 
-      const leased = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const leased = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       leased.dispose(); // lease release, not real dispose
 
       expect(disposeCount.count).toBe(0); // editor NOT destroyed
 
       // Can still acquire again
-      const again = await pool.acquire('s1', LOCAL_METADATA, TEST_IO);
+      const again = asV1Lease(await pool.acquire('s1', LOCAL_METADATA, TEST_IO));
       expect(again.editor).toBe(fake.editor);
     });
   });
@@ -520,7 +556,7 @@ describe('InMemorySessionPool', () => {
 
       const pool = new InMemorySessionPool({
         openLocal: async () => createFakeOpened('flush-test').opened,
-        exportToPath: async (_editor, docPath) => {
+        exportToPath: async (_opened, docPath) => {
           exportCalls.push(docPath);
           return { path: docPath, byteLength: 100 };
         },
@@ -582,9 +618,9 @@ describe('InMemorySessionPool', () => {
     test('reuses liveblocks session when profile matches', async () => {
       const { pool, openCollabCalls } = createPool();
 
-      const first = await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+      const first = asV1Lease(await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO));
       first.dispose();
-      const second = await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO);
+      const second = asV1Lease(await pool.acquire('s1', LIVEBLOCKS_METADATA, TEST_IO));
 
       expect(openCollabCalls.length).toBe(1);
       expect(first.editor).toBe(second.editor);

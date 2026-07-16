@@ -86,4 +86,15 @@ describe('TableRow attributes', () => {
       },
     });
   });
+
+  describe('trackChange (structural revision slot)', () => {
+    it('defaults to null and is not rendered to the DOM', () => {
+      expect(attributes.trackChange.default).toBe(null);
+      expect(attributes.trackChange.rendered).toBe(false);
+    });
+
+    it('is preserved when a tracked row is split', () => {
+      expect(attributes.trackChange.keepOnSplit).toBe(true);
+    });
+  });
 });

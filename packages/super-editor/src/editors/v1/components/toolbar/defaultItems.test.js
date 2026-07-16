@@ -87,6 +87,20 @@ describe('makeDefaultItems formatting marks button opt-in', () => {
   });
 });
 
+describe('makeDefaultItems font family mixed selection state', () => {
+  it('blanks the font family label and selection for mixed selections', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    const fontFamily = getItem(defaultItems, overflowItems, 'fontFamily');
+    fontFamily.label.value = 'Arial';
+    fontFamily.selectedValue.value = 'Arial';
+
+    fontFamily.activate({}, true);
+
+    expect(fontFamily.label.value).toBe('');
+    expect(fontFamily.selectedValue.value).toBe('');
+  });
+});
+
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
   const XL_OVERFLOW_SAFETY_BUFFER = 20;
   const XL_CUTOFF = RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER;

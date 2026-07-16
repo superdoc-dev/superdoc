@@ -1,5 +1,6 @@
 import type { ColumnLayout, SectionBreakBlock } from '@superdoc/contracts';
-import { cloneColumnLayout, widthsEqual } from './column-utils.js';
+import { columnRenderLayoutsEqual, resolveColumnCount } from '@superdoc/contracts';
+import { cloneColumnLayout } from './column-utils.js';
 
 export type SectionState = {
   activeTopMargin: number;
@@ -56,22 +57,14 @@ function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
  */
 function isColumnConfigChanging(blockColumns: ColumnLayout | undefined, activeColumns: ColumnLayout): boolean {
   if (blockColumns) {
-    // Explicit column change: any of count, gap, separator presence, equalWidth,
-    // or widths differs. withSeparator must be included because a sep-only toggle
-    // still needs a new column region so the renderer can draw (or stop drawing)
-    // the separator from the toggle point onward.
-    return (
-      blockColumns.count !== activeColumns.count ||
-      blockColumns.gap !== activeColumns.gap ||
-      Boolean(blockColumns.withSeparator) !== Boolean(activeColumns.withSeparator) ||
-      blockColumns.equalWidth !== activeColumns.equalWidth ||
-      !widthsEqual(blockColumns.widths, activeColumns.widths)
-    );
+    // Columns change when the block's resolved RENDER layout differs from the active one. Render
+    // equality includes withSeparator (a sep-only toggle needs a new region) and ignores raw
+    // equalWidth / surplus count that resolution discards.
+    return !columnRenderLayoutsEqual(blockColumns, activeColumns);
   }
-  // No columns specified = reset to single column (OOXML default).
-  // This is a change if currently in multi-column layout, or if the separator was on
-  // (the reset implicitly turns it off).
-  return activeColumns.count > 1 || Boolean(activeColumns.withSeparator);
+  // No columns specified = reset to single column (OOXML default). A change if the active layout
+  // renders as multi-column, or the separator was on (the reset implicitly turns it off).
+  return resolveColumnCount(activeColumns) > 1 || Boolean(activeColumns.withSeparator);
 }
 
 /**

@@ -497,7 +497,8 @@ export function toCommentInfo(
 ): CommentInfo {
   const resolvedId = typeof entry.commentId === 'string' ? entry.commentId : String(entry.importedId ?? '');
   const status = options.status ?? (isCommentResolved(entry) ? 'resolved' : 'open');
-  const trackedChangeLink =
+  const trackedChangeId = toNonEmptyString(entry.trackedChangeParentId) ?? resolvedId;
+  const trackedChangeLink: CommentTrackedChangeLink | null | undefined =
     options.trackedChangeLink !== undefined
       ? normalizeTrackedChangeLink(options.trackedChangeLink)
       : entry.trackedChange === true ||
@@ -507,6 +508,7 @@ export function toCommentInfo(
           entry.deletedText != null
         ? {
             trackedChange: true,
+            trackedChangeId,
             trackedChangeType: normalizeTrackedChangeType(entry.trackedChangeType),
             trackedChangeDisplayType: entry.trackedChangeDisplayType ?? null,
             trackedChangeStory: entry.trackedChangeStory ?? null,

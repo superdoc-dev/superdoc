@@ -26,6 +26,12 @@ export type RunRenderContext = {
   layoutEpoch: number;
   showFormattingMarks: boolean;
   contentControlsChrome: 'default' | 'none';
+  /**
+   * Per-document logical->physical font resolver, FACE-aware: the substitute applies only when it
+   * provides the run's face (weight/style), else the logical family passes through (no faux-style).
+   * Undefined => global bundled default (family-level).
+   */
+  resolvePhysical?: (cssFontFamily: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
   pendingTooltips: WeakMap<HTMLElement, string>;
   getNextLinkId: () => string;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;

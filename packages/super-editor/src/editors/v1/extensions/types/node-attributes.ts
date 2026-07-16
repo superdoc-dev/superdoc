@@ -14,7 +14,14 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
-import type { ImageHyperlink, StructuredContentLockMode } from '@superdoc/contracts';
+import type {
+  FieldResultFormat,
+  ImageHyperlink,
+  NumericPictureFormat,
+  PageNumberFieldFormat,
+  PageNumberFormat,
+  StructuredContentLockMode,
+} from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -539,6 +546,10 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   shouldCover?: boolean;
   /** @internal Clip-path value for srcRect image crops */
   clipPath?: string;
+  /** @internal Clip-path value for picture shape geometry masks */
+  shapeClipPath?: string;
+  /** @internal CSS object-fit value used by the layout renderer */
+  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
   /** @internal Raw a:srcRect element for lossless round-trip export */
   rawSrcRect?: Record<string, unknown> | null;
   /** @internal DrawingML luminance adjustment from a:lum */
@@ -767,16 +778,60 @@ export interface SmartTagAttrs extends InlineNodeAttributes {
 
 /** Shape container node attributes */
 export interface ShapeContainerAttrs extends BlockNodeAttributes {
-  /** Background color for the shape */
+  /** Background color for the shape (VML fillcolor) */
   fillcolor?: string;
-  /** CSS style string */
+  /** CSS style string (VML geometry) */
   style?: string;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
-  /** @internal Wrapper attributes */
+  /** @internal VML wrapper attributes */
   wrapAttributes?: Record<string, unknown>;
-  /** @internal Attributes storage */
+  /** @internal Anchor positioning data */
+  anchorData?: Record<string, unknown> | null;
+  /** @internal Margin offset for positioned shapes */
+  marginOffset?: { horizontal?: number; top?: number } | null;
+  /** @internal Raw XML attributes storage */
   attributes?: Record<string, unknown>;
+
+  // DrawingML shape geometry
+  /** Preset geometry kind (e.g. 'rect', 'ellipse') */
+  kind?: string | null;
+  /** Display width in pixels */
+  width?: number | null;
+  /** Display height in pixels */
+  height?: number | null;
+  /** Fill color (DrawingML) */
+  fillColor?: string | null;
+  /** Stroke color */
+  strokeColor?: string | null;
+  /** Stroke width in pixels */
+  strokeWidth?: number | null;
+  /** Rotation in degrees */
+  rotation?: number;
+  /** Horizontal flip */
+  flipH?: boolean;
+  /** Vertical flip */
+  flipV?: boolean;
+  /** Text wrap configuration */
+  wrap?: Record<string, unknown> | null;
+  /** Whether the shape is anchored (not inline) */
+  isAnchor?: boolean;
+  /** @internal Original w:drawing XML blob for round-trip export */
+  drawingContent?: Record<string, unknown> | null;
+  /** @internal Original anchor XML attributes */
+  originalAttributes?: Record<string, unknown> | null;
+  /** @internal Effect extent padding */
+  effectExtent?: Record<string, unknown> | null;
+  /** Visual effects applied to the shape (e.g. DrawingML outer shadow) */
+  effects?: VectorShapeEffects | null;
+  /** @internal Line end markers */
+  lineEnds?: Record<string, unknown> | null;
+  /** Whether the shape is hidden */
+  hidden?: boolean;
+  /** Whether this shape is a textbox (txBox="1") */
+  isTextBox?: boolean;
+  /** Whether this shape is WordArt */
+  isWordArt?: boolean;
 }
 
 // ============================================
@@ -815,6 +870,8 @@ export interface ShapeGroupAttrs extends ShapeNodeAttributes {
   padding?: ShapeGroupPadding | null;
   /** Margin offset for anchored shape groups */
   marginOffset?: ShapeGroupMarginOffset | null;
+  /** Extra bounds around the shape group */
+  effectExtent?: VectorShapeEffectExtent | null;
   /** @internal Drawing content data */
   drawingContent?: unknown;
   /** Text wrapping configuration */
@@ -870,6 +927,27 @@ export interface VectorShapeEffectExtent {
   bottom?: number;
 }
 
+/** Vector shape outer shadow effect */
+export interface VectorShapeOuterShadowEffect {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+  alignment?: string;
+  rotateWithShape?: boolean;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+}
+
+/** Vector shape effects */
+export interface VectorShapeEffects {
+  outerShadow?: VectorShapeOuterShadowEffect;
+}
+
 /** Vector shape node attributes */
 export interface VectorShapeAttrs extends ShapeNodeAttributes {
   /** Shape kind (rect, ellipse, etc.) */
@@ -888,6 +966,8 @@ export interface VectorShapeAttrs extends ShapeNodeAttributes {
   lineEnds?: VectorShapeLineEnds | null;
   /** Extra bounds around the shape */
   effectExtent?: VectorShapeEffectExtent | null;
+  /** Visual effects applied to the shape */
+  effects?: VectorShapeEffects | null;
   /** Rotation in degrees */
   rotation?: number;
   /** Horizontal flip */
@@ -938,6 +1018,22 @@ export interface PageReferenceAttrs extends InlineNodeAttributes {
   marksAsAttrs?: unknown[] | null;
   /** Field instruction */
   instruction?: string;
+  /** @internal Raw field instruction tokens for lossless export */
+  instructionTokens?: Array<{ type: string; text?: string }> | null;
+  /** @internal Parsed bookmark target */
+  bookmarkId?: string;
+  /** @internal Whether the instruction has a \h switch */
+  hasHyperlinkSwitch?: boolean;
+  /** @internal Whether the instruction has a \p switch */
+  hasRelativePositionSwitch?: boolean;
+  /** @internal Parsed page number format for PAGEREF output */
+  pageNumberFieldFormat?: PageNumberFieldFormat | null;
+  /** @internal Parsed numeric picture format for PAGEREF output */
+  numericPictureFormat?: NumericPictureFormat | null;
+  /** @internal Parsed field result formatting switch */
+  fieldResultFormat?: FieldResultFormat | null;
+  /** @internal Parsed run properties from the first instruction run for CHARFORMAT */
+  fieldRunProperties?: unknown | null;
 }
 
 // ============================================
@@ -948,12 +1044,40 @@ export interface PageReferenceAttrs extends InlineNodeAttributes {
 export interface PageNumberAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original PAGE field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: PageNumberFormat | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
 }
 
 /** Total page count node attributes */
 export interface TotalPageCountAttrs extends InlineNodeAttributes {
   /** @internal Marks stored as attributes */
   marksAsAttrs?: unknown[] | null;
+  /** @internal Original NUMPAGES field instruction when switched */
+  instruction?: string | null;
+  /** @internal Normalized field switch format */
+  pageNumberFormat?: PageNumberFormat | null;
+  /** @internal Zero-padding width from numeric picture switch */
+  pageNumberZeroPadding?: number | null;
+  /** @internal Raw numeric picture switch */
+  pageNumberNumericPicture?: string | null;
+}
+
+/** Section page count node attributes */
+export interface SectionPageCountAttrs extends InlineNodeAttributes {
+  /** @internal Marks stored as attributes */
+  marksAsAttrs?: unknown[] | null;
+  /** Imported cached field result */
+  importedCachedText?: string | null;
+  /** Cached display value set by an explicit field update */
+  resolvedText?: string | null;
+  /** Imported or synthesized SECTIONPAGES field instruction */
+  instruction?: string | null;
+  /** PAGE/SECTIONPAGES field-local value formatting override */
+  pageNumberFormat?: PageNumberFormat | null;
 }
 
 // ============================================
@@ -1084,6 +1208,8 @@ export interface DocumentIndexAttrs extends BlockNodeAttributes {
   instructionTokens?: unknown;
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
+  /** @internal Original generated-reference wrapper paragraph properties for export preservation */
+  wrapperParagraphProperties?: unknown;
 }
 
 /** Index entry node attributes */
@@ -1277,6 +1403,7 @@ declare module '../../core/types/NodeAttributesMap.js' {
     pageReference: PageReferenceAttrs;
     'page-number': PageNumberAttrs;
     'total-page-number': TotalPageCountAttrs;
+    'section-page-count': SectionPageCountAttrs;
 
     // Field annotations
     fieldAnnotation: FieldAnnotationAttrs;

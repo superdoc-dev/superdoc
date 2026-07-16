@@ -8,8 +8,10 @@
 
 import * as Y from 'yjs';
 import type { Editor } from '../../../core/Editor.js';
+import type { SessionManagedNoteIds } from '../../../core/parts/adapters/notes-part-descriptor.js';
 import type { PartsCapability } from './types.js';
 import { encodeEnvelopeToYjs } from './json-crdt.js';
+import { clearNoteTombstonesFromMeta, publishSessionManagedNoteIds } from '../note-tombstone-sync.js';
 import {
   PARTS_MAP_KEY,
   META_MAP_KEY,
@@ -29,7 +31,8 @@ interface SeedOptions {
  *
  * - Filters out `word/document.xml` (owned by y-prosemirror).
  * - `replaceExisting: true` performs an authoritative replace: deletes any
- *   parts map key not present in the current converter snapshot.
+ *   parts map key not present in the current converter snapshot and clears
+ *   note-tombstone metadata from the previous document state.
  * - `replaceExisting: false` (default) skips keys that already exist.
  * - All writes happen in a single `ydoc.transact()`.
  */
@@ -37,6 +40,11 @@ export function seedPartsFromEditor(editor: Editor, ydoc: Y.Doc, options?: SeedO
   const convertedXml = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter
     ?.convertedXml;
   if (!convertedXml) return;
+  const sessionManagedNoteIds = (
+    editor as unknown as {
+      converter?: { sessionManagedNoteIds?: SessionManagedNoteIds };
+    }
+  ).converter?.sessionManagedNoteIds;
 
   const partsMap = ydoc.getMap(PARTS_MAP_KEY) as Y.Map<unknown>;
   const metaMap = ydoc.getMap(META_MAP_KEY);
@@ -53,6 +61,10 @@ export function seedPartsFromEditor(editor: Editor, ydoc: Y.Doc, options?: SeedO
             partsMap.delete(key);
           }
         }
+
+        // Authoritative replace means prior-document note tombstones must not
+        // survive into the next file when the room Y.Doc is reused.
+        clearNoteTombstonesFromMeta(ydoc);
       }
 
       // Upsert parts from converter snapshot
@@ -66,6 +78,10 @@ export function seedPartsFromEditor(editor: Editor, ydoc: Y.Doc, options?: SeedO
         });
         partsMap.set(key, envelope);
       }
+
+      // Share the current editor's session-managed note ids so peers and late
+      // joiners converge on the same export/enumeration state immediately.
+      publishSessionManagedNoteIds(ydoc, sessionManagedNoteIds);
 
       // Set capability marker and schema version
       const capability: PartsCapability = {

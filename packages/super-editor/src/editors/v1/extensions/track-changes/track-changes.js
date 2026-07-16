@@ -96,7 +96,9 @@ const dispatchReviewDecision = ({ editor, state, dispatch, decision, target }) =
           originalId: event.changeId,
         }).some(({ mark }) => mark.attrs?.splitFromId === event.changeId);
         if (successorsPresent) continue;
-        editor.emit('commentsUpdate', event);
+        // Carry the decision so resolved bubbles can report accepted vs
+        // rejected instead of assuming every resolution was an accept.
+        editor.emit('commentsUpdate', { ...event, decision });
       }
 
       const touched =
@@ -330,14 +332,14 @@ export const TrackChanges = Extension.create({
         },
 
       acceptTrackedChangeById:
-        (id) =>
+        (id, options = {}) =>
         ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
             dispatch,
             decision: 'accept',
-            target: { kind: 'id', id },
+            target: { kind: 'id', id, ...(options.side ? { side: options.side } : {}) },
           });
           return reviewDecision.applied;
         },
@@ -356,14 +358,14 @@ export const TrackChanges = Extension.create({
         },
 
       rejectTrackedChangeById:
-        (id) =>
+        (id, options = {}) =>
         ({ state, dispatch, editor }) => {
           const reviewDecision = dispatchReviewDecision({
             editor,
             state,
             dispatch,
             decision: 'reject',
-            target: { kind: 'id', id },
+            target: { kind: 'id', id, ...(options.side ? { side: options.side } : {}) },
           });
           return reviewDecision.applied;
         },

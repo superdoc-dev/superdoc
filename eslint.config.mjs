@@ -162,6 +162,7 @@ export default [
             '^superdoc$',
             '^superdoc/.*$',
             '^\\..*/generated/', // Generated files (codegen artifacts, not in git)
+            '^\\..*/dist/', // Built package output (scripts that exercise the build; not in git)
           ],
         }
       ]

@@ -33,6 +33,14 @@ Live demos that run at `demos.superdoc.dev` live in the separate `superdoc-dev/d
 | [chrome-extension](./chrome-extension) | Integrations | Browser extension workflow |
 | [word-addin](./word-addin) | Integrations | Microsoft Word add-in sync workflow |
 
+## Security
+
+Demo backend servers (`slack-redlining`, `word-addin`, `nodejs`, `collaborative-agent`) are for **local development only**. They listen on plain HTTP and have no TLS configuration.
+
+**Never expose these servers directly to the internet.** If you need to run a demo in a non-local environment, terminate TLS at a reverse proxy in front of the server.
+
+Risk acceptance: HTTP-only transport is an accepted trade-off for local demo servers. Production deployments must add TLS termination externally.
+
 ## Compatibility shims
 
 Some old starter demo paths now point at `examples/getting-started/`. Keep the README shims for one release cycle so existing GitHub links do not 404.

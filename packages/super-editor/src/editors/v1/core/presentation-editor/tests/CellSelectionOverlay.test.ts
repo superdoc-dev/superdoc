@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { TableMap, type CellSelection } from 'prosemirror-tables';
+import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model';
+import { CellSelection, TableMap } from 'prosemirror-tables';
 import type { FlowBlock, Layout, Measure, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
 
 import { renderCellSelectionOverlay, type RenderCellSelectionOverlayDeps } from '../selection/CellSelectionOverlay.js';
@@ -109,6 +110,70 @@ function createMockLayout(pages: Array<{ fragments: unknown[] }>): Layout {
   } as Layout;
 }
 
+const nestedTableSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: {
+      content: 'text*',
+      group: 'block',
+    },
+    table: {
+      content: 'tableRow+',
+      tableRole: 'table',
+      group: 'block',
+    },
+    tableRow: {
+      content: 'tableCell+',
+      tableRole: 'row',
+    },
+    tableCell: {
+      content: 'block+',
+      tableRole: 'cell',
+      attrs: { colspan: { default: 1 }, rowspan: { default: 1 } },
+    },
+    text: {},
+  },
+});
+
+function createSelectionAfterNestedTable(): {
+  selection: CellSelection;
+  blocks: FlowBlock[];
+  measures: Measure[];
+  layout: Layout;
+} {
+  const paragraph = (text: string) => nestedTableSchema.node('paragraph', null, [nestedTableSchema.text(text)]);
+  const cell = (...content: ProseMirrorNode[]) => nestedTableSchema.node('tableCell', null, content);
+  const row = (...cells: ReturnType<typeof cell>[]) => nestedTableSchema.node('tableRow', null, cells);
+  const nestedTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Nested')))]);
+  const firstTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Outer 1'), nestedTable))]);
+  const secondTable = nestedTableSchema.node('table', null, [row(cell(paragraph('Target')))]);
+  const doc = nestedTableSchema.node('doc', null, [firstTable, secondTable]);
+
+  const topLevelTablePositions: number[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name !== 'table') return true;
+    topLevelTablePositions.push(pos);
+    return false;
+  });
+
+  const secondTablePos = topLevelTablePositions[1];
+  if (secondTablePos == null) {
+    throw new Error('Failed to locate second top-level table.');
+  }
+
+  const secondTableCellPos = secondTablePos + 2;
+  return {
+    selection: CellSelection.create(doc, secondTableCellPos, secondTableCellPos),
+    blocks: [createMockTableBlock('outer-1') as FlowBlock, createMockTableBlock('outer-2') as FlowBlock],
+    measures: [createMockTableMeasure([60]) as Measure, createMockTableMeasure([60]) as Measure],
+    layout: createMockLayout([
+      {
+        fragments: [createMockTableFragment('outer-2', 0, 0, 1, [{ index: 0, x: 0, width: 200 }])],
+      },
+    ]),
+  };
+}
+
 describe('renderCellSelectionOverlay', () => {
   let localSelectionLayer: HTMLElement;
   let convertPageLocalToOverlayCoords: ReturnType<typeof vi.fn>;
@@ -164,6 +229,26 @@ describe('renderCellSelectionOverlay', () => {
 
     const highlights = localSelectionLayer.querySelectorAll('.presentation-editor__cell-selection-rect');
     expect(highlights.length).toBeGreaterThan(0);
+  });
+
+  it('maps fallback table selection by top-level document order when earlier tables contain nested tables', () => {
+    const { selection, blocks, measures, layout } = createSelectionAfterNestedTable();
+
+    const deps: RenderCellSelectionOverlayDeps = {
+      selection,
+      layout,
+      localSelectionLayer,
+      blocks,
+      measures,
+      cellAnchorTableBlockId: null,
+      convertPageLocalToOverlayCoords,
+    };
+
+    renderCellSelectionOverlay(deps);
+
+    const highlights = localSelectionLayer.querySelectorAll('.presentation-editor__cell-selection-rect');
+    expect(highlights.length).toBe(1);
+    expect(convertPageLocalToOverlayCoords).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
   });
 
   it('handles merged cells with colspan > 1', () => {

@@ -29,7 +29,8 @@ describe('DomPainter public contract shape', () => {
       | 'onScroll'
       | 'setZoom'
       | 'setScrollContainer'
-      | 'setShowFormattingMarks';
+      | 'setShowFormattingMarks'
+      | 'dispose';
     type _Check = AssertTrue<Equal<keyof DomPainterHandle, ExpectedKeys>>;
     expectTypeOf<keyof DomPainterHandle>().toEqualTypeOf<ExpectedKeys>();
   });

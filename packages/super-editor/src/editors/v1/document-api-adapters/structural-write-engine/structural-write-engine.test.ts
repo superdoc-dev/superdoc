@@ -11,6 +11,7 @@ import { enforceNestingPolicy } from './nesting-guard.js';
 import { validateDocumentFragment } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import type { SDFragment, SelectionTarget, SDReplaceInput } from '@superdoc/document-api';
+import { getExportedResultWithDocContent } from '@tests/export/export-helpers/index.js';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -101,6 +102,54 @@ function enableTrackedMode(editor: Editor): void {
     name: 'Test User',
     email: 'test-user@example.com',
   };
+}
+
+function collectTextMarks(editor: Editor, text: string): string[][] {
+  const matches: string[][] = [];
+  editor.state.doc.descendants((node) => {
+    if (!node.isText || node.text !== text) return true;
+    matches.push(node.marks.map((mark) => mark.type.name));
+    return true;
+  });
+  return matches;
+}
+
+function collectXmlText(node: any): string {
+  if (!node) return '';
+  if (node.type === 'text' && typeof node.text === 'string') return node.text;
+  if (!Array.isArray(node.elements)) return '';
+  return node.elements.map(collectXmlText).join('');
+}
+
+function hasXmlDescendant(node: any, name: string): boolean {
+  if (!node || !Array.isArray(node.elements)) return false;
+  return node.elements.some((child: any) => child.name === name || hasXmlDescendant(child, name));
+}
+
+function findXmlNodes(node: any, predicate: (node: any) => boolean, matches: any[] = []): any[] {
+  if (!node) return matches;
+  if (predicate(node)) matches.push(node);
+  if (Array.isArray(node.elements)) {
+    node.elements.forEach((child: any) => findXmlNodes(child, predicate, matches));
+  }
+  return matches;
+}
+
+function findTrackedInsertedHyperlinkCitations(exported: any, citationText: string): any[] {
+  const hyperlinkOwnsTrackedInsertion = findXmlNodes(
+    exported,
+    (node) => node.name === 'w:hyperlink' && collectXmlText(node) === citationText && hasXmlDescendant(node, 'w:ins'),
+  );
+  const trackedInsertionOwnsHyperlink = findXmlNodes(
+    exported,
+    (node) => node.name === 'w:ins' && collectXmlText(node) === citationText && hasXmlDescendant(node, 'w:hyperlink'),
+  );
+  return [...hyperlinkOwnsTrackedInsertion, ...trackedInsertionOwnsHyperlink];
+}
+
+function getDocumentRelationships(editor: Editor): any[] {
+  const rels = (editor.converter as any).convertedXml['word/_rels/document.xml.rels'];
+  return rels?.elements?.find((element: any) => element.name === 'Relationships')?.elements ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -567,6 +616,84 @@ describe('mutations.apply structural steps', () => {
     expect(dispatchedTr?.getMeta('skipTrackChanges')).not.toBe(true);
   });
 
+  it('inserts SD-3563 citation hyperlinks as tracked inserted link text', async () => {
+    enableTrackedMode(editor);
+    const anchor = executeStructuralInsert(editor, {
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'citation anchor' }] },
+    });
+    const citationText = '[27]';
+    const citationHref = 'https://www.bloomberg.com/example-citation';
+
+    const receipt = executePlan(editor, {
+      changeMode: 'tracked',
+      steps: [
+        {
+          id: 'step-structural-hyperlink-insert',
+          op: 'structural.insert',
+          where: { by: 'ref', ref: anchor.insertedBlockIds[0]! },
+          args: {
+            content: {
+              kind: 'paragraph',
+              paragraph: {
+                inlines: [
+                  { kind: 'run', run: { text: 'See ' } },
+                  {
+                    kind: 'hyperlink',
+                    hyperlink: {
+                      href: citationHref,
+                      inlines: [{ kind: 'run', run: { text: citationText } }],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(receipt.success).toBe(true);
+    const citationMarks = collectTextMarks(editor, citationText);
+    expect(citationMarks).toHaveLength(1);
+    expect(citationMarks[0]).toEqual(expect.arrayContaining(['link', 'trackInsert']));
+
+    const exported = await getExportedResultWithDocContent(editor.getJSON().content ?? []);
+    const insertedCitationLinks = findTrackedInsertedHyperlinkCitations(exported, citationText);
+
+    expect(insertedCitationLinks).toHaveLength(1);
+
+    await editor.converter.exportToDocx(
+      editor.getUpdatedJson(),
+      editor.schema,
+      (editor.storage.image as { media?: Record<string, unknown> }).media ?? {},
+      false,
+      'external',
+      [],
+      editor,
+      false,
+      null,
+    );
+
+    const [exportedCitationLink] = findTrackedInsertedHyperlinkCitations(
+      (editor.converter as any).convertedXml['word/document.xml'],
+      citationText,
+    );
+    const relationshipId = exportedCitationLink?.attributes?.['r:id'];
+    const relationship = getDocumentRelationships(editor).find(
+      (element) =>
+        element.attributes?.Id === relationshipId &&
+        element.attributes?.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+
+    expect(relationshipId).toBeTruthy();
+    expect(relationship?.attributes).toEqual(
+      expect.objectContaining({
+        Target: citationHref,
+        TargetMode: 'External',
+      }),
+    );
+  });
+
   it('passes tracked mode through structural.replace step execution', () => {
     enableTrackedMode(editor);
     const targetSeed = executeStructuralInsert(editor, {
@@ -894,6 +1021,74 @@ describe('materializeFragment — capability gates', () => {
 
     // Extension nodes bypass capability gates — should fall through to fallback materializer
     expect(() => materializeFragment(editor.state.schema, fragment, new Set(), 'insert')).not.toThrow();
+  });
+
+  // SD-3278: a `kind: 'lineBreak'` inline must become a soft `lineBreak`
+  // node (exports to <w:br/>), NOT a `hardBreak` node (exports to a page break).
+  // This is the bug that made the structural.replace workaround fail.
+  it('materializes a structural lineBreak as a soft lineBreak node, not a hardBreak', () => {
+    const fragment: SDFragment = {
+      kind: 'paragraph',
+      paragraph: {
+        inlines: [
+          { kind: 'run', run: { text: 'Alpha' } },
+          { kind: 'lineBreak' },
+          { kind: 'run', run: { text: 'Beta' } },
+        ],
+      },
+    } as any;
+
+    const materialized = materializeFragment(editor.state.schema, fragment, new Set(), 'insert');
+    const roots = Array.isArray(materialized) ? materialized : [materialized];
+    const typeNames = new Set<string>();
+    roots.forEach((root: any) => root.descendants((node: any) => typeNames.add(node.type.name)));
+
+    expect(typeNames.has('lineBreak')).toBe(true);
+    expect(typeNames.has('hardBreak')).toBe(false);
+  });
+
+  // SD-3278: a structural run whose text carries a raw newline (a natural shape
+  // for SDK/agent-built `structural.replace` content) must split into lineBreak
+  // nodes, not keep the literal '\n' in a text node.
+  it('splits a newline inside structural run text into a lineBreak node, not raw text', () => {
+    const fragment: SDFragment = {
+      kind: 'paragraph',
+      paragraph: {
+        inlines: [{ kind: 'run', run: { text: 'left\nright' } }],
+      },
+    } as any;
+
+    const materialized = materializeFragment(editor.state.schema, fragment, new Set(), 'insert');
+    const roots = Array.isArray(materialized) ? materialized : [materialized];
+    const typeCounts: Record<string, number> = {};
+    let text = '';
+    roots.forEach((root: any) =>
+      root.descendants((node: any) => {
+        typeCounts[node.type.name] = (typeCounts[node.type.name] ?? 0) + 1;
+        if (node.isText) text += node.text ?? '';
+      }),
+    );
+
+    expect(typeCounts.lineBreak).toBe(1);
+    expect(typeCounts.hardBreak ?? 0).toBe(0);
+    // No raw newline survives inside a text node.
+    expect(text.includes('\n')).toBe(false);
+    expect(text).toContain('left');
+    expect(text).toContain('right');
+    // The break reads back as '\n' via leafText, so structural reads that
+    // flatten PM content preserve it on round-trip (SD-3278).
+    const readableText = roots
+      .map((root: any) => {
+        if (typeof root.textBetween !== 'function') return root.textContent ?? '';
+        const leafText = (node: any) => {
+          const specLeafText = node?.type?.spec?.leafText;
+          return typeof specLeafText === 'function' ? specLeafText(node) : '';
+        };
+        const size = root.content?.size ?? root.size ?? 0;
+        return root.textBetween(0, size, '', leafText);
+      })
+      .join('');
+    expect(readableText).toBe('left\nright');
   });
 });
 

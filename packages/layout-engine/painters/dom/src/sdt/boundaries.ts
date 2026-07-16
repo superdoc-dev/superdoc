@@ -1,5 +1,31 @@
-import type { Fragment, ResolvedPaintItem } from '@superdoc/contracts';
-import type { SdtBoundaryOptions } from './container.js';
+import type { Fragment, ResolvedPaintItem, SdtMetadata } from '@superdoc/contracts';
+import { getSdtContainerKey } from '@superdoc/contracts';
+import { computeOwnContainerFlags, type SdtBoundaryOptions } from './container.js';
+
+type SdtAttrsCandidate = {
+  attrs?: {
+    sdt?: SdtMetadata | null;
+  } | null;
+};
+
+const getOwnContainerKey = (item: ResolvedPaintItem): string | null => {
+  if (item.kind !== 'fragment') return null;
+
+  const fragment = item.fragment;
+  const block = item.block;
+  if (!block) return null;
+
+  if (fragment.kind === 'list-item' && block.kind === 'list') {
+    const listItem = block.items.find((candidate) => candidate.id === fragment.itemId);
+    return getSdtContainerKey(listItem?.paragraph.attrs?.sdt);
+  }
+
+  if ('attrs' in block) {
+    return getSdtContainerKey((block as SdtAttrsCandidate).attrs?.sdt);
+  }
+
+  return null;
+};
 
 export const computeSdtBoundaries = (
   resolvedItems: readonly ResolvedPaintItem[],
@@ -13,6 +39,7 @@ export const computeSdtBoundaries = (
     }
     return null;
   });
+  const ownContainerKeys: (string | null)[] = resolvedItems.map((item) => getOwnContainerKey(item));
 
   const fragmentOf = (idx: number): Fragment | null => {
     const item = resolvedItems[idx];
@@ -60,17 +87,25 @@ export const computeSdtBoundaries = (
         }
       }
 
-      const showLabel = isStart && !sdtLabelsRendered.has(currentKey);
-      if (showLabel) {
-        sdtLabelsRendered.add(currentKey);
-      }
+      const ownKey = ownContainerKeys[k];
+      const previousOwnKey = k > 0 ? ownContainerKeys[k - 1] : null;
+      const nextOwnKey = k + 1 < ownContainerKeys.length ? ownContainerKeys[k + 1] : null;
+      const nextContainerKey = k + 1 < containerKeys.length ? containerKeys[k + 1] : null;
+      const ownFlags = computeOwnContainerFlags({
+        containerKey: currentKey,
+        ownContainerKey: ownKey,
+        previousOwnContainerKey: previousOwnKey,
+        nextOwnContainerKey: nextOwnKey,
+        nextContainerKey,
+        sdtLabelsRendered,
+      });
 
       boundaries.set(k, {
         isStart,
         isEnd,
         widthOverride: groupRight - fragment.x,
         paddingBottomOverride,
-        showLabel,
+        ...ownFlags,
       });
     }
 

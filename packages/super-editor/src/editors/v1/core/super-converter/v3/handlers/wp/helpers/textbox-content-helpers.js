@@ -13,6 +13,7 @@ import { SuperConverter } from '@converter/SuperConverter.js';
  * Matches: header.xml, header1.xml, footer.xml, footer2.xml, etc.
  */
 const HEADER_FOOTER_FILENAME_PATTERN = /^(header|footer)\d*\.xml$/i;
+const DEFAULT_TAB_INTERVAL_TWIPS = 720;
 
 /**
  * Recursively collects all paragraph nodes (w:p) from a text box content structure.
@@ -41,11 +42,277 @@ export function collectTextBoxParagraphs(nodes, paragraphs = []) {
       paragraphs.push(node);
       return;
     }
+    if (node.name === 'w:tbl') {
+      paragraphs.push(...flattenTextBoxTableToParagraphs(node));
+      return;
+    }
     if (Array.isArray(node.elements)) {
       collectTextBoxParagraphs(node.elements, paragraphs);
     }
   });
   return paragraphs;
+}
+
+function flattenTextBoxTableToParagraphs(table) {
+  const rows = table.elements?.filter((node) => node?.name === 'w:tr') || [];
+  if (!rows.length) return [];
+
+  const gridWidths = extractTableGridWidths(table);
+  const paragraphs = [];
+
+  rows.forEach((row) => {
+    const cells = row.elements?.filter((node) => node?.name === 'w:tc') || [];
+    if (!cells.length) return;
+
+    const columnStarts = buildColumnStarts(cells, gridWidths);
+    const cellLines = cells.map((cell) => collectTextBoxTableCellLines(cell));
+    const maxLineCount = cellLines.reduce((max, lines) => Math.max(max, lines.length), 0);
+
+    for (let lineIndex = 0; lineIndex < maxLineCount; lineIndex += 1) {
+      const lineParts = cellLines.map((lines) => lines[lineIndex] || null);
+      if (!lineParts.some((line) => line && hasRenderableLineContent(line.elements))) continue;
+      paragraphs.push(buildTableVisualLineParagraph(lineParts, columnStarts));
+    }
+  });
+
+  return paragraphs;
+}
+
+function extractTableGridWidths(table) {
+  const grid = table.elements?.find((node) => node?.name === 'w:tblGrid');
+  return (
+    grid?.elements
+      ?.filter((node) => node?.name === 'w:gridCol')
+      .map((node) => toFiniteNumber(node.attributes?.['w:w'] ?? node.attributes?.w))
+      .filter((value) => value != null && value > 0) || []
+  );
+}
+
+function buildColumnStarts(cells, gridWidths) {
+  const starts = [];
+  let cursor = 0;
+  let gridIndex = 0;
+
+  cells.forEach((cell) => {
+    starts.push(cursor);
+    const gridSpan = resolveCellGridSpan(cell);
+    cursor += resolveCellWidth(cell, gridWidths, gridIndex, gridSpan);
+    gridIndex += gridSpan;
+  });
+
+  return starts;
+}
+
+function resolveCellGridSpan(cell) {
+  const tcPr = cell.elements?.find((node) => node?.name === 'w:tcPr');
+  const gridSpan = tcPr?.elements?.find((node) => node?.name === 'w:gridSpan');
+  const value = toFiniteNumber(gridSpan?.attributes?.['w:val'] ?? gridSpan?.attributes?.val);
+  return value && value > 0 ? Math.max(1, Math.floor(value)) : 1;
+}
+
+function resolveCellWidth(cell, gridWidths, gridIndex, gridSpan) {
+  const gridWidth = sumGridWidths(gridWidths, gridIndex, gridSpan);
+  if (gridWidth > 0) return gridWidth;
+
+  const tcPr = cell.elements?.find((node) => node?.name === 'w:tcPr');
+  const tcW = tcPr?.elements?.find((node) => node?.name === 'w:tcW');
+  const width = toFiniteNumber(tcW?.attributes?.['w:w'] ?? tcW?.attributes?.w);
+  return width && width > 0 ? width : 0;
+}
+
+function sumGridWidths(gridWidths, gridIndex, gridSpan) {
+  if (!Array.isArray(gridWidths) || gridWidths.length === 0) return 0;
+
+  let width = 0;
+  for (let offset = 0; offset < gridSpan; offset += 1) {
+    const gridWidth = gridWidths[gridIndex + offset];
+    if (gridWidth != null && gridWidth > 0) {
+      width += gridWidth;
+    }
+  }
+  return width;
+}
+
+function collectTextBoxTableCellLines(cell) {
+  const paragraphNodes = [];
+  collectTextBoxParagraphsSkippingTables(cell.elements || [], paragraphNodes);
+  return paragraphNodes.flatMap((paragraph) => splitTextBoxParagraphIntoVisualLines(paragraph));
+}
+
+function collectTextBoxParagraphsSkippingTables(nodes, paragraphs) {
+  if (!Array.isArray(nodes)) return;
+  nodes.forEach((node) => {
+    if (!node) return;
+    if (node.name === 'w:p') {
+      paragraphs.push(node);
+      return;
+    }
+    if (node.name === 'w:tbl') return;
+    if (Array.isArray(node.elements)) {
+      collectTextBoxParagraphsSkippingTables(node.elements, paragraphs);
+    }
+  });
+}
+
+function splitTextBoxParagraphIntoVisualLines(paragraph) {
+  const pPr = paragraph.elements?.find((node) => node?.name === 'w:pPr') || null;
+  const lines = [{ pPr, elements: [] }];
+
+  const appendToCurrentLine = (element) => {
+    lines[lines.length - 1].elements.push(element);
+  };
+
+  for (const element of paragraph.elements || []) {
+    if (!element || element.name === 'w:pPr') continue;
+    if (element.name !== 'w:r' || !Array.isArray(element.elements)) {
+      appendToCurrentLine(carbonCopy(element));
+      continue;
+    }
+
+    splitRunAroundBreaks(element, appendToCurrentLine, () => {
+      lines.push({ pPr, elements: [] });
+    });
+  }
+
+  while (lines.length > 1 && !hasRenderableLineContent(lines[lines.length - 1].elements)) {
+    lines.pop();
+  }
+
+  return lines;
+}
+
+function splitRunAroundBreaks(run, appendRun, startNewLine) {
+  let runElements = [];
+  const runProperties = run.elements?.filter((node) => node?.name === 'w:rPr').map((node) => carbonCopy(node)) || [];
+
+  const flushRun = () => {
+    const meaningfulElements = runElements.filter((node) => node?.name !== 'w:rPr');
+    if (!meaningfulElements.length) {
+      runElements = runProperties.map((node) => carbonCopy(node));
+      return;
+    }
+
+    appendRun({
+      ...carbonCopy(run),
+      elements: runElements,
+    });
+    runElements = runProperties.map((node) => carbonCopy(node));
+  };
+
+  run.elements.forEach((child) => {
+    if (child?.name === 'w:br') {
+      flushRun();
+      startNewLine();
+      return;
+    }
+    runElements.push(carbonCopy(child));
+  });
+
+  flushRun();
+}
+
+function buildTableVisualLineParagraph(lineParts, columnStarts) {
+  const baseLine = lineParts.find((line) => line?.pPr) || lineParts.find(Boolean);
+  const pPr = buildVisualLineParagraphProperties(baseLine?.pPr, lineParts, columnStarts);
+  const elements = pPr ? [pPr] : [];
+
+  lineParts.forEach((line, index) => {
+    if (!line || !hasRenderableLineContent(line.elements)) return;
+    if (index > 0) elements.push(createTabRun());
+    elements.push(...line.elements.map((element) => carbonCopy(element)));
+  });
+
+  return { name: 'w:p', elements };
+}
+
+function buildVisualLineParagraphProperties(basePPr, lineParts, columnStarts) {
+  const pPr = basePPr ? carbonCopy(basePPr) : { name: 'w:pPr', elements: [] };
+  pPr.elements = (pPr.elements || []).filter((node) => node?.name !== 'w:tabs');
+
+  const tabStops = [];
+  lineParts.forEach((line, index) => {
+    const columnStart = columnStarts[index] || 0;
+    if (index > 0 && columnStart > 0 && line && hasRenderableLineContent(line.elements)) {
+      tabStops.push(createTabStop(columnStart));
+    }
+
+    const sourceTabs = extractTabs(line?.pPr);
+    let positionedSourceTabCount = 0;
+    sourceTabs.forEach((tab) => {
+      const pos = toFiniteNumber(tab.attributes?.['w:pos'] ?? tab.attributes?.pos);
+      if (pos == null) return;
+      positionedSourceTabCount += 1;
+      tabStops.push(createTabStop(columnStart + pos, tab.attributes));
+    });
+
+    const tabRunCount = countTabRuns(line?.elements);
+    for (let tabIndex = positionedSourceTabCount; tabIndex < tabRunCount; tabIndex += 1) {
+      tabStops.push(createTabStop(resolveDefaultInternalTabPos(columnStart, tabIndex)));
+    }
+  });
+
+  if (tabStops.length > 0) {
+    pPr.elements.push({ name: 'w:tabs', elements: dedupeTabStops(tabStops) });
+  }
+
+  return pPr.elements.length > 0 ? pPr : null;
+}
+
+function extractTabs(pPr) {
+  const tabs = pPr?.elements?.find((node) => node?.name === 'w:tabs');
+  return tabs?.elements?.filter((node) => node?.name === 'w:tab') || [];
+}
+
+function countTabRuns(elements = []) {
+  return elements.reduce((count, element) => {
+    if (element?.name === 'w:tab') return count + 1;
+    if (Array.isArray(element?.elements)) return count + countTabRuns(element.elements);
+    return count;
+  }, 0);
+}
+
+function resolveDefaultInternalTabPos(columnStart, tabIndex) {
+  return columnStart + DEFAULT_TAB_INTERVAL_TWIPS * (tabIndex + 1);
+}
+
+function createTabRun() {
+  return { name: 'w:r', elements: [{ name: 'w:tab' }] };
+}
+
+function createTabStop(pos, sourceAttributes = {}) {
+  return {
+    name: 'w:tab',
+    attributes: {
+      ...sourceAttributes,
+      'w:val': sourceAttributes['w:val'] || sourceAttributes.val || 'left',
+      'w:pos': String(pos),
+    },
+  };
+}
+
+function dedupeTabStops(tabStops) {
+  const seen = new Set();
+  return tabStops
+    .filter((tab) => {
+      const key = `${tab.attributes?.['w:val'] || ''}:${tab.attributes?.['w:pos'] || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Number(a.attributes?.['w:pos'] || 0) - Number(b.attributes?.['w:pos'] || 0));
+}
+
+function hasRenderableLineContent(elements) {
+  return elements.some((element) => {
+    if (element?.name === 'w:tab') return true;
+    if (element?.name === 'w:t') return true;
+    return Array.isArray(element?.elements) && hasRenderableLineContent(element.elements);
+  });
+}
+
+function toFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 /**
@@ -122,6 +389,46 @@ export function resolveParagraphPropertiesForTextBox(paragraph, params) {
   const pPr = paragraph.elements?.find((el) => el.name === 'w:pPr');
   const inlineParagraphProperties = pPr ? w_pPrTranslator.encode({ ...params, nodes: [pPr] }) || {} : {};
   return resolveParagraphProperties(params, inlineParagraphProperties, false, false, null);
+}
+
+/**
+ * Converts resolved textbox paragraph spacing from twips to CSS pixels.
+ *
+ * @param {Object|null|undefined} paragraphProperties - Resolved paragraph properties
+ * @param {Object} options - Paragraph context
+ * @param {number} options.paragraphIndex - Logical paragraph index
+ * @param {number} options.paragraphCount - Logical paragraph count
+ * @param {string|number|boolean|undefined} options.spcFirstLastPara - Raw wps:bodyPr spcFirstLastPara value
+ * @returns {{ before?: number, after?: number }|undefined} Paragraph spacing in CSS px
+ */
+export function extractTextBoxParagraphSpacing(
+  paragraphProperties,
+  { paragraphIndex, paragraphCount, spcFirstLastPara } = {},
+) {
+  const spacing = paragraphProperties?.spacing;
+  if (!spacing) return undefined;
+
+  // ECMA-376 §21.1.2.1.1: an omitted spcFirstLastPara implies false, so edge
+  // spacing is suppressed unless the attribute explicitly enables it.
+  const honorFirstLast =
+    spcFirstLastPara === '1' ||
+    spcFirstLastPara === 1 ||
+    spcFirstLastPara === true ||
+    spcFirstLastPara === 'true' ||
+    spcFirstLastPara === 'on';
+  const isFirst = paragraphIndex === 0;
+  const isLast = paragraphCount != null && paragraphIndex === paragraphCount - 1;
+
+  const result = {};
+  if (typeof spacing.before === 'number' && !(isFirst && !honorFirstLast)) {
+    const px = twipsToPixels(spacing.before);
+    if (typeof px === 'number') result.before = px;
+  }
+  if (typeof spacing.after === 'number' && !(isLast && !honorFirstLast)) {
+    const px = twipsToPixels(spacing.after);
+    if (typeof px === 'number') result.after = px;
+  }
+  return result.before === undefined && result.after === undefined ? undefined : result;
 }
 
 /**
@@ -219,6 +526,7 @@ export function extractBodyPrProperties(bodyPr) {
 
   // Extract wrap mode (default to 'square' if not specified)
   const wrap = bodyPrAttrs['wrap'] || 'square';
+  const spcFirstLastPara = bodyPrAttrs['spcFirstLastPara'];
 
-  return { verticalAlign, insets, wrap };
+  return { verticalAlign, insets, wrap, spcFirstLastPara };
 }

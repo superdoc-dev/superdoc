@@ -9,7 +9,7 @@ SuperDoc provides `@superdoc-dev/react`: a first-party wrapper with lifecycle ma
 ## Install
 
 ```bash
-npm install @superdoc-dev/react
+npm install @superdoc-dev/react @superdoc-dev/fonts
 ```
 
 <Note>
@@ -20,12 +20,14 @@ npm install @superdoc-dev/react
 
 ```jsx
 import { SuperDocEditor } from '@superdoc-dev/react';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import '@superdoc-dev/react/style.css';
 
 function App() {
   return (
     <SuperDocEditor
       document={file}
+      fonts={superdocFonts}
       documentMode="editing"
       onReady={() => console.log('Editor ready!')}
     />
@@ -58,6 +60,23 @@ function App() {
 ```jsx
 <SuperDocEditor document={file} role="editor" />
 ```
+
+### Responsive zoom
+
+Pass `zoom` with `mode: 'fit-width'` to keep the document fitted to its container as it resizes. SuperDoc observes the container for you; no resize listeners needed. Calling `setZoom()` (or the user picking a percentage in the toolbar) switches back to manual mode.
+
+```jsx
+<SuperDocEditor
+  document={file}
+  zoom={{
+    mode: 'fit-width',
+    fitWidth: { min: 35, max: 100, padding: 24 },
+  }}
+  onZoomChange={({ zoom, mode }) => console.log(`Zoom: ${zoom}% (${mode})`)}
+/>
+```
+
+For custom behavior, listen to `onViewportChange` instead and apply your own zoom with `getInstance().setZoom()`. See [zoom configuration](/editor/superdoc/configuration#param-zoom).
 
 ## Handle file uploads
 

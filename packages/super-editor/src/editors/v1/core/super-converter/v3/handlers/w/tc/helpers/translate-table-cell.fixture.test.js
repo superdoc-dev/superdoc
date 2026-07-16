@@ -20,7 +20,7 @@ import { twipsToPixels } from '@converter/helpers.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.resolve(
   __dirname,
-  '../../../../../../../../../../../../tests/behavior/tests/tables/fixtures/sd-3152-tcmar-key-family.docx',
+  '../../../../../../../tests/data/behavior-fixtures/sd-3152-tcmar-key-family.docx',
 );
 
 const findTblCellMar = (container) => container?.elements?.find((e) => e.name === 'w:tblCellMar');

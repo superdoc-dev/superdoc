@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TextSelection } from 'prosemirror-state';
+import { Slice, Fragment } from 'prosemirror-model';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { Editor } from '@core/Editor.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '@extensions/track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/trackChangesBasePlugin.js';
@@ -12,6 +15,8 @@ const ALICE = { name: 'Alice Reviewer', email: 'alice@example.com' };
 const BOB = { name: 'Bob Reviewer', email: 'bob@example.com' };
 const FIXED_DATE = '2026-05-21T00:00:00.000Z';
 const FOREIGN_INSERT_ID = 'foreign-insert';
+const FOREIGN_DELETE_ID = 'foreign-delete';
+const DELETED_TEXT = 'please remove this sentence';
 const INSERTED_TEXT = 'here is my new text, do you like it?';
 const INSERTED_TAIL = 'do you like it?';
 const INSERTED_TEXT_AFTER_DIRECT_DELETE = INSERTED_TEXT.replace(INSERTED_TAIL, '');
@@ -22,7 +27,7 @@ const TEST_PARAGRAPH_BLOCK_ID = 'test-paragraph-1';
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const WORD_REPLACEMENT_FIXTURE = resolve(
   CURRENT_DIR,
-  '../../../../../../tests/behavior/tests/comments/fixtures/sd-1960-word-replacement-no-comments.docx',
+  '../tests/data/behavior-fixtures/sd-1960-word-replacement-no-comments.docx',
 );
 const BASIC_TEXT_INSERTION_OPEN_FIXTURE = resolve(CURRENT_DIR, '../tests/data/basic-text-insertion-open.docx');
 
@@ -103,6 +108,34 @@ const setDocumentWithSeparateRunTrackedInsertion = (
       schema.nodes.run.create({}, schema.text(IMPORTED_TRACKED_INSERTION_TEXT, [insertMark])),
       schema.nodes.run.create({}, schema.text('dog.')),
     ]),
+  );
+
+  editor.dispatch(
+    editor.state.tr
+      .replaceWith(0, editor.state.doc.content.size, doc.content)
+      .setMeta('skipTrackChanges', true)
+      .setMeta('inputType', 'test-setup'),
+  );
+};
+
+const setDocumentWithTrackedDeletion = (editor, { author = ALICE, id = FOREIGN_DELETE_ID } = {}) => {
+  const { schema } = editor;
+  const deleteMark = schema.marks[TrackDeleteMarkName].create({
+    id,
+    author: author.name,
+    authorEmail: author.email,
+    date: FIXED_DATE,
+  });
+  const doc = schema.nodes.doc.create(
+    {},
+    schema.nodes.paragraph.create(
+      { sdBlockId: TEST_PARAGRAPH_BLOCK_ID },
+      schema.nodes.run.create({}, [
+        schema.text('hello there '),
+        schema.text(DELETED_TEXT, [deleteMark]),
+        schema.text(' after'),
+      ]),
+    ),
   );
 
   editor.dispatch(
@@ -268,6 +301,53 @@ describe('Editor dispatch tracked-change meta', () => {
         authorEmail: 'test@example.com',
       }),
     );
+  });
+
+  it('tracks native replacement transactions that clear a toolbar-preserved selection', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Replace target</p>',
+      user: { name: 'Test', email: 'test@example.com' },
+      useImmediateSetTimeout: false,
+    }));
+
+    editor.setDocumentMode('suggesting');
+
+    const range = findTextRange(editor, 'Replace target');
+    const preservedSelection = TextSelection.create(editor.state.doc, range.from, range.to);
+    editor.dispatch(
+      editor.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection,
+        showVisualSelection: true,
+        skipFocusReset: false,
+      }),
+    );
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).not.toBeNull();
+
+    editor.dispatch(
+      editor.state.tr
+        .insertText('Tracked text', range.from, range.to)
+        .setMeta(CustomSelectionPluginKey, {
+          focused: false,
+          preservedSelection: null,
+          showVisualSelection: false,
+          skipFocusReset: false,
+        })
+        .setMeta('inputType', 'insertText'),
+    );
+
+    const insertedText = markEntries(editor, TrackInsertMarkName)
+      .map(({ text }) => text)
+      .join('');
+    const deletedText = markEntries(editor, TrackDeleteMarkName)
+      .map(({ text }) => text)
+      .join('');
+
+    expect(insertedText).toContain('Tracked text');
+    expect(deletedText).toContain('Replace target');
+    expect(getTrackChanges(editor.state).length).toBeGreaterThanOrEqual(1);
+    expect(CustomSelectionPluginKey.getState(editor.state)?.preservedSelection).toBeNull();
   });
 
   it('normalizes modules.trackChanges.replacements for direct Editor.open callers', async () => {
@@ -442,7 +522,7 @@ describe('Editor dispatch tracked-change meta', () => {
     );
   });
 
-  it('mutates another user tracked insertion in place on direct insert while local track mode is off', () => {
+  it('inserts plain text on direct insert inside another user tracked insertion while local track mode is off', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -454,16 +534,157 @@ describe('Editor dispatch tracked-change meta', () => {
     const insertPos = findTextRange(editor, INSERTED_TEXT).from + 4;
     editor.dispatch(editor.state.tr.insertText('ZZ', insertPos).setMeta('inputType', 'insertText'));
 
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(
-      'hereZZ is my new text, do you like it?',
-    );
+    // Editing mode: the typed text stays plain and the existing suggestion is
+    // simply split around it, so the foreign insertion never covers the new chars.
+    expect(editor.state.doc.textContent).toContain('hereZZ is my new text, do you like it?');
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
     expect(
       markEntries(editor, TrackInsertMarkName).filter(({ mark }) => mark.attrs?.id !== FOREIGN_INSERT_ID),
     ).toHaveLength(0);
+    expect(markEntries(editor, TrackInsertMarkName).some(({ text }) => text.includes('ZZ'))).toBe(false);
     expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
   });
 
-  it('updates the existing insertion review item on direct insert inside another user tracked insertion', () => {
+  it('does not over-strip the existing suggestion on an open-slice paste inside another user tracked insertion while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    // A genuinely open slice - the shape a multi-paragraph / rich-HTML paste produces -
+    // has content.size > slice.size because of its open node boundaries (a slice of
+    // inline text within one node would be closed, content.size === size). Paste it
+    // collapsed strictly inside the foreign insertion. The mark cleanup must span only
+    // the inserted size (slice.size); using content.size would overrun and strip
+    // trackInsert from the suggestion text after the paste.
+    const { schema } = editor;
+    const openSlice = new Slice(
+      Fragment.from(
+        schema.nodes.paragraph.create({ sdBlockId: 'paste-src' }, schema.nodes.run.create({}, schema.text('PASTE'))),
+      ),
+      2,
+      2,
+    );
+    expect(openSlice.content.size).toBeGreaterThan(openSlice.size);
+
+    const insertPos = findTextRange(editor, INSERTED_TEXT).from + 4;
+    editor.dispatch(
+      editor.state.tr.replaceRange(insertPos, insertPos, openSlice).setMeta('inputType', 'insertFromPaste'),
+    );
+
+    // The paste landed at the cursor (after "here"); textContent joins blocks with no
+    // separator, so this holds whether the open slice merges inline or splits a block.
+    expect(editor.state.doc.textContent).toContain('herePASTE is my new text');
+
+    // The whole original insertion stays tracked (split around the now-plain paste);
+    // no characters after the paste point lost their trackInsert mark.
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
+    expect(markEntries(editor, TrackInsertMarkName).some(({ text }) => text.includes('PASTE'))).toBe(false);
+  });
+
+  it('preserves review marks carried by a pasted slice inside another user tracked insertion while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedInsertion(editor);
+
+    // Pasting a SuperDoc slice that already carries its own tracked-review marks
+    // (a copied suggestion) into the interior of another suggestion must keep the
+    // pasted marks. Only the ENCLOSING mark inherited from the neighbour is stripped;
+    // a blanket strip-by-type would silently drop the pasted review metadata.
+    const { schema } = editor;
+    const pastedMark = schema.marks[TrackInsertMarkName].create({
+      id: 'pasted-insert',
+      author: 'Carol Author',
+      authorEmail: 'carol@example.com',
+      date: FIXED_DATE,
+    });
+    const openSlice = new Slice(
+      Fragment.from(
+        schema.nodes.paragraph.create(
+          { sdBlockId: 'paste-src' },
+          schema.nodes.run.create({}, schema.text('COPIED', [pastedMark])),
+        ),
+      ),
+      2,
+      2,
+    );
+
+    const insertPos = findTextRange(editor, INSERTED_TEXT).from + 4;
+    editor.dispatch(
+      editor.state.tr.replaceRange(insertPos, insertPos, openSlice).setMeta('inputType', 'insertFromPaste'),
+    );
+
+    // The pasted suggestion keeps its own review id (it is not the enclosing mark).
+    expect(textForMarkId(editor, TrackInsertMarkName, 'pasted-insert')).toBe('COPIED');
+    // The enclosing foreign insertion did not absorb the pasted text into its id.
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
+  });
+
+  it('inserts plain text on direct insert inside another user tracked deletion while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedDeletion(editor);
+
+    const beforeTrackedChanges = editor.doc.trackChanges.list().items;
+    expect(beforeTrackedChanges).toHaveLength(1);
+    const beforeChangeId = beforeTrackedChanges[0].id;
+
+    const insertPos = findTextRange(editor, DELETED_TEXT).from + 6;
+    editor.dispatch(editor.state.tr.insertText('ZZ', insertPos).setMeta('inputType', 'insertText'));
+
+    // The Slack bug: typing inside someone else's pending deletion must not join
+    // the deletion (struck through) nor become a new tracked insert. The chars
+    // stay plain and the deletion is preserved, split around them.
+    expect(editor.state.doc.textContent).toContain('pleaseZZ remove this sentence');
+    expect(textForMarkId(editor, TrackDeleteMarkName, FOREIGN_DELETE_ID)).toBe(DELETED_TEXT);
+    expect(markEntries(editor, TrackDeleteMarkName).some(({ text }) => text.includes('ZZ'))).toBe(false);
+    expect(markEntries(editor, TrackInsertMarkName)).toHaveLength(0);
+
+    const afterTrackedChanges = editor.doc.trackChanges.list().items;
+    expect(afterTrackedChanges).toHaveLength(1);
+    expect(afterTrackedChanges[0].id).toBe(beforeChangeId);
+  });
+
+  it('inserts plain text on collapsed paste inside another user tracked deletion while local track mode is off', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: BOB,
+      useImmediateSetTimeout: false,
+    }));
+    setDocumentWithTrackedDeletion(editor);
+
+    const beforeTrackedChanges = editor.doc.trackChanges.list().items;
+    expect(beforeTrackedChanges).toHaveLength(1);
+
+    // A paste with a collapsed selection arrives as a single collapsed ReplaceStep
+    // carrying a slice (here a plain text node), the same shape the fix keys on.
+    const insertPos = findTextRange(editor, DELETED_TEXT).from + 6;
+    editor.dispatch(
+      editor.state.tr.insert(insertPos, editor.schema.text('PASTED')).setMeta('inputType', 'insertFromPaste'),
+    );
+
+    expect(editor.state.doc.textContent).toContain('pleasePASTED remove this sentence');
+    expect(markEntries(editor, TrackInsertMarkName)).toHaveLength(0);
+    expect(markEntries(editor, TrackDeleteMarkName).some(({ text }) => text.includes('PASTED'))).toBe(false);
+    expect(textForMarkId(editor, TrackDeleteMarkName, FOREIGN_DELETE_ID)).toBe(DELETED_TEXT);
+
+    const afterTrackedChanges = editor.doc.trackChanges.list().items;
+    expect(afterTrackedChanges).toHaveLength(1);
+  });
+
+  it('does not expand the existing insertion review item on direct insert inside another user tracked insertion', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -476,14 +697,17 @@ describe('Editor dispatch tracked-change meta', () => {
     const insertPos = findTextRange(editor, INSERTED_TEXT).from + 4;
     editor.dispatch(editor.state.tr.insertText('ZZ', insertPos).setMeta('inputType', 'insertText'));
 
+    // The plain typed text is not part of any review item, so the existing
+    // insertion comment keeps its original text and no new child item appears.
     expect(editor.doc.comments.list().items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           trackedChangeType: 'insert',
-          trackedChangeText: 'hereZZ is my new text, do you like it?',
+          trackedChangeText: INSERTED_TEXT,
         }),
       ]),
     );
+    expect(editor.doc.comments.list().items.some((item) => item.trackedChangeText?.includes('ZZ'))).toBe(false);
 
     const addChildInsertionEvent = emitSpy.mock.calls.find(
       ([eventName, payload]) =>
@@ -495,9 +719,20 @@ describe('Editor dispatch tracked-change meta', () => {
     )?.[1];
 
     expect(addChildInsertionEvent).toBeUndefined();
+
+    // No commentsUpdate event of any kind (add or update) should reference the
+    // plain typed text - the suggestion was split around it, not mutated, so the
+    // stale direct-insertion mutation event must be suppressed.
+    const anyEventMentionsTypedText = emitSpy.mock.calls.some(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        typeof payload?.trackedChangeText === 'string' &&
+        payload.trackedChangeText.includes('ZZ'),
+    );
+    expect(anyEventMentionsTypedText).toBe(false);
   });
 
-  it('keeps the tracked-change id and linked review comment id stable on direct insert inside a live tracked insertion', () => {
+  it('keeps a live tracked insertion intact and inserts plain text on direct insert inside it', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -534,19 +769,22 @@ describe('Editor dispatch tracked-change meta', () => {
     );
 
     expect(receipt.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('live-reZZview-comment');
 
     const afterTrackedChanges = editor.doc.trackChanges.list().items;
     const afterComments = editor.doc.comments.list().items;
 
+    // Direct insert stays plain: the suggestion is split around it, so its id,
+    // linked comment, and text all stay exactly as before (no ZZ absorbed).
     expect(afterTrackedChanges).toHaveLength(1);
     expect(afterComments).toHaveLength(1);
     expect(afterTrackedChanges[0].id).toBe(beforeChangeId);
     expect(afterComments[0].commentId).toBe(beforeCommentId);
-    expect(afterTrackedChanges[0].insertedText).toBe('live-reZZview-comment');
-    expect(afterComments[0].trackedChangeText).toBe('live-reZZview-comment');
+    expect(afterTrackedChanges[0].insertedText).toBe('live-review-comment');
+    expect(afterComments[0].trackedChangeText).toBe('live-review-comment');
   });
 
-  it('mutates an imported-style separate-run tracked insertion in place from document-api direct insert', () => {
+  it('inserts plain text inside an imported-style separate-run tracked insertion from document-api direct insert', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -573,18 +811,20 @@ describe('Editor dispatch tracked-change meta', () => {
     );
 
     expect(receipt.success).toBe(true);
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(
-      IMPORTED_TRACKED_INSERTION_TEXT_AFTER_DIRECT_INSERT,
-    );
+    // The imported suggestion is split around the plain text; its text and the
+    // tracked change stay unchanged, and the new chars carry no review mark.
+    expect(editor.state.doc.textContent).toContain(IMPORTED_TRACKED_INSERTION_TEXT_AFTER_DIRECT_INSERT);
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(IMPORTED_TRACKED_INSERTION_TEXT);
+    expect(markEntries(editor, TrackInsertMarkName).some(({ text }) => text.includes(DIRECT_INSERT_TEXT))).toBe(false);
     expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
 
     const afterTrackedChanges = editor.doc.trackChanges.list().items;
     expect(afterTrackedChanges).toHaveLength(1);
     expect(afterTrackedChanges[0].id).toBe(beforeChangeId);
-    expect(afterTrackedChanges[0].insertedText).toBe(IMPORTED_TRACKED_INSERTION_TEXT_AFTER_DIRECT_INSERT);
+    expect(afterTrackedChanges[0].insertedText).toBe(IMPORTED_TRACKED_INSERTION_TEXT);
   });
 
-  it('keeps imported tracked insertions semantically updated after document-api direct insert inside the imported text', async () => {
+  it('keeps imported tracked insertions intact and inserts plain text on document-api direct insert inside the imported text', async () => {
     const fixture = await readFile(BASIC_TEXT_INSERTION_OPEN_FIXTURE);
     editor = await Editor.open(fixture, {
       isHeadless: true,
@@ -616,10 +856,14 @@ describe('Editor dispatch tracked-change meta', () => {
     );
 
     expect(receipt.success).toBe(true);
+    // The plain text splits the imported suggestion without joining it, so the
+    // tracked change keeps its id and original text.
+    expect(editor.state.doc.textContent).toContain(IMPORTED_TRACKED_INSERTION_TEXT_AFTER_DIRECT_INSERT);
+    expect(markEntries(editor, TrackInsertMarkName).some(({ text }) => text.includes(DIRECT_INSERT_TEXT))).toBe(false);
     const afterTrackedChanges = editor.doc.trackChanges.list().items;
     expect(afterTrackedChanges).toHaveLength(1);
     expect(afterTrackedChanges[0].id).toBe(beforeChangeId);
-    expect(afterTrackedChanges[0].insertedText).toBe(IMPORTED_TRACKED_INSERTION_TEXT_AFTER_DIRECT_INSERT);
+    expect(afterTrackedChanges[0].insertedText).toBe(IMPORTED_TRACKED_INSERTION_TEXT);
   });
 
   it('protects an imported-style separate-run tracked insertion from direct doc.replace', () => {

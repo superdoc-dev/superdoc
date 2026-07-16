@@ -58,6 +58,48 @@ const formatAttrsWithSnapshots = (id, user = SAME_USER, before = [], after = [])
   after,
 });
 
+describe('id-target side selector on a non-paired change', () => {
+  // 'ins-1' is a STANDALONE insertion (no paired deletion) — the shape you get
+  // after the deleted half of a replacement was already resolved.
+  const standaloneInsertionState = () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [
+        { text: 'before ' },
+        { text: 'NEW', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-1') }] },
+        { text: ' after' },
+      ],
+    });
+    return state;
+  };
+
+  it('fails closed when side targets the half that is not present', () => {
+    const result = decideTrackedChanges({
+      state: standaloneInsertionState(),
+      editor: editorFor(SAME_USER),
+      decision: 'reject',
+      target: { kind: 'id', id: 'ins-1', side: 'deleted' },
+    });
+    // Must NOT silently resolve the surviving insertion when 'deleted' was asked.
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_TARGET');
+  });
+
+  it('resolves normally when side matches the surviving standalone side', () => {
+    const state = standaloneInsertionState();
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(SAME_USER),
+      decision: 'reject',
+      target: { kind: 'id', id: 'ins-1', side: 'inserted' },
+    });
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(next.doc.textContent).toBe('before  after');
+  });
+});
+
 describe('decideTrackedChanges overlap behavior', () => {
   it('accept insertion by id keeps content and removes the trackInsert mark', () => {
     const schema = createReviewGraphTestSchema();
@@ -309,6 +351,66 @@ describe('decideTrackedChanges overlap behavior', () => {
     });
     expect(result.ok).toBe(true);
     expect(state.apply(result.tr).doc.textContent).toBe('a OLD b');
+  });
+
+  it('reject replacement between split same-author deletion fragments restores the inferred parent deletion', () => {
+    const schema = createReviewGraphTestSchema();
+    const replacementAttrs = {
+      changeType: 'replacement',
+      replacementGroupId: 'rep-3',
+    };
+    const parentLeft = deleteAttrs('parent-left', OTHER_USER, { date: '2026-05-20T14:08:00Z' });
+    const parentRight = deleteAttrs('parent-right', OTHER_USER, { date: '2026-05-20T14:08:00Z' });
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [
+        { text: 'a ' },
+        { text: 'B', marks: [{ markType: TrackDeleteMarkName, attrs: parentLeft }] },
+        {
+          text: 'B',
+          marks: [
+            {
+              markType: TrackDeleteMarkName,
+              attrs: deleteAttrs('rep-3', SAME_USER, {
+                ...replacementAttrs,
+                replacementSideId: 'rep-3#deleted',
+              }),
+            },
+          ],
+        },
+        {
+          text: 'ZZ',
+          marks: [
+            {
+              markType: TrackInsertMarkName,
+              attrs: insertAttrs('rep-3', SAME_USER, {
+                ...replacementAttrs,
+                replacementSideId: 'rep-3#inserted',
+              }),
+            },
+          ],
+        },
+        { text: 'B', marks: [{ markType: TrackDeleteMarkName, attrs: parentRight }] },
+        { text: ' b' },
+      ],
+    });
+
+    const result = decideTrackedChanges({
+      state,
+      editor: editorFor(SAME_USER),
+      decision: 'reject',
+      target: { kind: 'id', id: 'rep-3' },
+    });
+
+    expect(result.ok).toBe(true);
+    const next = state.apply(result.tr);
+    expect(next.doc.textContent).toBe('a BBB b');
+    const graph = buildReviewGraph({ state: next });
+    expect(graph.changes.size).toBe(1);
+    const parent = graph.changes.get('parent-left');
+    expect(parent).toBeDefined();
+    expect(parent.type).toBe('deletion');
+    expect(parent.deletedSegments.map((segment) => segment.text).join('')).toBe('BBB');
   });
 
   it('formatting accept removes the trackFormat mark; reject restores the before snapshot', () => {

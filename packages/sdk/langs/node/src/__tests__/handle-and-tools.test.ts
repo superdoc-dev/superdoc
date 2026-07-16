@@ -20,7 +20,7 @@ describe('SuperDocDocument', () => {
     expect('api' in (doc as unknown as Record<string, unknown>)).toBe(false);
   });
 
-  test('formatRange delegates to doc.format.apply with inline properties', async () => {
+  test('formatRange delegates to the doc.formatRange operation, passing properties through', async () => {
     const calls: Array<{ operationId: string; params: unknown }> = [];
     const boundRuntime = {
       invoke: async (operation: { operationId: string }, params: unknown) => {
@@ -48,10 +48,10 @@ describe('SuperDocDocument', () => {
     expect(result).toEqual({ ok: true });
     expect(calls).toEqual([
       {
-        operationId: 'doc.format.apply',
+        operationId: 'doc.formatRange',
         params: {
           target,
-          inline: { bold: true, italic: false },
+          properties: { bold: true, italic: false },
           changeMode: 'tracked',
           dryRun: true,
         },
@@ -84,82 +84,29 @@ describe('SuperDocClient handle lifecycle', () => {
 });
 
 describe('dispatchSuperDocTool', () => {
-  test('dispatches against root-bound document methods', async () => {
-    const calls: unknown[] = [];
-    const args = { select: { type: 'text', pattern: 'termination' } };
-    const documentHandle = {
-      query: {
-        match: async (args: unknown) => {
-          calls.push(args);
-          return { ok: true };
-        },
-      },
-    } as unknown as BoundDocApi;
-
-    const result = await dispatchSuperDocTool(documentHandle, 'superdoc_search', args);
-
-    expect(result).toEqual({ ok: true });
-    expect(calls).toEqual([args]);
+  test('rejects an unknown tool name with TOOL_DISPATCH_NOT_FOUND', async () => {
+    const documentHandle = {} as unknown as BoundDocApi;
+    try {
+      await dispatchSuperDocTool(documentHandle, 'superdoc_unknown_tool', {});
+      throw new Error('Expected dispatchSuperDocTool to reject unknown tool.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SuperDocCliError);
+      expect((error as SuperDocCliError).code).toBe('TOOL_DISPATCH_NOT_FOUND');
+    }
   });
 
-  test('rejects legacy doc/session targeting args', async () => {
-    const documentHandle = {
-      query: {
-        match: async () => ({ ok: true }),
-      },
-    } as unknown as BoundDocApi;
-
+  test('rejects non-object args with INVALID_ARGUMENT', async () => {
+    const documentHandle = {} as unknown as BoundDocApi;
     try {
-      await dispatchSuperDocTool(documentHandle, 'superdoc_search', { doc: './contract.docx' });
-      throw new Error('Expected dispatchSuperDocTool to reject legacy doc/session args.');
+      await dispatchSuperDocTool(
+        documentHandle,
+        'superdoc_inspect',
+        'not-an-object' as unknown as Record<string, unknown>,
+      );
+      throw new Error('Expected dispatchSuperDocTool to reject non-object args.');
     } catch (error) {
       expect(error).toBeInstanceOf(SuperDocCliError);
       expect((error as SuperDocCliError).code).toBe('INVALID_ARGUMENT');
     }
-  });
-
-  test('strips obviously corrupted nested keys before dispatch', async () => {
-    const calls: unknown[] = [];
-    const documentHandle = {
-      mutations: {
-        apply: async (args: unknown) => {
-          calls.push(args);
-          return { ok: true };
-        },
-      },
-    } as unknown as BoundDocApi;
-
-    const args = {
-      action: 'apply',
-      atomic: true,
-      changeMode: 'tracked',
-      steps: [
-        {
-          id: 'r1',
-          op: 'text.rewrite',
-          where: { by: 'block', nodeType: 'paragraph', nodeId: '6F228706' },
-          args: { replacement: { text: 'Replacement clause' } },
-          '},{': ':',
-        },
-      ],
-    };
-
-    const result = await dispatchSuperDocTool(documentHandle, 'superdoc_mutations', args);
-
-    expect(result).toEqual({ ok: true });
-    expect(calls).toEqual([
-      {
-        atomic: true,
-        changeMode: 'tracked',
-        steps: [
-          {
-            id: 'r1',
-            op: 'text.rewrite',
-            where: { by: 'block', nodeType: 'paragraph', nodeId: '6F228706' },
-            args: { replacement: { text: 'Replacement clause' } },
-          },
-        ],
-      },
-    ]);
   });
 });

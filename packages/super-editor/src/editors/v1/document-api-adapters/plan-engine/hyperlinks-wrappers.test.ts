@@ -58,7 +58,7 @@ vi.mock('../helpers/hyperlink-mutation-helper.js', () => ({
   unwrapLink: vi.fn(() => true),
   deleteLinkedText: vi.fn(() => true),
   sanitizeHrefOrThrow: vi.fn((href: string) => {
-    if (href.startsWith('javascript:')) {
+    if (href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('vbscript:')) {
       throw Object.assign(new Error('Blocked href'), { code: 'INVALID_INPUT' });
     }
     return href;

@@ -116,12 +116,7 @@ export function SelectionPopover() {
     }
     const update = () => setRect(ui.selection.getAnchorRect({ placement: 'start' }));
     update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
+    return ui.viewport.observe(update);
   }, [ui, selection.empty, selection.target, selection.quotedText]);
 
   if (!rect) return null;
@@ -182,6 +177,17 @@ document.addEventListener('contextmenu', (event) => {
 
 The painted host is separate from the offscreen ProseMirror DOM. Reach for `getHost()` when you need the element a `MouseEvent.target` would resolve to inside the editor.
 
+## Get the scroll container
+
+Use `ui.viewport.getScrollContainer()` when your UI needs to scroll the editor or attach scroll listeners. It returns `null` when the page window is the scroller.
+
+```ts
+const scroller = ui.viewport.getScrollContainer();
+(scroller ?? window).scrollTo({ top: 0, behavior: 'smooth' });
+```
+
+If you cache rects from `getRect`, subscribe to `ui.viewport.observe(() => remeasure())` and re-query them when geometry changes.
+
 ## The right-click bundle
 
 `ui.viewport.contextAt({ x, y })` composes the four primitives above into one bundle. Use it for custom right-click menus where the same shape filters items and runs handlers. See [Custom right-click menu](/editor/custom-ui/context-menu) for the full pattern.
@@ -231,6 +237,14 @@ if (result.success) {
 }
 ```
 
+For a body text range, pass the same `TextAddress` or `TextTarget` shape you get from selection and Document API calls:
+
+```ts
+const result = ui.viewport.getRect({
+  target: { kind: 'text', blockId: 'p-123', range: { start: 8, end: 21 } },
+});
+```
+
 Rects are plain values in viewport coordinates. Multi-page or multi-line targets return `rects` carrying every painted occurrence in document order.
 
 `success: false` reasons:
@@ -245,6 +259,6 @@ Rects are plain values in viewport coordinates. Multi-page or multi-line targets
 ## Trade-offs
 
 - The selection slice updates on every editor change. Subscribe via the typed hook, not via raw `ui.select(...)`, so the controller can dedupe by shallow equality.
-- `getRect`, `getRects`, `getAnchorRect`, `entityAt`, and `positionAt` are synchronous and DOM-driven. Run them inside a `useLayoutEffect` if you need them to settle before paint. Text-anchored `getRect` targets are deferred until story-aware text resolution lands.
+- `getRect`, `getRects`, `getAnchorRect`, `entityAt`, and `positionAt` are synchronous and DOM-driven. Run them inside a `useLayoutEffect` if you need them to settle before paint. Body text-range `getRect` targets are supported; header, footer, footnote, and endnote text targets are deferred until story-aware text resolution lands.
 - `scrollIntoView` honors `behavior: 'smooth'` for body content. Non-body entities (header / footer / footnote / endnote) snap to view because story activation has to mount the surface synchronously before alignment. If smooth animation across non-body entities matters, scroll the editor surface yourself first with `behavior: 'smooth'`, then call `scrollIntoView` to land the entity.
 - `contextAt({ x, y })` always returns a bundle. Non-numeric coords coerce to `(0, 0)`, which is a real point and may sit inside the painted host. Pass real coordinates if you want the result to reflect a specific click.

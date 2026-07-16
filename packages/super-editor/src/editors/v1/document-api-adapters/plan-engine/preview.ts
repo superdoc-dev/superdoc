@@ -16,7 +16,7 @@ import type {
 import type { Editor } from '../../core/Editor.js';
 import { checkRevision, getRevision } from './revision-tracker.js';
 import { compilePlan } from './compiler.js';
-import { runMutationsOnTransaction } from './executor.js';
+import { applyMutationPlanMeta, runMutationsOnTransaction } from './executor.js';
 import { planError, PlanError } from './errors.js';
 
 export function previewPlan(editor: Editor, input: MutationsPreviewInput): MutationsPreviewOutput {
@@ -34,18 +34,31 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
   let evaluatedRevision = getRevision(editor);
 
   try {
-    // Phase 1: Compile — resolve selectors against pre-mutation snapshot
-    const compiled = compilePlan(editor, input.steps);
+    // Phase 1: Compile — resolve selectors against pre-mutation snapshot.
+    //
+    // Preview is documented as non-mutating, so we pass `skipIdentityRepair`
+    // to suppress the runtime paraId repair dispatch. If the doc has
+    // duplicate identities, `compilePlan` still throws
+    // `DOCUMENT_IDENTITY_CONFLICT` (caught below and surfaced as a
+    // PreviewFailure). The mutation path (`executeCompiledPlan`) does run
+    // the repair, so calling `mutations.apply` on the same state recovers
+    // automatically.
+    const compiled = compilePlan(editor, input.steps, {
+      skipIdentityRepair: true,
+      selectTextModel: input.changeMode === 'tracked' ? 'raw' : 'visible',
+    });
     evaluatedRevision = compiled.compiledRevision;
     currentPhase = 'execute';
 
     // Phase 2: Execute on ephemeral transaction (never dispatched)
     const tr = editor.state.tr;
+    const changeMode = input.changeMode ?? 'direct';
+    applyMutationPlanMeta(tr, compiled, changeMode);
 
     // Run mutations without throwing on assert failure — collect failures instead
     const { stepOutcomes, assertFailures } = runMutationsOnTransaction(editor, tr, compiled, {
       throwOnAssertFailure: false,
-      changeMode: input.changeMode ?? 'direct',
+      changeMode,
       isPreview: true,
     });
 

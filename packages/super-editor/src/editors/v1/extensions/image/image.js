@@ -242,6 +242,16 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {{amt: number}} [alphaModFix] - DrawingML fixed alpha adjustment from a:alphaModFix
+       * @private
+       */
+      alphaModFix: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
        * @private
        */
@@ -295,6 +305,16 @@ export const Image = Node.create({
           if (scaleStyle) style += ` ${scaleStyle}`;
           return { style };
         },
+      },
+
+      shapeClipPath: {
+        default: null,
+        rendered: false,
+      },
+
+      objectFit: {
+        default: null,
+        rendered: false,
       },
 
       size: {

@@ -9,22 +9,50 @@ The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files.
 
 ## How it works
 
-The MCP server runs as a local subprocess, communicating over stdio. It manages document sessions in memory: each `superdoc_open` creates an Editor instance, and all subsequent operations run against that in-memory state until you `superdoc_save`.
+Your MCP client spawns the server as a local subprocess and talks to it over stdio. The server embeds the SuperDoc document engine — the same engine the browser editor uses — and manages documents as in-memory **sessions**: `superdoc_open` loads a file and returns a `session_id`, every tool call targets that session, and nothing touches disk until `superdoc_save`.
 
-```
-AI Agent (Claude, Cursor, Windsurf)
-  │ MCP protocol (stdio)
-  ▼
-@superdoc-dev/mcp
-  │ Document API
-  ▼
-SuperDoc Editor (in-memory)
-  │ export
-  ▼
-.docx file on disk
+```mermaid
+flowchart LR
+    subgraph client["Your MCP client"]
+        AGENT["AI agent<br/><i>Claude Code · Claude Desktop<br/>Cursor · Windsurf</i>"]
+    end
+    subgraph server["@superdoc-dev/mcp — local subprocess"]
+        direction TB
+        TOOLS["Registered tools<br/><i>lifecycle + preset surface</i>"]
+        SM["Session manager<br/><i>session_id → live document</i>"]
+        ENGINE["Document engine (in-memory)<br/><i>same engine as the SuperDoc editor</i>"]
+        TOOLS --> SM --> ENGINE
+    end
+    DISK[(".docx files<br/>on disk")]
+
+    AGENT <-->|"MCP protocol (stdio)<br/>tools/list · tools/call"| TOOLS
+    DISK -->|"superdoc_open"| ENGINE
+    ENGINE -->|"superdoc_save"| DISK
 ```
 
-The MCP server runs locally: SuperDoc never uploads your files. The AI agent you connect still sends content to its own provider.
+A typical conversation, end to end:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as AI agent
+    participant S as MCP server
+    participant D as .docx on disk
+
+    A->>S: superdoc_open {path: "contract.docx"}
+    S->>D: read file into an in-memory session
+    S-->>A: session_id
+    A->>S: superdoc_inspect / read tools {session_id}
+    S-->>A: document structure
+    A->>S: edit tools {session_id, ...}
+    Note over S: edits apply to the live session —<br/>tracked changes, comments, formatting
+    S-->>A: results / receipts
+    A->>S: superdoc_save {session_id}
+    S->>D: write the updated .docx
+    A->>S: superdoc_close {session_id}
+```
+
+Everything runs locally — SuperDoc never uploads your files. The AI agent you connect still sends document content to its own model provider as tool results.
 
 ## Setup
 
@@ -82,12 +110,27 @@ Install once. Your MCP client spawns the server automatically on each conversati
 
 ## Tools
 
-The MCP server exposes 12 tools total:
+The server registers one of two tool surfaces, selected by the `MCP_PRESET` environment variable. All tools except `superdoc_open` take a `session_id` from `superdoc_open`.
 
-- 3 lifecycle tools: `superdoc_open`, `superdoc_save`, `superdoc_close`
-- 9 grouped intent tools generated from the SDK catalog
+| | Default (`legacy`) | `MCP_PRESET=core` — recommended |
+| --- | --- | --- |
+| Tools | 13: lifecycle + 10 grouped intent tools | 5: lifecycle + `superdoc_inspect` + `superdoc_perform_action` (40 named actions) |
+| Style | Low-level: search for handles, edit by address | High-level verbs with deterministic targeting and verifiable receipts |
+| Reference | tables below | [core preset reference](/ai/agents/core-preset) |
 
-All tools except `superdoc_open` take a `session_id` from `superdoc_open`.
+To use the core surface, add the env to your client config:
+
+```json
+{
+  "mcpServers": {
+    "superdoc": {
+      "command": "npx",
+      "args": ["@superdoc-dev/mcp"],
+      "env": { "MCP_PRESET": "core" }
+    }
+  }
+}
+```
 
 ### Lifecycle
 
@@ -99,17 +142,22 @@ All tools except `superdoc_open` take a `session_id` from `superdoc_open`.
 
 ### Intent tools
 
+<Note>
+These are the **legacy preset's** tools (the default surface). With `MCP_PRESET=core` the server registers `superdoc_inspect` and `superdoc_perform_action` instead — see the [core preset reference](/ai/agents/core-preset) for its 40 actions, selectors, and receipts.
+</Note>
+
 | Tool | Actions | Description |
 | --- | --- | --- |
-| `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
-| `superdoc_search` | `match` | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_get_content` | `text`, `markdown`, `html`, `blocks`, `extract`, `info` | Read document content in different formats |
+| `superdoc_search` | _(single action)_ | Find text or nodes and return handles or addresses for later edits |
 | `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
-| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing` | Apply inline or paragraph formatting |
-| `superdoc_create` | `paragraph`, `heading` | Create structural block elements |
-| `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing`, `set_direction`, `set_flow_options` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading`, `table` | Create structural block elements |
+| `superdoc_list` | `insert`, `create`, `attach`, `detach`, `delete`, `merge`, `split`, `indent`, `outdent`, `set_level`, `set_type`, `set_value`, `continue_previous` | Create and manipulate lists |
 | `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
 | `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
 | `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
+| `superdoc_table` | `delete`, `delete_column`, `delete_row`, `insert_column`, `insert_row`, `merge_cells`, `set_borders`, `set_cell`, `set_cell_text`, `set_column`, `set_layout`, `set_options`, `set_row`, `set_row_options`, `set_shading`, `set_style_options`, `unmerge_cells` | Modify table structure, content, and styling |
 
 Multi-action tools use an `action` argument to select the underlying operation. `superdoc_search` is a single-action tool and does not require `action`.
 

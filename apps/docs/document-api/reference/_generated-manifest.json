@@ -197,6 +197,7 @@
     "apps/docs/document-api/reference/format/paragraph/set-flow-options.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-keep-options.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-numbering.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-outline-level.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-shading.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-spacing.mdx",
@@ -336,6 +337,7 @@
     "apps/docs/document-api/reference/metadata/update.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
+    "apps/docs/document-api/reference/mutations/plan-execute.mdx",
     "apps/docs/document-api/reference/mutations/preview.mdx",
     "apps/docs/document-api/reference/permission-ranges/create.mdx",
     "apps/docs/document-api/reference/permission-ranges/get.mdx",
@@ -426,6 +428,8 @@
     "apps/docs/document-api/reference/tables/split-cell.mdx",
     "apps/docs/document-api/reference/tables/split.mdx",
     "apps/docs/document-api/reference/tables/unmerge-cells.mdx",
+    "apps/docs/document-api/reference/templates/apply.mdx",
+    "apps/docs/document-api/reference/templates/index.mdx",
     "apps/docs/document-api/reference/toc/configure.mdx",
     "apps/docs/document-api/reference/toc/edit-entry.mdx",
     "apps/docs/document-api/reference/toc/get-entry.mdx",
@@ -651,7 +655,7 @@
     {
       "aliasMemberPaths": [],
       "key": "mutations",
-      "operationIds": ["mutations.preview", "mutations.apply"],
+      "operationIds": ["mutations.preview", "mutations.apply", "plan.execute"],
       "pagePath": "apps/docs/document-api/reference/mutations/index.mdx",
       "title": "Mutations"
     },
@@ -677,7 +681,8 @@
         "format.paragraph.setShading",
         "format.paragraph.clearShading",
         "format.paragraph.setDirection",
-        "format.paragraph.clearDirection"
+        "format.paragraph.clearDirection",
+        "format.paragraph.setNumbering"
       ],
       "pagePath": "apps/docs/document-api/reference/format/paragraph/index.mdx",
       "title": "Paragraph Formatting"
@@ -688,6 +693,13 @@
       "operationIds": ["styles.paragraph.setStyle", "styles.paragraph.clearStyle"],
       "pagePath": "apps/docs/document-api/reference/styles/paragraph/index.mdx",
       "title": "Paragraph Styles"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "templates",
+      "operationIds": ["templates.apply"],
+      "pagePath": "apps/docs/document-api/reference/templates/index.mdx",
+      "title": "Templates"
     },
     {
       "aliasMemberPaths": [],
@@ -1078,5 +1090,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "5f439c4117bbb2e55f227e7711df415c1173f8c476954c6e412a4b8b45edd1a3"
+  "sourceHash": "2954ad7f0581c8cbaa8903cf227429d4bc1c0ca550a663f3b5bd28449323717f"
 }

@@ -48,6 +48,26 @@ export const DOM_CLASS_NAMES = {
    */
   SDT_GROUP_HOVER: 'sdt-group-hover',
 
+  /**
+   * Selected ancestor/wrapper highlight applied to fragments that participate
+   * in a selected block SDT container but are not necessarily the selected SDT
+   * identity themselves.
+   */
+  SDT_CONTAINER_SELECTED: 'sdt-container-selected',
+
+  /**
+   * Applied to an ancestor block SDT when a nested child SDT is the exact
+   * selection. This keeps ancestor badges visible without marking the ancestor
+   * as the active ProseMirror node.
+   */
+  SDT_ANCESTOR_SELECTED: 'sdt-ancestor-selected',
+
+  /** Paragraph fragment rendered as a Table of Contents entry. */
+  TOC_ENTRY: 'superdoc-toc-entry',
+
+  /** TOC analogue of `SDT_GROUP_HOVER`, applied to every fragment sharing a `data-toc-id`. */
+  TOC_GROUP_HOVER: 'toc-group-hover',
+
   /** Block-level image fragment (ImageBlock). */
   IMAGE_FRAGMENT: 'superdoc-image-fragment',
 

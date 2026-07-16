@@ -3,6 +3,8 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
 import { auth } from "express-oauth2-jwt-bearer";
@@ -118,6 +120,15 @@ const debugAuth = (req, res, next) => {
 
 
 app.use(cors());
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// Throttle the document storage/retrieval endpoints (GCS read + write) BEFORE the
+// 50mb body parsers, so over-limit POSTs are rejected without parsing a large body.
+// Static assets, the editor page, and health checks are not throttled. The
+// high-frequency edit path is the WebSocket, which bypasses Express entirely.
+const documentRateLimit = rateLimit({ windowMs: 60_000, limit: 20 });
+app.use("/document", documentRateLimit);
+
 app.use(express.json({ limit: "50mb" })); // Increase limit for document uploads
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use('/public', express.static(path.join(__dirname, 'public')));

@@ -46,10 +46,9 @@ vi.mock('../../Editor', () => ({
   })),
 }));
 
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: vi.fn((_: unknown, opts?: any) => {
       if (typeof opts?.blockIdPrefix === 'string' && opts.blockIdPrefix.startsWith('footnote-')) {
         return {
@@ -61,7 +60,7 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
       }
       return { blocks: [], bookmarks: new Map() };
     }),
-  };
+  });
 });
 
 vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
@@ -327,5 +326,11 @@ describe('PresentationEditor - footnote number marker PM position', () => {
       expect.arrayContaining(['footnote-body-1', 'footnote-separator-page-1-col-0']),
     );
     expect(lastResolveInput.measures).toHaveLength(lastResolveInput.blocks.length);
+
+    const resolveSnapshot = editor.getLayoutResolveSnapshot();
+    expect(resolveSnapshot.blocks.map((block) => block.id)).toEqual(
+      expect.arrayContaining(['footnote-body-1', 'footnote-separator-page-1-col-0']),
+    );
+    expect(resolveSnapshot.measures).toHaveLength(resolveSnapshot.blocks.length);
   });
 });

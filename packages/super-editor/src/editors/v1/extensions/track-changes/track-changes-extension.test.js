@@ -1,8 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { undoDepth } from 'prosemirror-history';
 import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
+import { CanonicalChangeType } from './review-model/mark-metadata.js';
 import { initTestEditor, hasAnyMark } from '@tests/helpers/helpers.js';
 
 const commands = TrackChanges.config.addCommands();
@@ -60,6 +62,29 @@ describe('TrackChanges extension commands', () => {
     });
 
     return text;
+  };
+  const getMarkAttrsForText = (doc, markName, text) => {
+    let attrs = null;
+
+    doc.descendants((node) => {
+      if (!node.isText || attrs || !node.text?.includes(text)) return;
+      const mark = node.marks.find((candidate) => candidate.type.name === markName);
+      if (mark) attrs = mark.attrs;
+    });
+
+    return attrs;
+  };
+  const getMarkIds = (doc, markName) => {
+    const ids = new Set();
+
+    doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name === markName && mark.attrs?.id) ids.add(mark.attrs.id);
+      });
+    });
+
+    return ids;
   };
 
   beforeEach(() => {
@@ -1136,7 +1161,20 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
-  it('interaction: composition at paragraph start replaces a dead-key placeholder in suggesting mode', async () => {
+  /**
+   * SD-2368: tracked-transaction rewriting is deferred while an IME
+   * composition is in flight (rewriting preedit updates into tracked inserts
+   * restructures the composing DOM node and Chrome aborts the composition).
+   * During composition the text applies raw; after compositionend the
+   * composed range is converted into a single tracked insertion.
+   *
+   * This replaces the earlier dead-key-placeholder simulation: the leftover
+   * `´` placeholder was a symptom of the mid-composition rewrite losing
+   * Chrome's composition range. With deferral the DOM is never rewritten
+   * mid-composition, so Chrome replaces the preedit in place (simulated here
+   * via the characterData update).
+   */
+  it('interaction: IME composition in suggesting mode defers tracking until compositionend', async () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -1152,28 +1190,317 @@ describe('TrackChanges extension commands', () => {
         return paragraph?.querySelector('.sd-paragraph-content') ?? paragraph;
       };
       const getBreak = () => getContainer()?.querySelector('br.ProseMirror-trailingBreak');
+      const hasTrackInsert = () => {
+        let marked = false;
+        interactionEditor.state.doc.descendants((node) => {
+          if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) marked = true;
+        });
+        return marked;
+      };
 
       view.focus();
       view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
 
       expect(getContainer()).toBeTruthy();
 
-      getContainer().insertBefore(document.createTextNode('´'), getBreak() ?? null);
+      const preedit = document.createTextNode('´');
+      getContainer().insertBefore(preedit, getBreak() ?? null);
       view.domObserver.flush();
       await Promise.resolve();
 
-      getContainer().insertBefore(document.createTextNode('é'), getBreak() ?? null);
+      // Mid-composition: raw text, no tracked insert yet (deferral active).
+      expect(interactionEditor.state.doc.textContent).toBe('´');
+      expect(hasTrackInsert()).toBe(false);
+
+      // Chrome replaces the preedit in place when the dead key resolves.
+      const liveText = getContainer().firstChild;
+      liveText.textContent = 'é';
       view.domObserver.flush();
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('é');
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Post-composition flush converts the composed range into a tracked insert.
+      expect(interactionEditor.state.doc.textContent).toBe('é');
+      expect(hasTrackInsert()).toBe(true);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: deferred IME tracking flush merges into the composition undo event', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const baselineUndoDepth = undoDepth(interactionEditor.state);
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('你').setMeta('composition', 1));
+      await Promise.resolve();
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
+      // The mark flush must share the composition's undo event: a first undo
+      // that only strips suggestion marks would leave the text behind as an
+      // untracked edit (and desync the unified history coordinator).
+      expect(undoDepth(interactionEditor.state)).toBe(baselineUndoDepth + 1);
+
+      interactionEditor.commands.undo();
+
+      expect(interactionEditor.state.doc.textContent).toBe('');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: IME composition replacing a selection stays untracked until compositionend', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>replace me</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+      view.dispatch(
+        interactionEditor.state.tr.replaceSelectionWith(interactionEditor.schema.text('你')).setMeta('composition', 1),
+      );
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('你');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('');
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('replace me');
+
+      const insertedAttrs = getMarkAttrsForText(interactionEditor.state.doc, TrackInsertMarkName, '你');
+      const deletedAttrs = getMarkAttrsForText(interactionEditor.state.doc, TrackDeleteMarkName, 'replace me');
+      expect(insertedAttrs?.id).toBeTruthy();
+      expect(deletedAttrs?.id).toBe(insertedAttrs.id);
+      expect(insertedAttrs?.changeType).toBe(CanonicalChangeType.Replacement);
+      expect(deletedAttrs?.changeType).toBe(CanonicalChangeType.Replacement);
+      expect(insertedAttrs?.replacementGroupId).toBe(insertedAttrs.id);
+      expect(deletedAttrs?.replacementGroupId).toBe(insertedAttrs.id);
+      expect(insertedAttrs?.replacementSideId).toBe(`${insertedAttrs.id}#inserted`);
+      expect(deletedAttrs?.replacementSideId).toBe(`${insertedAttrs.id}#deleted`);
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: IME composition blur flushes even when ProseMirror stays composing', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('é').setMeta('composition', 1));
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('é');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('');
+
+      Object.defineProperty(view, 'composing', { value: true, configurable: true });
+      view.dom.dispatchEvent(new FocusEvent('blur'));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('é');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: IME composition inside an existing insertion does not create a nested revision', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const { schema } = interactionEditor;
+      const existingInsertMark = schema.marks[TrackInsertMarkName].create({
+        id: 'existing-insertion',
+        author: 'Track Tester',
+        authorEmail: 'track@example.com',
+      });
+      const markedState = EditorState.create({
+        schema,
+        doc: schema.nodes.doc.create(null, [
+          schema.nodes.paragraph.create(null, schema.text('existing', [existingInsertMark])),
+        ]),
+        plugins: interactionEditor.state.plugins,
+      });
+      interactionEditor._state = markedState;
+      interactionEditor.view.updateState(markedState);
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      view.dispatch(
+        interactionEditor.state.tr.setSelection(TextSelection.create(interactionEditor.state.doc, textRange.from + 2)),
+      );
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+      view.dispatch(interactionEditor.state.tr.insertText('é').setMeta('composition', 1));
       await Promise.resolve();
 
       view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(interactionEditor.state.doc.textContent).toBe('é');
+      expect(interactionEditor.state.doc.textContent).toBe('exéisting');
+      expect(getMarkAttrsForText(interactionEditor.state.doc, TrackInsertMarkName, 'é')?.id).toBe('existing-insertion');
+      expect(getMarkIds(interactionEditor.state.doc, TrackInsertMarkName)).toEqual(new Set(['existing-insertion']));
     } finally {
       interactionEditor.destroy();
     }
+  });
+
+  it('interaction: IME composition maps deferred deletion through appended cleanup transactions', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const { schema } = interactionEditor;
+      const runWrappedParagraph = schema.nodes.paragraph.create(null, [
+        schema.nodes.run.create(),
+        schema.nodes.run.create(null, schema.text('replace me')),
+      ]);
+      const runWrappedState = EditorState.create({
+        schema,
+        doc: schema.nodes.doc.create(null, [runWrappedParagraph]),
+        plugins: interactionEditor.state.plugins,
+      });
+      interactionEditor._state = runWrappedState;
+      interactionEditor.view.updateState(runWrappedState);
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const textRange = getSubstringRange(interactionEditor.state.doc, 'replace me');
+      expect(textRange).toBeDefined();
+
+      view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+      view.dispatch(
+        interactionEditor.state.tr.replaceSelectionWith(interactionEditor.schema.text('你')).setMeta('composition', 1),
+      );
+      await Promise.resolve();
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('你replace me');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('你');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('replace me');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: IME composition in editing mode preserves existing tracked review state', async () => {
+    const replaceTrackedDeletion = async ({ composition }) => {
+      const { editor: interactionEditor } = initTestEditor({
+        mode: 'text',
+        content: '<p>ABCDE</p>',
+        user: { name: 'Track Tester', email: 'track@example.com' },
+      });
+
+      try {
+        const fullTextRange = getFirstTextRange(interactionEditor.state.doc);
+        interactionEditor.commands.insertTrackedChange({ from: fullTextRange.from, to: fullTextRange.to, text: '' });
+
+        const deletionRange = getSubstringRange(interactionEditor.state.doc, 'ABCDE');
+        interactionEditor.view.dispatch(
+          interactionEditor.state.tr.setSelection(
+            TextSelection.create(interactionEditor.state.doc, deletionRange.from, deletionRange.to),
+          ),
+        );
+
+        if (composition) {
+          interactionEditor.view.dom.dispatchEvent(
+            new CompositionEvent('compositionstart', { data: '', bubbles: true }),
+          );
+        }
+
+        const tr = interactionEditor.state.tr.replaceSelectionWith(interactionEditor.schema.text('你'));
+        if (composition) tr.setMeta('composition', 1);
+        interactionEditor.view.dispatch(tr);
+
+        if (composition) {
+          interactionEditor.view.dom.dispatchEvent(
+            new CompositionEvent('compositionend', { data: '你', bubbles: true }),
+          );
+          await Promise.resolve();
+          await Promise.resolve();
+        }
+
+        return {
+          text: interactionEditor.state.doc.textContent,
+          deletedText: getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName),
+          insertedText: getMarkedText(interactionEditor.state.doc, TrackInsertMarkName),
+        };
+      } finally {
+        interactionEditor.destroy();
+      }
+    };
+
+    const expected = await replaceTrackedDeletion({ composition: false });
+    const actual = await replaceTrackedDeletion({ composition: true });
+
+    expect(actual).toEqual(expected);
+    expect(actual.deletedText).toBe('ABCDE');
   });
 
   it('interaction: setLink in suggesting mode emits hyperlink-specific tracked change messaging', () => {

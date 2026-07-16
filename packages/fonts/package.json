@@ -1,0 +1,43 @@
+{
+  "name": "@superdoc-dev/fonts",
+  "version": "0.2.0",
+  "description": "Optional bundled metric-compatible font substitutes for SuperDoc, shipped as bundler-resolvable assets.",
+  "type": "module",
+  "license": "SEE LICENSE IN assets/LICENSES.md",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "assets"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "sync": "node scripts/sync-assets.mjs",
+    "generate": "node scripts/generate-asset-urls.mjs && pnpm exec tsx scripts/generate-bundled-families.ts",
+    "check:families": "pnpm exec tsx scripts/check-bundled-families.ts",
+    "build:cdn": "vite build",
+    "build": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vite build",
+    "prepare": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

@@ -5,6 +5,7 @@ import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
 import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
+import type { FlowBlock } from '@superdoc/contracts';
 import { NodeSelection } from 'prosemirror-state';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
@@ -108,6 +109,13 @@ const {
             size: 10,
           },
           textBetween: vi.fn(() => 'Lazy note session'),
+          // Mirror the real PM doc contract: this stub doc reports text via
+          // textBetween, so descendants must walk a matching text node (the
+          // note-session empty watch inspects it via isNoteContentEmpty).
+          descendants: vi.fn((cb: (node: unknown) => boolean | void) => {
+            cb({ isText: false, isAtom: false, type: { name: 'paragraph' } });
+            cb({ isText: true, isAtom: true, text: 'Lazy note session', type: { name: 'text' } });
+          }),
         },
       },
       options: {},
@@ -223,6 +231,12 @@ const bookmarkResolverMocks = vi.hoisted(() => ({
   resolveBookmarkTarget: vi.fn(),
 }));
 
+const trackedChangeResolverMocks = vi.hoisted(() => ({
+  resolveTrackedChange: vi.fn(() => null),
+  resolveTrackedChangeInStory: vi.fn(() => null),
+  resolveTrackedChangeNavigationSelection: vi.fn(() => null),
+}));
+
 // Mock PositionHitResolver
 vi.mock('../input/PositionHitResolver.js', () => ({
   resolvePointerPositionHit: (...args: unknown[]) => mockResolvePointerPositionHit(...args),
@@ -231,81 +245,97 @@ vi.mock('../input/PositionHitResolver.js', () => ({
 // Mock Editor class
 vi.mock('../../Editor', () => {
   return {
-    Editor: vi.fn().mockImplementation(() => ({
-      setDocumentMode: vi.fn(),
-      setOptions: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      destroy: vi.fn(),
-      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-      isEditable: true,
-      state: {
-        selection: {
-          from: 0,
-          to: 0,
-          $from: {
-            depth: 0,
-            node: vi.fn(),
+    Editor: vi.fn().mockImplementation((options: { content?: unknown } = {}) => {
+      const contentAttrs =
+        options.content && typeof options.content === 'object' && !Array.isArray(options.content)
+          ? (((options.content as { attrs?: Record<string, unknown> }).attrs ?? {}) as Record<string, unknown>)
+          : {};
+
+      return {
+        setDocumentMode: vi.fn(),
+        setOptions: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        destroy: vi.fn(),
+        getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+        isEditable: true,
+        state: {
+          selection: {
+            from: 0,
+            to: 0,
+            $from: {
+              depth: 0,
+              node: vi.fn(),
+            },
+          },
+          doc: {
+            attrs: contentAttrs,
+            nodeSize: 100,
+            content: {
+              size: 100,
+            },
+            descendants: vi.fn(),
+            nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
+              // Simulate a simple document with one text block at position 0.
+              callback({ isTextblock: true }, 0);
+            }),
+            resolve: vi.fn((pos: number) => ({
+              pos,
+              depth: 0,
+              parent: { inlineContent: true },
+              node: vi.fn(),
+              min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
+              max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
+            })),
+          },
+          tr: {
+            setSelection: vi.fn().mockReturnThis(),
           },
         },
-        doc: {
-          nodeSize: 100,
-          content: {
-            size: 100,
-          },
-          descendants: vi.fn(),
-          nodesBetween: vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
-            // Simulate a simple document with one text block at position 0.
-            callback({ isTextblock: true }, 0);
-          }),
-          resolve: vi.fn((pos: number) => ({
-            pos,
-            depth: 0,
-            parent: { inlineContent: true },
-            node: vi.fn(),
-            min: vi.fn((other: { pos: number }) => Math.min(pos, other.pos)),
-            max: vi.fn((other: { pos: number }) => Math.max(pos, other.pos)),
-          })),
-        },
-        tr: {
-          setSelection: vi.fn().mockReturnThis(),
-        },
-      },
-      view: {
-        dom: {
-          dispatchEvent: vi.fn(() => true),
+        view: {
+          // Real element (matching createSectionEditor) so addEventListener-based
+          // wiring such as SD-2368 composition deferral works; dispatchEvent stays
+          // a spy but performs real dispatch so attached listeners fire.
+          dom: (() => {
+            const dom = document.createElement('div');
+            // The bridge refuses to forward to disconnected targets; pretend the
+            // hidden editor DOM is mounted without attaching it (keeps dispatched
+            // events from bubbling to the bridge's window-fallback listeners).
+            Object.defineProperty(dom, 'isConnected', { value: true });
+            vi.spyOn(dom, 'dispatchEvent');
+            vi.spyOn(dom, 'focus').mockImplementation(() => {});
+            return dom;
+          })(),
           focus: vi.fn(),
+          dispatch: vi.fn(),
         },
-        focus: vi.fn(),
-        dispatch: vi.fn(),
-      },
-      options: {
-        documentId: 'test-doc',
-        element: document.createElement('div'),
-      },
-      converter: mockEditorConverterStore.current,
-      storage: {
-        image: {
-          media: mockEditorConverterStore.mediaFiles,
+        options: {
+          documentId: 'test-doc',
+          element: document.createElement('div'),
         },
-      },
-    })),
+        converter: mockEditorConverterStore.current,
+        storage: {
+          image: {
+            media: mockEditorConverterStore.mediaFiles,
+          },
+        },
+      };
+    }),
   };
 });
 
-// Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, {
     toFlowBlocks: mockToFlowBlocks,
     FlowBlockCache: MockFlowBlockCache,
-  };
+  });
 });
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
+  measureCache: { clear: vi.fn() },
   normalizeMargin: (value: number | undefined, fallback: number) =>
     Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
@@ -324,6 +354,8 @@ vi.mock('@superdoc/layout-bridge', () => ({
     extractFooterId: vi.fn(() => 'rId-footer-default'),
   })),
   buildMultiSectionIdentifier: vi.fn(() => ({ sections: [] })),
+  buildEffectiveHeaderFooterRefsBySection: vi.fn(() => new Map()),
+  collectReferencedHeaderFooterRIds: vi.fn(() => new Set()),
   getHeaderFooterTypeForSection: vi.fn(() => 'default'),
   getHeaderFooterType: vi.fn((_pageNumber, _identifier, _options) => {
     // Returns the type of header/footer for a given page
@@ -364,6 +396,7 @@ vi.mock('@superdoc/painter-dom', () => ({
 // Mock measuring-dom
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
+  clearTextMeasurementCaches: vi.fn(),
 }));
 
 vi.mock('@superdoc/layout-resolved', () => ({
@@ -389,6 +422,17 @@ vi.mock('../../../document-api-adapters/helpers/bookmark-resolver.js', async (im
   };
 });
 
+vi.mock('../../../document-api-adapters/helpers/tracked-change-resolver.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../document-api-adapters/helpers/tracked-change-resolver.js')>();
+  return {
+    ...actual,
+    resolveTrackedChange: trackedChangeResolverMocks.resolveTrackedChange,
+    resolveTrackedChangeInStory: trackedChangeResolverMocks.resolveTrackedChangeInStory,
+    resolveTrackedChangeNavigationSelection: trackedChangeResolverMocks.resolveTrackedChangeNavigationSelection,
+  };
+});
+
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -396,6 +440,7 @@ vi.mock('../../header-footer/EditorOverlayManager', () => ({
 describe('PresentationEditor', () => {
   let container: HTMLElement;
   let editor: PresentationEditor;
+  let originalBodyPageTokens: string | undefined;
 
   const makeNodeSelection = (from: number, to: number, node: Record<string, unknown>) => {
     const selection = Object.create(NodeSelection.prototype);
@@ -428,12 +473,16 @@ describe('PresentationEditor', () => {
   };
 
   beforeEach(() => {
+    originalBodyPageTokens = process.env.SD_BODY_PAGE_TOKENS;
+
     // Create a container element for the presentation editor
     container = document.createElement('div');
     document.body.appendChild(container);
 
     // Clear all mocks
     vi.clearAllMocks();
+    mockToFlowBlocks.mockReset();
+    mockToFlowBlocks.mockReturnValue({ blocks: [], bookmarks: new Map() });
     // Reset mockIncrementalLayout to default implementation (clearAllMocks doesn't reset mockResolvedValue)
     mockIncrementalLayout.mockReset();
     mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
@@ -450,12 +499,24 @@ describe('PresentationEditor', () => {
     bookmarkResolverMocks.findAllBookmarksInDocument.mockReset();
     bookmarkResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
     bookmarkResolverMocks.resolveBookmarkTarget.mockReset();
+    trackedChangeResolverMocks.resolveTrackedChange.mockReset();
+    trackedChangeResolverMocks.resolveTrackedChange.mockImplementation(() => null);
+    trackedChangeResolverMocks.resolveTrackedChangeInStory.mockReset();
+    trackedChangeResolverMocks.resolveTrackedChangeInStory.mockImplementation(() => null);
+    trackedChangeResolverMocks.resolveTrackedChangeNavigationSelection.mockReset();
+    trackedChangeResolverMocks.resolveTrackedChangeNavigationSelection.mockImplementation(() => null);
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
   });
 
   afterEach(() => {
+    if (originalBodyPageTokens === undefined) {
+      delete process.env.SD_BODY_PAGE_TOKENS;
+    } else {
+      process.env.SD_BODY_PAGE_TOKENS = originalBodyPageTokens;
+    }
+
     if (editor) {
       editor.destroy();
     }
@@ -492,6 +553,163 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
+  describe('document font config', () => {
+    it('registers configured families and maps before the first measure callback', async () => {
+      const order: string[] = [];
+      const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+      const originalFontFace = Object.getOwnPropertyDescriptor(window, 'FontFace');
+
+      class TestFontFace {
+        readonly status = 'unloaded';
+
+        constructor(public readonly family: string) {}
+
+        load(): Promise<TestFontFace> {
+          return Promise.resolve(this);
+        }
+      }
+
+      const fontSet = {
+        add: vi.fn((face: { family: string }) => {
+          if (face.family === 'Gelasio') order.push('custom-font-add');
+        }),
+        load: vi.fn(async () => [new TestFontFace('loaded')]),
+        check: vi.fn(() => true),
+      };
+
+      Object.defineProperty(document, 'fonts', { configurable: true, value: fontSet });
+      Object.defineProperty(window, 'FontFace', { configurable: true, value: TestFontFace });
+
+      try {
+        const block = {
+          kind: 'paragraph',
+          id: 'p-font-config',
+          runs: [{ kind: 'text', text: 'Hello', fontFamily: 'Georgia', fontSize: 12 }],
+        } as FlowBlock;
+
+        mockToFlowBlocks.mockReturnValueOnce({ blocks: [block], bookmarks: new Map() });
+        mockIncrementalLayout.mockImplementationOnce(
+          async (_previousBlocks, _previousLayout, blocks, _layoutOptions, measureBlock) => {
+            order.push('layout');
+            await (measureBlock as (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => unknown)(
+              blocks[0] as FlowBlock,
+              { maxWidth: 500, maxHeight: 700 },
+            );
+            return { layout: { pages: [] }, measures: [] };
+          },
+        );
+
+        editor = new PresentationEditor({
+          element: container,
+          fontAssets: {
+            families: [{ family: 'Gelasio', faces: [{ source: '/fonts/Gelasio-Regular.woff2' }] }],
+            map: { Georgia: 'Gelasio' },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        expect(order).toContain('custom-font-add');
+        expect(order.indexOf('custom-font-add')).toBeLessThan(order.indexOf('layout'));
+        const fontContext = mockMeasureBlock.mock.calls[0]?.[2] as
+          | {
+              resolvePhysical?: (family: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }) => string;
+            }
+          | undefined;
+        expect(fontContext?.resolvePhysical?.('Georgia', { weight: '400', style: 'normal' })).toBe('Gelasio');
+      } finally {
+        if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts);
+        else Reflect.deleteProperty(document, 'fonts');
+        if (originalFontFace) Object.defineProperty(window, 'FontFace', originalFontFace);
+        else Reflect.deleteProperty(window, 'FontFace');
+      }
+    });
+  });
+
+  describe('formatting marks repaint', () => {
+    it('passes body bookmarks to initial layout resolution when body page tokens are disabled', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'body-page-tokens-disabled-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockResolveLayout).toHaveBeenCalled());
+
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
+    });
+
+    it('preserves body bookmarks when repainting the current layout', async () => {
+      // Disabling PAGE/NUMPAGES convergence must not suppress PAGEREF bookmark resolution.
+      process.env.SD_BODY_PAGE_TOKENS = 'false';
+
+      const bookmarks = new Map([['target', 100]]);
+      const blocks = [
+        {
+          kind: 'paragraph',
+          id: 'source',
+          runs: [{ text: '5', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ];
+      const measures = [
+        {
+          kind: 'paragraph',
+          lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 1, width: 8, ascent: 8, descent: 2, lineHeight: 12 }],
+        },
+      ];
+      mockToFlowBlocks.mockReturnValue({ blocks, bookmarks });
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 800, h: 1000 },
+          pages: [{ number: 1, fragments: [{ kind: 'para', blockId: 'source', fromLine: 0, toLine: 1 }] }],
+        },
+        measures,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'formatting-marks-pageref-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      mockResolveLayout.mockClear();
+
+      editor.setShowFormattingMarks(true);
+
+      expect(mockResolveLayout).toHaveBeenCalledTimes(1);
+      expect(mockResolveLayout.mock.calls[0]?.[0]).toMatchObject({ bookmarks });
     });
   });
 
@@ -599,6 +817,102 @@ describe('PresentationEditor', () => {
       getSelectionUpdateHandler(editorInstance)();
 
       expect(sdtWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
+    });
+
+    it('marks child fragments as outer wrapper participants without selecting the child SDT', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'outer-sdt-selection-wraps-child-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const parentNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'parent-sdt' },
+        nodeSize: 30,
+      };
+      editorInstance.state.selection = makeNodeSelection(90, 120, parentNode);
+
+      const parentWrapper = document.createElement('div');
+      parentWrapper.className = 'superdoc-structured-content-block';
+      parentWrapper.dataset.sdtId = 'parent-sdt';
+      parentWrapper.dataset.pmStart = '90';
+      parentWrapper.dataset.pmEnd = '99';
+
+      const childWrapper = document.createElement('div');
+      childWrapper.className = 'superdoc-structured-content-block';
+      childWrapper.dataset.sdtId = 'child-sdt';
+      childWrapper.dataset.sdtContainerId = 'parent-sdt';
+      childWrapper.dataset.pmStart = '100';
+      childWrapper.dataset.pmEnd = '110';
+
+      container.querySelector('.presentation-editor__pages')?.append(parentWrapper, childWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(parentWrapper.classList.contains('ProseMirror-selectednode')).toBe(true);
+      expect(parentWrapper.classList.contains('sdt-container-selected')).toBe(true);
+      expect(parentWrapper.classList.contains('sdt-ancestor-selected')).toBe(false);
+      expect(childWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
+      expect(childWrapper.classList.contains('sdt-container-selected')).toBe(true);
+      expect(childWrapper.classList.contains('sdt-ancestor-selected')).toBe(false);
+    });
+
+    it('marks the outer wrapper as an ancestor when a nested child SDT is selected', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'inner-sdt-selection-selects-outer-wrapper-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      syncViewState(editorInstance);
+
+      const childNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'child-sdt' },
+        nodeSize: 10,
+      };
+      editorInstance.state.selection = makeNodeSelection(100, 110, childNode);
+
+      const parentWrapper = document.createElement('div');
+      parentWrapper.className = 'superdoc-structured-content-block';
+      parentWrapper.dataset.sdtId = 'parent-sdt';
+      parentWrapper.dataset.pmStart = '90';
+      parentWrapper.dataset.pmEnd = '99';
+
+      const childWrapper = document.createElement('div');
+      childWrapper.className = 'superdoc-structured-content-block';
+      childWrapper.dataset.sdtId = 'child-sdt';
+      childWrapper.dataset.sdtContainerId = 'parent-sdt';
+      childWrapper.dataset.pmStart = '100';
+      childWrapper.dataset.pmEnd = '110';
+
+      const siblingWrapper = document.createElement('div');
+      siblingWrapper.className = 'superdoc-structured-content-block';
+      siblingWrapper.dataset.sdtId = 'sibling-sdt';
+      siblingWrapper.dataset.sdtContainerId = 'parent-sdt';
+      siblingWrapper.dataset.pmStart = '111';
+      siblingWrapper.dataset.pmEnd = '120';
+
+      container.querySelector('.presentation-editor__pages')?.append(parentWrapper, childWrapper, siblingWrapper);
+
+      getSelectionUpdateHandler(editorInstance)();
+
+      expect(childWrapper.classList.contains('ProseMirror-selectednode')).toBe(true);
+      expect(childWrapper.classList.contains('sdt-container-selected')).toBe(true);
+      expect(childWrapper.classList.contains('sdt-ancestor-selected')).toBe(false);
+      expect(parentWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
+      expect(parentWrapper.classList.contains('sdt-container-selected')).toBe(false);
+      expect(parentWrapper.classList.contains('sdt-ancestor-selected')).toBe(true);
+      expect(siblingWrapper.classList.contains('ProseMirror-selectednode')).toBe(false);
+      expect(siblingWrapper.classList.contains('sdt-container-selected')).toBe(false);
+      expect(siblingWrapper.classList.contains('sdt-ancestor-selected')).toBe(false);
     });
   });
 
@@ -1102,6 +1416,56 @@ describe('PresentationEditor', () => {
     });
   });
 
+  describe('documentBackground resolution', () => {
+    it('forwards configured documentBackground when the document has no imported background', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-config-doc',
+        mode: 'docx',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#EEEEEE' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#EEEEEE' });
+    });
+
+    it('prefers imported documentBackground over the configured fallback', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'doc-background-import-doc',
+        mode: 'docx',
+        content: {
+          type: 'doc',
+          attrs: {
+            documentBackground: { color: '#DDDDDD' },
+          },
+          content: [{ type: 'paragraph' }],
+        },
+        layoutEngineOptions: {
+          documentBackground: { color: '#EEEEEE' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.getLayoutOptions().documentBackground).toEqual({ color: '#DDDDDD' });
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        documentBackground?: { color?: string };
+      };
+      expect(layoutOptions.documentBackground).toEqual({ color: '#DDDDDD' });
+    });
+  });
+
   describe('scrollToPage', () => {
     const buildMixedPageLayout = () => ({
       layout: {
@@ -1393,6 +1757,17 @@ describe('PresentationEditor', () => {
         }
         document.body.appendChild(container);
       }
+    });
+
+    it('returns null for scrollContainer when the window scrolls', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-window-scroll-container',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      expect(editor.scrollContainer).toBeNull();
     });
   });
 
@@ -2032,6 +2407,149 @@ describe('PresentationEditor', () => {
       container.dispatchEvent(event);
 
       expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'compositionstart' }));
+    });
+  });
+
+  describe('IME composition rerender deferral (SD-2368)', () => {
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
+      rafSpy = null;
+    });
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    /**
+     * Creates the editor, waits for the initial layout pass to finish, and
+     * returns a doc-change trigger (the registered pageStyleUpdate handler,
+     * which sets pendingDocChange and schedules a rerender).
+     */
+    const setupSettledEditor = async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await settle();
+
+      const mockEditorInstance = getLastEditorInstance();
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const pageStyleUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'pageStyleUpdate');
+      expect(pageStyleUpdateCall).toBeDefined();
+      const handlePageStyleUpdate = pageStyleUpdateCall![1] as (payload: {
+        pageMargins?: unknown;
+        pageStyles?: unknown;
+      }) => void;
+      const triggerDocChange = () =>
+        handlePageStyleUpdate({ pageMargins: { left: 1.5, right: 1.5, top: 1, bottom: 1 }, pageStyles: {} });
+
+      mockIncrementalLayout.mockClear();
+      return { mockEditorInstance, triggerDocChange };
+    };
+
+    it('defers pending rerender while composition is active', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+    });
+
+    it('flushes deferred rerender once after compositionend', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      triggerDocChange();
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '你好', bubbles: true }));
+      await settle();
+
+      expect(mockIncrementalLayout).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not drop pendingDocChange when composition defers a flush', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      // The synchronous RAF stub runs the flush immediately; it must
+      // early-return without consuming the pending doc change.
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '你', bubbles: true }));
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
+
+    it('compositionend without pending doc changes does not schedule rerender', async () => {
+      await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true }));
+      await settle();
+
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+    });
+
+    it('recovers from a lost compositionend via blur on the hidden editor', async () => {
+      const { mockEditorInstance, triggerDocChange } = await setupSettledEditor();
+      const hiddenDom = mockEditorInstance.view.dom as HTMLElement;
+
+      hiddenDom.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      // User clicks away mid-composition; the browser never delivers compositionend.
+      hiddenDom.dispatchEvent(new FocusEvent('blur'));
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
+
+    it('recovers from a lost compositionend via a non-composing beforeinput', async () => {
+      const { triggerDocChange } = await setupSettledEditor();
+
+      container.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      const event = new InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true });
+      Object.defineProperty(event, 'isComposing', { value: false, writable: false });
+      container.dispatchEvent(event);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
+    });
+
+    it('recovers from a lost compositionend via non-composing beforeinput on the hidden editor', async () => {
+      const { mockEditorInstance, triggerDocChange } = await setupSettledEditor();
+      const hiddenDom = mockEditorInstance.view.dom as HTMLElement;
+
+      hiddenDom.dispatchEvent(new CompositionEvent('compositionstart', { data: 'n', bubbles: true }));
+      triggerDocChange();
+      await settle();
+      expect(mockIncrementalLayout).not.toHaveBeenCalled();
+
+      const event = new InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true });
+      Object.defineProperty(event, 'isComposing', { value: false, writable: false });
+      hiddenDom.dispatchEvent(event);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalledTimes(1));
     });
   });
 
@@ -2683,6 +3201,81 @@ describe('PresentationEditor', () => {
       boundingSpy.mockRestore();
     });
 
+    it('does not activate a header story for stale tracked-change navigation', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+      vi.spyOn(page, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 612,
+        height: 792,
+        right: 612,
+        bottom: 792,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-header-1';
+      renderedChange.dataset.storyKey = 'hf:part:rId-header-default';
+      vi.spyOn(renderedChange, 'getBoundingClientRect').mockReturnValue({
+        left: 120,
+        top: 50,
+        width: 20,
+        height: 12,
+        right: 140,
+        bottom: 62,
+        x: 120,
+        y: 50,
+        toJSON: () => ({}),
+      } as DOMRect);
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      // Let navigation reach the header story path, then go stale before activation.
+      let guardCallsRemaining = 4;
+      const shouldContinue = vi.fn(() => guardCallsRemaining-- > 0);
+
+      const didNavigate = await editor.navigateTo(
+        {
+          kind: 'entity',
+          entityType: 'trackedChange',
+          entityId: 'tc-header-1',
+          story: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-header-default' },
+        },
+        { shouldContinue },
+      );
+
+      expect(didNavigate).toBe(false);
+      expect(mockCreateHeaderFooterEditor).not.toHaveBeenCalled();
+      expect(createdSectionEditors.length).toBe(0);
+    });
+
     it('re-emits live header/footer child editor updates and transactions', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
 
@@ -2938,9 +3531,16 @@ describe('PresentationEditor', () => {
     });
 
     it('emits headerFooterEditBlocked when keyboard shortcut has no matching region', async () => {
-      const layoutNoHeaders = buildLayoutResult();
-      layoutNoHeaders.headers = [];
-      mockIncrementalLayout.mockResolvedValueOnce(layoutNoHeaders);
+      // Header/footer regions are derived from the resolved layout's PAGES
+      // (HeaderFooterSessionManager.rebuildRegions builds one region per page), not
+      // from the headers[] array. To exercise the "no matching region" path the
+      // resolved layout must have no page 0 at all; emptying headers[] still leaves a
+      // per-page region and takes the activation path instead. With no pages,
+      // getRegionForPage('header', 0) returns null deterministically, independent of
+      // render timing.
+      const layoutNoPages = buildLayoutResult();
+      layoutNoPages.layout.pages = [];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutNoPages);
 
       const blockedSpy = vi.fn();
 
@@ -2957,7 +3557,9 @@ describe('PresentationEditor', () => {
         new KeyboardEvent('keydown', { ctrlKey: true, altKey: true, code: 'KeyH', bubbles: true }),
       );
 
-      expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
+      await vi.waitFor(() =>
+        expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' })),
+      );
     });
 
     it('returns false without emitting an error when an unqualified bookmark is not found', async () => {
@@ -2982,6 +3584,101 @@ describe('PresentationEditor', () => {
       expect(bookmarkResolverMocks.findAllBookmarksInDocument).toHaveBeenCalled();
       expect(bookmarkResolverMocks.resolveBookmarkTarget).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('scrolls before placing a body tracked-change caret so the selection overlay uses mounted page geometry', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      trackedChangeResolverMocks.resolveTrackedChangeNavigationSelection.mockReturnValueOnce({ from: 42, to: 42 });
+      const order: string[] = [];
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const editorInstance = getLastEditorInstance();
+      editorInstance.commands = {
+        ...(editorInstance.commands ?? {}),
+        setTextSelection: vi.fn(() => {
+          order.push('setTextSelection');
+          return true;
+        }),
+      };
+      vi.spyOn(editor, 'scrollToPositionAsync').mockImplementation(async () => {
+        order.push('scroll');
+        return true;
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'word:trackInsert:132',
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(editor.scrollToPositionAsync).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({ behavior: 'auto', block: 'center' }),
+      );
+      expect(editorInstance.commands.setTextSelection).toHaveBeenCalledWith({ from: 42, to: 42 });
+      expect(editorInstance.view.focus).toHaveBeenCalled();
+      expect(order).toEqual(['scroll', 'setTextSelection']);
+    });
+
+    it('exits active header mode before navigating to a body tracked change', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+      trackedChangeResolverMocks.resolveTrackedChangeNavigationSelection.mockReturnValueOnce({ from: 42, to: 42 });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const headerEditor = editor.getActiveEditor();
+      const bodyEditor = (Editor as unknown as MockedEditor).mock.results[0].value;
+      bodyEditor.commands = {
+        ...(bodyEditor.commands ?? {}),
+        setTextSelection: vi.fn(() => true),
+      };
+      vi.spyOn(editor, 'scrollToPositionAsync').mockResolvedValue(true);
+      expect(headerEditor).not.toBe(bodyEditor);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'word:trackInsert:132',
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(editor.getActiveEditor()).toBe(bodyEditor);
+      expect(headerEditor.commands.setTextSelection).not.toHaveBeenCalledWith({ from: 42, to: 42 });
+      expect(bodyEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 42, to: 42 });
     });
 
     it('exits active header mode before navigating to a body bookmark', async () => {
@@ -4493,6 +5190,48 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
+      it('defers the selection overlay render for doc-changing transactions (SD-3400)', async () => {
+        // Editor emits 'selectionUpdate' BEFORE 'update', so for a transaction
+        // that changed the doc the epoch/layout gates are not armed yet: an
+        // immediate flush renders the caret against the PRE-change paint
+        // (stale caret on every Enter/Backspace). Doc-changing transactions
+        // must defer to the post-paint flush; selection-only changes keep the
+        // immediate path (collab-cancellation rationale).
+        const layoutResult = {
+          layout: { pages: [] },
+          measures: [],
+        };
+        mockIncrementalLayout.mockResolvedValue(layoutResult);
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-doc',
+        });
+
+        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+          (Editor as unknown as MockedEditor).mock.results.length - 1
+        ].value;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+        const onCalls = mockEditorInstance.on as unknown as Mock;
+        const selectionUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'selectionUpdate');
+        const handleSelection = selectionUpdateCall![1] as (payload?: {
+          transaction?: { docChanged?: boolean };
+        }) => void;
+
+        // Doc-changing transaction: must NOT render synchronously (RAF-deferred).
+        handleSelection({ transaction: { docChanged: true } });
+        expect(rafSpy).toHaveBeenCalled();
+
+        // Selection-only transaction: immediate path, no RAF needed.
+        rafSpy.mockClear();
+        handleSelection({ transaction: { docChanged: false } });
+        expect(rafSpy).not.toHaveBeenCalled();
+
+        rafSpy.mockRestore();
+      });
+
       it('should skip scheduling during rerender (#isRerendering flag)', async () => {
         const layoutResult = {
           layout: { pages: [] },
@@ -5112,16 +5851,19 @@ describe('PresentationEditor', () => {
         ];
 
         try {
-          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
+          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted),
+          // pointerup drag update: page 1, pointerup DOM refine: page 1
           mockClickToPosition.mockReset();
           mockClickToPosition
             .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
             .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 })
             .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
           mockResolvePointerPositionHit.mockReset();
           mockResolvePointerPositionHit
             .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
             .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
             .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
           viewport.dispatchEvent(
@@ -5161,8 +5903,9 @@ describe('PresentationEditor', () => {
             }),
           );
 
-          // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+          // pointerup first updates the drag at the release point, then refines
+          // the fallback selection with one final DOM hit on the mounted page.
+          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(4);
         } finally {
           if (originalElementsFromPoint === undefined) {
             delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;

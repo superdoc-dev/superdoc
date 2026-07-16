@@ -14,7 +14,7 @@ Remove border for a specific side or all sides of a paragraph.
 - API member path: `editor.doc.format.paragraph.clearBorder(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -37,7 +37,11 @@ Returns a ParagraphMutationResult; reports NO_OP if the border is already absent
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -73,14 +77,22 @@ Returns a ParagraphMutationResult; reports NO_OP if the border is already absent
     "target": {
       "kind": "block",
       "nodeId": "node-def456",
-      "nodeType": "paragraph"
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     }
   },
   "success": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```

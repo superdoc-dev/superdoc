@@ -52,6 +52,14 @@ export const ShapeTextbox = Node.create({
       attributes: {
         rendered: false,
       },
+      textInsets: {
+        default: null,
+        rendered: false,
+      },
+      textVerticalAlign: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

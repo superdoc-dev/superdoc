@@ -401,8 +401,8 @@ export function registerBuiltInExecutors(): void {
         ctx,
         targets,
         step,
-        (e, tr, t, s, m) => executeStyleApply(e, tr, t, s as StyleApplyStep, m),
-        (e, tr, t, s, m) => executeSpanStyleApply(e, tr, t, s as StyleApplyStep, m),
+        (e, tr, t, s, m) => executeStyleApply(e, tr, t, s as StyleApplyStep, m, ctx.changeMode),
+        (e, tr, t, s, m) => executeSpanStyleApply(e, tr, t, s as StyleApplyStep, m, ctx.changeMode),
       );
     },
   });

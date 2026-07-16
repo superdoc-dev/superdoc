@@ -49,6 +49,17 @@ export interface TableInfo {
   numRows: number;
   rowCnfStyle?: ParagraphConditionalFormatting | null;
   cellCnfStyle?: ParagraphConditionalFormatting | null;
+  /**
+   * Grid position of the cell (SD-3028 G7). Word's firstCol/lastCol/banding
+   * regions are GRID columns, not display-cell indices: gridSpan, vMerge
+   * continuations (merged away at import), and gridBefore placeholders all
+   * shift display indices off the grid. When absent, display indices are used.
+   */
+  gridColumnStart?: number | null;
+  /** Grid columns covered by the cell. Defaults to 1. */
+  gridColumnSpan?: number | null;
+  /** Total grid columns in the table (w:tblGrid length). */
+  numGridCols?: number | null;
 }
 
 /**
@@ -63,6 +74,47 @@ export const DEFAULT_TBL_LOOK: TableLookProperties = {
   noHBand: false,
   noVBand: true,
 };
+
+const BUILT_IN_HEADING_NAME_RE = /^heading\s+([1-9])$/i;
+
+function getBuiltInHeadingLevel(styleDef: StyleDefinition | undefined): number | undefined {
+  if (styleDef?.type !== 'paragraph' || typeof styleDef.name !== 'string') {
+    return undefined;
+  }
+
+  const match = BUILT_IN_HEADING_NAME_RE.exec(styleDef.name.trim());
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  return Number(match[1]);
+}
+
+function resolveStyleDefinition(
+  params: OoxmlResolverParams,
+  styleId: string,
+): { styleId: string; styleDef: StyleDefinition } | undefined {
+  const styles = params.translatedLinkedStyles?.styles;
+  const styleDef = styles?.[styleId];
+  if (!styles || !styleDef) {
+    return undefined;
+  }
+
+  const headingLevel = getBuiltInHeadingLevel(styleDef);
+  const canonicalHeadingStyleId = headingLevel ? `Heading${headingLevel}` : null;
+  const canonicalHeadingStyleDef = canonicalHeadingStyleId ? styles[canonicalHeadingStyleId] : undefined;
+
+  if (
+    canonicalHeadingStyleId &&
+    canonicalHeadingStyleId !== styleId &&
+    canonicalHeadingStyleDef &&
+    getBuiltInHeadingLevel(canonicalHeadingStyleDef) === headingLevel
+  ) {
+    return { styleId: canonicalHeadingStyleId, styleDef: canonicalHeadingStyleDef };
+  }
+
+  return { styleId, styleDef };
+}
 
 export function resolveRunProperties(
   params: OoxmlResolverParams,
@@ -291,21 +343,29 @@ export function resolveStyleChain<T extends PropertyObject>(
 ): T {
   if (!styleId) return {} as T;
 
-  const styleDef = params.translatedLinkedStyles?.styles?.[styleId];
-  if (!styleDef) return {} as T;
+  const resolvedStyle = resolveStyleDefinition(params, styleId);
+  if (!resolvedStyle) return {} as T;
 
+  const { styleDef } = resolvedStyle;
   const styleProps = (styleDef[propertyType as keyof typeof styleDef] ?? {}) as T;
   const basedOn = styleDef.basedOn;
 
   let styleChain: T[] = [styleProps];
-  const seenStyles = new Set<string>([styleId]);
+  const seenStyles = new Set<string>([styleId, resolvedStyle.styleId]);
   let nextBasedOn = basedOn;
   while (followBasedOnChain && nextBasedOn) {
     if (seenStyles.has(nextBasedOn as string)) {
       break;
     }
     seenStyles.add(nextBasedOn as string);
-    const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
+    // Resolve each parent through the canonical heading mapping so derived styles
+    // based on a localized heading (e.g. `MyHeading` basedOn `Kop1`) inherit the
+    // canonical `Heading1` formatting rather than the literal localized definition.
+    const resolvedBasedOn = resolveStyleDefinition(params, nextBasedOn as string);
+    const basedOnStyleDef = resolvedBasedOn?.styleDef;
+    if (resolvedBasedOn) {
+      seenStyles.add(resolvedBasedOn.styleId);
+    }
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
     if (basedOnProps && Object.keys(basedOnProps).length) {
@@ -483,6 +543,15 @@ function resolveConditionalProps<T extends PropertyObject>(
     const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
     const props = def?.tableStyleProperties?.[styleType]?.[propertyType] as T | undefined;
     if (props) chain.push(props);
+    // ECMA-376 17.7.6: a table style's BASE-LEVEL <w:tcPr> (stored on the def's own
+    // tableCellProperties, a sibling of tableStyleProperties) IS the wholeTable
+    // conditional layer; Word paints e.g. its w:shd on every cell. Pushed after the
+    // explicit wholeTable entry so, post-reverse, the explicit entry still wins within
+    // one def while a leaf's base props beat any ancestor's. (SD-3035)
+    if (styleType === 'wholeTable' && propertyType === 'tableCellProperties') {
+      const baseProps = def?.tableCellProperties as T | undefined;
+      if (baseProps) chain.push(baseProps);
+    }
     currentId = def?.basedOn;
   }
   if (chain.length === 0) return undefined;
@@ -511,6 +580,9 @@ export function resolveCellStyles<T extends PropertyObject>(
     colBandSize,
     tableInfo.rowCnfStyle,
     tableInfo.cellCnfStyle,
+    tableInfo.gridColumnStart,
+    tableInfo.gridColumnSpan,
+    tableInfo.numGridCols,
   );
   cellStyleTypes.forEach((styleType) => {
     const typeProps = resolveConditionalProps<T>(propertyType, styleType, tableStyleId, translatedLinkedStyles);
@@ -572,9 +644,14 @@ const CNF_STYLE_MAP: ReadonlyArray<[keyof ParagraphConditionalFormatting, TableS
   ['lastRowLastColumn', 'seCell'],
 ];
 
-// Word / Office precedence order (low → high), per MS-OI29500 §2.1.1310.
-// combineProperties treats later entries as higher priority, so this array
-// must list types from lowest to highest override strength.
+// Conditional-format apply order (low → high). combineProperties treats later
+// entries as higher priority. NOTE: this intentionally diverges from the literal
+// ECMA-376 §17.7.6.6 list (which puts banded rows after banded columns). Word's
+// ACTUAL render applies COLUMN banding over row banding and column edges over row
+// edges — verified by 150dpi Word renders of first_row_styling and
+// conditional_style_regions, whose interior cells paint band1Vert/band2Vert
+// (#EEEEEE/#FAFAFA), not band1Horz/band2Horz (SD-3028, Gabriel review). Match Word,
+// not the spec text.
 const TABLE_STYLE_PRECEDENCE: TableStyleType[] = [
   'wholeTable',
   'band1Horz',
@@ -601,16 +678,31 @@ function determineCellStyleTypes(
   colBandSize = 1,
   rowCnfStyle?: ParagraphConditionalFormatting | null,
   cellCnfStyle?: ParagraphConditionalFormatting | null,
+  gridColumnStart?: number | null,
+  gridColumnSpan?: number | null,
+  numGridCols?: number | null,
 ): TableStyleType[] {
   const applicable = new Set<TableStyleType>(['wholeTable']);
 
   const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
   const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
 
+  // Column position on the GRID when the caller provides it (SD-3028 G7);
+  // display indices otherwise. firstCol/lastCol and vertical banding follow
+  // grid columns in Word, so spans and merges must not shift them.
+  const columnStart = gridColumnStart ?? cellIndex;
+  const columnEnd = columnStart + (gridColumnSpan ?? 1);
+  // When a row declares more cells than the table grid has columns, Word
+  // auto-extends the grid; trust the larger count so lastCol / corners apply
+  // only to the true last column, not to every cell whose end reaches the
+  // under-declared grid width (SD-3028).
+  const columnCount =
+    numGridCols != null && numCells != null ? Math.max(numGridCols, numCells) : (numGridCols ?? numCells);
+
   // Per ECMA-376, banding excludes header/footer rows and first/last columns.
   // Offset the index so the first data row/column starts at band1.
   const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
-  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const bandColIndex = Math.max(0, columnStart - (tblLook?.firstColumn ? 1 : 0));
   const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
   const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
 
@@ -625,8 +717,8 @@ function determineCellStyleTypes(
   // Row/column edge flags — reused for both row/col styles and corner gating.
   const isFirstRow = !!tblLook?.firstRow && rowIndex === 0;
   const isLastRow = !!tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1;
-  const isFirstCol = !!tblLook?.firstColumn && cellIndex === 0;
-  const isLastCol = !!tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1;
+  const isFirstCol = !!tblLook?.firstColumn && columnStart === 0;
+  const isLastCol = !!tblLook?.lastColumn && columnCount != null && columnCount > 0 && columnEnd >= columnCount;
 
   if (isFirstRow) applicable.add('firstRow');
   if (isFirstCol) applicable.add('firstCol');

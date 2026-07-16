@@ -5,9 +5,7 @@
  * The bidirectional completeness checks at the bottom of this file guarantee
  * that every OperationId has a registry entry and vice versa.
  */
-
 import type { OperationId } from './types.js';
-
 import type { NodeAddress } from '../types/index.js';
 import type { SDNodeResult, SDFindInput, SDFindResult, SDGetInput } from '../types/sd-envelope.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
@@ -28,7 +26,6 @@ import type {
   BlocksDeleteRangeInput,
   BlocksDeleteRangeResult,
 } from '../types/blocks.types.js';
-
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
 import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
@@ -45,6 +42,7 @@ import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
 import type { FormatInlineAliasInput, FormatRangeInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
 import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/index.js';
+import type { TemplatesApplyInput, TemplatesApplyOptions, TemplatesApplyReceipt } from '../templates/index.js';
 import type {
   CommentsCreateReceipt,
   CommentsCreateInput,
@@ -162,6 +160,7 @@ import type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -232,6 +231,7 @@ import type {
   MutationsPreviewOutput,
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
+import type { PlanExecuteInput, PlanExecuteResult } from '../plan/plan.js';
 import type {
   CreateTableOfContentsInput,
   CreateTableOfContentsResult,
@@ -262,7 +262,6 @@ import type {
   BookmarkRemoveInput,
   BookmarkMutationResult,
 } from '../bookmarks/bookmarks.types.js';
-
 import type {
   CustomXmlPartsListInput,
   CustomXmlPartsListResult,
@@ -274,7 +273,6 @@ import type {
   CustomXmlPartsRemoveInput,
   CustomXmlPartsMutationResult,
 } from '../customXml/customXml.types.js';
-
 import type {
   AnchoredMetadataAttachInput,
   AnchoredMetadataAttachResult,
@@ -288,7 +286,6 @@ import type {
   AnchoredMetadataMutationResult,
   AnchoredMetadataResolveInfo,
 } from '../metadata/anchored-metadata.types.js';
-
 import type {
   FootnoteListInput,
   FootnotesListResult,
@@ -545,7 +542,6 @@ import type {
   ContentControlsGroupUngroupInput,
   CreateContentControlInput,
 } from '../content-controls/content-controls.types.js';
-
 type FormatInlineAliasOperationRegistry = {
   [K in InlineRunPatchKey as `format.${K}`]: {
     input: FormatInlineAliasInput<K>;
@@ -553,7 +549,6 @@ type FormatInlineAliasOperationRegistry = {
     output: TextMutationReceipt;
   };
 };
-
 export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
   get: { input: SDGetInput; options: never; output: SDDocument };
@@ -566,19 +561,16 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
   extract: { input: ExtractInput; options: never; output: ExtractResult };
-
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
   insert: { input: InsertInput; options: MutationOptions; output: SDMutationReceipt };
   replace: { input: ReplaceInput; options: MutationOptions; output: SDMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
   formatRange: { input: FormatRangeInput; options: MutationOptions; output: TextMutationReceipt };
-
   // --- blocks.* ---
   'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
   'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
-
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
   // --- styles.paragraph.* ---
@@ -592,7 +584,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ParagraphMutationResult;
   };
-
   // --- format.paragraph.* ---
   'format.paragraph.resetDirectFormatting': {
     input: ParagraphsResetDirectFormattingInput;
@@ -689,15 +680,25 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ParagraphMutationResult;
   };
-
+  'format.paragraph.setNumbering': {
+    input: ParagraphsSetNumberingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
-
+  // --- templates.* ---
+  // Async operation (SD-3247): output is Promise<TemplatesApplyReceipt>. The JSON
+  // output schema still describes the resolved receipt, not the Promise.
+  'templates.apply': {
+    input: TemplatesApplyInput;
+    options: TemplatesApplyOptions;
+    output: Promise<TemplatesApplyReceipt>;
+  };
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
   'create.heading': { input: CreateHeadingInput; options: MutationOptions; output: CreateHeadingResult };
   'create.sectionBreak': { input: CreateSectionBreakInput; options: MutationOptions; output: CreateSectionBreakResult };
-
   // --- lists.* ---
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };
   'lists.get': { input: ListsGetInput; options: never; output: ListItemInfo };
@@ -731,7 +732,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: ListsMutateItemResult;
   };
   'lists.convertToText': { input: ListsConvertToTextInput; options: MutationOptions; output: ListsConvertToTextResult };
-
   // --- lists.* (SD-1973 formatting) ---
   'lists.applyTemplate': { input: ListsApplyTemplateInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.applyPreset': { input: ListsApplyPresetInput; options: MutationOptions; output: ListsMutateItemResult };
@@ -773,7 +773,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ListsMutateItemResult;
   };
-
   // --- lists.* (SD-2025 user-facing) ---
   'lists.getStyle': { input: ListsGetStyleInput; options: never; output: ListsGetStyleResult };
   'lists.applyStyle': { input: ListsApplyStyleInput; options: MutationOptions; output: ListsMutateItemResult };
@@ -786,7 +785,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.setLevelText': { input: ListsSetLevelTextInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setLevelStart': { input: ListsSetLevelStartInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setLevelLayout': { input: ListsSetLevelLayoutInput; options: MutationOptions; output: ListsMutateItemResult };
-
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
   'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
@@ -867,43 +865,34 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
-
   // --- comments.* ---
   'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: CommentsCreateReceipt };
   'comments.patch': { input: CommentsPatchInput; options: RevisionGuardOptions; output: Receipt };
   'comments.delete': { input: CommentsDeleteInput; options: RevisionGuardOptions; output: Receipt };
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
   'comments.list': { input: CommentsListQuery | undefined; options: never; output: CommentsListResult };
-
   // --- trackChanges.* ---
   'trackChanges.list': { input: TrackChangesListInput | undefined; options: never; output: TrackChangesListResult };
   'trackChanges.get': { input: TrackChangesGetInput; options: never; output: TrackChangeInfo };
   'trackChanges.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
-
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
-
   // --- ranges.* ---
   'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
-
   // --- selection.* ---
   'selection.current': { input: SelectionCurrentInput | undefined; options: never; output: SelectionInfo };
-
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
   'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
-
+  'plan.execute': { input: PlanExecuteInput; options: never; output: PlanExecuteResult };
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };
-
   // --- history.* ---
   'history.get': { input: undefined; options: never; output: HistoryState };
   'history.undo': { input: undefined; options: never; output: HistoryActionResult };
   'history.redo': { input: undefined; options: never; output: HistoryActionResult };
-
   // --- create.table ---
   'create.table': { input: CreateTableInput; options: MutationOptions; output: CreateTableResult };
-
   // --- tables.* ---
   'tables.convertFromText': {
     input: TablesConvertFromTextInput;
@@ -974,7 +963,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: TableMutationResult;
   };
   'tables.applyPreset': { input: TablesApplyPresetInput; options: MutationOptions; output: TableMutationResult };
-
   // --- tables.* reads ---
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
   'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
@@ -990,31 +978,26 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: DocumentMutationResult;
   };
-
   // --- create.tableOfContents ---
   'create.tableOfContents': {
     input: CreateTableOfContentsInput;
     options: MutationOptions;
     output: CreateTableOfContentsResult;
   };
-
   // --- toc.* ---
   'toc.list': { input: TocListQuery | undefined; options: never; output: TocListResult };
   'toc.get': { input: TocGetInput; options: never; output: TocInfo };
   'toc.configure': { input: TocConfigureInput; options: MutationOptions; output: TocMutationResult };
   'toc.update': { input: TocUpdateInput; options: MutationOptions; output: TocMutationResult };
   'toc.remove': { input: TocRemoveInput; options: MutationOptions; output: TocMutationResult };
-
   // --- toc entry (TC field) operations ---
   'toc.markEntry': { input: TocMarkEntryInput; options: MutationOptions; output: TocEntryMutationResult };
   'toc.unmarkEntry': { input: TocUnmarkEntryInput; options: MutationOptions; output: TocEntryMutationResult };
   'toc.listEntries': { input: TocListEntriesQuery | undefined; options: never; output: TocListEntriesResult };
   'toc.getEntry': { input: TocGetEntryInput; options: never; output: TocEntryInfo };
   'toc.editEntry': { input: TocEditEntryInput; options: MutationOptions; output: TocEntryMutationResult };
-
   // --- create.image ---
   'create.image': { input: CreateImageInput; options: MutationOptions; output: CreateImageResult };
-
   // --- images.* ---
   'images.list': { input: ImagesListInput | undefined; options: never; output: ImagesListResult };
   'images.get': { input: ImagesGetInput; options: never; output: ImageSummary };
@@ -1051,7 +1034,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'images.insertCaption': { input: InsertCaptionInput; options: MutationOptions; output: ImagesMutationResult };
   'images.updateCaption': { input: UpdateCaptionInput; options: MutationOptions; output: ImagesMutationResult };
   'images.removeCaption': { input: RemoveCaptionInput; options: MutationOptions; output: ImagesMutationResult };
-
   // --- hyperlinks.* ---
   'hyperlinks.list': { input: HyperlinksListQuery | undefined; options: never; output: HyperlinksListResult };
   'hyperlinks.get': { input: HyperlinksGetInput; options: never; output: HyperlinkInfo };
@@ -1059,7 +1041,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
-
   // --- headerFooters.* ---
   'headerFooters.list': {
     input: HeaderFootersListQuery | undefined;
@@ -1098,14 +1079,12 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: HeaderFooterPartsMutationResult;
   };
-
   // --- create.contentControl ---
   'create.contentControl': {
     input: CreateContentControlInput;
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.* core CRUD + discovery ---
   'contentControls.list': {
     input: ContentControlsListQuery | undefined;
@@ -1213,7 +1192,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.* data binding + raw ---
   'contentControls.getBinding': {
     input: ContentControlsGetBindingInput;
@@ -1255,7 +1233,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.text.* ---
   'contentControls.text.setMultiline': {
     input: ContentControlsTextSetMultilineInput;
@@ -1272,7 +1249,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.date.* ---
   'contentControls.date.setValue': {
     input: ContentControlsDateSetValueInput;
@@ -1304,7 +1280,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.checkbox.* ---
   'contentControls.checkbox.getState': {
     input: ContentControlsCheckboxGetStateInput;
@@ -1326,7 +1301,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.choiceList.* ---
   'contentControls.choiceList.getItems': {
     input: ContentControlsChoiceListGetItemsInput;
@@ -1343,7 +1317,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.repeatingSection.* ---
   'contentControls.repeatingSection.listItems': {
     input: ContentControlsRepeatingSectionListItemsInput;
@@ -1375,7 +1348,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- contentControls.group.* ---
   'contentControls.group.wrap': {
     input: ContentControlsGroupWrapInput;
@@ -1387,14 +1359,12 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
-
   // --- bookmarks.* ---
   'bookmarks.list': { input: BookmarkListInput | undefined; options: never; output: BookmarksListResult };
   'bookmarks.get': { input: BookmarkGetInput; options: never; output: BookmarkInfo };
   'bookmarks.insert': { input: BookmarkInsertInput; options: MutationOptions; output: BookmarkMutationResult };
   'bookmarks.rename': { input: BookmarkRenameInput; options: MutationOptions; output: BookmarkMutationResult };
   'bookmarks.remove': { input: BookmarkRemoveInput; options: MutationOptions; output: BookmarkMutationResult };
-
   // --- footnotes.* ---
   'footnotes.list': { input: FootnoteListInput | undefined; options: never; output: FootnotesListResult };
   'footnotes.get': { input: FootnoteGetInput; options: never; output: FootnoteInfo };
@@ -1402,14 +1372,12 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'footnotes.update': { input: FootnoteUpdateInput; options: MutationOptions; output: FootnoteMutationResult };
   'footnotes.remove': { input: FootnoteRemoveInput; options: MutationOptions; output: FootnoteMutationResult };
   'footnotes.configure': { input: FootnoteConfigureInput; options: MutationOptions; output: FootnoteConfigResult };
-
   // --- crossRefs.* ---
   'crossRefs.list': { input: CrossRefListInput | undefined; options: never; output: CrossRefsListResult };
   'crossRefs.get': { input: CrossRefGetInput; options: never; output: CrossRefInfo };
   'crossRefs.insert': { input: CrossRefInsertInput; options: MutationOptions; output: CrossRefMutationResult };
   'crossRefs.rebuild': { input: CrossRefRebuildInput; options: MutationOptions; output: CrossRefMutationResult };
   'crossRefs.remove': { input: CrossRefRemoveInput; options: MutationOptions; output: CrossRefMutationResult };
-
   // --- index.* ---
   'index.list': { input: IndexListInput | undefined; options: never; output: IndexListResult };
   'index.get': { input: IndexGetInput; options: never; output: IndexInfo };
@@ -1417,14 +1385,12 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'index.configure': { input: IndexConfigureInput; options: MutationOptions; output: IndexMutationResult };
   'index.rebuild': { input: IndexRebuildInput; options: MutationOptions; output: IndexMutationResult };
   'index.remove': { input: IndexRemoveInput; options: MutationOptions; output: IndexMutationResult };
-
   // --- index.entries.* ---
   'index.entries.list': { input: IndexEntryListInput | undefined; options: never; output: IndexEntryListResult };
   'index.entries.get': { input: IndexEntryGetInput; options: never; output: IndexEntryInfo };
   'index.entries.insert': { input: IndexEntryInsertInput; options: MutationOptions; output: IndexEntryMutationResult };
   'index.entries.update': { input: IndexEntryUpdateInput; options: MutationOptions; output: IndexEntryMutationResult };
   'index.entries.remove': { input: IndexEntryRemoveInput; options: MutationOptions; output: IndexEntryMutationResult };
-
   // --- captions.* ---
   'captions.list': { input: CaptionListInput | undefined; options: never; output: CaptionsListResult };
   'captions.get': { input: CaptionGetInput; options: never; output: CaptionInfo };
@@ -1432,21 +1398,18 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'captions.update': { input: CaptionUpdateInput; options: MutationOptions; output: CaptionMutationResult };
   'captions.remove': { input: CaptionRemoveInput; options: MutationOptions; output: CaptionMutationResult };
   'captions.configure': { input: CaptionConfigureInput; options: MutationOptions; output: CaptionConfigResult };
-
   // --- fields.* ---
   'fields.list': { input: FieldListInput | undefined; options: never; output: FieldsListResult };
   'fields.get': { input: FieldGetInput; options: never; output: FieldInfo };
   'fields.insert': { input: FieldInsertInput; options: MutationOptions; output: FieldMutationResult };
   'fields.rebuild': { input: FieldRebuildInput; options: MutationOptions; output: FieldMutationResult };
   'fields.remove': { input: FieldRemoveInput; options: MutationOptions; output: FieldMutationResult };
-
   // --- citations.* ---
   'citations.list': { input: CitationListInput | undefined; options: never; output: CitationsListResult };
   'citations.get': { input: CitationGetInput; options: never; output: CitationInfo };
   'citations.insert': { input: CitationInsertInput; options: MutationOptions; output: CitationMutationResult };
   'citations.update': { input: CitationUpdateInput; options: MutationOptions; output: CitationMutationResult };
   'citations.remove': { input: CitationRemoveInput; options: MutationOptions; output: CitationMutationResult };
-
   // --- citations.sources.* ---
   'citations.sources.list': {
     input: CitationSourceListInput | undefined;
@@ -1469,7 +1432,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: CitationSourceMutationResult;
   };
-
   // --- citations.bibliography.* ---
   'citations.bibliography.get': { input: BibliographyGetInput; options: never; output: BibliographyInfo };
   'citations.bibliography.insert': {
@@ -1492,7 +1454,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: BibliographyMutationResult;
   };
-
   // --- authorities.* ---
   'authorities.list': { input: AuthoritiesListInput | undefined; options: never; output: AuthoritiesListResult };
   'authorities.get': { input: AuthoritiesGetInput; options: never; output: AuthoritiesInfo };
@@ -1508,7 +1469,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: AuthoritiesMutationResult;
   };
   'authorities.remove': { input: AuthoritiesRemoveInput; options: MutationOptions; output: AuthoritiesMutationResult };
-
   // --- authorities.entries.* ---
   'authorities.entries.list': {
     input: AuthorityEntryListInput | undefined;
@@ -1531,12 +1491,10 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: AuthorityEntryMutationResult;
   };
-
   // --- diff.* ---
   'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
   'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
   'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
-
   // --- protection.* ---
   'protection.get': { input: ProtectionGetInput; options: never; output: DocumentProtectionState };
   'protection.setEditingRestriction': {
@@ -1549,7 +1507,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ProtectionMutationResult;
   };
-
   // --- permissionRanges.* ---
   'permissionRanges.list': {
     input: PermissionRangesListInput | undefined;
@@ -1572,7 +1529,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: PermissionRangeMutationResult;
   };
-
   // --- customXml.parts.* ---
   'customXml.parts.list': {
     input: CustomXmlPartsListInput | undefined;
@@ -1599,7 +1555,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: CustomXmlPartsMutationResult;
   };
-
   // --- metadata.* (anchored metadata) ---
   'metadata.attach': {
     input: AnchoredMetadataAttachInput;
@@ -1632,20 +1587,14 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: AnchoredMetadataResolveInfo | null;
   };
 }
-
 // --- Bidirectional completeness checks ---
 // If either assertion fails, the `false extends true` branch produces a compile error.
-
 type Assert<_T extends true> = void;
-
 /** Fails to compile if OperationRegistry is missing any OperationId key. */
 type _AllOpsHaveRegistryEntry = Assert<OperationId extends keyof OperationRegistry ? true : false>;
-
 /** Fails to compile if OperationRegistry has extra keys not in OperationId. */
 type _NoExtraRegistryKeys = Assert<keyof OperationRegistry extends OperationId ? true : false>;
-
 // --- Invoke request/result types ---
-
 /**
  * Typed invoke request. TypeScript narrows input and options based on operationId.
  *
@@ -1666,12 +1615,10 @@ export type InvokeRequest<T extends OperationId> = OperationRegistry[T]['options
       input: OperationRegistry[T]['input'];
       options?: OperationRegistry[T]['options'];
     };
-
 /**
  * Typed invoke result, narrowed by operationId.
  */
 export type InvokeResult<T extends OperationId> = OperationRegistry[T]['output'];
-
 /**
  * Loose invoke request for dynamic callers who don't know the operation at compile time.
  * Invalid inputs will produce adapter-level errors, not input-validation errors.

@@ -31,9 +31,28 @@
     "../layout-engine/layout-bridge/src",
     "../layout-engine/layout-engine/src",
     "../layout-engine/painters/dom/src",
-    "../layout-engine/pm-adapter/src/converter-context.ts",
-    "../layout-engine/pm-adapter/src/sections/types.ts",
     "../layout-engine/style-engine/src/ooxml",
-    "../layout-engine/style-engine/src/cascade.ts"
+    "../layout-engine/style-engine/src/cascade.ts",
+    "../layout-engine/style-engine/src",
+    "../word-layout/src"
+  ],
+  "exclude": [
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**",
+    "src/dev/**",
+    "../document-api/src/**/*.test.*",
+    "../document-api/src/**/*.spec.*",
+    "../document-api/src/**/__tests__/**",
+    "../layout-engine/**/*.test.*",
+    "../layout-engine/**/*.spec.*",
+    "../layout-engine/**/__tests__/**",
+    "../super-editor/src/**/*.test.*",
+    "../super-editor/src/**/*.spec.*",
+    "../super-editor/src/**/__tests__/**"
   ]
 }

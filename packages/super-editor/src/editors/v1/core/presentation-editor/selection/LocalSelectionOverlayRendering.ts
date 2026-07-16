@@ -99,6 +99,34 @@ export type RenderCaretOverlayDeps = {
   convertPageLocalToOverlayCoords: (pageIndex: number, x: number, y: number) => OverlayCoords | null;
 };
 
+export type CreateCaretElementInput = {
+  left: number;
+  top: number;
+  height: number;
+};
+
+export function createCaretElement(
+  doc: Document | null | undefined,
+  { left, top, height }: CreateCaretElementInput,
+): HTMLElement | null {
+  const caretEl = doc?.createElement('div');
+  if (!caretEl) {
+    return null;
+  }
+
+  caretEl.className = 'presentation-editor__selection-caret';
+  caretEl.style.position = 'absolute';
+  caretEl.style.left = `${left}px`;
+  caretEl.style.top = `${top}px`;
+  caretEl.style.width = '2px';
+  caretEl.style.height = `${Math.max(1, height)}px`;
+  caretEl.style.backgroundColor = '#000000';
+  caretEl.style.borderRadius = '1px';
+  caretEl.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.92)';
+  caretEl.style.pointerEvents = 'none';
+  return caretEl;
+}
+
 /**
  * Renders the text cursor (caret) by creating and appending a DOM element to the overlay layer.
  *
@@ -130,21 +158,13 @@ export function renderCaretOverlay({
   }
 
   // Height is in layout space - the transform on #viewportHost handles scaling
-  const finalHeight = Math.max(1, caretLayout.height);
-
-  const caretEl = localSelectionLayer.ownerDocument?.createElement('div');
+  const caretEl = createCaretElement(localSelectionLayer.ownerDocument, {
+    left: coords.x,
+    top: coords.y,
+    height: caretLayout.height,
+  });
   if (!caretEl) {
     return;
   }
-  caretEl.className = 'presentation-editor__selection-caret';
-  caretEl.style.position = 'absolute';
-  caretEl.style.left = `${coords.x}px`;
-  caretEl.style.top = `${coords.y}px`;
-  caretEl.style.width = '2px';
-  caretEl.style.height = `${finalHeight}px`;
-  caretEl.style.backgroundColor = '#000000';
-  caretEl.style.borderRadius = '1px';
-  caretEl.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.92)';
-  caretEl.style.pointerEvents = 'none';
   localSelectionLayer.appendChild(caretEl);
 }

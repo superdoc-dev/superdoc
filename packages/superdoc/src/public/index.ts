@@ -44,7 +44,7 @@ export const BlankDOCX: string = BlankDOCXAsset;
 export { DOCX, PDF, HTML, getFileObject, compareVersions };
 
 // =============================================================================
-// SUPPORTED ROOT (132)
+// SUPPORTED ROOT
 // First-class public API. Documented, advertised, supported long-term.
 // =============================================================================
 
@@ -105,11 +105,19 @@ export type { SuperDocExceptionEditorPayload } from '../core/types/index.js';
 export type { SuperDocExceptionPayload } from '../core/types/index.js';
 export type { SuperDocExceptionRestorePayload } from '../core/types/index.js';
 export type { SuperDocExceptionStorePayload } from '../core/types/index.js';
+export type { SuperDocFitWidthOptions } from '../core/types/index.js';
+export type { SuperDocFontsApi, SuperDocFontFamily, SuperDocFontFace } from '../core/types/index.js';
 export type { SuperDocLayoutEngineOptions } from '../core/types/index.js';
 export type { SuperDocLockedPayload } from '../core/types/index.js';
 export type { SuperDocReadyPayload } from '../core/types/index.js';
 export type { SuperDocState } from '../core/types/index.js';
 export type { SuperDocTelemetryConfig } from '../core/types/index.js';
+export type { SuperDocViewportChangePayload } from '../core/types/index.js';
+export type { SuperDocViewportMetrics } from '../core/types/index.js';
+export type { SuperDocZoomConfig } from '../core/types/index.js';
+export type { SuperDocZoomMode } from '../core/types/index.js';
+export type { SuperDocZoomPayload } from '../core/types/index.js';
+export type { SuperDocZoomState } from '../core/types/index.js';
 export type { SurfaceComponentProps } from '../core/types/index.js';
 export type { SurfaceFloatingPlacement } from '../core/types/index.js';
 export type { SurfaceHandle } from '../core/types/index.js';
@@ -119,6 +127,8 @@ export type { SurfaceRequest } from '../core/types/index.js';
 export type { SurfaceResolution } from '../core/types/index.js';
 export type { SurfaceResolver } from '../core/types/index.js';
 export type { SurfacesModuleConfig } from '../core/types/index.js';
+export type { TrackChangeAuthor } from '../core/types/index.js';
+export type { TrackChangesAuthorColorsConfig } from '../core/types/index.js';
 export type { TrackChangesModuleConfig } from '../core/types/index.js';
 export type { TrackedChangeAddress } from '../core/types/index.js';
 export type { UpgradeToCollaborationOptions } from '../core/types/index.js';
@@ -166,7 +176,15 @@ export type { ExportDocxParams } from '@superdoc/super-editor';
 export type { ExportFormat } from '@superdoc/super-editor';
 export type { ExportOptions } from '@superdoc/super-editor';
 export type { FieldValue } from '@superdoc/super-editor';
+export type { FontAssetUrlContext } from '@superdoc/super-editor';
+export type { FontAssetUrlResolver } from '@superdoc/super-editor';
 export type { FontConfig } from '@superdoc/super-editor';
+export type { FontFaceConfig } from '@superdoc/super-editor';
+export type { FontFamilyConfig } from '@superdoc/super-editor';
+export type { FontResolutionRecord } from '@superdoc/super-editor';
+export type { DocumentFontOption } from '@superdoc/super-editor';
+export type { FontsChangedPayload } from '@superdoc/super-editor';
+export type { FontsConfig } from '@superdoc/super-editor';
 export type { FontsResolvedPayload } from '@superdoc/super-editor';
 export type { ImageDeselectedEvent } from '@superdoc/super-editor';
 export type { ImageSelectedEvent } from '@superdoc/super-editor';

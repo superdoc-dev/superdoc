@@ -27,6 +27,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { PresentationEditor } from '../PresentationEditor.js';
+import { SelectionSyncCoordinator } from '../selection/SelectionSyncCoordinator.js';
 
 const {
   createDefaultConverter,
@@ -183,10 +184,12 @@ vi.mock('../../Editor', () => {
         },
       },
       view: {
-        dom: {
+        // Real element so listener-based wiring (e.g. SD-2368 composition
+        // deferral) can attach; dispatchEvent/focus stay non-dispatching stubs.
+        dom: Object.assign(document.createElement('div'), {
           dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
-        },
+        }),
         focus: vi.fn(),
         dispatch: vi.fn(),
       },
@@ -205,12 +208,9 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
-    toFlowBlocks: mockToFlowBlocks,
-  };
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockToFlowBlocks });
 });
 
 // Mock layout-bridge functions
@@ -424,6 +424,122 @@ describe('PresentationEditor - scrollToPosition', () => {
           behavior: 'auto',
         });
         expect(mockPage.scrollIntoView).not.toHaveBeenCalled();
+      }
+    });
+
+    it('requests a selection overlay render after the RAF scroll reassert', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
+      if (!pagesHost) return;
+
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+
+      const textElement = document.createElement('span');
+      textElement.dataset.pmStart = '40';
+      textElement.dataset.pmEnd = '60';
+      textElement.scrollIntoView = vi.fn();
+      mockPage.appendChild(textElement);
+      pagesHost.appendChild(mockPage);
+
+      const requestRenderSpy = vi.spyOn(SelectionSyncCoordinator.prototype, 'requestRender');
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+
+      try {
+        const callsBeforeScroll = requestRenderSpy.mock.calls.length;
+        const result = editor.scrollToPosition(50, { behavior: 'smooth' });
+
+        expect(result).toBe(true);
+        expect(textElement.scrollIntoView).toHaveBeenCalledTimes(2);
+        expect(textElement.scrollIntoView).toHaveBeenLastCalledWith({
+          block: 'center',
+          inline: 'nearest',
+          behavior: 'smooth',
+        });
+        expect(requestRenderSpy).toHaveBeenCalledTimes(callsBeforeScroll);
+
+        window.dispatchEvent(new Event('scroll'));
+        expect(requestRenderSpy.mock.calls.length).toBeGreaterThan(callsBeforeScroll);
+        expect(requestRenderSpy).toHaveBeenLastCalledWith({ immediate: true });
+
+        const callsAfterScrollRender = requestRenderSpy.mock.calls.length;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        expect(requestRenderSpy.mock.calls.length).toBeGreaterThan(callsAfterScrollRender);
+        expect(requestRenderSpy).toHaveBeenLastCalledWith({ immediate: true });
+      } finally {
+        rafSpy.mockRestore();
+        requestRenderSpy.mockRestore();
+      }
+    });
+
+    it('paints the navigated caret in layout coordinates after scroll settles at non-100% zoom', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
+      if (!pagesHost) return;
+
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+
+      const textElement = document.createElement('span');
+      textElement.dataset.pmStart = '40';
+      textElement.dataset.pmEnd = '60';
+      textElement.scrollIntoView = vi.fn();
+      mockPage.appendChild(textElement);
+      pagesHost.appendChild(mockPage);
+
+      const activeEditor = editor.getActiveEditor() as unknown as {
+        state: { selection: { from: number; to: number } };
+        view: { hasFocus?: () => boolean };
+      };
+      activeEditor.state.selection = { from: 50, to: 50 };
+      activeEditor.view.hasFocus = () => true;
+      editor.setZoom(2);
+
+      const coordsAtPosSpy = vi.spyOn(editor, 'coordsAtPos').mockReturnValue({
+        top: 222,
+        bottom: 242,
+        left: 144,
+        right: 146,
+        width: 2,
+        height: 20,
+      });
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+
+      try {
+        expect(editor.scrollToPosition(50, { behavior: 'smooth' })).toBe(true);
+        window.dispatchEvent(new Event('scrollend'));
+
+        const caret = container.querySelector('.presentation-editor__selection-caret') as HTMLElement | null;
+        expect(caret).toBeTruthy();
+        expect(coordsAtPosSpy).toHaveBeenCalledWith(50);
+        expect(caret?.style.left).toBe('72px');
+        expect(caret?.style.top).toBe('111px');
+        expect(caret?.style.height).toBe('10px');
+      } finally {
+        rafSpy.mockRestore();
+        coordsAtPosSpy.mockRestore();
       }
     });
 

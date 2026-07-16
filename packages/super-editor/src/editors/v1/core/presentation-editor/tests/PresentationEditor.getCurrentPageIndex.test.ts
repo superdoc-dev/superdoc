@@ -174,10 +174,12 @@ vi.mock('../../Editor', () => {
         },
       },
       view: {
-        dom: {
+        // Real element so listener-based wiring (e.g. SD-2368 composition
+        // deferral) can attach; dispatchEvent/focus stay non-dispatching stubs.
+        dom: Object.assign(document.createElement('div'), {
           dispatchEvent: vi.fn(() => true),
           focus: vi.fn(),
-        },
+        }),
         focus: vi.fn(),
         dispatch: vi.fn(),
       },
@@ -196,12 +198,9 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
-  return {
-    ...actual,
-    toFlowBlocks: mockToFlowBlocks,
-  };
+vi.mock('@core/layout-adapter', async (importOriginal) => {
+  const { buildLayoutDocumentAdapterVitestMock } = await import('./mock-layout-document-adapter-vitest.js');
+  return buildLayoutDocumentAdapterVitestMock(importOriginal, { toFlowBlocks: mockToFlowBlocks });
 });
 
 // Mock layout-bridge functions

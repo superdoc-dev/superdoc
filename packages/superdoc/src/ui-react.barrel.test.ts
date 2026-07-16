@@ -38,6 +38,8 @@ describe('superdoc/ui/react public barrels (SD-3157)', () => {
       'useSuperDocTrackChanges',
       'useSuperDocCommand',
       'useSuperDocDocument',
+      'useSuperDocFontOptions',
+      'useSuperDocFontSizeOptions',
       'useSuperDocToolbar',
     ]) {
       expect(JS_BARREL).toContain(name);

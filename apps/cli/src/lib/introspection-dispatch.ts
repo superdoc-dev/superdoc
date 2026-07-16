@@ -243,6 +243,7 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
             data: {
               active: true,
               contextId: metadata.contextId,
+              runtime: metadata.runtime,
               activeSessionId: activeSessionId ?? undefined,
               projectRoot: metadata.projectRoot,
               document: {

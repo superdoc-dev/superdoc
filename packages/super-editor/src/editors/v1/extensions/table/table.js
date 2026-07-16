@@ -182,6 +182,7 @@ import { createColGroup } from './tableHelpers/createColGroup.js';
 import { deleteTableWhenSelected } from './tableHelpers/deleteTableWhenSelected.js';
 import { normalizeNewTableAttrs } from './tableHelpers/normalizeNewTableAttrs.js';
 import { computeColumnWidths } from './tableHelpers/computeColumnWidths.js';
+import { cellWidthDxa } from './tableHelpers/cellWidth.js';
 import { createTableBorders } from './tableHelpers/createTableBorders.js';
 import {
   isLegacySchemaDefaultBorders,
@@ -921,7 +922,12 @@ export const Table = Node.create({
             for (let r = 0; r < rows; r++) {
               const cellNodes = [];
               for (let c = 0; c < columns; c++) {
-                const cellAttrs = widths ? { colwidth: [widths[c]] } : {};
+                // Emit w:tcW alongside colwidth (matching createTable) so the inserted
+                // grid is a real layout cache; without it the measuring pass classifies
+                // the table as pure-auto and content-sizes it. (SD-3308/SD-3309)
+                const cellAttrs = widths
+                  ? { colwidth: [widths[c]], tableCellProperties: { cellWidth: cellWidthDxa(widths[c]) } }
+                  : {};
                 const cell = tableCellType.createAndFill(cellAttrs);
                 if (!cell) return false;
                 cellNodes.push(cell);

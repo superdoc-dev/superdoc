@@ -645,8 +645,6 @@ const attachServerActivityStream = async () => {
 
 const init = async () => {
   // If the dev shell re-initializes (e.g. on file upload), tear down the previous instance first.
-  detachWordOverlayListener();
-  removeWordOverlay();
   superdoc.value?.destroy?.();
   superdoc.value = null;
   activeEditor.value = null;
@@ -922,6 +920,12 @@ const init = async () => {
 
   superdoc.value?.on('zoomChange', ({ zoom }) => {
     currentZoom.value = zoom;
+  });
+
+  superdoc.value?.on('viewport-change', ({ availableWidth, documentWidth, fitZoom }) => {
+    // Passive demo: custom consumers clamp and apply fitZoom themselves via
+    // setZoom(). For automatic behavior, configure `zoom: { mode: 'fit-width' }`.
+    console.log('[viewport-change]', { availableWidth, documentWidth, fitZoom });
   });
 
   window.superdoc = superdoc.value;
@@ -1238,6 +1242,12 @@ const toggleShowBookmarks = () => {
   superdoc.value?.setShowBookmarks?.(showBookmarks.value);
 };
 
+// SD-3400: demo wiring for the custom insert-footnote action. Consumer apps
+// register this on their own toolbar; it is intentionally not a default item.
+const handleInsertFootnote = () => {
+  activeEditor.value?.commands?.insertFootnote?.();
+};
+
 const toggleViewLayout = () => {
   const nextValue = !useWebLayout.value;
   const url = new URL(window.location.href);
@@ -1538,6 +1548,7 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleShowBookmarks">
               {{ showBookmarks ? 'Hide' : 'Show' }} bookmarks
             </button>
+            <button class="dev-app__header-export-btn" @click="handleInsertFootnote">Insert footnote</button>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>

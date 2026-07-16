@@ -260,16 +260,31 @@ const currentFloatingInstanceId = computed(() => {
   return props.floatingInstanceId ?? props.comment.commentId ?? null;
 });
 
+const activeCommentBelongsToDialog = computed(() => {
+  const activeId = activeComment.value;
+  if (activeId == null) return false;
+  if (activeId === props.comment.commentId) return true;
+  if (!props.comment.trackedChange) return false;
+
+  return collectTrackedChangeThread(props.comment, commentsStore.commentsList).some(
+    (comment) => comment.commentId === activeId || comment.importedId === activeId,
+  );
+});
+
 const isDialogActive = computed(() => {
   if (typeof props.isFloatingInstanceActive === 'boolean') {
     return props.isFloatingInstanceActive;
   }
 
-  if (activeComment.value !== props.comment.commentId) {
+  if (!activeCommentBelongsToDialog.value) {
     return false;
   }
 
   if (props.floatingInstanceId == null) {
+    return true;
+  }
+
+  if (props.comment.trackedChange && activeFloatingCommentInstanceId.value == null) {
     return true;
   }
 
@@ -279,7 +294,8 @@ const isDialogActive = computed(() => {
 /* ── Step 1: Resolved badge ── */
 const resolvedBadgeLabel = computed(() => {
   if (!props.comment.resolvedTime) return null;
-  return props.comment.trackedChange ? 'Accepted' : 'Resolved';
+  if (!props.comment.trackedChange) return 'Resolved';
+  return props.comment.trackedChangeDecision === 'reject' ? 'Rejected' : 'Accepted';
 });
 
 /* ── Pending new comment (brand-new, not a reply) ── */
@@ -350,14 +366,16 @@ const checkOverflow = () => {
 watch(parentBodyRef, () => {
   nextTick(checkOverflow);
 });
-// Reset truncation, thread collapse, and reply state when card becomes inactive
+const resetInactiveThreadState = () => {
+  textExpanded.value = false;
+  threadExpanded.value = false;
+  isReplying.value = false;
+  nextTick(() => emit('resize'));
+};
+
+// Reset truncation, thread collapse, and reply state when card becomes inactive.
 watch(isDialogActive, (active) => {
-  if (!active) {
-    textExpanded.value = false;
-    threadExpanded.value = false;
-    isReplying.value = false;
-    nextTick(() => emit('resize'));
-  }
+  if (!active) resetInactiveThreadState();
 });
 
 /* ── Step 3: Thread collapse ──
@@ -370,6 +388,7 @@ const threadExpanded = ref(false);
 const childComments = computed(() => comments.value.slice(1));
 
 const shouldCollapseThread = computed(() => {
+  if (props.comment.trackedChange) return false;
   if (threadExpanded.value) return false;
   return childComments.value.length >= 2;
 });
@@ -414,6 +433,11 @@ const expandThread = () => {
   nextTick(() => emit('resize'));
 };
 
+watch(activeComment, (commentId) => {
+  if (commentId === props.comment.commentId) return;
+  resetInactiveThreadState();
+});
+
 const isInternalDropdownDisabled = computed(() => {
   if (props.comment.resolvedTime) return true;
   return getConfig.value.readOnly;
@@ -437,7 +461,7 @@ const hasTextContent = computed(() => {
   return currentCommentText.value && currentCommentText.value !== '<p></p>';
 });
 
-const setFocus = () => {
+const setFocus = async () => {
   const editor = proxy.$superdoc.activeEditor;
   const isTrackedChange = Boolean(props.comment?.trackedChange);
   const targetClientY = getPreferredCommentFocusTargetClientY();
@@ -485,7 +509,10 @@ const setFocus = () => {
           };
 
       if (presentation?.navigateTo) {
-        void presentation.navigateTo(trackedTarget);
+        const didNavigate = await presentation.navigateTo(trackedTarget);
+        if (didNavigate && !props.comment.resolvedTime) {
+          commentsStore.setActiveComment(proxy.$superdoc, props.comment.commentId);
+        }
       } else if (props.comment.resolvedTime) {
         editor.commands?.setCursorById(cursorId);
       } else {
@@ -576,7 +603,7 @@ const handleClickOutside = (e) => {
   isCommentHighlighted.value = false;
 };
 
-const handleAddComment = () => {
+const handleAddComment = async () => {
   const options = {
     documentId: props.comment.fileId,
     isInternal: pendingComment.value ? pendingComment.value.isInternal : isInternal.value,
@@ -589,35 +616,49 @@ const handleAddComment = () => {
   }
 
   const comment = commentsStore.getPendingComment(options);
-  addComment({ superdoc: proxy.$superdoc, comment });
-  isReplying.value = false;
-  nextTick(() => emit('resize'));
+  if (!pendingComment.value && currentCommentText.value) {
+    comment.setText({ text: currentCommentText.value, suppressUpdate: true });
+  }
+  Promise.resolve(addComment({ superdoc: proxy.$superdoc, comment })).finally(() => {
+    isReplying.value = false;
+    nextTick(() => emit('resize'));
+  });
 };
 
-const handleReject = () => {
+const getResolveDisabledReason = () => null;
+const getRejectDisabledReason = () => null;
+
+const handleReject = async () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
 
-  if (props.comment.trackedChange && typeof customHandler === 'function') {
-    customHandler(props.comment, proxy.$superdoc.activeEditor);
-  } else if (props.comment.trackedChange) {
-    commentsStore.decideTrackedChangeFromSidebar({
-      superdoc: proxy.$superdoc,
-      comment: props.comment,
-      decision: 'reject',
-    });
+  if (props.comment.trackedChange) {
+    // Custom handlers always resolve so the bubble disappears from
+    // getFloatingComments (SD-2049). The internal decision path only resolves
+    // when the decision actually applied; otherwise the tracked marks are
+    // still in the document and the thread must stay open (SD-3386).
+    let decisionApplied = true;
+    if (typeof customHandler === 'function') {
+      customHandler(props.comment, proxy.$superdoc.activeEditor);
+    } else {
+      const outcome = commentsStore.decideTrackedChangeFromSidebar({
+        superdoc: proxy.$superdoc,
+        comment: props.comment,
+        decision: 'reject',
+      });
+      decisionApplied = Boolean(outcome?.ok) && outcome.success !== false;
+    }
+
+    if (decisionApplied) {
+      props.comment.resolveComment({
+        id: superdocStore.user.id,
+        email: superdocStore.user.email,
+        name: superdocStore.user.name,
+        superdoc: proxy.$superdoc,
+        decision: 'reject',
+      });
+    }
   } else {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
-  }
-
-  // Always resolve tracked changes so resolvedTime is set and the bubble
-  // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
-  if (props.comment.trackedChange) {
-    props.comment.resolveComment({
-      id: superdocStore.user.id,
-      email: superdocStore.user.email,
-      name: superdocStore.user.name,
-      superdoc: proxy.$superdoc,
-    });
   }
 
   // Always cleanup the dialog state
@@ -629,29 +670,41 @@ const handleReject = () => {
   });
 };
 
-const handleResolve = () => {
+const handleResolve = async () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
 
+  let v1TrackedChangeDecisionApplied = true;
   if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handlers always resolve so the bubble disappears from
+    // getFloatingComments (SD-2049).
     customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else if (props.comment.trackedChange) {
+    const outcome = commentsStore.decideTrackedChangeFromSidebar({
+      superdoc: proxy.$superdoc,
+      comment: props.comment,
+      decision: 'accept',
+    });
+    v1TrackedChangeDecisionApplied = Boolean(outcome?.ok) && outcome.success !== false;
   } else {
-    if (props.comment.trackedChange) {
-      commentsStore.decideTrackedChangeFromSidebar({
-        superdoc: proxy.$superdoc,
-        comment: props.comment,
-        decision: 'accept',
-      });
-    }
+    props.comment.resolveComment({
+      id: superdocStore.user.id,
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+    });
   }
 
-  // Always resolve so resolvedTime is set and the bubble disappears
-  // from getFloatingComments — even when a custom handler is used (SD-2049).
-  props.comment.resolveComment({
-    id: superdocStore.user.id,
-    email: superdocStore.user.email,
-    name: superdocStore.user.name,
-    superdoc: proxy.$superdoc,
-  });
+  // For v1 tracked changes we still need to resolve the local Vue model so the
+  // bubble disappears from getFloatingComments after the document decision works.
+  if (props.comment.trackedChange && v1TrackedChangeDecisionApplied) {
+    props.comment.resolveComment({
+      id: superdocStore.user.id,
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+      decision: 'accept',
+    });
+  }
 
   // Always cleanup the dialog state
   nextTick(() => {
@@ -682,7 +735,7 @@ const handleOverflowSelect = (value, comment) => {
   }
 };
 
-const handleCommentUpdate = (comment) => {
+const handleCommentUpdate = async (comment) => {
   editingCommentId.value = null;
   comment.setText({ text: currentCommentText.value, superdoc: proxy.$superdoc });
   removePendingComment(proxy.$superdoc);
@@ -846,6 +899,8 @@ watch(editingCommentId, (commentId) => {
           :timestamp="getProcessedDate(comment.createdTime)"
           :comment="comment"
           :is-active="isDialogActive"
+          :resolve-disabled-reason="getResolveDisabledReason(comment)"
+          :reject-disabled-reason="getRejectDisabledReason(comment)"
           @resolve="handleResolve"
           @reject="handleReject"
           @overflow-select="handleOverflowSelect($event, comment)"
@@ -864,6 +919,15 @@ watch(editingCommentId, (commentId) => {
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
               <span class="change-type">Changed hyperlink to </span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'paragraphSplit'">
+              <span class="change-type">Added new line</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'tableInsert'">
+              <span class="change-type">Added table</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'tableDelete'">
+              <span class="change-type">Deleted table</span>
             </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>

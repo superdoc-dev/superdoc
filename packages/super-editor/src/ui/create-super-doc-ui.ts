@@ -1,4 +1,5 @@
 import { createHeadlessToolbar } from '../headless-toolbar/index.js';
+import { DEFAULT_FONT_SIZE_OPTIONS } from '../headless-toolbar/constants.js';
 import { resolveToolbarSources } from '../headless-toolbar/resolve-toolbar-sources.js';
 import { createToolbarRegistry } from '../headless-toolbar/toolbar-registry.js';
 import type {
@@ -19,6 +20,10 @@ import type {
   TextTarget,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { composeAuthorColorResolver } from '@superdoc/contracts';
+import type { TrackChangeAuthorColorResolver } from '@superdoc/contracts';
+import { buildFontFamilyOptions, deriveBundledActivationForConfig } from '@superdoc/font-system';
+import type { FontFamilyOption } from '@superdoc/font-system';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
@@ -28,6 +33,10 @@ import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
 import { restoreSelection } from './selection-restore.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
+import { buildTrackedChangeCanonicalIdMap } from '../editors/v1/document-api-adapters/helpers/tracked-change-resolver.js';
+import { resolveStoryRuntime } from '../editors/v1/document-api-adapters/story-runtime/resolve-story-runtime.js';
+import { buildStoryKey } from '../editors/v1/document-api-adapters/story-runtime/story-key.js';
 import { createScope } from './scope.js';
 import type {
   CommandHandle,
@@ -41,6 +50,8 @@ import type {
   DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
+  FontSizeOption,
+  FontsHandle,
   MetadataHandle,
   TrackChangesHandle,
   TrackChangesItem,
@@ -70,6 +81,9 @@ import type {
   ContentControlFocusResult,
   ViewportRect,
   ViewportRectResult,
+  ZoomHandle,
+  ZoomMode,
+  ZoomSlice,
 } from './types.js';
 
 /**
@@ -108,7 +122,7 @@ const EDITOR_EVENTS = [
  */
 const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'tracked-changes-changed'] as const;
 
-const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
+const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange', 'viewport-change'] as const;
 
 /**
  * Presentation-editor events the controller listens to. These signal
@@ -171,6 +185,30 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
  * `ui.comments.subscribe` even when nothing in the slice changed.
  */
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
+
+const FONT_SIZE_OPTIONS: FontSizeOption[] = DEFAULT_FONT_SIZE_OPTIONS.map(({ label, value }) => ({ label, value }));
+
+function resolveActiveCommentIdFromList(items: CommentsListResult['items'], commentId: string): string | null {
+  const matches = (item: CommentsListResult['items'][number], id: string) => {
+    const importedId = (item as { importedId?: string }).importedId;
+    return item.id === id || importedId === id;
+  };
+
+  let item = items.find((candidate) => matches(candidate, commentId));
+  const visited = new Set<string>();
+
+  while (item) {
+    if (visited.has(item.id)) return null;
+    visited.add(item.id);
+
+    const parentId = (item as { parentCommentId?: string }).parentCommentId;
+    if (!parentId) return item.id;
+
+    item = items.find((candidate) => matches(candidate, parentId));
+  }
+
+  return null;
+}
 
 /**
  * Recursive structural clone for `ui.selection.capture()` (SD-2821).
@@ -263,10 +301,13 @@ function resolveFreshToolbarSources(superdoc: SuperDocUIOptions['superdoc']) {
 function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
   try {
     const sources = resolveFreshToolbarSources(superdoc);
-    return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
+    const routedEditor = (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
+    if (routedEditor) return routedEditor;
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
   }
+  const activeEditor = (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
+  return activeEditor?.doc ? activeEditor : null;
 }
 
 /**
@@ -527,6 +568,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   refreshTrackChangesListCache();
 
+  // Per-author tracked-change color resolver. Built once from the host
+  // `modules.trackChanges.authorColors` config so the snapshot colors match
+  // exactly what the layout engine paints (both go through
+  // `composeAuthorColorResolver`). `undefined` when colors are disabled /
+  // unconfigured, in which case items carry no `authorColor`.
+  const authorColorResolver: TrackChangeAuthorColorResolver | undefined = composeAuthorColorResolver(
+    superdoc.config?.modules?.trackChanges?.authorColors,
+  );
+
   // Content-controls slice cache (SD-3157). Same posture as comments
   // and tracked changes: list reads are O(N), so cache the list and
   // refresh on document-changing events. `activeIds` derives from the
@@ -554,6 +604,32 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     }
   };
   refreshContentControlsListCache();
+
+  // The document's bundled-font activation, derived from the same `fonts` config the editor used
+  // (a pure function of config + the CDN pack flag, so it matches the editor's resolver). Gates the
+  // built-in picker rows: baseline without a pack, the curated rich set with one.
+  const bundledActivation = () => deriveBundledActivationForConfig(superdoc.config?.fonts);
+  let fontOptionsCache: FontFamilyOption[] = buildFontFamilyOptions([], bundledActivation());
+  const fontOptionsSignatureFor = (options: readonly FontFamilyOption[]) =>
+    JSON.stringify(options.map((option) => [option.label, option.value, option.previewFamily]));
+  let fontOptionsSignature = fontOptionsSignatureFor(fontOptionsCache);
+  const refreshFontOptionsCache = () => {
+    let next: FontFamilyOption[];
+    try {
+      next = buildFontFamilyOptions(superdoc.fonts?.getDocumentFontOptions?.() ?? [], bundledActivation());
+    } catch {
+      next = buildFontFamilyOptions([], bundledActivation());
+    }
+    const signature = fontOptionsSignatureFor(next);
+    if (signature === fontOptionsSignature) return false;
+    fontOptionsSignature = signature;
+    fontOptionsCache = next;
+    return true;
+  };
+  const refreshFontOptionsAndNotify = () => {
+    if (refreshFontOptionsCache()) scheduleNotify();
+  };
+  refreshFontOptionsCache();
 
   /**
    * Memoized content-controls slice. Items array reference stays
@@ -650,6 +726,30 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
    * overwritten by the next computeState() call.
    */
   let activeTrackChangeId: string | null = null;
+  let trackChangeNavigationGeneration = 0;
+  let awaitingTrackChangeNavigationBaseline = false;
+  let navigatedEmptySelectionKey: string | null = null;
+  type TrackChangeNavigationRollbackState = {
+    activeTrackChangeId: string | null;
+    awaitingTrackChangeNavigationBaseline: boolean;
+    navigatedEmptySelectionKey: string | null;
+  };
+  let pendingTrackChangeNavigation: {
+    id: string;
+    generation: number;
+    rollbackState: TrackChangeNavigationRollbackState;
+  } | null = null;
+  const captureTrackChangeNavigationRollbackState = (): TrackChangeNavigationRollbackState =>
+    pendingTrackChangeNavigation?.rollbackState ?? {
+      activeTrackChangeId,
+      awaitingTrackChangeNavigationBaseline,
+      navigatedEmptySelectionKey,
+    };
+  const restoreTrackChangeNavigationRollbackState = (state: TrackChangeNavigationRollbackState): void => {
+    activeTrackChangeId = state.activeTrackChangeId;
+    awaitingTrackChangeNavigationBaseline = state.awaitingTrackChangeNavigationBaseline;
+    navigatedEmptySelectionKey = state.navigatedEmptySelectionKey;
+  };
   /**
    * The selection-driven change id observed during the last
    * `computeState`. Only when this changes between calls does the
@@ -671,6 +771,120 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     activeId: string | null;
     slice: TrackChangesSlice;
   } | null = null;
+  let trackedChangeIdContextMemo: {
+    editor: SuperDocEditorLike | null;
+    items: readonly TrackChangesItem[];
+    context: {
+      itemById: Map<string, TrackChangesItem>;
+      toPublicId(id: string): string | null;
+      aliasesFor(id: string): string[];
+    };
+  } | null = null;
+  let syncedTrackChangeFocusKey: string | null = null;
+  let syncedTrackChangeFocusPresentation: { setActiveTrackChangeIds?(ids: readonly string[]): boolean } | null = null;
+
+  const buildTrackedChangeIdContext = (editor: SuperDocEditorLike | null, items: readonly TrackChangesItem[]) => {
+    if (trackedChangeIdContextMemo?.editor === editor && trackedChangeIdContextMemo.items === items) {
+      return trackedChangeIdContextMemo.context;
+    }
+
+    const itemById = new Map(items.map((item) => [item.id, item] as const));
+    const canonicalIdByAlias = new Map<string, string>();
+    let cacheable = true;
+    const addCanonicalAliasesFromEditor = (sourceEditor: SuperDocEditorLike | null) => {
+      if (!sourceEditor) return;
+      try {
+        for (const [alias, canonical] of buildTrackedChangeCanonicalIdMap(sourceEditor as never)) {
+          canonicalIdByAlias.set(alias, canonical);
+        }
+      } catch {
+        // Ignore transient story/runtime failures; direct public ids still resolve below.
+        cacheable = false;
+      }
+    };
+
+    addCanonicalAliasesFromEditor(editor);
+
+    if (editor) {
+      const resolvedStoryKeys = new Set<string>();
+      for (const item of items) {
+        const story = item.change.address.story;
+        if (!story || typeof story !== 'object' || story.storyType === 'body') continue;
+        try {
+          const key = buildStoryKey(story);
+          if (resolvedStoryKeys.has(key)) continue;
+          resolvedStoryKeys.add(key);
+          // Story hit-testing intentionally warms story runtimes so painted story-local ids can map to public ids.
+          const runtime = resolveStoryRuntime(editor as never, story);
+          addCanonicalAliasesFromEditor(runtime.editor as never);
+        } catch {
+          // Story editors can be unavailable while a document is initializing.
+          cacheable = false;
+        }
+      }
+    }
+
+    const context = {
+      itemById,
+      toPublicId(id: string): string | null {
+        const canonical = canonicalIdByAlias.get(id);
+        if (canonical && itemById.has(canonical)) return canonical;
+        if (itemById.has(id)) return id;
+        return null;
+      },
+
+      aliasesFor(id: string): string[] {
+        const canonical = canonicalIdByAlias.get(id) ?? (itemById.has(id) ? id : null);
+        const out: string[] = [];
+        const add = (value: string | null | undefined) => {
+          if (!value || out.includes(value)) return;
+          out.push(value);
+        };
+
+        add(id);
+        if (!canonical) return out;
+
+        for (const [alias, publicId] of canonicalIdByAlias) {
+          if (publicId === canonical) add(alias);
+        }
+        if (itemById.has(canonical)) add(canonical);
+        return out;
+      },
+    };
+
+    if (cacheable) {
+      trackedChangeIdContextMemo = { editor, items, context };
+    }
+
+    return context;
+  };
+
+  const syncActiveTrackChangeFocus = (
+    editor: SuperDocEditorLike | null,
+    items: readonly TrackChangesItem[],
+    activeId: string | null,
+  ) => {
+    const hostEditor = resolveHostEditor(superdoc);
+    const presentation = (
+      hostEditor as { presentationEditor?: { setActiveTrackChangeIds?(ids: readonly string[]): boolean } } | null
+    )?.presentationEditor;
+    if (!presentation || typeof presentation.setActiveTrackChangeIds !== 'function') {
+      syncedTrackChangeFocusKey = null;
+      syncedTrackChangeFocusPresentation = null;
+      return;
+    }
+
+    if (syncedTrackChangeFocusPresentation !== presentation) {
+      syncedTrackChangeFocusPresentation = presentation;
+      syncedTrackChangeFocusKey = null;
+    }
+
+    const aliases = activeId ? buildTrackedChangeIdContext(editor, items).aliasesFor(activeId) : [];
+    const key = aliases.join('\u0000');
+    if (syncedTrackChangeFocusKey === key) return;
+    syncedTrackChangeFocusKey = key;
+    presentation.setActiveTrackChangeIds(aliases);
+  };
 
   /**
    * Memoized selection slice. Slice identity is stable when the
@@ -690,6 +904,64 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
    * either field, but they do trigger computeState rebuilds).
    */
   let documentMemo: { slice: DocumentSlice } | null = null;
+  let zoomMemo: { slice: ZoomSlice } | null = null;
+
+  // Static fallback for hosts without the zoom surface (older builds,
+  // minimal stubs): manual mode at 100% with no metrics.
+  const FALLBACK_ZOOM_SLICE: ZoomSlice = Object.freeze({
+    mode: 'manual',
+    value: 100,
+    fitZoom: null,
+    min: 10,
+    max: 100,
+    metrics: null,
+  });
+
+  // Read the host zoom state + metrics into one slice. Memoized on the
+  // field values. Metrics compare by reference, which is equivalent to a
+  // field-wise compare because the host's viewport-fit store replaces the
+  // (frozen) metrics object only when a field actually changed; if that
+  // invariant moves, switch this to field-wise. `shallowEqual` on
+  // `state.zoom` then short-circuits `ui.zoom.observe` while nothing
+  // zoom-related changes.
+  const computeZoomSlice = (): ZoomSlice => {
+    if (typeof superdoc.getZoomState !== 'function') return FALLBACK_ZOOM_SLICE;
+    let state: ReturnType<NonNullable<typeof superdoc.getZoomState>> | null = null;
+    try {
+      state = superdoc.getZoomState();
+    } catch {
+      state = null;
+    }
+    if (!state) return FALLBACK_ZOOM_SLICE;
+    let metrics: ZoomSlice['metrics'] = null;
+    try {
+      metrics = superdoc.getViewportMetrics?.() ?? null;
+    } catch {
+      metrics = null;
+    }
+    const prev = zoomMemo?.slice;
+    if (
+      prev &&
+      prev.mode === state.mode &&
+      prev.value === state.value &&
+      prev.fitZoom === state.fitZoom &&
+      prev.min === state.min &&
+      prev.max === state.max &&
+      prev.metrics === metrics
+    ) {
+      return prev;
+    }
+    const slice: ZoomSlice = {
+      mode: state.mode,
+      value: state.value,
+      fitZoom: state.fitZoom,
+      min: state.min,
+      max: state.max,
+      metrics,
+    };
+    zoomMemo = { slice };
+    return slice;
+  };
 
   /**
    * Internal dirty flag. Flipped to `true` by any editor transaction
@@ -749,12 +1021,24 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     return `${empty ? '1' : '0'}:${storyKey}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
   };
 
+  const buildSelectionLocationKey = (
+    empty: boolean,
+    target: import('@superdoc/document-api').TextTarget | null | undefined,
+    quotedText: string,
+  ): string => {
+    const targetKey = target
+      ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
+      : 'null';
+    return `${empty ? '1' : '0'}:${targetKey}:t=${quotedText}`;
+  };
+
   const computeState = (): SuperDocUIState => {
     // Route through PresentationEditor when active so selection state
     // follows the body/header/footer/note editor the user is actually
     // editing — `superdoc.activeEditor` stays on the body editor while
     // `PresentationEditor.getActiveEditor()` follows the routed story.
     const editor = resolveRoutedEditor(superdoc);
+    const hostEditor = resolveHostEditor(superdoc);
     const ready = editor != null;
     const selectionInfo = editor?.doc?.selection?.current?.({ includeText: true });
     const empty = selectionInfo ? selectionInfo.empty : true;
@@ -767,6 +1051,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // snapshot re-fires every selection event).
     const activeIds = (selectionInfo?.activeCommentIds ?? EMPTY_ACTIVE_IDS) as string[];
     const activeChangeIdsFromSelection = (selectionInfo?.activeChangeIds ?? EMPTY_ACTIVE_IDS) as string[];
+    const selectionLocationKey = buildSelectionLocationKey(
+      empty,
+      (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null,
+      quotedText,
+    );
 
     // Reconcile activeTrackChangeId. Mirror the selection-driven
     // tracked-change id only when it has changed since the last
@@ -778,10 +1067,26 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     //     activeTrackChangeId so navigation persists, but clear it if
     //     the underlying change dropped out of the list
     const selectionDrivenActiveId = activeChangeIdsFromSelection[0] ?? null;
-    const selectionMoved = selectionDrivenActiveId !== lastSelectionDrivenId;
-    lastSelectionDrivenId = selectionDrivenActiveId;
-    if (selectionMoved && selectionDrivenActiveId) {
-      activeTrackChangeId = selectionDrivenActiveId;
+    if (!pendingTrackChangeNavigation) {
+      const selectionMoved = selectionDrivenActiveId !== lastSelectionDrivenId;
+      lastSelectionDrivenId = selectionDrivenActiveId;
+      if (selectionMoved && selectionDrivenActiveId) {
+        activeTrackChangeId = selectionDrivenActiveId;
+        awaitingTrackChangeNavigationBaseline = false;
+        navigatedEmptySelectionKey = null;
+      } else if (activeTrackChangeId && !selectionDrivenActiveId) {
+        if (awaitingTrackChangeNavigationBaseline) {
+          awaitingTrackChangeNavigationBaseline = false;
+          navigatedEmptySelectionKey = selectionLocationKey;
+        } else if (navigatedEmptySelectionKey && selectionLocationKey !== navigatedEmptySelectionKey) {
+          activeTrackChangeId = null;
+          navigatedEmptySelectionKey = null;
+        } else if (!navigatedEmptySelectionKey && selectionMoved) {
+          activeTrackChangeId = null;
+        }
+      } else if (awaitingTrackChangeNavigationBaseline) {
+        awaitingTrackChangeNavigationBaseline = false;
+      }
     }
 
     // Build (or reuse) the track-changes slice. Memo invalidates only
@@ -796,23 +1101,47 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     ) {
       trackChangesSlice = trackChangesMemo.slice;
     } else {
-      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => ({
-        id: change.id,
-        change,
-      }));
+      // Resolve per-author colors (when configured) for each change, plus the
+      // ordered unique author list. Resolution mirrors the layout-engine paint
+      // path so snapshot colors match what is rendered.
+      const authors: TrackChangesSlice['authors'] = [];
+      const seenAuthorKeys = new Set<string>();
+      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => {
+        if (!authorColorResolver) {
+          return { id: change.id, change };
+        }
+        const author = {
+          name: typeof change.author === 'string' ? change.author : undefined,
+          email: typeof change.authorEmail === 'string' ? change.authorEmail : undefined,
+          image: typeof change.authorImage === 'string' ? change.authorImage : undefined,
+        };
+        const authorColor = authorColorResolver(author);
+        if (authorColor && (author.name || author.email)) {
+          const key = JSON.stringify([author.name ?? '', author.email ?? '']);
+          if (!seenAuthorKeys.has(key)) {
+            seenAuthorKeys.add(key);
+            authors.push({ ...author, color: authorColor });
+          }
+        }
+        if (!authorColor) {
+          return { id: change.id, change };
+        }
+        return { id: change.id, change: { ...change, authorColor }, authorColor };
+      });
       // If the previously active id dropped out of the feed (e.g. an
       // accept/reject), reset to null. Compute *after* items is built
       // so the final slice matches the eventual activeTrackChangeId.
       if (activeTrackChangeId && !items.some((item) => item.id === activeTrackChangeId)) {
         activeTrackChangeId = null;
       }
-      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId };
+      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId, authors };
       trackChangesMemo = {
         changesRef: trackChangesListCache.items,
         activeId: activeTrackChangeId,
         slice: trackChangesSlice,
       };
     }
+    syncActiveTrackChangeFocus(hostEditor, trackChangesSlice.items, activeTrackChangeId);
 
     // Build (or reuse) the rich selection slice. Memo key folds in
     // every observable field so a typing-only transaction (which leaves
@@ -827,7 +1156,6 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // only place where both are reachable. Direct
     // `editor.doc.selection.current()` calls are unaffected by design;
     // a deeper adapter change would be a separate ticket.
-    const hostEditor = resolveHostEditor(superdoc);
     const routedIsStory = editor != null && hostEditor != null && editor !== hostEditor;
     const activeStory = routedIsStory ? readActiveStoryLocator(superdoc) : null;
     const selectionTextTarget = attachStoryToTextTarget(
@@ -903,6 +1231,8 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       documentMode,
       document: documentSlice,
       selection: selectionSlice,
+      zoom: computeZoomSlice(),
+      fonts: { options: fontOptionsCache, sizeOptions: FONT_SIZE_OPTIONS },
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
         total: commentsListCache.total,
@@ -1000,7 +1330,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   // zoomChange fires *before* the re-render, so notifying then would hand
   // consumers stale rects. Tag the next post-paint layout flush as 'zoom'.
-  const onGeometryZoom = () => {
+  // Only a changed VALUE schedules a repaint; mode-only transitions
+  // (setZoomMode with an unchanged value) would latch a tag no flush ever
+  // consumes, mis-labeling the next unrelated layout notification.
+  let lastGeometryZoomValue: number | null = (() => {
+    try {
+      return superdoc.getZoomState?.().value ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const onGeometryZoom = (...args: unknown[]) => {
+    const payload = args[0] as { zoom?: number } | undefined;
+    const nextZoom = typeof payload?.zoom === 'number' ? payload.zoom : null;
+    if (nextZoom !== null && nextZoom === lastGeometryZoomValue) return;
+    lastGeometryZoomValue = nextZoom;
     zoomPending = true;
   };
   const onGeometryLayout = () => {
@@ -1013,6 +1357,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   const onWindowScrollGeometry = () => scheduleGeometry('scroll');
   const onWindowResizeGeometry = () => scheduleGeometry('resize');
+  // The comments rail toggling shifts/reflows document geometry but does
+  // not reliably emit a layout repaint on its own, so cached rects would
+  // silently go stale. Bridge the explicit sidebar-toggle signal into a
+  // geometry invalidation. Reuses the 'layout' reason; consumers only
+  // re-query on it, so no new public reason is warranted.
+  const onGeometrySidebar = () => scheduleGeometry('layout');
   let domGeometryAttached = false;
   const attachDomGeometryListeners = () => {
     if (domGeometryAttached || typeof window === 'undefined') return;
@@ -1046,9 +1396,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // zoom drives geometry (post-paint, tagged via onGeometryLayout) — separate
     // from the slice recompute that SUPERDOC_EVENTS triggers.
     superdoc.on?.('zoomChange', onGeometryZoom);
+    superdoc.on?.('fonts-changed', refreshFontOptionsAndNotify);
+    superdoc.on?.('sidebar-toggle', onGeometrySidebar);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
       superdoc.off?.('zoomChange', onGeometryZoom);
+      superdoc.off?.('fonts-changed', refreshFontOptionsAndNotify);
+      superdoc.off?.('sidebar-toggle', onGeometrySidebar);
     });
   }
 
@@ -1101,7 +1455,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const attachEditorListeners = () => {
     const next = resolveRoutedEditor(superdoc);
-    if (next === currentEditor) return;
+    if (next === currentEditor) {
+      refreshFontOptionsAndNotify();
+      return;
+    }
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = next;
@@ -1138,11 +1495,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       next.off?.('transaction', onTransaction);
       next.off?.('transaction', onDocChangedForContentControls);
     };
-    // The set of source events changed and the routed editor swapped
-    // — refresh the comments + content-controls caches for the new
-    // editor and recompute state so subscribers see the new selection.
+    // The set of source events changed and the routed editor swapped.
+    // Refresh caches before recomputing state so subscribers see the
+    // new document's current data.
     refreshCommentsListCache();
+    refreshTrackChangesListCache();
     refreshContentControlsListCache();
+    refreshFontOptionsCache();
     scheduleNotify();
   };
 
@@ -1767,6 +2126,28 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       refreshAndNotify();
       return receipt;
     },
+    setActive(commentId) {
+      const editor = resolveHostEditor(superdoc) as unknown as {
+        commands?: { setActiveComment?(input: { commentId: string | null }): boolean };
+        doc?: { comments?: { list?(): CommentsListResult } };
+      } | null;
+
+      try {
+        const setActiveComment = editor?.commands?.setActiveComment;
+        if (typeof setActiveComment !== 'function') return false;
+
+        let resolvedCommentId: string | null = null;
+        if (commentId !== null) {
+          const items = editor?.doc?.comments?.list?.().items ?? [];
+          resolvedCommentId = resolveActiveCommentIdFromList(items, commentId);
+          if (!resolvedCommentId) return false;
+        }
+
+        return setActiveComment({ commentId: resolvedCommentId }) === true;
+      } catch {
+        return false;
+      }
+    },
     async scrollTo(commentId) {
       // `CommentAddress` is body-scoped in the contract — it has no
       // `story` field today. Story-aware comment navigation lands as
@@ -1791,6 +2172,9 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // SD-2667/S4 (filed separately).
 
   const requireDocTrackChanges = () => {
+    if (superdoc.config?.documentMode === 'viewing' || superdoc.config?.modules?.trackChanges?.enabled === false) {
+      throw new Error('ui.trackChanges: tracked-change decisions are unavailable in read-only mode.');
+    }
     // Always go through the host editor — `trackChanges.decide` is
     // document-wide and the change's own `address.story` (carried in
     // the decide target) tells the adapter which story to operate
@@ -1833,6 +2217,72 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     return (change as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
   };
 
+  const buildTrackedChangeEntityTarget = (id: string): import('@superdoc/document-api').EntityAddress => {
+    const story = lookupChangeStory(id) as import('@superdoc/document-api').TrackedChangeAddress['story'];
+    return story != null
+      ? { kind: 'entity', entityType: 'trackedChange', entityId: id, story }
+      : { kind: 'entity', entityType: 'trackedChange', entityId: id };
+  };
+
+  const navigateToTrackedChange = async (
+    id: string,
+    behavior: import('@superdoc/document-api').ScrollIntoViewInput['behavior'],
+    rollbackState = captureTrackChangeNavigationRollbackState(),
+  ): Promise<import('@superdoc/document-api').ScrollIntoViewOutput> => {
+    const generation = ++trackChangeNavigationGeneration;
+    activeTrackChangeId = id;
+    awaitingTrackChangeNavigationBaseline = true;
+    navigatedEmptySelectionKey = null;
+    pendingTrackChangeNavigation = { id, generation, rollbackState };
+    scheduleNotify();
+
+    const fail = (): import('@superdoc/document-api').ScrollIntoViewOutput => {
+      if (pendingTrackChangeNavigation?.generation === generation) {
+        restoreTrackChangeNavigationRollbackState(rollbackState);
+      }
+      return { success: false };
+    };
+
+    try {
+      const editor = resolveHostEditor(superdoc);
+      const presentation = editor?.presentationEditor as
+        | {
+            navigateTo?: (
+              target: import('@superdoc/document-api').EntityAddress,
+              options?: {
+                block?: import('@superdoc/document-api').ScrollIntoViewInput['block'];
+                behavior?: import('@superdoc/document-api').ScrollIntoViewInput['behavior'];
+                shouldContinue?: () => boolean;
+              },
+            ) => Promise<boolean> | boolean;
+          }
+        | null
+        | undefined;
+      if (!presentation || typeof presentation.navigateTo !== 'function') {
+        return fail();
+      }
+      const shouldContinue = () => pendingTrackChangeNavigation?.generation === generation;
+      if (!shouldContinue()) return fail();
+      const ok = await presentation.navigateTo(buildTrackedChangeEntityTarget(id), {
+        block: 'center',
+        behavior,
+        shouldContinue,
+      });
+      if (!shouldContinue()) return fail();
+      if (ok) {
+        if (!shouldContinue()) return fail();
+      }
+      return ok ? { success: true } : fail();
+    } catch {
+      return fail();
+    } finally {
+      if (pendingTrackChangeNavigation?.generation === generation) {
+        pendingTrackChangeNavigation = null;
+        scheduleNotify();
+      }
+    }
+  };
+
   const trackChanges: TrackChangesHandle = {
     getSnapshot: () => computeState().trackChanges,
     observe(listener) {
@@ -1846,6 +2296,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
     subscribe(listener) {
       return trackChanges.observe((snapshot) => listener({ snapshot }));
+    },
+    getAt(input) {
+      const hits = viewport.entityAt(input);
+      if (hits.length === 0) return null;
+
+      const slice = computeState().trackChanges;
+      const editor = resolveHostEditor(superdoc);
+      const { itemById, toPublicId } = buildTrackedChangeIdContext(editor, slice.items);
+
+      for (const hit of hits) {
+        if (hit.type !== 'trackedChange') continue;
+        const publicId = toPublicId(hit.id);
+        if (!publicId) continue;
+        const item = itemById.get(publicId);
+        if (!item) continue;
+        return { id: item.id, item };
+      }
+
+      return null;
     },
     accept(changeId) {
       const api = requireDocTrackChanges();
@@ -1883,13 +2352,32 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       refreshAndNotify();
       return receipt;
     },
+    setActive(id) {
+      const editor = resolveRoutedEditor(superdoc) ?? resolveHostEditor(superdoc);
+      if (!editor) return false;
+
+      const items = computeState().trackChanges.items;
+      if (id !== null && !items.some((item) => item.id === id)) {
+        return false;
+      }
+
+      activeTrackChangeId = id;
+      awaitingTrackChangeNavigationBaseline = false;
+      navigatedEmptySelectionKey = null;
+      pendingTrackChangeNavigation = null;
+      syncActiveTrackChangeFocus(resolveHostEditor(superdoc), items, activeTrackChangeId);
+      scheduleNotify();
+      return true;
+    },
     next() {
       const items = computeState().trackChanges.items;
       if (items.length === 0) return null;
       const current = activeTrackChangeId ? items.findIndex((i) => i.id === activeTrackChangeId) : -1;
       // Wrap-around: after last → first; null active → first.
       const nextIndex = current < 0 || current >= items.length - 1 ? 0 : current + 1;
+      pendingTrackChangeNavigation = null;
       activeTrackChangeId = items[nextIndex]!.id;
+      syncActiveTrackChangeFocus(resolveHostEditor(superdoc), items, activeTrackChangeId);
       scheduleNotify();
       return activeTrackChangeId;
     },
@@ -1899,23 +2387,26 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const current = activeTrackChangeId ? items.findIndex((i) => i.id === activeTrackChangeId) : -1;
       // Wrap-around: before first → last; null active → last.
       const prevIndex = current <= 0 ? items.length - 1 : current - 1;
+      pendingTrackChangeNavigation = null;
       activeTrackChangeId = items[prevIndex]!.id;
+      syncActiveTrackChangeFocus(resolveHostEditor(superdoc), items, activeTrackChangeId);
       scheduleNotify();
       return activeTrackChangeId;
     },
+    async navigateNext() {
+      const rollbackState = captureTrackChangeNavigationRollbackState();
+      const id = trackChanges.next();
+      if (!id) return { success: false };
+      return navigateToTrackedChange(id, 'auto', rollbackState);
+    },
+    async navigatePrevious() {
+      const rollbackState = captureTrackChangeNavigationRollbackState();
+      const id = trackChanges.previous();
+      if (!id) return { success: false };
+      return navigateToTrackedChange(id, 'auto', rollbackState);
+    },
     async scrollTo(id) {
-      activeTrackChangeId = id;
-      scheduleNotify();
-      const story = lookupChangeStory(id) as import('@superdoc/document-api').TrackedChangeAddress['story'];
-      const target: import('@superdoc/document-api').EntityAddress =
-        story != null
-          ? { kind: 'entity', entityType: 'trackedChange', entityId: id, story }
-          : { kind: 'entity', entityType: 'trackedChange', entityId: id };
-      return runScrollIntoView({
-        target,
-        block: 'center',
-        behavior: 'smooth',
-      });
+      return navigateToTrackedChange(id, 'smooth');
     },
   };
 
@@ -1950,6 +2441,71 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     pageIndex: rect.pageIndex,
   });
 
+  // Text-target branch for `ui.viewport.getRect` (SD-3329). Resolves a
+  // Document API `TextAddress` (one block) or `TextTarget` (segments) to
+  // PM positions via `resolveTextTarget`, then to painted body rects via
+  // `getBodyRangeRects`. Body story only: a non-body `story` returns
+  // `unresolved` (valid target, story-aware text rects are a follow-up)
+  // rather than `invalid-target` (a caller-shape error). Multi-segment
+  // targets produce per-segment rects concatenated in document order, not
+  // a collapsed first→last range, so discontinuous / imported spans paint
+  // correctly.
+  const resolveTextTargetRects = (
+    hostEditor: SuperDocEditorLike,
+    presentation: NonNullable<SuperDocEditorLike['presentationEditor']>,
+    target: { story?: unknown; blockId?: unknown; range?: unknown; segments?: unknown },
+  ): ViewportRectResult => {
+    const story = target.story as { storyType?: unknown } | undefined;
+    if (story && story.storyType !== undefined && story.storyType !== 'body') {
+      return { success: false, reason: 'unresolved' };
+    }
+    if (typeof presentation.getBodyRangeRects !== 'function') {
+      return { success: false, reason: 'not-ready' };
+    }
+    const segments = Array.isArray(target.segments)
+      ? (target.segments as Array<{ blockId?: unknown; range?: unknown }>)
+      : [{ blockId: target.blockId, range: target.range }];
+    if (segments.length === 0) return { success: false, reason: 'invalid-target' };
+
+    const rects: ViewportRect[] = [];
+    for (const seg of segments) {
+      const blockId = seg?.blockId;
+      const range = seg?.range as { start?: unknown; end?: unknown } | undefined;
+      if (
+        typeof blockId !== 'string' ||
+        !blockId ||
+        !range ||
+        typeof range.start !== 'number' ||
+        typeof range.end !== 'number'
+      ) {
+        return { success: false, reason: 'invalid-target' };
+      }
+      let resolved: { from: number; to: number } | null;
+      try {
+        resolved = resolveTextTarget(hostEditor as unknown as Parameters<typeof resolveTextTarget>[0], {
+          kind: 'text',
+          blockId,
+          range: { start: range.start, end: range.end },
+        });
+      } catch {
+        // `resolveTextTarget` throws on ambiguous block ids (and other
+        // adapter/target errors). A public geometry read must never throw
+        // out — surface it as a structured failure. The target shape is
+        // valid; it just can't be resolved to a unique range.
+        return { success: false, reason: 'unresolved' };
+      }
+      if (!resolved) return { success: false, reason: 'unresolved' };
+      for (const r of presentation.getBodyRangeRects(resolved.from, resolved.to)) {
+        rects.push(toViewportRect(r));
+      }
+    }
+    // All segments resolved to model positions but nothing is painted —
+    // the page/story is virtualized or offscreen (same posture as the
+    // entity path's `not-mounted`).
+    if (rects.length === 0) return { success: false, reason: 'not-mounted' };
+    return { success: true, rect: rects[0], rects, pageIndex: rects[0].pageIndex };
+  };
+
   const viewport: ViewportHandle = {
     getRect(input: ViewportGetRectInput): ViewportRectResult {
       const target = input?.target;
@@ -1971,12 +2527,19 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         return { success: false, reason: 'not-ready' };
       }
 
-      // Entity-anchored path. Text-anchored paths are deferred — the
-      // resolver needs story-aware routing through the active routed
-      // editor (header/footer/note vs body) to avoid silently reading
-      // body coords for a non-body target. Until that lands, surface
-      // an explicit `invalid-target` so consumers don't quietly get
-      // wrong rects.
+      // Text-anchored path (SD-3329): a `TextAddress` / `TextTarget`
+      // resolves to painted body rects. Body story only for now; non-body
+      // text targets return `unresolved` (story-aware text rects are a
+      // follow-up). Entity targets stay story-aware below.
+      if ('kind' in target && (target as { kind?: unknown }).kind === 'text') {
+        return resolveTextTargetRects(
+          editor,
+          presentation,
+          target as { story?: unknown; blockId?: unknown; range?: unknown; segments?: unknown },
+        );
+      }
+
+      // Entity-anchored path. Any other `kind` is a caller-shape error.
       if (!('kind' in target) || (target as { kind?: unknown }).kind !== 'entity') {
         return { success: false, reason: 'invalid-target' };
       }
@@ -2000,11 +2563,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         return { success: false, reason: 'invalid-target' };
       }
 
-      const rangeRects = presentation.getEntityRects({
-        entityType: entity.entityType,
-        entityId: entity.entityId,
-        story: entity.story,
-      });
+      const getEntityRectsForId = (entityId: string) =>
+        presentation.getEntityRects({
+          entityType: entity.entityType,
+          entityId,
+          story: entity.story,
+        });
+
+      let rangeRects = getEntityRectsForId(entity.entityId);
+      if ((!rangeRects || rangeRects.length === 0) && entity.entityType === 'trackedChange') {
+        const slice = computeState().trackChanges;
+        const { aliasesFor } = buildTrackedChangeIdContext(editor, slice.items);
+        for (const alias of aliasesFor(entity.entityId)) {
+          if (alias === entity.entityId) continue;
+          rangeRects = getEntityRectsForId(alias);
+          if (rangeRects && rangeRects.length > 0) break;
+        }
+      }
       if (!rangeRects || rangeRects.length === 0) {
         return { success: false, reason: 'not-mounted' };
       }
@@ -2063,12 +2638,43 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (!host) return [];
       const startEl = dom.elementFromPoint(input.x, input.y);
       if (!startEl || !host.contains(startEl)) return [];
-      return collectEntityHitsFromChain(startEl);
+      const rawHits = collectEntityHitsFromChain(startEl);
+      if (rawHits.length === 0) return rawHits;
+
+      const slice = computeState().trackChanges;
+      const { toPublicId } = buildTrackedChangeIdContext(editor, slice.items);
+      const seen = new Set<string>();
+      const hits: ViewportEntityHit[] = [];
+
+      for (const hit of rawHits) {
+        if (hit.type !== 'trackedChange') {
+          const key = `${hit.type}:${hit.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            hits.push(hit);
+          }
+          continue;
+        }
+
+        const publicId = toPublicId(hit.id);
+        if (!publicId) continue;
+        const key = `trackedChange:${publicId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hits.push({ type: 'trackedChange', id: publicId });
+      }
+
+      return hits;
     },
 
     getHost(): HTMLElement | null {
       const editor = resolveHostEditor(superdoc);
       return editor?.presentationEditor?.visibleHost ?? null;
+    },
+
+    getScrollContainer(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.scrollContainer ?? null;
     },
 
     positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
@@ -2292,6 +2898,66 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         }
       }
     },
+  };
+
+  // ---- ui.zoom -----------------------------------------------------------
+  // One slice for zoom UIs (mode, value, fit zoom, bounds, metrics) plus
+  // the two mutations. Recomputes on the host's zoomChange (which now
+  // includes mode-only transitions) and viewport-change events; both are
+  // in SUPERDOC_EVENTS.
+  const zoom: ZoomHandle = {
+    getSnapshot: () => computeState().zoom,
+    observe(listener) {
+      return select((state) => state.zoom, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    set(percent: number) {
+      const setter = superdoc.setZoom;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, percent);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.zoom.set failed:', err);
+      }
+    },
+    setMode(mode: ZoomMode) {
+      const setter = superdoc.setZoomMode;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, mode);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.zoom.setMode failed:', err);
+      }
+    },
+  };
+
+  const fonts: FontsHandle = {
+    getSnapshot: () => ({ options: fontOptionsCache, sizeOptions: FONT_SIZE_OPTIONS }),
+    subscribe(listener) {
+      return select((state) => state.fonts, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    observe(listener) {
+      return select((state) => state.fonts, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    getOptions: () => fontOptionsCache,
+    getSizeOptions: () => FONT_SIZE_OPTIONS,
   };
 
   // Live scopes created via `ui.createScope()`. The controller's
@@ -2563,6 +3229,8 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     selection,
     viewport,
     document,
+    zoom,
+    fonts,
     createScope: createScopeFn,
     destroy,
   };

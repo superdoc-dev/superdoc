@@ -22,7 +22,7 @@ type ImageLayerLike = Pick<ImageInteractionLayer, 'setContainer' | 'apply' | 'cl
 type StructuredContentLayerLike = Pick<StructuredContentInteractionLayer, 'setContainer' | 'apply' | 'clear'>;
 type CommentHighlightDecoratorLike = Pick<
   CommentHighlightDecorator,
-  'setContainer' | 'setActiveComment' | 'apply' | 'destroy'
+  'setContainer' | 'setActiveComment' | 'setActiveTrackChangeIds' | 'apply' | 'destroy'
 >;
 type DecorationBridgeLike = Pick<
   DecorationBridge,
@@ -41,11 +41,13 @@ type PresentationPostPaintPipelineDeps = {
 
 type RefreshAfterPaintOptions = {
   layoutEpoch: number;
+  activeHeaderFooterMode?: string | null;
   editorState: EditorState | null | undefined;
   domPositionIndex: DomPositionIndex;
   proofingAnnotations: ProofingAnnotation[] | null | undefined;
   rebuildDomPositionIndex: () => void;
   reapplyStructuredContentHover?: () => void;
+  reapplyTocGroupHover?: () => void;
 };
 
 /**
@@ -86,6 +88,10 @@ export class PresentationPostPaintPipeline {
 
   setActiveComment(commentId: string | null): boolean {
     return this.#commentHighlightDecorator.setActiveComment(commentId);
+  }
+
+  setActiveTrackChangeIds(ids: readonly string[]): boolean {
+    return this.#commentHighlightDecorator.setActiveTrackChangeIds(ids);
   }
 
   recordDecorationTransaction(transaction?: Transaction): void {
@@ -136,11 +142,12 @@ export class PresentationPostPaintPipeline {
   refreshAfterPaint(options: RefreshAfterPaintOptions): void {
     this.#fieldAnnotationLayer.apply(options.layoutEpoch);
     options.rebuildDomPositionIndex();
-    this.#imageLayer.apply(options.layoutEpoch);
+    this.#imageLayer.apply(options.layoutEpoch, { activeHeaderFooterMode: options.activeHeaderFooterMode });
     this.#structuredContentLayer.apply(options.layoutEpoch);
     this.syncInlineStyleLayers(options.editorState, options.domPositionIndex);
     this.applyProofingAnnotations(options.proofingAnnotations, options.rebuildDomPositionIndex);
     options.reapplyStructuredContentHover?.();
+    options.reapplyTocGroupHover?.();
   }
 
   destroy(): void {

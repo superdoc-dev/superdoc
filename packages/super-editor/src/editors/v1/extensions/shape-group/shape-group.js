@@ -66,6 +66,11 @@ export const ShapeGroup = Node.create({
         },
       },
 
+      effectExtent: {
+        default: null,
+        rendered: false,
+      },
+
       hidden: {
         default: false,
         rendered: false,

@@ -384,6 +384,38 @@ describe('w:t translator', () => {
       expect(wHyperlinkTranslator.decode).toHaveBeenCalled();
     });
 
+    it('delegates linked tracked text to wHyperlinkTranslator first', () => {
+      const node = { type: 'text', marks: [{ type: 'trackInsert' }, { type: 'link' }] };
+      const params = { node, extraParams: {} };
+
+      config.decode(params);
+
+      expect(wHyperlinkTranslator.decode).toHaveBeenCalledWith(params);
+      expect(wInsTranslator.decode).not.toHaveBeenCalled();
+    });
+
+    it('lets standalone final linked deletions resolve through wDelTranslator', () => {
+      const node = { type: 'text', marks: [{ type: 'trackDelete' }, { type: 'link' }] };
+      const params = { node, isFinalDoc: true, extraParams: {} };
+
+      config.decode(params);
+
+      expect(wDelTranslator.decode).toHaveBeenCalledWith(params);
+      expect(wHyperlinkTranslator.decode).not.toHaveBeenCalled();
+    });
+
+    it('delegates final deletion-first hyperlink groups to wHyperlinkTranslator', () => {
+      const linkMark = { type: 'link', attrs: { href: 'https://example.com', rId: 'rId1' } };
+      const node = { type: 'text', text: 'old', marks: [{ type: 'trackDelete' }, linkMark] };
+      const nextNode = { type: 'text', text: 'new', marks: [{ type: 'trackInsert' }, linkMark] };
+      const params = { node, isFinalDoc: true, extraParams: { hyperlinkGroup: [node, nextNode] } };
+
+      config.decode(params);
+
+      expect(wHyperlinkTranslator.decode).toHaveBeenCalledWith(params);
+      expect(wDelTranslator.decode).not.toHaveBeenCalled();
+    });
+
     it('calls getTextNodeForExport for regular text nodes', () => {
       const node = { type: 'text', text: 'Hello', marks: [] };
       const params = { node };
@@ -392,10 +424,10 @@ describe('w:t translator', () => {
     });
 
     it('skips hyperlink delegation when linkProcessed is true', () => {
-      const node = { type: 'text', marks: [{ type: 'link' }] };
+      const node = { type: 'text', marks: [{ type: 'trackInsert' }, { type: 'link' }] };
       config.decode({ node, extraParams: { linkProcessed: true } });
       expect(wHyperlinkTranslator.decode).not.toHaveBeenCalled();
-      expect(getTextNodeForExport).toHaveBeenCalled();
+      expect(wInsTranslator.decode).toHaveBeenCalled();
     });
   });
 });

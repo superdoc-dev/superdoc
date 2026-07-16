@@ -33,9 +33,10 @@ class PresetDescriptor(Protocol):
     description: str
     supports_cache_control: bool
 
-    def get_tools(self, provider: ToolProvider, *, cache: bool = False) -> Dict[str, Any]: ...
+    def get_tools(self, provider: ToolProvider, *, cache: bool = False,
+                  exclude_actions: Optional[list] = None) -> Dict[str, Any]: ...
     def get_catalog(self) -> Dict[str, Any]: ...
-    def get_system_prompt(self) -> str: ...
+    def get_system_prompt(self, *, exclude_actions: Optional[list] = None) -> str: ...
     def get_mcp_prompt(self) -> str: ...
     def dispatch(
         self,
@@ -43,6 +44,8 @@ class PresetDescriptor(Protocol):
         tool_name: str,
         args: Optional[Dict[str, Any]] = None,
         invoke_options: Optional[Dict[str, Any]] = None,
+        *,
+        exclude_actions: Optional[list] = None,
     ) -> Any: ...
     def dispatch_async(
         self,
@@ -50,16 +53,20 @@ class PresetDescriptor(Protocol):
         tool_name: str,
         args: Optional[Dict[str, Any]] = None,
         invoke_options: Optional[Dict[str, Any]] = None,
+        *,
+        exclude_actions: Optional[list] = None,
     ) -> Awaitable[Any]: ...
 
 
 # Lazy import to avoid the registry pulling in heavy modules at package load.
 def _build_registry() -> Dict[str, PresetDescriptor]:
     from .legacy import legacy_preset  # noqa: WPS433 — intentional lazy import
-    return {'legacy': legacy_preset}
+    from .core import core_preset  # noqa: WPS433 — intentional lazy import
+    return {'legacy': legacy_preset, 'core': core_preset}
 
 
 DEFAULT_PRESET: str = 'legacy'
+_BUILTIN_IDS = ('legacy', 'core')
 _PRESETS: Optional[Dict[str, PresetDescriptor]] = None
 
 
@@ -68,6 +75,44 @@ def _registry() -> Dict[str, PresetDescriptor]:
     if _PRESETS is None:
         _PRESETS = _build_registry()
     return _PRESETS
+
+
+def register_preset(*presets: PresetDescriptor) -> None:
+    """Register one or more presets so they resolve by id through ``get_preset``
+    and the ``choose_tools`` / ``dispatch_superdoc_tool`` plumbing.
+
+    Re-registering a custom id replaces the previously registered preset for
+    that id (tests / hot-reload rely on this). Built-in ids (``legacy`` /
+    ``core``) cannot be overwritten. Mirrors Node ``registerPreset``.
+    """
+    registry = _registry()
+    for preset in presets:
+        preset_id = getattr(preset, 'id', None)
+        if not isinstance(preset_id, str) or not preset_id:
+            raise SuperDocError(
+                'register_preset requires a preset with a non-empty string id.',
+                code='INVALID_ARGUMENT',
+            )
+        if preset_id in _BUILTIN_IDS:
+            raise SuperDocError(
+                f'Cannot overwrite built-in preset "{preset_id}".',
+                code='INVALID_ARGUMENT',
+                details={'id': preset_id},
+            )
+        registry[preset_id] = preset
+
+
+def unregister_preset(preset_id: str) -> None:
+    """Unregister a customer-registered preset. Idempotent (no-op if absent).
+    Rejects unregistering a built-in preset id. Mirrors Node ``unregisterPreset``.
+    """
+    if preset_id in _BUILTIN_IDS:
+        raise SuperDocError(
+            f'Cannot unregister built-in preset "{preset_id}".',
+            code='INVALID_ARGUMENT',
+            details={'id': preset_id},
+        )
+    _registry().pop(preset_id, None)
 
 
 def list_presets() -> List[str]:
@@ -99,4 +144,6 @@ __all__ = [
     'ToolProvider',
     'get_preset',
     'list_presets',
+    'register_preset',
+    'unregister_preset',
 ]

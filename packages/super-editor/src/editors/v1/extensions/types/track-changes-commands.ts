@@ -91,8 +91,10 @@ export interface TrackChangesCommands {
   /**
    * Accept tracked change by its ID
    * @param id - The tracked change ID
+   * @param options - Optional `side` ('inserted' | 'deleted') to accept only one
+   *   half of a paired replacement, leaving the other half pending.
    */
-  acceptTrackedChangeById: (id: string) => boolean;
+  acceptTrackedChangeById: (id: string, options?: { side?: 'inserted' | 'deleted' }) => boolean;
 
   /**
    * Accept all tracked changes in the document
@@ -134,8 +136,10 @@ export interface TrackChangesCommands {
   /**
    * Reject tracked change by its ID
    * @param id - The tracked change ID
+   * @param options - Optional `side` ('inserted' | 'deleted') to reject only one
+   *   half of a paired replacement, leaving the other half pending.
    */
-  rejectTrackedChangeById: (id: string) => boolean;
+  rejectTrackedChangeById: (id: string, options?: { side?: 'inserted' | 'deleted' }) => boolean;
 
   /**
    * Reject all tracked changes in the document

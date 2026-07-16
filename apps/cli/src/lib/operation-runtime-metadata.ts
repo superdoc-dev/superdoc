@@ -136,6 +136,76 @@ const RUNTIME_OVERRIDES: Record<string, RuntimeOverride> = {
       supportsCollab: true,
     },
   },
+  'doc.executeCode': {
+    profile: 'mutation',
+    context: {
+      requiresDocument: false,
+      requiresSession: true,
+      supportsStateless: false,
+      supportsSession: true,
+      supportsCollab: true,
+    },
+  },
+  'doc.preset.list': {
+    profile: 'read',
+    context: {
+      requiresDocument: false,
+      requiresSession: false,
+      supportsStateless: true,
+      supportsSession: false,
+      supportsCollab: false,
+    },
+  },
+  'doc.preset.getCatalog': {
+    profile: 'read',
+    context: {
+      requiresDocument: false,
+      requiresSession: false,
+      supportsStateless: true,
+      supportsSession: false,
+      supportsCollab: false,
+    },
+  },
+  'doc.preset.getTools': {
+    profile: 'read',
+    context: {
+      requiresDocument: false,
+      requiresSession: false,
+      supportsStateless: true,
+      supportsSession: false,
+      supportsCollab: false,
+    },
+  },
+  'doc.preset.getSystemPrompt': {
+    profile: 'read',
+    context: {
+      requiresDocument: false,
+      requiresSession: false,
+      supportsStateless: true,
+      supportsSession: false,
+      supportsCollab: false,
+    },
+  },
+  'doc.preset.getMcpPrompt': {
+    profile: 'read',
+    context: {
+      requiresDocument: false,
+      requiresSession: false,
+      supportsStateless: true,
+      supportsSession: false,
+      supportsCollab: false,
+    },
+  },
+  'doc.preset.dispatch': {
+    profile: 'mutation',
+    context: {
+      requiresDocument: false,
+      requiresSession: true,
+      supportsStateless: false,
+      supportsSession: true,
+      supportsCollab: true,
+    },
+  },
 };
 
 function hasParam(params: readonly CliOperationParamSpec[], name: string): boolean {

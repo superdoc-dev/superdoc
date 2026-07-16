@@ -1,16 +1,21 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { toFlowBlocks } from '@superdoc/pm-adapter';
+import JSZip from 'jszip';
+import { toFlowBlocks } from '@core/layout-adapter';
 import { createDomPainter } from '@superdoc/painter-dom';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import { Editor } from '@core/Editor.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
-import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { getTestDataAsFileBuffer, initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 
 const SIGNATURE_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
 const ENCODED_SIGNATURE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" />';
 const ENCODED_SIGNATURE_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(ENCODED_SIGNATURE_SVG)}`;
 const PNG_SRC =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/Ur/9wAAAABJRU5ErkJggg==';
+const OUTER_BOOKMARK_SDT_ID = '71001';
+const INNER_BOOKMARK_SDT_ID = '71002';
+const BOOKMARK_ID = '42';
+const BOOKMARK_NAME = 'beforeInnerSdt';
 
 const findFirstNodeByType = (node, typeName) => {
   let found = null;
@@ -55,6 +60,68 @@ const collectElementsByName = (node, name, result = []) => {
 const getChildElement = (node, name) => node?.elements?.find((child) => child.name === name);
 
 const hasDescendantNamed = (node, name) => collectElementsByName(node, name).length > 0;
+
+const findSdtById = (documentXml, id) =>
+  collectElementsByName(documentXml, 'w:sdt').find((candidate) => {
+    const sdtPr = getChildElement(candidate, 'w:sdtPr');
+    return sdtPr?.elements?.some((el) => el.name === 'w:id' && el.attributes?.['w:val'] === id);
+  });
+
+const collectElementOrder = (node, result = []) => {
+  if (!node || typeof node !== 'object') return result;
+  if (node.name) result.push(node.name);
+  (node.elements || []).forEach((child) => collectElementOrder(child, result));
+  return result;
+};
+
+const readDocumentXmlFromDocx = async (buffer) => {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentEntry = zip.file('word/document.xml');
+  if (!documentEntry) throw new Error('word/document.xml not found in DOCX.');
+  return documentEntry.async('string');
+};
+
+const buildDocxWithNestedSdtAfterBookmark = async () => {
+  const baseBuffer = await getTestDataAsFileBuffer('blank-doc.docx');
+  const zip = await JSZip.loadAsync(baseBuffer);
+  const documentEntry = zip.file('word/document.xml');
+  if (!documentEntry) throw new Error('word/document.xml not found in blank-doc.docx.');
+
+  const nestedSdtXml = `
+    <w:sdt>
+      <w:sdtPr>
+        <w:id w:val="${OUTER_BOOKMARK_SDT_ID}"/>
+        <w:tag w:val="outer-bookmark-roundtrip"/>
+        <w:alias w:val="Outer Bookmark Roundtrip"/>
+        <w:richText/>
+      </w:sdtPr>
+      <w:sdtContent>
+        <w:bookmarkStart w:id="${BOOKMARK_ID}" w:name="${BOOKMARK_NAME}"/>
+        <w:sdt>
+          <w:sdtPr>
+            <w:id w:val="${INNER_BOOKMARK_SDT_ID}"/>
+            <w:tag w:val="inner-bookmark-roundtrip"/>
+            <w:alias w:val="Inner Bookmark Roundtrip"/>
+            <w:richText/>
+          </w:sdtPr>
+          <w:sdtContent>
+            <w:p>
+              <w:r><w:t>Nested paragraph</w:t></w:r>
+            </w:p>
+          </w:sdtContent>
+        </w:sdt>
+      </w:sdtContent>
+    </w:sdt>
+  `;
+  const documentXml = await documentEntry.async('string');
+  const patchedDocumentXml = documentXml.replace(/<w:body>/, `<w:body>${nestedSdtXml}`);
+  if (patchedDocumentXml === documentXml) {
+    throw new Error('Could not inject nested SDT fixture into blank document.');
+  }
+
+  zip.file('word/document.xml', patchedDocumentXml);
+  return zip.generateAsync({ type: 'nodebuffer' });
+};
 
 const DEFAULT_CONVERTER_CONTEXT = {
   docx: {},
@@ -146,6 +213,68 @@ describe('SD-3116 structured content image round-trip', () => {
     editor = null;
     reopened = null;
     paintMount = null;
+  });
+
+  it('round-trips a nested block SDT when a bookmark starts before it in the parent SDT', async () => {
+    const inputBuffer = await buildDocxWithNestedSdtAfterBookmark();
+    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(inputBuffer, true);
+    ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true, isNewFile: false }));
+
+    const importedOuter = findNodeByTypeAndId(editor.state.doc, 'structuredContentBlock', OUTER_BOOKMARK_SDT_ID);
+    const importedInner = findNodeByTypeAndId(editor.state.doc, 'structuredContentBlock', INNER_BOOKMARK_SDT_ID);
+    const importedBookmark = findNodeByTypeAndId(editor.state.doc, 'bookmarkStart', BOOKMARK_ID);
+    expect(importedOuter?.attrs).toMatchObject({
+      alias: 'Outer Bookmark Roundtrip',
+      controlType: 'richText',
+    });
+    expect(importedInner?.attrs).toMatchObject({
+      alias: 'Inner Bookmark Roundtrip',
+      controlType: 'richText',
+    });
+    expect(importedBookmark?.attrs).toMatchObject({
+      id: BOOKMARK_ID,
+      name: BOOKMARK_NAME,
+    });
+
+    const exported = await editor.exportDocx({ isFinalDoc: false });
+    const exportedDocumentXml = await readDocumentXmlFromDocx(exported);
+    const exportedDocumentJson = parseXmlToJson(exportedDocumentXml);
+    const exportedOuter = findSdtById(exportedDocumentJson, OUTER_BOOKMARK_SDT_ID);
+    const outerContent = getChildElement(exportedOuter, 'w:sdtContent');
+    const exportedInner = findSdtById(outerContent, INNER_BOOKMARK_SDT_ID);
+    const exportedBookmark = collectElementsByName(exportedOuter, 'w:bookmarkStart').find(
+      (node) => node.attributes?.['w:id'] === BOOKMARK_ID && node.attributes?.['w:name'] === BOOKMARK_NAME,
+    );
+    const outerElementOrder = collectElementOrder(outerContent);
+
+    expect(exportedOuter).toBeDefined();
+    expect(exportedInner).toBeDefined();
+    expect(exportedBookmark).toBeDefined();
+    expect(outerElementOrder.indexOf('w:bookmarkStart')).toBeGreaterThanOrEqual(0);
+    expect(outerElementOrder.indexOf('w:sdt')).toBeGreaterThan(outerElementOrder.indexOf('w:bookmarkStart'));
+
+    const [roundTripDocx, roundTripMedia, roundTripMediaFiles, roundTripFonts] = await Editor.loadXmlData(
+      exported,
+      true,
+    );
+    ({ editor: reopened } = initTestEditor({
+      content: roundTripDocx,
+      media: roundTripMedia,
+      mediaFiles: roundTripMediaFiles,
+      fonts: roundTripFonts,
+      isNewFile: false,
+    }));
+
+    expect(
+      findNodeByTypeAndId(reopened.state.doc, 'structuredContentBlock', INNER_BOOKMARK_SDT_ID)?.attrs,
+    ).toMatchObject({
+      alias: 'Inner Bookmark Roundtrip',
+      controlType: 'richText',
+    });
+    expect(findNodeByTypeAndId(reopened.state.doc, 'bookmarkStart', BOOKMARK_ID)?.attrs).toMatchObject({
+      id: BOOKMARK_ID,
+      name: BOOKMARK_NAME,
+    });
   });
 
   it('exports and reopens a block SDT containing preset image content', async () => {

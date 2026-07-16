@@ -25,6 +25,11 @@ export type MinimalMarkerRun = {
   color?: string;
   letterSpacing?: number;
   vanish?: boolean;
+  // SD-2656: caps mark on the level rPr ( w:caps ). When true the marker
+  // text is rendered with CSS text-transform: uppercase, matching Word's
+  // legal/contract list styles ("FIRST:", "SECOND:", "THIRD:").
+  allCaps?: boolean;
+  smallCaps?: boolean;
 };
 
 /**
@@ -158,27 +163,6 @@ const getMarkerStartPx = (anchorPx: number, justification: string, markerTextWid
   return anchorPx;
 };
 
-const getNextExplicitTabStopPx = (tabsPx: number[] | undefined, currentPosPx: number): number | undefined => {
-  if (!Array.isArray(tabsPx)) {
-    return undefined;
-  }
-
-  for (const tabPx of tabsPx) {
-    if (typeof tabPx === 'number' && Number.isFinite(tabPx) && tabPx > currentPosPx) {
-      return tabPx;
-    }
-  }
-
-  return undefined;
-};
-
-const getFirstLineTextStartTargetPx = (
-  wordLayout: MinimalWordLayout | undefined,
-  marker: MinimalMarker,
-): number | undefined => {
-  return getFiniteNumber(marker.textStartX) ?? getFiniteNumber(wordLayout?.textStartPx);
-};
-
 const getNextDefaultTabStopPx = (currentPosPx: number): number => {
   const remainderPx = currentPosPx % DEFAULT_TAB_INTERVAL_PX;
   if (remainderPx === 0) {
@@ -270,6 +254,26 @@ export function resolveListMarkerGeometry(
     };
   }
 
+  if (wordLayout?.firstLineIndentMode === true) {
+    const markerCurrentPosPx = justification === 'right' ? anchorPx : markerContentEndPx;
+    const suffixWidthPx = computeTabWidth(
+      markerCurrentPosPx,
+      justification,
+      wordLayout.tabsPx,
+      hanging,
+      firstLine,
+      indentLeft,
+    );
+    const textStartPx = markerContentEndPx + suffixWidthPx;
+
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx,
+      suffixWidthPx,
+    };
+  }
+
   if (justification !== 'left') {
     const gutterWidthPx = Math.max(getNonNegativeFiniteNumber(marker.gutterWidthPx) ?? 0, LIST_MARKER_GAP);
     return {
@@ -277,31 +281,6 @@ export function resolveListMarkerGeometry(
       markerTextWidthPx,
       textStartPx: markerContentEndPx + gutterWidthPx,
       suffixWidthPx: gutterWidthPx,
-    };
-  }
-
-  if (wordLayout?.firstLineIndentMode === true) {
-    const explicitTabStopPx = getNextExplicitTabStopPx(wordLayout.tabsPx, markerContentEndPx);
-    const textStartTargetPx = getFirstLineTextStartTargetPx(wordLayout, marker);
-
-    let textStartPx: number;
-    if (explicitTabStopPx != null) {
-      textStartPx = explicitTabStopPx;
-    } else if (textStartTargetPx != null && textStartTargetPx > markerContentEndPx) {
-      textStartPx = textStartTargetPx;
-    } else {
-      textStartPx = markerContentEndPx + LIST_MARKER_GAP;
-    }
-
-    if (textStartPx - markerContentEndPx < LIST_MARKER_GAP) {
-      textStartPx = markerContentEndPx + LIST_MARKER_GAP;
-    }
-
-    return {
-      markerStartPx,
-      markerTextWidthPx,
-      textStartPx,
-      suffixWidthPx: textStartPx - markerContentEndPx,
     };
   }
 

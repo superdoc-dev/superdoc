@@ -33,7 +33,15 @@ export const createLinkedStylesPlugin = (editor) => {
        */
       init() {
         if (!editor.converter || editor.options.mode !== 'docx') return {};
-        if (editor.presentationEditor) {
+        // Linked-style decorations are a VIEW concern (inline CSS painted by the
+        // EditorView / PresentationEditor). A headless editor has no view, and a
+        // PresentationEditor paints styles via its own resolver — in both cases
+        // the decorations are never consumed, but `generateDecorations` walks the
+        // WHOLE document (resolve + style-string build) on every transaction.
+        // For a batch of N tracked edits that is O(N * doc) — ~50s on a 38-page
+        // doc. Skip generation in those modes; `styles` is still exposed for
+        // setStyleById / getStyles consumers.
+        if (editor.presentationEditor || editor.options?.isHeadless) {
           return { styles: editor.converter?.linkedStyles || [], decorations: DecorationSet.empty };
         }
         const styles = editor.converter?.linkedStyles || [];
@@ -53,7 +61,9 @@ export const createLinkedStylesPlugin = (editor) => {
        */
       apply(tr, prev, oldEditorState, newEditorState) {
         if (!editor.converter || editor.options.mode !== 'docx') return { ...prev };
-        if (editor.presentationEditor) {
+        // See init(): headless / presentation editors never consume these
+        // decorations, so skip the whole-document regeneration on every tx.
+        if (editor.presentationEditor || editor.options?.isHeadless) {
           return { ...prev, decorations: DecorationSet.empty };
         }
         let decorations = prev.decorations || DecorationSet.empty;

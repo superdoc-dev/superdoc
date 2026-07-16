@@ -139,6 +139,7 @@ export const CLI_ONLY_OPERATIONS = [
   'close',
   'insertTab',
   'insertLineBreak',
+  'executeCode',
   'status',
   'describe',
   'describeCommand',
@@ -146,6 +147,12 @@ export const CLI_ONLY_OPERATIONS = [
   'session.save',
   'session.close',
   'session.setDefault',
+  'preset.list',
+  'preset.getCatalog',
+  'preset.getTools',
+  'preset.getSystemPrompt',
+  'preset.getMcpPrompt',
+  'preset.dispatch',
 ] as const;
 
 export type CliOnlyOperation = (typeof CLI_ONLY_OPERATIONS)[number];

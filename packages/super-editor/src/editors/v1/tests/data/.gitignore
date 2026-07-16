@@ -4,3 +4,6 @@
 !tab_stops_basic_test/**
 !table_in_list/
 !table_in_list/**
+!diffing/
+!diffing/word/
+!diffing/word/**

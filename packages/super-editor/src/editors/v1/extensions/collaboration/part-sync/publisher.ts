@@ -12,7 +12,7 @@ import * as Y from 'yjs';
 import type { Editor } from '../../../core/Editor.js';
 import type { PartChangedEvent } from '../../../core/parts/types.js';
 import type { BufferedPartEvent, ConcurrentOverwriteTelemetry } from './types.js';
-import { encodeEnvelopeToYjs, readEnvelopeVersion } from './json-crdt.js';
+import { decodeYjsToEnvelope, encodeEnvelopeToYjs, readEnvelopeVersion } from './json-crdt.js';
 import {
   PARTS_MAP_KEY,
   EXCLUDED_PART_IDS,
@@ -103,8 +103,7 @@ function checkConcurrentOverwrite(
   const currentV = readEnvelopeVersion(partsMap, partId);
 
   // Read the current envelope's clientId to detect foreign writes
-  const yValue = partsMap.get(partId);
-  const envelopeClientId = yValue instanceof Y.Map ? ((yValue.get('clientId') as number) ?? 0) : 0;
+  const envelopeClientId = decodeYjsToEnvelope(partsMap.get(partId))?.clientId ?? 0;
 
   // Detect concurrent overwrite in two cases:
   // 1. Version advanced beyond our last write (remote published a newer version)

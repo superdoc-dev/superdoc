@@ -137,6 +137,15 @@ export function buildOperationArgv(
     const value = normalizedParams[spec.name];
     if (value == null) continue;
 
+    if (operation.operationId === 'doc.tables.setShading' && spec.name === 'color') {
+      // This operation accepts structured color payloads, so sending the raw
+      // value through --color-json preserves both named colors and richer
+      // object shapes. Treating it like a normal scalar flag would stringify
+      // objects as "[object Object]" and silently corrupt the CLI request.
+      argv.push('--color-json', JSON.stringify(value));
+      continue;
+    }
+
     const flag = `--${spec.flag ?? spec.name}`;
 
     switch (spec.kind) {

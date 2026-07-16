@@ -923,6 +923,97 @@ describe('renderRemoteCursors', () => {
     });
   });
 
+  describe('stale selection rectangle cleanup', () => {
+    const baseOptions = () => ({
+      layout,
+      blocks,
+      measures,
+      pageGeometryHelper,
+      remoteCursorState,
+      remoteCursorElements,
+      remoteCursorOverlay,
+      doc,
+      computeCaretLayoutRect,
+      convertPageLocalToOverlayCoords,
+      fallbackColors,
+      cursorStyles,
+      maxSelectionRectsPerUser: 100,
+      defaultPageHeight: 1200,
+      fallbackPageHeight: 1200,
+    });
+
+    it('removes stale selection rectangles when a client disconnects from remoteCursorState', () => {
+      vi.spyOn(layoutBridge, 'selectionToRects').mockReturnValue([
+        { x: 50, y: 100, width: 200, height: 16, pageIndex: 0 },
+        { x: 50, y: 120, width: 150, height: 16, pageIndex: 0 },
+      ]);
+
+      // Client 1 has a range selection -> renders selection rectangles + caret.
+      remoteCursorState.set(1, createMockRemoteCursor(1, 100, 200));
+
+      renderRemoteCursors({ ...baseOptions(), presence: undefined });
+
+      expect(
+        remoteCursorOverlay.querySelectorAll('.presentation-editor__remote-selection[data-client-id="1"]').length,
+      ).toBeGreaterThanOrEqual(1);
+
+      // Client 1 disconnects: no longer present in remoteCursorState.
+      remoteCursorState.delete(1);
+
+      renderRemoteCursors({ ...baseOptions(), presence: undefined });
+
+      // Both the caret and the stale selection rectangles must be gone.
+      expect(remoteCursorElements.has(1)).toBe(false);
+      expect(remoteCursorOverlay.querySelectorAll('.presentation-editor__remote-selection').length).toBe(0);
+    });
+
+    it('removes orphan selection rectangles for clients with no cursor state', () => {
+      // Pre-seed an orphan selection rectangle for a client that never appears
+      // in remoteCursorState (e.g. its cursor awareness state is missing).
+      const orphan = document.createElement('div');
+      orphan.className = 'presentation-editor__remote-selection';
+      orphan.setAttribute('data-client-id', '9');
+      remoteCursorOverlay.appendChild(orphan);
+
+      // A different, live client renders this pass.
+      remoteCursorState.set(1, createMockRemoteCursor(1, 100, 100));
+
+      renderRemoteCursors({ ...baseOptions(), presence: undefined });
+
+      expect(remoteCursorOverlay.contains(orphan)).toBe(false);
+    });
+
+    it('removes selection rectangles when a previously visible range cursor is excluded by maxVisible', () => {
+      vi.spyOn(layoutBridge, 'selectionToRects').mockReturnValue([
+        { x: 50, y: 100, width: 200, height: 16, pageIndex: 0 },
+      ]);
+
+      const now = Date.now();
+      // Client 1 is the older range selection; client 2 is more recent.
+      remoteCursorState.set(1, { ...createMockRemoteCursor(1, 100, 200), updatedAt: now - 5000 });
+      remoteCursorState.set(2, { ...createMockRemoteCursor(2, 300, 400), updatedAt: now - 1000 });
+
+      // First render with maxVisible large enough to show both.
+      renderRemoteCursors({ ...baseOptions(), presence: { maxVisible: 2 } });
+
+      expect(
+        remoteCursorOverlay.querySelectorAll('.presentation-editor__remote-selection[data-client-id="1"]').length,
+      ).toBeGreaterThanOrEqual(1);
+
+      // Second render with maxVisible = 1: the older client 1 is excluded.
+      renderRemoteCursors({ ...baseOptions(), presence: { maxVisible: 1 } });
+
+      // Client 1's selection rectangles must be removed; client 2's remain.
+      expect(
+        remoteCursorOverlay.querySelectorAll('.presentation-editor__remote-selection[data-client-id="1"]').length,
+      ).toBe(0);
+      expect(remoteCursorElements.has(1)).toBe(false);
+      expect(
+        remoteCursorOverlay.querySelectorAll('.presentation-editor__remote-selection[data-client-id="2"]').length,
+      ).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe('multiple remote users', () => {
     it('renders cursors for multiple users simultaneously', () => {
       remoteCursorState.set(1, createMockRemoteCursor(1, 100, 100, { name: 'Alice', color: '#FF0000' }));

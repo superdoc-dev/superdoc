@@ -519,6 +519,7 @@ const rgbToHex = (rgb) => {
 };
 
 const DEFAULT_SHADING_FOREGROUND_COLOR = '#000000';
+const DEFAULT_SHADING_FILL_COLOR = '#FFFFFF';
 
 const hexToRgb = (hex) => {
   const normalized = normalizeHexColor(hex);
@@ -549,21 +550,53 @@ const blendHexColors = (backgroundHex, foregroundHex, foregroundRatio) => {
   return `${toByte(r)}${toByte(g)}${toByte(b)}`;
 };
 
+/**
+ * Resolve an OOXML shading element (CT_Shd, ECMA-376 §17.3.5) to a concrete CSS
+ * hex fill WITHOUT a leading '#', or null when the shading produces no background.
+ *
+ * The shading model paints a pattern (`w:val`) of the foreground color (`w:color`)
+ * over the fill background (`w:fill`). The `auto` sentinel resolves to white for a
+ * fill and black for a foreground, so `pct10` + `color="auto"` + `fill="auto"` is
+ * 10% black over white ≈ light gray (#E6E6E6) — which is what Word renders.
+ *
+ * Theme colors (themeFill/themeColor) are resolved by callers that own the theme
+ * palette and passed back in as explicit hex; this helper handles explicit hex and
+ * the `auto` sentinel only.
+ *
+ * @param {{ val?: string, color?: string, fill?: string } | null | undefined} shading
+ * @returns {string | null} Hex without '#', or null for "no background".
+ */
 const resolveShadingFillColor = (shading) => {
   if (!shading || typeof shading !== 'object') return null;
 
-  const fill = normalizeHexColor(shading.fill);
-  if (!fill) return null;
-
   const val = typeof shading.val === 'string' ? shading.val.trim().toLowerCase() : '';
+  if (val === 'nil' || val === 'none') return null;
+
+  // The `auto` fill sentinel means "automatic background" (white). A missing or
+  // non-hex fill yields no explicit color.
+  const fillIsAuto = typeof shading.fill === 'string' && shading.fill.trim().toLowerCase() === 'auto';
+  const fillHex = fillIsAuto ? null : normalizeHexColor(shading.fill);
+
   const pctMatch = val.match(/^pct(\d{1,3})$/);
-  if (!pctMatch) return fill;
+  const isPattern = Boolean(pctMatch) || val === 'solid';
 
-  const pct = Number.parseInt(pctMatch[1], 10);
-  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fill;
+  // No pattern (clear / unspecified): the fill IS the background. An automatic or
+  // missing fill therefore means "no background".
+  if (!isPattern) return fillHex;
 
-  const foreground = normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR;
-  return blendHexColors(fill, foreground, pct / 100) ?? fill;
+  // Pattern (pctNN or solid): blend the foreground over the fill base. An automatic
+  // fill base resolves to white; an automatic or absent foreground resolves to black.
+  const baseHex = fillHex ?? DEFAULT_SHADING_FILL_COLOR;
+  const colorIsAuto =
+    typeof shading.color !== 'string' || shading.color.trim() === '' || shading.color.trim().toLowerCase() === 'auto';
+  const foregroundHex = colorIsAuto
+    ? DEFAULT_SHADING_FOREGROUND_COLOR
+    : (normalizeHexColor(shading.color) ?? DEFAULT_SHADING_FOREGROUND_COLOR);
+
+  const pct = pctMatch ? Number.parseInt(pctMatch[1], 10) : 100; // solid = 100% foreground
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fillHex;
+
+  return blendHexColors(baseHex, foregroundHex, pct / 100) ?? fillHex;
 };
 
 const getLineHeightValueString = (lineHeight, defaultUnit, lineRule = '', isObject = false) => {

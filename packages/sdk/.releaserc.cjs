@@ -10,7 +10,7 @@ const {
  * This shared helper patches git-log-parser to expand commit analysis to
  * dependency paths. It REPLACES semantic-release-commit-filter.
  */
-require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+const RELEASE_PATHS = [
   'packages/sdk',
   'apps/cli',
   'packages/document-api',
@@ -21,7 +21,9 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/preset-geometry',
   'shared',
   'pnpm-workspace.yaml',
-]);
+];
+
+require('../../scripts/semantic-release/patch-commit-filter.cjs')(RELEASE_PATHS);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 const isCiRelease = Boolean(process.env.CI);
@@ -33,12 +35,29 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
-// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
-const shouldCommentOnRelease = !isPrerelease;
+// GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
+const shouldPublishGitHubRelease = Boolean(branch) && !isPrerelease;
+// Linear release comments remain the shipped-version breadcrumb, so
+// prereleases link to their Git tags when no GitHub Release exists.
+const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease
+  ? createReleaseNotesGenerator()
+  : [
+      'semantic-release-ai-notes',
+      {
+        style: 'concise',
+        scope: {
+          name: 'SuperDoc SDK',
+          paths: RELEASE_PATHS,
+          audience:
+            'Developers integrating the SuperDoc SDK (Node and Python bindings) into their own backend or CLI tooling',
+          instructions:
+            "The SDK wraps the CLI and document engine. Only mention CLI or engine changes when they change the SDK's API, output, or supported operations.",
+        },
+      },
+    ];
 
 const config = {
   branches,
@@ -103,22 +122,23 @@ if (!isPrerelease) {
 
 // Linear integration
 config.plugins.push([
-  'semantic-release-linear-app',
+  '../../scripts/semantic-release/linear-commit-sync.cjs',
   {
     teamKeys: ['SD'],
-    addComment: shouldCommentOnRelease,
+    addComment: shouldCommentOnLinearRelease,
     packageName: 'superdoc-sdk',
     commentTemplate: 'shipped in {package} {releaseLink} {channel}',
   },
 ]);
 
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc-sdk** v${nextRelease.version}',
-    successCommentCondition: shouldCommentOnRelease ? undefined : false,
-  },
-]);
+if (shouldPublishGitHubRelease) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      successComment:
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc-sdk** v${nextRelease.version}',
+    },
+  ]);
+}
 
 module.exports = config;

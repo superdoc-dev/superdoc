@@ -88,8 +88,8 @@ describe('hosted SuperDoc MCP server', { concurrency: false }, () => {
 
       const server = await startMcpHttpServer({
         port: 0,
-        createMcpServer: () => {
-          const created = createSuperDocMcpServer();
+        createMcpServer: async () => {
+          const created = await createSuperDocMcpServer();
           const closeAll = created.sessions.closeAll.bind(created.sessions);
           created.sessions.closeAll = async () => {
             sessionManagerCloseCount += 1;

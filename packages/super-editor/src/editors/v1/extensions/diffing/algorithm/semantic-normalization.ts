@@ -8,7 +8,9 @@
  * never mutates live ProseMirror nodes or touches importer/exporter code.
  */
 
-import { NON_SEMANTIC_BLOCK_ATTRS } from './identity-attrs';
+import { NON_SEMANTIC_BLOCK_ATTRS, VOLATILE_RUN_ATTR_KEYS } from './identity-attrs';
+
+const VOLATILE_RUN_ATTRS = new Set(VOLATILE_RUN_ATTR_KEYS);
 
 /**
  * Keys inside `originalAttributes` on image nodes that Word regenerates
@@ -93,7 +95,71 @@ export function normalizeInlineNodeJSON(nodeJSON: Record<string, unknown>): Reco
   if (nodeJSON.type === 'image') {
     return normalizeImageNodeJSON(nodeJSON);
   }
+  if (nodeJSON.type === 'structuredContent') {
+    return normalizeStructuredContentNodeJSON(nodeJSON);
+  }
   return nodeJSON;
+}
+
+/**
+ * Top-level SDT attrs that Word regenerates on every save and must not
+ * participate in semantic equality comparisons.
+ *
+ * - `id`    — maps to `<w:id>` in OOXML; a per-instance numeric identifier
+ *             reassigned whenever Word saves the document.
+ * - `sdtPr` — the raw `<w:sdtPr>` XML snapshot stored for export round-trip.
+ *             It also contains `<w:id>`, so two otherwise-identical SDTs saved
+ *             at different times will differ in this field. All semantic
+ *             properties (tag, alias, lockMode, controlType, …) are already
+ *             extracted into their own attrs, so sdtPr is safe to exclude from
+ *             diff equality.
+ */
+const VOLATILE_SDT_TOP_LEVEL_ATTR_KEYS = new Set(['id', 'sdtPr']);
+
+/**
+ * Strips volatile attrs from a structuredContent node JSON tree.
+ *
+ * Two passes are applied:
+ * 1. Top-level SDT attrs: `id` and `sdtPr` are removed from the SDT root's own attrs.
+ * 2. Descendant run attrs: `rsidR`, `rsidRPr`, `rsidDel` are removed recursively
+ *    from all content children (run nodes inside the SDT).
+ *
+ * @param nodeJSON Serialized structuredContent node.
+ * @returns Normalized copy with volatile attrs removed.
+ */
+function normalizeStructuredContentNodeJSON(nodeJSON: Record<string, unknown>): Record<string, unknown> {
+  // Strip top-level volatile SDT attrs from the SDT root node only.
+  const result: Record<string, unknown> = { ...nodeJSON };
+  if (result.attrs !== null && typeof result.attrs === 'object') {
+    result.attrs = omitKeys(result.attrs as Record<string, unknown>, VOLATILE_SDT_TOP_LEVEL_ATTR_KEYS);
+  }
+  // Strip volatile run attrs recursively from all content descendants.
+  if (Array.isArray(result.content)) {
+    result.content = result.content.map((child) =>
+      child !== null && typeof child === 'object' ? stripVolatileRunAttrsDeep(child as Record<string, unknown>) : child,
+    );
+  }
+  return result;
+}
+
+function stripVolatileRunAttrsDeep(json: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...json };
+
+  if (result.attrs !== null && typeof result.attrs === 'object') {
+    const attrs = { ...(result.attrs as Record<string, unknown>) };
+    for (const key of VOLATILE_RUN_ATTR_KEYS) {
+      delete attrs[key];
+    }
+    result.attrs = attrs;
+  }
+
+  if (Array.isArray(result.content)) {
+    result.content = result.content.map((child) =>
+      child !== null && typeof child === 'object' ? stripVolatileRunAttrsDeep(child as Record<string, unknown>) : child,
+    );
+  }
+
+  return result;
 }
 
 /**
@@ -164,6 +230,7 @@ export function normalizeParagraphNodeJSON(nodeJSON: Record<string, unknown>): R
  * recurses into container nodes (e.g. runs) that have their own content.
  */
 function normalizeContentNodeJSON(nodeJSON: Record<string, unknown>): Record<string, unknown> {
+  const attrs = nodeJSON.attrs as Record<string, unknown> | undefined;
   const content = nodeJSON.content as Record<string, unknown>[] | undefined;
 
   // Leaf inline nodes (image, etc.)
@@ -171,9 +238,13 @@ function normalizeContentNodeJSON(nodeJSON: Record<string, unknown>): Record<str
     return normalizeInlineNodeJSON(nodeJSON);
   }
 
-  // Container nodes (run, etc.) — recurse into children
+  // Container nodes (run, etc.) — strip volatile run-level attrs AND recurse into children.
+  // Without stripping here, a Word save that reassigns rsid on runs (with no visible change)
+  // would make normalizeParagraphNodeJSON produce a different JSON and trigger a false
+  // shouldProcessEqualAsModification for an otherwise unchanged paragraph.
   return {
     ...nodeJSON,
+    ...(attrs ? { attrs: omitKeys(attrs, VOLATILE_RUN_ATTRS) } : {}),
     content: content.map(normalizeContentNodeJSON),
   };
 }

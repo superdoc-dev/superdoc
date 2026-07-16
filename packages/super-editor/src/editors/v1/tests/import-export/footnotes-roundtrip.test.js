@@ -6,7 +6,11 @@ import { Editor } from '@core/Editor.js';
 import DocxZipper from '@core/DocxZipper.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '../helpers/helpers.js';
-import { createFootnoteElement, prepareFootnotesXmlForExport } from '@converter/v2/exporter/footnotesExporter.js';
+import {
+  createFootnoteElement,
+  prepareFootnotesXmlForExport,
+  pruneSessionDeletedNotesPart,
+} from '@converter/v2/exporter/footnotesExporter.js';
 import { importFootnoteData } from '@converter/v2/importer/documentFootnotesImporter.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { resolveNoteRuntime } from '../../document-api-adapters/story-runtime/note-story-runtime.ts';
@@ -185,6 +189,62 @@ describe('footnotes import/export roundtrip', () => {
         expect(exportedFn).toBeDefined();
         expect(exportedFn.attributes?.['w:id']).toBe(id);
       });
+    });
+
+    it('preserves separator config and footnote linkage in the variant fixture (SD-3400)', async () => {
+      // footnote-tests-B carries explicit separator/continuationSeparator notes
+      // and the settings.xml special-footnote list — the configuration variants
+      // from the SD-3400 Observatory check.
+      const docxPath = join(__dirname, '../data', 'footnote-tests-B.docx');
+      const docxBuffer = await fs.readFile(docxPath);
+
+      const originalZipper = new DocxZipper();
+      const originalFiles = await originalZipper.getDocxData(docxBuffer, true);
+      const originalFootnotesJson = parseXmlToJson(originalFiles.find((f) => f.name === 'word/footnotes.xml').content);
+      const originalRoot = findFootnotesRoot(originalFootnotesJson);
+      const regularIds = collectFootnoteIds(originalRoot).filter((id) => {
+        const type = findFootnoteById(originalRoot, id)?.attributes?.['w:type'];
+        return !type || (type !== 'separator' && type !== 'continuationSeparator');
+      });
+      expect(regularIds.length).toBeGreaterThan(0);
+
+      const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(docxBuffer, true);
+      const { editor: testEditor } = initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+      editor = testEditor;
+
+      const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
+      const exportedZipper = new DocxZipper();
+      const exportedFiles = await exportedZipper.getDocxData(exportedBuffer, true);
+      const exportedRoot = findFootnotesRoot(
+        parseXmlToJson(exportedFiles.find((f) => f.name === 'word/footnotes.xml').content),
+      );
+
+      // Every regular footnote survives with its id.
+      regularIds.forEach((id) => {
+        expect(findFootnoteById(exportedRoot, id)).toBeTruthy();
+      });
+      // Separator notes survive with their types and reserved ids.
+      expect(findFootnotesByType(exportedRoot, 'separator').map((el) => el.attributes['w:id'])).toEqual(['-1']);
+      expect(findFootnotesByType(exportedRoot, 'continuationSeparator').map((el) => el.attributes['w:id'])).toEqual([
+        '0',
+      ]);
+      // The settings.xml special-footnote list (§17.11.9) survives export.
+      const settingsPr = findFootnotePrInSettings(findSettingsXml(exportedFiles));
+      expect(settingsPr).toBeTruthy();
+      const listedIds = (settingsPr.elements ?? [])
+        .filter((el) => el.name === 'w:footnote')
+        .map((el) => el.attributes?.['w:id']);
+      expect(listedIds).toContain('-1');
+      expect(listedIds).toContain('0');
+      // Body references survive in document order.
+      const exportedBody = parseXmlToJson(exportedFiles.find((f) => f.name === 'word/document.xml').content);
+      const refIds = [];
+      const walk = (node) => {
+        if (node?.name === 'w:footnoteReference') refIds.push(node.attributes?.['w:id']);
+        (node?.elements ?? []).forEach(walk);
+      };
+      walk(exportedBody.elements?.[0]);
+      expect(refIds).toEqual(regularIds);
     });
 
     it('preserves footnoteReference nodes in document body', async () => {
@@ -556,6 +616,135 @@ describe('footnotesExporter unit tests', () => {
       expect(result.updatedXml['word/footnotes.xml']).toBeDefined();
       expect(result.relationships.length).toBeGreaterThan(0);
       expect(result.relationships[0].attributes.Target).toBe('footnotes.xml');
+    });
+  });
+
+  describe('export pruning of session-deleted notes (SD-3400 tombstones, zip-time transform)', () => {
+    const makePart = (entries, noteName = 'w:footnote', rootName = 'w:footnotes') => ({
+      elements: [
+        {
+          type: 'element',
+          name: rootName,
+          elements: entries.map((e) => ({
+            type: 'element',
+            name: noteName,
+            attributes: { 'w:id': e.id, ...(e.type ? { 'w:type': e.type } : {}) },
+            elements: [{ name: 'w:p', elements: [] }],
+          })),
+        },
+      ],
+    });
+
+    const makeDocumentXml = (referencedIds, refName = 'w:footnoteReference') => ({
+      elements: [
+        {
+          name: 'w:document',
+          elements: [
+            {
+              name: 'w:body',
+              elements: referencedIds.map((id) => ({
+                name: 'w:p',
+                elements: [
+                  {
+                    name: 'w:r',
+                    elements: [{ name: refName, attributes: { 'w:id': id } }],
+                  },
+                ],
+              })),
+            },
+          ],
+        },
+      ],
+    });
+
+    const prunedIds = (part, noteName = 'w:footnote') =>
+      part.elements[0].elements.filter((el) => el.name === noteName).map((el) => el.attributes['w:id']);
+
+    const makeConverter = (registered) => ({
+      sessionManagedNoteIds: { footnotes: new Set(registered), endnotes: new Set() },
+    });
+
+    it('prunes a session-deleted note with no reference in the exported document', () => {
+      const part = makePart([{ id: '1' }, { id: '2' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: makeConverter(['2']),
+        documentXml: makeDocumentXml(['1']),
+        type: 'footnote',
+      });
+
+      expect(prunedIds(pruned)).toEqual(['1']);
+      // Pure transform: the input part keeps the tombstone (store intact).
+      expect(prunedIds(part)).toEqual(['1', '2']);
+    });
+
+    it('keeps a session-deleted note whose reference is present (undo restored the marker)', () => {
+      const part = makePart([{ id: '1' }, { id: '2' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: makeConverter(['2']),
+        documentXml: makeDocumentXml(['1', '2']),
+        type: 'footnote',
+      });
+
+      expect(prunedIds(pruned)).toEqual(['1', '2']);
+    });
+
+    it('never prunes separator/continuationSeparator entries even when registered', () => {
+      const part = makePart([{ id: '-1', type: 'separator' }, { id: '0', type: 'continuationSeparator' }, { id: '1' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: makeConverter(['-1', '0', '1']),
+        documentXml: makeDocumentXml([]),
+        type: 'footnote',
+      });
+
+      expect(prunedIds(pruned)).toEqual(['-1', '0']);
+    });
+
+    it('preserves pre-existing unreferenced notes that were never session-deleted (Round-Trip Principle)', () => {
+      const part = makePart([{ id: '1' }, { id: '9' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: makeConverter(['1']),
+        documentXml: makeDocumentXml(['1']),
+        type: 'footnote',
+      });
+
+      expect(prunedIds(pruned)).toEqual(['1', '9']);
+    });
+
+    it('prunes to an empty (but rewritten) part when the only note is session-deleted and separator-less', () => {
+      // Some third-party producers omit separators; the exported part must be
+      // the pruned copy, never the stale input carrying the deleted text.
+      const part = makePart([{ id: '3' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: makeConverter(['3']),
+        documentXml: makeDocumentXml([]),
+        type: 'footnote',
+      });
+
+      expect(prunedIds(pruned)).toEqual([]);
+      expect(pruned).not.toBe(part);
+    });
+
+    it('returns the part untouched when no ids are session-managed (imported docs export as before)', () => {
+      const part = makePart([{ id: '1' }, { id: '9' }]);
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter: {},
+        documentXml: makeDocumentXml(['1']),
+        type: 'footnote',
+      });
+
+      expect(pruned).toBe(part);
+    });
+
+    it('endnote symmetry: prunes via w:endnoteReference scan and the endnotes registry', () => {
+      const part = makePart([{ id: '1' }, { id: '2' }], 'w:endnote', 'w:endnotes');
+      const converter = { sessionManagedNoteIds: { footnotes: new Set(), endnotes: new Set(['1', '2']) } };
+      const pruned = pruneSessionDeletedNotesPart(part, {
+        converter,
+        documentXml: makeDocumentXml(['2'], 'w:endnoteReference'),
+        type: 'endnote',
+      });
+
+      expect(prunedIds(pruned, 'w:endnote')).toEqual(['2']);
     });
   });
 });

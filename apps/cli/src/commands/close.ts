@@ -63,6 +63,7 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
           discarded: mode.discard,
           defaultSessionCleared: wasDefaultSession,
           wasDirty: effectiveMetadata.dirty,
+          runtime: effectiveMetadata.runtime,
           document: {
             path: effectiveMetadata.sourcePath,
             source: effectiveMetadata.source,

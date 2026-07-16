@@ -14,7 +14,7 @@ Set paragraph spacing properties (before, after, line, lineRule) in twips.
 - API member path: `editor.doc.format.paragraph.setSpacing(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -60,7 +60,11 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -96,14 +100,22 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
     "target": {
       "kind": "block",
       "nodeId": "node-def456",
-      "nodeType": "paragraph"
+      "nodeType": "paragraph",
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
     }
   },
   "success": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```

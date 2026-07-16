@@ -1,0 +1,13 @@
+{
+  "name": "@superdoc-examples/ai-core-actions-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node agent.mjs"
+  },
+  "dependencies": {
+    "@superdoc-dev/sdk": "workspace:*",
+    "dotenv": "^17.4.2",
+    "openai": "^6.33.0"
+  }
+}

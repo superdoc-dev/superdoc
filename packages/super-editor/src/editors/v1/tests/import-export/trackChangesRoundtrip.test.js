@@ -321,7 +321,8 @@ describe('tracked format import/export round trip', () => {
 
       const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
       const exportedBody = await loadExportedDocumentBody(exportedBuffer);
-      expect(collectRunPropertyChangeIdsFromXml(exportedBody)).toEqual(['format-1']);
+      const [exportedFormatChangeId] = collectRunPropertyChangeIdsFromXml(exportedBody);
+      expect(exportedFormatChangeId).toMatch(/^\d+$/);
 
       const [reimportedDocx, reimportedMedia, reimportedMediaFiles, reimportedFonts] = await Editor.loadXmlData(
         exportedBuffer,
@@ -336,11 +337,225 @@ describe('tracked format import/export round trip', () => {
       });
 
       try {
-        expect(collectTrackFormatMarkIds(reimportedEditor.state.doc)).toEqual(['format-1']);
-        expect(collectTextsWithTrackFormatId(reimportedEditor.state.doc, 'format-1')).toEqual(['styles']);
+        expect(collectTrackFormatMarkIds(reimportedEditor.state.doc)).toEqual([exportedFormatChangeId]);
+        expect(collectTextsWithTrackFormatId(reimportedEditor.state.doc, exportedFormatChangeId)).toEqual(['styles']);
       } finally {
         reimportedEditor.destroy();
       }
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
+describe('editing-mode direct insert inside a tracked span export', () => {
+  const EDITING_INSERT_TEXT = 'PLAIN';
+
+  const createTrackedInsertionDoc = () => ({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'run',
+            content: [{ type: 'text', text: 'before ' }],
+          },
+          {
+            type: 'run',
+            content: [
+              {
+                type: 'text',
+                text: 'suggested text',
+                marks: [
+                  {
+                    type: 'trackInsert',
+                    attrs: {
+                      id: 'editing-insert-1',
+                      author: 'Alice Reviewer',
+                      authorEmail: 'alice@example.com',
+                      date: '2026-01-07T20:24:39Z',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'run',
+            content: [{ type: 'text', text: ' after' }],
+          },
+        ],
+      },
+    ],
+  });
+
+  const createTrackedDeletionDoc = () => ({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'run',
+            content: [{ type: 'text', text: 'before ' }],
+          },
+          {
+            type: 'run',
+            content: [
+              {
+                type: 'text',
+                text: 'deleted text',
+                marks: [
+                  {
+                    type: 'trackDelete',
+                    attrs: {
+                      id: 'editing-delete-1',
+                      author: 'Alice Reviewer',
+                      authorEmail: 'alice@example.com',
+                      date: '2026-01-07T20:24:39Z',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'run',
+            content: [{ type: 'text', text: ' after' }],
+          },
+        ],
+      },
+    ],
+  });
+
+  // Finds a cursor position strictly inside the tracked span so the collapsed
+  // insert inherits the neighboring revision mark via PM mark inheritance.
+  const findInteriorPositionOfTrackedMark = (editor, markName) => {
+    let found = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found != null || !node.isText || !node.text) return;
+      const hasMark = node.marks?.some((mark) => mark.type.name === markName);
+      if (hasMark && node.text.length >= 2) found = pos + 1;
+    });
+    if (found == null) throw new Error(`Could not find a position inside ${markName}`);
+    return found;
+  };
+
+  const collectTextsWithMarkName = (editor, markName, needle) => {
+    const texts = [];
+    editor.state.doc.descendants((node) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks?.some((mark) => mark.type.name === markName) && node.text.includes(needle)) {
+        texts.push(node.text);
+      }
+    });
+    return texts;
+  };
+
+  // Walks the exported XML and records whether each text node sits under a
+  // revision ancestor.
+  const collectTextRunSegments = (node, context, segments) => {
+    if (!node || typeof node !== 'object') return;
+    const nextContext = {
+      insideIns: context.insideIns || node.name === 'w:ins',
+      insideDel: context.insideDel || node.name === 'w:del',
+    };
+    if (node.name === 'w:t' || node.name === 'w:delText') {
+      const text = (node.elements ?? [])
+        .filter((child) => child.type === 'text')
+        .map((child) => child.text ?? '')
+        .join('');
+      segments.push({ text, name: node.name, ...nextContext });
+      return;
+    }
+    if (Array.isArray(node.elements)) {
+      node.elements.forEach((child) => collectTextRunSegments(child, nextContext, segments));
+    }
+  };
+
+  it('exports editing-mode text typed inside a tracked insertion as plain w:t, not inside w:ins', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    const { editor } = await initTestEditor({
+      content: docx,
+      media,
+      mediaFiles,
+      fonts,
+      isHeadless: true,
+      user: { name: 'Bob Reviewer', email: 'bob@example.com' },
+    });
+
+    try {
+      replaceEditorDocumentContent(editor, createTrackedInsertionDoc());
+
+      // Editing mode (tracking off) is the initTestEditor default. A collapsed
+      // insert strictly inside the suggestion must stay plain text.
+      const insertPos = findInteriorPositionOfTrackedMark(editor, 'trackInsert');
+      editor.dispatch(editor.state.tr.insertText(EDITING_INSERT_TEXT, insertPos).setMeta('inputType', 'insertText'));
+
+      expect(collectTextsWithMarkName(editor, 'trackInsert', EDITING_INSERT_TEXT)).toHaveLength(0);
+
+      const exportedXml = await editor.exportDocx({ exportXmlOnly: true, isFinalDoc: false });
+      expect(typeof exportedXml).toBe('string');
+
+      const documentJson = parseXmlToJson(exportedXml);
+      const documentNode = documentJson.elements?.find((el) => el.name === 'w:document');
+      const body = documentNode?.elements?.find((el) => el.name === 'w:body');
+      expect(body).toBeDefined();
+
+      const segments = [];
+      collectTextRunSegments(body, { insideIns: false, insideDel: false }, segments);
+
+      const plainSegment = segments.find((segment) => segment.text.includes(EDITING_INSERT_TEXT));
+      expect(plainSegment).toBeDefined();
+      // The new text exports as a normal run, never wrapped in a w:ins revision.
+      expect(plainSegment.name).toBe('w:t');
+      expect(plainSegment.insideIns).toBe(false);
+      expect(segments.some((segment) => segment.insideIns && segment.text.includes(EDITING_INSERT_TEXT))).toBe(false);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('exports editing-mode text typed inside a tracked deletion as plain w:t, not inside w:del', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    const { editor } = await initTestEditor({
+      content: docx,
+      media,
+      mediaFiles,
+      fonts,
+      isHeadless: true,
+      user: { name: 'Bob Reviewer', email: 'bob@example.com' },
+    });
+
+    try {
+      replaceEditorDocumentContent(editor, createTrackedDeletionDoc());
+
+      const insertPos = findInteriorPositionOfTrackedMark(editor, 'trackDelete');
+      editor.dispatch(editor.state.tr.insertText(EDITING_INSERT_TEXT, insertPos).setMeta('inputType', 'insertText'));
+
+      expect(collectTextsWithMarkName(editor, 'trackDelete', EDITING_INSERT_TEXT)).toHaveLength(0);
+
+      const exportedXml = await editor.exportDocx({ exportXmlOnly: true, isFinalDoc: false });
+      expect(typeof exportedXml).toBe('string');
+
+      const documentJson = parseXmlToJson(exportedXml);
+      const documentNode = documentJson.elements?.find((el) => el.name === 'w:document');
+      const body = documentNode?.elements?.find((el) => el.name === 'w:body');
+      expect(body).toBeDefined();
+
+      const segments = [];
+      collectTextRunSegments(body, { insideIns: false, insideDel: false }, segments);
+
+      const plainSegment = segments.find((segment) => segment.text.includes(EDITING_INSERT_TEXT));
+      expect(plainSegment).toBeDefined();
+      expect(plainSegment.name).toBe('w:t');
+      expect(plainSegment.insideIns).toBe(false);
+      expect(plainSegment.insideDel).toBe(false);
+      expect(segments.some((segment) => segment.insideDel && segment.text.includes(EDITING_INSERT_TEXT))).toBe(false);
+      expect(
+        segments.some((segment) => segment.name === 'w:delText' && segment.text.includes(EDITING_INSERT_TEXT)),
+      ).toBe(false);
     } finally {
       editor.destroy();
     }

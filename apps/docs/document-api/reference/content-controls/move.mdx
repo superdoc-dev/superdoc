@@ -1,26 +1,26 @@
 ---
 title: contentControls.move
 sidebarTitle: contentControls.move
-description: Move a content control to a new position. Preserves original IDs.
+description: Move a content control to a new position. Direct moves preserve the original ID; tracked-mode authoring supports safe top-level block SDTs and remaps the destination SDT ID to avoid duplicate live anchors.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Move a content control to a new position. Preserves original IDs.
+Move a content control to a new position. Direct moves preserve the original ID; tracked-mode authoring supports safe top-level block SDTs and remaps the destination SDT ID to avoid duplicate live anchors.
 
 - Operation ID: `contentControls.move`
 - API member path: `editor.doc.contentControls.move(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a ContentControlMutationResult with the updated target position.
+Returns a ContentControlMutationResult with the updated target position. Tracked-mode results include `trackedChangeRefs` pointing at the paired move review entity.
 
 ## Input fields
 
@@ -109,6 +109,7 @@ Returns a ContentControlMutationResult with the updated target position.
 ## Non-applied failure codes
 
 - `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 

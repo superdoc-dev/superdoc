@@ -1,5 +1,7 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { FlowBlock } from '@superdoc/contracts';
 import { findParagraphBoundaries, findWordBoundaries } from '@superdoc/layout-bridge';
+import { cellWrapping } from '@extensions/table/tableHelpers/cellWrapping.js';
 
 /**
  * Unicode-aware regular expression for matching word characters.
@@ -165,4 +167,90 @@ export function calculateExtendedSelection(
 
   // Fallback to character mode (no extension) if boundaries not found or mode is 'char'
   return { selAnchor: anchor, selHead: head };
+}
+
+/**
+ * Detects when extending a text selection from `anchor` to `head` would be collapsed by
+ * prosemirror-tables' selection normalization.
+ *
+ * prosemirror-tables (`normalizeSelection` -> `isTextSelectionAcrossCells`) rewrites a
+ * TextSelection to the anchor block's own bounds when the two endpoints resolve to different
+ * table cells AND the head sits at the very start of its block (`parentOffset === 0`). An
+ * empty paragraph inside a cell only ever has `parentOffset === 0`, so dragging a body
+ * selection into (or through) an empty cell paragraph collapses the whole selection back to
+ * the run at the anchor — e.g. `[44, 2026]` becomes `[44, 49]`. (SD-3328.)
+ *
+ * Returns true when extending to `head` would trigger that collapse, so a drag handler can
+ * keep the last good selection for that frame instead of dispatching a doomed one. Mirrors
+ * the upstream condition exactly; the regression test pins it against real editor behavior.
+ *
+ * @param doc - The current ProseMirror document.
+ * @param anchor - The selection anchor position.
+ * @param head - The prospective selection head position.
+ * @returns True if dispatching `TextSelection(anchor, head)` would be normalized to a collapse.
+ */
+export function selectionCollapsesAcrossTableCells(doc: ProseMirrorNode, anchor: number, head: number): boolean {
+  if (anchor === head) return false;
+
+  // Fail open: if the document shape is unexpected or a position is out of range, never block
+  // the selection — extending it is the safe default. This also keeps the guard a no-op for
+  // callers that pass a minimal doc stub.
+  try {
+    const size = doc.content.size;
+    if (anchor < 0 || head < 0 || anchor > size || head > size) return false;
+
+    const $from = doc.resolve(Math.min(anchor, head));
+    const $to = doc.resolve(Math.max(anchor, head));
+
+    // Mirrors prosemirror-tables `isTextSelectionAcrossCells`: endpoints in different cells
+    // (or one outside the table entirely) with the head at the start of its block.
+    return cellWrapping($from) !== cellWrapping($to) && $to.parentOffset === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns a stable text-selection range for drags that cross a table boundary.
+ *
+ * prosemirror-tables collapses a text selection when its upper endpoint sits at the start of a
+ * block in a different cell context. For empty textblocks there is no interior position to keep,
+ * so the closest stable endpoint is the position immediately after that empty block. Using that
+ * endpoint preserves the intended visual extent without pulling visible characters into the range.
+ *
+ * Returns the original endpoints when they are already safe, a stabilized pair for the empty-
+ * textblock case, or null when the selection would still collapse.
+ */
+export function stabilizeTextSelectionAcrossTableCells(
+  doc: ProseMirrorNode,
+  anchor: number,
+  head: number,
+): { selAnchor: number; selHead: number } | null {
+  if (!selectionCollapsesAcrossTableCells(doc, anchor, head)) {
+    return { selAnchor: anchor, selHead: head };
+  }
+
+  try {
+    const anchorIsUpper = anchor > head;
+    const upperPos = anchorIsUpper ? anchor : head;
+    if (upperPos < 0 || upperPos >= doc.content.size) return null;
+
+    const $upper = doc.resolve(upperPos);
+    if (!$upper.parent.inlineContent || $upper.parent.content.size !== 0) {
+      return null;
+    }
+
+    const stabilizedUpperPos = upperPos + 1;
+    if (stabilizedUpperPos > doc.content.size) return null;
+
+    const selAnchor = anchorIsUpper ? stabilizedUpperPos : anchor;
+    const selHead = anchorIsUpper ? head : stabilizedUpperPos;
+    if (selectionCollapsesAcrossTableCells(doc, selAnchor, selHead)) {
+      return null;
+    }
+
+    return { selAnchor, selHead };
+  } catch {
+    return null;
+  }
 }

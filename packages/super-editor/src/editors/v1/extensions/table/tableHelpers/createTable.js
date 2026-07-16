@@ -2,6 +2,7 @@
 import { getNodeType } from '@core/helpers/getNodeType.js';
 import { createCell } from './createCell.js';
 import { generateDocxHexId } from '../../../utils/generateDocxHexId.js';
+import { cellWidthDxa } from './cellWidth.js';
 
 /**
  * Create a new table with specified dimensions
@@ -42,7 +43,18 @@ export const createTable = (
   const cells = [];
 
   for (let index = 0; index < colsCount; index++) {
-    const cellAttrs = columnWidths ? { colwidth: [columnWidths[index]] } : null;
+    // Word writes w:tcW on every cell it inserts; the concrete cell width marks
+    // the grid as a real layout cache so the measuring pass preserves the
+    // requested column widths instead of content-sizing the table as pure-auto.
+    // (SD-3308)
+    const cellAttrs = columnWidths
+      ? {
+          colwidth: [columnWidths[index]],
+          tableCellProperties: {
+            cellWidth: cellWidthDxa(columnWidths[index]),
+          },
+        }
+      : null;
     const cell = createCell(types.tableCell, cellContent, cellAttrs);
     if (cell) cells.push(cell);
     if (withHeaderRow) {

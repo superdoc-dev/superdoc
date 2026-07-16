@@ -1,4 +1,5 @@
 import { Extension } from '@core/Extension.js';
+import { formatPageNumberFieldValue } from '@superdoc/contracts';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
 import { findAllTocNodes } from '../../document-api-adapters/helpers/toc-resolver.js';
 import {
@@ -6,9 +7,20 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
+import { resolveSectionPageCountFieldValue } from '../../document-api-adapters/helpers/section-page-count.js';
+import {
+  getSequenceFieldUpdaterConverterContext,
+  updateSequenceFieldsInTransaction,
+} from '../../document-api-adapters/helpers/sequence-field-updater.js';
+import { getPageNumberFieldFormat } from '../../core/layout-adapter/converters/inline-converters/page-number-field-format.js';
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
-const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
+const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES', 'SECTIONPAGES']);
+
+function resolveTotalPageNumberFieldValue(stats, node) {
+  if (stats.pages == null) return null;
+  return formatPageNumberFieldValue(stats.pages, getPageNumberFieldFormat(node.attrs));
+}
 
 /**
  * @module FieldUpdate
@@ -39,6 +51,8 @@ export const FieldUpdate = Extension.create({
         () =>
         ({ editor, state, tr: outerTr, dispatch }) => {
           const { from, to } = state.selection;
+          const originalSelectionFields = findFieldsInRange(state.doc, from, to);
+          const selectionHadSeq = originalSelectionFields.some((field) => field.fieldType === 'SEQ');
           let tocPathRan = false;
 
           // toc.update dispatches its own transaction per TOC; CommandService
@@ -84,14 +98,21 @@ export const FieldUpdate = Extension.create({
             }
           }
 
-          const fields = findFieldsInRange(state.doc, from, to);
+          const activeState = tocPathRan && editor?.state?.doc ? editor.state : state;
+          const activeDoc = activeState.doc ?? state.doc;
+          const activeSchema = activeState.schema ?? state.schema;
+          const activeFrom = Math.min(from, activeDoc.content.size);
+          const activeTo = to >= state.doc.content.size ? activeDoc.content.size : Math.min(to, activeDoc.content.size);
+
+          const fields = findFieldsInRange(activeDoc, activeFrom, activeTo);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          if (updatable.length === 0) return tocPathRan;
+          const hasSeqSelection = selectionHadSeq || fields.some((field) => field.fieldType === 'SEQ');
+          if (updatable.length === 0 && !hasSeqSelection) return tocPathRan;
 
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
 
-          const tr = state.tr;
+          const tr = activeState.tr;
           let changed = false;
 
           // Process in reverse position order so earlier positions stay valid
@@ -99,17 +120,22 @@ export const FieldUpdate = Extension.create({
           const sorted = [...updatable].sort((a, b) => b.pos - a.pos);
 
           for (const field of sorted) {
-            const freshValue = resolveDocumentStatFieldValue(field.fieldType, stats);
-            if (freshValue == null) continue;
-
             const node = tr.doc.nodeAt(field.pos);
             if (!node) continue;
 
-            if (node.type.name === 'total-page-number') {
-              // total-page-number stores its display value as a text child,
+            const freshValue =
+              field.fieldType === 'SECTIONPAGES'
+                ? resolveSectionPageCountFieldValue(editor, node)
+                : field.fieldType === 'NUMPAGES' && node.type.name === 'total-page-number'
+                  ? resolveTotalPageNumberFieldValue(stats, node)
+                  : resolveDocumentStatFieldValue(field.fieldType, stats);
+            if (freshValue == null) continue;
+
+            if (node.type.name === 'total-page-number' || node.type.name === 'section-page-count') {
+              // Page-count fields store their display value as a text child,
               // not just an attr. Replace the entire node so both the text
               // content and resolvedText stay in sync.
-              const textChild = freshValue ? state.schema.text(freshValue) : null;
+              const textChild = freshValue ? activeSchema.text(freshValue) : null;
               const newNode = node.type.create({ ...node.attrs, resolvedText: freshValue }, textChild);
               tr.replaceWith(field.pos, field.pos + node.nodeSize, newNode);
               changed = true;
@@ -123,6 +149,16 @@ export const FieldUpdate = Extension.create({
               });
               changed = true;
             }
+          }
+
+          if (hasSeqSelection) {
+            const result = updateSequenceFieldsInTransaction({
+              tr,
+              schema: activeSchema,
+              scope: { kind: 'all' },
+              converterContext: getSequenceFieldUpdaterConverterContext(editor),
+            });
+            changed = changed || result.changed;
           }
 
           if (!changed) return tocPathRan;

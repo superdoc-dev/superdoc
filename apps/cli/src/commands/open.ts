@@ -15,16 +15,45 @@ import {
   withContextLock,
   writeContextMetadata,
 } from '../lib/context';
-import { exportToPath, openCollaborativeDocument, openDocument } from '../lib/document';
-import type { EditorPassThroughOptions } from '../lib/document';
+import {
+  openCollaborativeDocument,
+  openDocument,
+  type OpenedRuntimeDocument,
+  EditorPassThroughOptions,
+} from '../lib/document';
 import { CliError } from '../lib/errors';
 import { resolvePassword } from '../lib/open-password';
 import { parseOperationArgs } from '../lib/operation-args';
 import { generateSessionId } from '../lib/session';
-import type { CommandContext, CommandExecution } from '../lib/types';
+import { type CommandContext, type CommandExecution, type DocumentRuntimeKind } from '../lib/types';
 
 const VALID_OVERRIDE_TYPES = new Set(['markdown', 'html', 'text']);
 const VALID_ON_MISSING = new Set(['seedFromDoc', 'blank', 'error']);
+
+function normalizeTrackChangesOpenConfig(value: unknown): EditorPassThroughOptions['trackChanges'] | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new CliError('INVALID_ARGUMENT', 'open: trackChanges must be a JSON object.');
+  }
+
+  const payload = value as Record<string, unknown>;
+  const allowedKeys = new Set(['replacements']);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new CliError('INVALID_ARGUMENT', `open: trackChanges.${key} is not supported.`);
+    }
+  }
+
+  const replacements = payload.replacements;
+  if (replacements == null) return undefined;
+  if (replacements === 'paired' || replacements === 'independent') {
+    return { replacements };
+  }
+
+  throw new CliError('INVALID_ARGUMENT', 'open: trackChanges.replacements must be one of: paired, independent.', {
+    provided: replacements,
+  });
+}
 
 export async function runOpen(tokens: string[], context: CommandContext): Promise<CommandExecution> {
   const { parsed, args, help } = parseOperationArgs('doc.open', tokens, {
@@ -67,9 +96,10 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const bootstrapSettlingMs = getNumberOption(parsed, 'bootstrap-settling-ms');
   const userName = getStringOption(parsed, 'user-name');
   const userEmail = getStringOption(parsed, 'user-email');
-  const trackChanges = args.trackChanges as { replacements?: 'paired' | 'independent' } | undefined;
+  const runtime: DocumentRuntimeKind = 'v1';
   const allowEnvFallback = context.executionMode !== 'host';
   const password = resolvePassword(getStringOption(parsed, 'password'), allowEnvFallback);
+  const trackChanges = normalizeTrackChangesOpenConfig(args.trackChanges);
 
   // Validate contentOverride / overrideType co-requirement.
   // Use != null checks so that intentional empty-string overrides are honored.
@@ -143,7 +173,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const user = userName != null || userEmail != null ? { name: userName ?? 'CLI', email: userEmail ?? '' } : undefined;
 
   // Build editor open options from override params and password.
-  const editorOpenOptions: EditorPassThroughOptions & { markdown?: string; html?: string; plainText?: string } = {};
+  const editorOpenOptions: EditorPassThroughOptions & Record<string, unknown> = {};
   if (contentOverride != null && overrideType) {
     if (overrideType === 'markdown') {
       editorOpenOptions.markdown = contentOverride;
@@ -158,12 +188,9 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   if (password != null) {
     editorOpenOptions.password = password;
   }
-  if (trackChanges?.replacements != null) {
-    editorOpenOptions.modules = {
-      trackChanges: {
-        replacements: trackChanges.replacements,
-      },
-    };
+  if (trackChanges != null) {
+    editorOpenOptions.trackChanges = trackChanges;
+    editorOpenOptions.modules = { ...(editorOpenOptions.modules ?? {}), trackChanges };
   }
 
   return withContextLock(
@@ -195,13 +222,17 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
         );
       }
 
-      const opened = collaboration
-        ? await openCollaborativeDocument(doc, context.io, collaboration, { editorOpenOptions, user })
-        : await openDocument(doc, context.io, { editorOpenOptions, user });
+      let opened: OpenedRuntimeDocument & { bootstrap?: unknown };
+      if (collaboration) {
+        opened = await openCollaborativeDocument(doc, context.io, collaboration, { editorOpenOptions, user });
+      } else {
+        opened = await openDocument(doc, context.io, { editorOpenOptions, user });
+      }
       const bootstrap = 'bootstrap' in opened ? opened.bootstrap : undefined;
       let adoptedToHostPool = false;
       try {
-        await exportToPath(opened.editor, paths.workingDocPath, true);
+        await opened.exportToPath(paths.originalDocPath, true, { mode: 'original' });
+        await opened.exportToPath(paths.workingDocPath, true);
         const sourcePath =
           opened.meta.source === 'path' && opened.meta.path
             ? resolveSourcePathForMetadata(opened.meta.path)
@@ -214,7 +245,9 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
           sourceSnapshot,
           sessionType,
           collaboration,
+          trackChanges,
           user,
+          runtime,
         });
 
         await writeContextMetadata(paths, metadata);
@@ -234,6 +267,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             workingDocPath: paths.workingDocPath,
             metadataRevision: metadata.revision,
             collaboration: metadata.collaboration,
+            trackChanges: metadata.trackChanges,
           });
           adoptedToHostPool = true;
         }
@@ -243,6 +277,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
           data: {
             active: true,
             contextId: metadata.contextId,
+            runtime: metadata.runtime,
             document: {
               path: metadata.sourcePath,
               source: metadata.source,
@@ -256,7 +291,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             openedAt: metadata.openedAt,
             updatedAt: metadata.updatedAt,
           },
-          pretty: `Opened ${metadata.sourcePath ?? (metadata.source === 'blank' ? '<blank>' : '<stdin>')} in context ${metadata.contextId} (${metadata.sessionType})`,
+          pretty: `Opened ${metadata.sourcePath ?? (metadata.source === 'blank' ? '<blank>' : '<stdin>')} in context ${metadata.contextId} (${metadata.sessionType}, runtime ${metadata.runtime})`,
         };
       } finally {
         if (!adoptedToHostPool) {

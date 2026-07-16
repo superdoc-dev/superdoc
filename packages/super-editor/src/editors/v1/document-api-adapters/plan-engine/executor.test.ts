@@ -1789,6 +1789,36 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     expect(assertFailures).toHaveLength(1);
   });
 
+  it('treats unsafe assert regex as zero text matches', () => {
+    const { editor, tr } = makeEditor('aaaaaaaaaaaaaaaaaaaaaaaa');
+    // Assert execution builds an index before falling back to whole-document text for no `within`.
+    (tr as any).doc.descendants = vi.fn();
+    (editor as any).state.tr = tr;
+
+    const assertStep: AssertStep = {
+      id: 'assert-unsafe',
+      op: 'assert',
+      where: {
+        by: 'select',
+        select: { type: 'text', pattern: '^(a+)+$', mode: 'regex' },
+      },
+      args: { expectCount: 1 },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [],
+      assertSteps: [assertStep],
+      compiledRevision: '0',
+    };
+
+    const { stepOutcomes } = runMutationsOnTransaction(editor, tr as any, compiled, { throwOnAssertFailure: false });
+    const assertOutcome = stepOutcomes.find((o) => o.stepId === 'assert-unsafe');
+
+    expect(assertOutcome).toBeDefined();
+    expect(assertOutcome!.effect).toBe('assert_failed');
+    expect((assertOutcome!.data as any).actualCount).toBe(0);
+  });
+
   it('counts listItem nodes correctly via mapBlockNodeType', () => {
     const nodes = [
       { type: { name: 'paragraph' }, isBlock: true, attrs: {} },
@@ -2795,6 +2825,147 @@ describe('span target contiguity checks', () => {
     expect(tr.delete).toHaveBeenCalledWith(6, 14);
   });
 
+  it('marks tracked span rewrites as changed for later batch fallback', () => {
+    const meta = new Map<string, unknown>([
+      ['forceTrackChanges', true],
+      ['documentApiTrackedRewriteBatch', true],
+    ]);
+    const schema = {
+      nodes: {},
+      text: vi.fn((text: string, marks?: unknown[]) => ({ type: { name: 'text' }, text, marks: marks ?? [] })),
+    };
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      getMeta: vi.fn((key: string) => meta.get(key)),
+      setMeta: vi.fn((key: string, value: unknown) => {
+        meta.set(key, value);
+        return tr;
+      }),
+      doc: {},
+    };
+    tr.replaceWith.mockReturnValue(tr);
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-rewrite',
+      op: 'text.rewrite',
+      matchId: 'm:tracked-span',
+      segments: [{ blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 }],
+      text: 'abc',
+      marks: [],
+      capturedStyleBySegment: [],
+    } as any;
+    const step: TextRewriteStep = {
+      id: 'step-span-rewrite',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'abc' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'xyz' } },
+    };
+
+    executeSpanTextRewrite({ state: { schema } } as unknown as Editor, tr as any, target, step, {
+      map: (pos: number) => pos,
+    } as any);
+
+    expect(tr.getMeta('documentApiTrackedRewriteChanged')).toBe(true);
+  });
+
+  it('does not mark tracked span rewrite no-ops as changed', () => {
+    const meta = new Map<string, unknown>([
+      ['forceTrackChanges', true],
+      ['documentApiTrackedRewriteBatch', true],
+    ]);
+    const schema = {
+      nodes: {},
+      text: vi.fn((text: string, marks?: unknown[]) => ({ type: { name: 'text' }, text, marks: marks ?? [] })),
+    };
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      getMeta: vi.fn((key: string) => meta.get(key)),
+      setMeta: vi.fn((key: string, value: unknown) => {
+        meta.set(key, value);
+        return tr;
+      }),
+      doc: {},
+    };
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-rewrite',
+      op: 'text.rewrite',
+      matchId: 'm:tracked-span-noop',
+      segments: [{ blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 }],
+      text: 'abc',
+      marks: [],
+      capturedStyleBySegment: [],
+    } as any;
+    const step: TextRewriteStep = {
+      id: 'step-span-rewrite',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'abc' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'abc' } },
+    };
+
+    const outcome = executeSpanTextRewrite({ state: { schema } } as unknown as Editor, tr as any, target, step, {
+      map: (pos: number) => pos,
+    } as any);
+
+    expect(outcome).toEqual({ changed: false });
+    expect(tr.replaceWith).not.toHaveBeenCalled();
+    expect(tr.getMeta('documentApiTrackedRewriteChanged')).toBeUndefined();
+  });
+
+  it('does not no-op same-text cross-block span rewrites', () => {
+    const meta = new Map<string, unknown>([
+      ['forceTrackChanges', true],
+      ['documentApiTrackedRewriteBatch', true],
+    ]);
+    const schema = {
+      nodes: {},
+      text: vi.fn((text: string, marks?: unknown[]) => ({ type: { name: 'text' }, text, marks: marks ?? [] })),
+    };
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      getMeta: vi.fn((key: string) => meta.get(key)),
+      setMeta: vi.fn((key: string, value: unknown) => {
+        meta.set(key, value);
+        return tr;
+      }),
+      doc: {},
+    };
+    tr.replaceWith.mockReturnValue(tr);
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-rewrite',
+      op: 'text.rewrite',
+      matchId: 'm:tracked-span-cross-block-same-text',
+      segments: [
+        { blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 },
+        { blockId: 'p2', from: 0, to: 3, absFrom: 6, absTo: 9 },
+      ],
+      text: 'abcdef',
+      marks: [],
+      capturedStyleBySegment: [],
+    } as any;
+    const step: TextRewriteStep = {
+      id: 'step-span-rewrite',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'abcdef' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'abcdef' } },
+    };
+
+    const outcome = executeSpanTextRewrite({ state: { schema } } as unknown as Editor, tr as any, target, step, {
+      map: (pos: number) => pos,
+    } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.replaceWith).toHaveBeenCalledWith(1, 9, { type: { name: 'text' }, text: 'abcdef', marks: [] });
+    expect(tr.getMeta('documentApiTrackedRewriteChanged')).toBe(true);
+  });
+
   it('inherits paragraph-level attrs for multi-block span rewrites without copying ids', () => {
     const schema = new Schema({
       nodes: {
@@ -2886,6 +3057,96 @@ describe('span target contiguity checks', () => {
     expect(second.attrs.listRendering).toEqual({ markerText: '1.' });
     expect(second.attrs.paraId).toBeNull();
     expect(second.attrs.sdBlockId).toBeNull();
+  });
+
+  it('marks multi-block tracked span rewrites as changed for later batch fallback', () => {
+    // Sibling of "marks tracked span rewrites as changed for later batch fallback"
+    // but exercises the MULTI-block span branch (replacement.blocks.length > 1),
+    // which routes through tr.replace(slice). Without that branch marking the
+    // transaction, a later rewrite in the same tracked batch keeps using the
+    // granular word-diff against stale positions — the SD-3478 corruption.
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+          attrs: {
+            paragraphProperties: { default: null },
+            listRendering: { default: null },
+            paraId: { default: null },
+            sdBlockId: { default: null },
+          },
+        },
+        text: { group: 'inline' },
+      },
+    });
+
+    const sourceP1 = schema.nodes.paragraph.create({
+      paragraphProperties: { styleId: 'Heading2' },
+      paraId: 'p1',
+      sdBlockId: 'sd-p1',
+    });
+    const sourceP2 = schema.nodes.paragraph.create({
+      paragraphProperties: { styleId: 'Normal' },
+      paraId: 'p2',
+      sdBlockId: 'sd-p2',
+    });
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [
+        { nodeId: 'p1', node: sourceP1, pos: 0, end: 12 },
+        { nodeId: 'p2', node: sourceP2, pos: 20, end: 32 },
+      ],
+    });
+
+    const meta = new Map<string, unknown>([
+      ['forceTrackChanges', true],
+      ['documentApiTrackedRewriteBatch', true],
+    ]);
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+      getMeta: vi.fn((key: string) => meta.get(key)),
+      setMeta: vi.fn((key: string, value: unknown) => {
+        meta.set(key, value);
+        return tr;
+      }),
+      doc: {},
+    };
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-rewrite',
+      op: 'text.rewrite',
+      matchId: 'm:tracked-multi-block-span',
+      segments: [
+        { blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 },
+        { blockId: 'p2', from: 0, to: 3, absFrom: 6, absTo: 9 },
+      ],
+      text: 'abcdef',
+      marks: [],
+      capturedStyleBySegment: [],
+    } as any;
+
+    const step: TextRewriteStep = {
+      id: 'step-span-rewrite',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'abcdef' }, require: 'exactlyOne' },
+      args: {
+        replacement: { blocks: [{ text: 'alpha' }, { text: 'beta' }] },
+        style: { inline: { mode: 'clear' }, paragraph: { mode: 'preserve' } },
+      },
+    };
+
+    const outcome = executeSpanTextRewrite({ state: { schema } } as unknown as Editor, tr as any, target, step, {
+      map: (pos: number) => pos,
+    } as any);
+
+    // Multi-block replacement goes through tr.replace(slice), not tr.replaceWith.
+    expect(outcome).toEqual({ changed: true });
+    expect(tr.replace).toHaveBeenCalledTimes(1);
+    expect(tr.getMeta('documentApiTrackedRewriteChanged')).toBe(true);
   });
 });
 

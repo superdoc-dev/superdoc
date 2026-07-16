@@ -35,8 +35,8 @@ Use the tables below to see what operations are available and where each one is 
 | Images | 27 | 0 | 27 | [Reference](/document-api/reference/images/index) |
 | Index | 11 | 0 | 11 | [Reference](/document-api/reference/index/index) |
 | Lists | 39 | 0 | 39 | [Reference](/document-api/reference/lists/index) |
-| Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
-| Paragraph Formatting | 19 | 0 | 19 | [Reference](/document-api/reference/format/paragraph/index) |
+| Mutations | 3 | 0 | 3 | [Reference](/document-api/reference/mutations/index) |
+| Paragraph Formatting | 20 | 0 | 20 | [Reference](/document-api/reference/format/paragraph/index) |
 | Paragraph Styles | 2 | 0 | 2 | [Reference](/document-api/reference/styles/paragraph/index) |
 | Permission Ranges | 5 | 0 | 5 | [Reference](/document-api/reference/permission-ranges/index) |
 | Protection | 3 | 0 | 3 | [Reference](/document-api/reference/protection/index) |
@@ -48,6 +48,7 @@ Use the tables below to see what operations are available and where each one is 
 | Table of Authorities | 11 | 0 | 11 | [Reference](/document-api/reference/authorities/index) |
 | Table of Contents | 10 | 0 | 10 | [Reference](/document-api/reference/toc/index) |
 | Tables | 47 | 0 | 47 | [Reference](/document-api/reference/tables/index) |
+| Templates | 1 | 0 | 1 | [Reference](/document-api/reference/templates/index) |
 | Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
 
 | Editor method | Operation |
@@ -335,6 +336,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevelLayout(...)</code></span> | [`lists.setLevelLayout`](/document-api/reference/lists/set-level-layout) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | [`mutations.preview`](/document-api/reference/mutations/preview) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.plan.execute(...)</code></span> | [`plan.execute`](/document-api/reference/mutations/plan-execute) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.resetDirectFormatting(...)</code></span> | [`format.paragraph.resetDirectFormatting`](/document-api/reference/format/paragraph/reset-direct-formatting) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setAlignment(...)</code></span> | [`format.paragraph.setAlignment`](/document-api/reference/format/paragraph/set-alignment) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearAlignment(...)</code></span> | [`format.paragraph.clearAlignment`](/document-api/reference/format/paragraph/clear-alignment) |
@@ -354,6 +356,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearShading(...)</code></span> | [`format.paragraph.clearShading`](/document-api/reference/format/paragraph/clear-shading) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setDirection(...)</code></span> | [`format.paragraph.setDirection`](/document-api/reference/format/paragraph/set-direction) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.clearDirection(...)</code></span> | [`format.paragraph.clearDirection`](/document-api/reference/format/paragraph/clear-direction) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.setNumbering(...)</code></span> | [`format.paragraph.setNumbering`](/document-api/reference/format/paragraph/set-numbering) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.paragraph.setStyle(...)</code></span> | [`styles.paragraph.setStyle`](/document-api/reference/styles/paragraph/set-style) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.paragraph.clearStyle(...)</code></span> | [`styles.paragraph.clearStyle`](/document-api/reference/styles/paragraph/clear-style) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.permissionRanges.list(...)</code></span> | [`permissionRanges.list`](/document-api/reference/permission-ranges/list) |
@@ -454,6 +457,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getStyles(...)</code></span> | [`tables.getStyles`](/document-api/reference/tables/get-styles) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setDefaultStyle(...)</code></span> | [`tables.setDefaultStyle`](/document-api/reference/tables/set-default-style) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearDefaultStyle(...)</code></span> | [`tables.clearDefaultStyle`](/document-api/reference/tables/clear-default-style) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>await editor.doc.templates.apply(...)</code></span> | [`templates.apply`](/document-api/reference/templates/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.list(...)</code></span> | [`trackChanges.list`](/document-api/reference/track-changes/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.get(...)</code></span> | [`trackChanges.get`](/document-api/reference/track-changes/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | [`trackChanges.decide`](/document-api/reference/track-changes/decide) |

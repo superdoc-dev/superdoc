@@ -200,6 +200,25 @@ export function renderRemoteCursors(options: {
       options.remoteCursorElements.delete(clientId);
     }
   });
+
+  // Remove stale selection rectangles for clients that are no longer visible.
+  // Selection rects are independent `.presentation-editor__remote-selection`
+  // DOM nodes that are NOT tracked in remoteCursorElements, so the caret cleanup
+  // above never touches them. The per-client clear earlier in this pass only
+  // removes rectangles for clients that are re-rendered; a client that vanished
+  // from remoteCursorState (disconnect/missing cursor state) or that fell
+  // outside the maxVisible window would otherwise leave its old selection
+  // rectangles stuck in the overlay even though its caret was removed.
+  const staleSelections = options.remoteCursorOverlay?.querySelectorAll(
+    '.presentation-editor__remote-selection[data-client-id]',
+  );
+  staleSelections?.forEach((selectionEl) => {
+    const clientIdAttr = selectionEl.getAttribute('data-client-id');
+    if (clientIdAttr === null) return;
+    if (!visibleClientIds.has(Number(clientIdAttr))) {
+      selectionEl.remove();
+    }
+  });
 }
 
 /**

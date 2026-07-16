@@ -1,12 +1,11 @@
 name: 🔄 Sync stable → main
 
-# Stable pushes first run semantic-release, which can append version/tag
-# commits back to stable. Sync only after that release lane finishes so main
-# never gets a PR from an intermediate stable head.
+# Stable releases can append version and tag commits. Wait for that lane to
+# drain, then pin its settled head before merging it into main.
 on:
   workflow_run:
     workflows:
-      - "📦 Release stable tooling (CLI/SDK/MCP)"
+      - '📦 Release stable tooling (CLI/SDK/MCP)'
     types:
       - completed
   workflow_dispatch:
@@ -14,7 +13,6 @@ on:
 permissions:
   actions: read
   contents: write
-  pull-requests: write
 
 concurrency:
   group: sync-stable-to-main
@@ -27,15 +25,13 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.head_branch == 'stable' &&
-        (
-          github.event.workflow_run.conclusion == 'success' ||
-          github.event.workflow_run.conclusion == 'failure'
-        )
+        github.event.workflow_run.conclusion == 'success'
       )
 
     steps:
+      # Manual dispatch is the recovery path after an investigated failure,
+      # but it still waits for active stable releases before pinning stable.
       - name: Wait for stable release lane to drain
-        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -52,7 +48,7 @@ jobs:
               --jq '[.[] | select((.name == "📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder") and .status != "completed")] | length')
 
             if [ "$active_runs" -eq 0 ]; then
-              echo "Stable release lane is idle."
+              echo "Stable release lane is drained."
               break
             fi
 
@@ -85,7 +81,8 @@ jobs:
 
       - name: Sync stable into main
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_STABLE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
@@ -93,17 +90,58 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch origin main stable --tags --prune
+          stable_sha=$(git rev-parse origin/stable)
 
-          SYNC_BRANCH="sync/stable-to-main-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b "$SYNC_BRANCH" origin/main
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            if ! git merge-base --is-ancestor "$TRIGGER_STABLE_SHA" "$stable_sha"; then
+              echo "Pinned stable SHA does not descend from the successful tooling release."
+              exit 1
+            fi
 
-          if git merge-base --is-ancestor origin/stable origin/main; then
+            release_subject_pattern='^chore(\([^)]+\))?: [^[:space:]]+ \[skip ci\]$'
+            unexpected_commit=false
+            while read -r sha subject; do
+              [ -z "$sha" ] && continue
+
+              author_email=$(git show -s --format='%ae' "$sha")
+              committer_email=$(git show -s --format='%ce' "$sha")
+              if [ "$author_email" != "semantic-release-bot@martynus.net" ] ||
+                [ "$committer_email" != "semantic-release-bot@martynus.net" ] ||
+                [[ ! "$subject" =~ $release_subject_pattern ]]; then
+                echo "Pinned stable includes a non-release commit: $sha $subject"
+                unexpected_commit=true
+                continue
+              fi
+
+              changed_files=$(git diff-tree --no-commit-id --name-only -r "$sha")
+              if [ -z "$changed_files" ]; then
+                echo "Release writeback has no version files: $sha"
+                unexpected_commit=true
+                continue
+              fi
+
+              while read -r f; do
+                case "$f" in
+                  package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json) ;;
+                  *)
+                    echo "Release writeback changes an unexpected file: $sha $f"
+                    unexpected_commit=true
+                    ;;
+                esac
+              done <<< "$changed_files"
+            done < <(git log --format='%H %s' "$TRIGGER_STABLE_SHA..$stable_sha")
+
+            if [ "$unexpected_commit" = true ]; then
+              exit 1
+            fi
+          fi
+
+          git checkout --detach origin/main
+
+          if git merge-base --is-ancestor "$stable_sha" origin/main; then
             echo "No changes to sync - stable is already in main's ancestry."
             exit 0
           fi
-
-          PR_TITLE="🔄 Sync stable → main"
-          MERGE_STATUS="clean"
 
           normalize_json_without_keys() {
             python3 -c 'import json, sys; data = json.load(sys.stdin); [data.pop(key, None) for key in sys.argv[1:]]; sys.stdout.write(json.dumps(data, sort_keys=True, separators=(",", ":")))' "$@"
@@ -121,8 +159,8 @@ jobs:
                 git show ":3:${f}" | normalize_json_without_keys version > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
                 ;;
               pyproject.toml|*/pyproject.toml)
-                git show ":2:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
-                git show ":3:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
+                git show ":2:${f}" | python3 scripts/normalize-pyproject-release-artifact.py > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
+                git show ":3:${f}" | python3 scripts/normalize-pyproject-release-artifact.py > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
                 ;;
               version.json|*/version.json)
                 git show ":2:${f}" | normalize_json_without_keys version sdkVersion > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
@@ -140,17 +178,13 @@ jobs:
             return "${status}"
           }
 
-          # Use a real merge, not a squash, so stable release tags become
-          # reachable from main. semantic-release uses reachable tags as the
-          # version floor for @next prereleases.
-          if git merge --no-ff --no-edit origin/stable; then
-            MERGE_STATUS="clean"
-          else
+          # A real merge makes stable release tags reachable from main, which
+          # semantic-release needs as the version floor for @next.
+          if ! git merge --no-ff --no-edit "$stable_sha"; then
             echo "Merge conflict — attempting auto-resolution of release artifacts..."
 
-            # Auto-resolve release artifact conflicts only when the conflict is
-            # version-only: keep stable's already-published version, but never
-            # drop dependency, script, export, or package metadata changes.
+            # Only published-version fields may take stable's side. Other
+            # package metadata conflicts remain manual.
             while read -r f; do
               case "$f" in
                 package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
@@ -166,7 +200,6 @@ jobs:
             done < <(git diff --name-only --diff-filter=U)
 
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-              MERGE_STATUS="auto_resolved"
               git commit -m "chore: merge stable into main (release conflicts auto-resolved)"
             else
               echo "Unresolved conflicts remain after version-only release artifact auto-resolution."
@@ -176,45 +209,10 @@ jobs:
             fi
           fi
 
-          if ! git merge-base --is-ancestor origin/stable HEAD; then
+          if ! git merge-base --is-ancestor "$stable_sha" HEAD; then
             echo "Stable is still not in the sync branch ancestry after merge."
             exit 1
           fi
 
-          git push origin "$SYNC_BRANCH"
-
-          # Check for existing open sync PR
-          EXISTING=$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            echo "Sync PR #$EXISTING already exists."
-            exit 0
-          fi
-
-          gh pr create \
-            --base main \
-            --head "$SYNC_BRANCH" \
-            --title "$PR_TITLE" \
-            --body "$(cat <<EOF
-          ## Summary
-
-          Merges latest stable patches into main with a real merge commit so stable release tags remain reachable from main.
-
-          This keeps \`@next\` prerelease version calculation ahead of the latest published stable release.
-
-          ## Merge requirement
-
-          This PR must be merged with GitHub's merge-commit option. Squash or rebase merging will discard stable ancestry and break \`@next\` version calculation again.
-
-          ## Conflict handling
-
-          Merge status: \`${MERGE_STATUS}\`.
-
-          Version-only release artifact conflicts are auto-resolved to keep stable's already-published versions. Non-version conflicts fail this workflow instead of committing conflict markers.
-
-          ---
-          _Auto-created by sync-patches workflow._
-          EOF
-            )" \
-            --label "patch-sync"
-
-          echo "✅ Created sync PR"
+          # Push this merge unchanged. A normal push fails safely if main moved.
+          git push origin HEAD:main

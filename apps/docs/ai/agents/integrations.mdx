@@ -50,36 +50,46 @@ await client.connect();
 const doc = await client.open({ doc: './contract.docx' });
 ```
 
-## Step 3: Load tools and system prompt
+## Step 3: Load the toolkit
 
-Load the tool definitions for your provider and the default system prompt. Both can be cached: they don't change between requests.
+One call returns the tool definitions for your provider, the matching system prompt, and a pre-bound dispatcher. This guide uses the [core preset](/ai/agents/core-preset) (recommended); everything can be cached — it doesn't change between requests.
 
 <Tabs>
   <Tab title="OpenAI">
     ```typescript
-    import { chooseTools, getSystemPrompt } from '@superdoc-dev/sdk';
+    import { createAgentToolkit } from '@superdoc-dev/sdk';
 
-    const { tools } = await chooseTools({ provider: 'openai' });
-    const systemPrompt = await getSystemPrompt();
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'openai',
+      preset: 'core',
+    });
     ```
   </Tab>
   <Tab title="Anthropic">
     ```typescript
-    import { chooseTools, getSystemPrompt } from '@superdoc-dev/sdk';
+    import { createAgentToolkit } from '@superdoc-dev/sdk';
 
-    const { tools } = await chooseTools({ provider: 'anthropic' });
-    const systemPrompt = await getSystemPrompt();
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'anthropic',
+      preset: 'core',
+    });
     ```
   </Tab>
   <Tab title="Vercel AI">
     ```typescript
-    import { chooseTools, getSystemPrompt } from '@superdoc-dev/sdk';
+    import { createAgentToolkit } from '@superdoc-dev/sdk';
 
-    const { tools: sdkTools } = await chooseTools({ provider: 'vercel' });
-    const systemPrompt = await getSystemPrompt();
+    const { tools: sdkTools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'vercel',
+      preset: 'core',
+    });
     ```
   </Tab>
 </Tabs>
+
+<Note>
+On the legacy preset instead? Pass `preset: 'legacy'` (or omit it — legacy is the default for backwards compatibility). The loop below is identical; what changes is the tool surface the model sees and that results are raw operation results rather than receipts. See the [legacy preset page](/ai/agents/legacy-preset) for its behaviors.
+</Note>
 
 ## Step 4: Run the agent loop
 
@@ -89,8 +99,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
   <Tab title="OpenAI">
     ```typescript
     import OpenAI from 'openai';
-    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
-
+    
     const openai = new OpenAI(); // uses OPENAI_API_KEY env var
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -119,8 +128,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
         if (toolCall.type !== 'function') continue;
 
         try {
-          const result = await dispatchSuperDocTool(
-            doc,
+          const result = await dispatch(doc,
             toolCall.function.name,
             JSON.parse(toolCall.function.arguments),
           );
@@ -144,15 +152,14 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
     **What's happening:**
 
     1. The system prompt teaches the model how to use SuperDoc tools.
-    2. The `while(true)` loop calls OpenAI, checks for tool calls, dispatches them via `dispatchSuperDocTool`, and feeds results back.
+    2. The `while(true)` loop calls OpenAI, checks for tool calls, dispatches them via the toolkit's `dispatch`, and feeds results back.
     3. When the model returns `finish_reason: 'stop'` (no more tool calls), the loop ends.
     4. Errors are caught and returned as tool results so the model can see what went wrong and retry.
   </Tab>
   <Tab title="Anthropic">
     ```typescript
     import Anthropic from '@anthropic-ai/sdk';
-    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
-
+    
     const anthropic = new Anthropic(); // uses ANTHROPIC_API_KEY env var
 
     const messages: Anthropic.MessageParam[] = [
@@ -161,7 +168,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
 
     while (true) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5',
         max_tokens: 4096,
         system: systemPrompt,
         messages,
@@ -183,8 +190,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
         if (block.type !== 'tool_use') continue;
 
         try {
-          const result = await dispatchSuperDocTool(
-            doc,
+          const result = await dispatch(doc,
             block.name,
             block.input as Record<string, unknown>,
           );
@@ -220,18 +226,17 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
     ```typescript
     import { generateText, jsonSchema, stepCountIs } from 'ai';
     import { openai } from '@ai-sdk/openai';
-    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
-
+    
     // Convert SDK tool definitions into Vercel AI tool objects with execute functions
+    // The vercel dialect is flat: { name, description, inputSchema }.
     const tools: Record<string, any> = {};
     for (const t of sdkTools as any[]) {
-      const fn = t.function;
-      tools[fn.name] = {
-        description: fn.description,
-        inputSchema: jsonSchema<Record<string, unknown>>(fn.parameters),
+      tools[t.name] = {
+        description: t.description,
+        inputSchema: jsonSchema<Record<string, unknown>>(t.inputSchema),
         execute: async (args: Record<string, unknown>) => {
           try {
-            return await dispatchSuperDocTool(doc, fn.name, args);
+            return await dispatch(doc, t.name, args);
           } catch (err: any) {
             return { error: err.message };
           }
@@ -255,7 +260,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
 
     **What's happening:**
 
-    1. SDK tool definitions are converted into Vercel AI tool objects: each with an `execute` function that calls `dispatchSuperDocTool`.
+    1. SDK tool definitions are converted into Vercel AI tool objects: each with an `execute` function that calls the toolkit's `dispatch`.
     2. `generateText` handles the agent loop internally: it calls the model, executes tools, feeds results back, and repeats.
     3. `stopWhen: stepCountIs(10)` sets a max iteration guard.
     4. No manual `while(true)` loop needed: Vercel AI manages it for you.
@@ -278,21 +283,18 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
   <Tab title="OpenAI">
     ```typescript
     import OpenAI from 'openai';
-    import {
-      createSuperDocClient,
-      chooseTools,
-      dispatchSuperDocTool,
-      getSystemPrompt,
-    } from '@superdoc-dev/sdk';
+    import { createSuperDocClient, createAgentToolkit } from '@superdoc-dev/sdk';
 
     // 1. Open the document
     const client = createSuperDocClient();
     await client.connect();
     const doc = await client.open({ doc: './contract.docx' });
 
-    // 2. Load tools and system prompt
-    const { tools } = await chooseTools({ provider: 'openai' });
-    const systemPrompt = await getSystemPrompt();
+    // 2. Load the toolkit (tools + system prompt + dispatch, core preset)
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'openai',
+      preset: 'core',
+    });
 
     // 3. Build the conversation
     const openai = new OpenAI();
@@ -321,8 +323,7 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
         if (toolCall.type !== 'function') continue;
 
         try {
-          const result = await dispatchSuperDocTool(
-            doc,
+          const result = await dispatch(doc,
             toolCall.function.name,
             JSON.parse(toolCall.function.arguments),
           );
@@ -350,21 +351,18 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
   <Tab title="Anthropic">
     ```typescript
     import Anthropic from '@anthropic-ai/sdk';
-    import {
-      createSuperDocClient,
-      chooseTools,
-      dispatchSuperDocTool,
-      getSystemPrompt,
-    } from '@superdoc-dev/sdk';
+    import { createSuperDocClient, createAgentToolkit } from '@superdoc-dev/sdk';
 
     // 1. Open the document
     const client = createSuperDocClient();
     await client.connect();
     const doc = await client.open({ doc: './contract.docx' });
 
-    // 2. Load tools and system prompt
-    const { tools } = await chooseTools({ provider: 'anthropic' });
-    const systemPrompt = await getSystemPrompt();
+    // 2. Load the toolkit (tools + system prompt + dispatch, core preset)
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'anthropic',
+      preset: 'core',
+    });
 
     // 3. Build the conversation
     const anthropic = new Anthropic();
@@ -375,7 +373,7 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
     // 4. Agent loop
     while (true) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5',
         max_tokens: 4096,
         system: systemPrompt,
         messages,
@@ -395,8 +393,7 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
         if (block.type !== 'tool_use') continue;
 
         try {
-          const result = await dispatchSuperDocTool(
-            doc,
+          const result = await dispatch(doc,
             block.name,
             block.input as Record<string, unknown>,
           );
@@ -428,12 +425,7 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
     ```typescript
     import { generateText, jsonSchema, stepCountIs } from 'ai';
     import { openai } from '@ai-sdk/openai';
-    import {
-      createSuperDocClient,
-      chooseTools,
-      dispatchSuperDocTool,
-      getSystemPrompt,
-    } from '@superdoc-dev/sdk';
+    import { createSuperDocClient, createAgentToolkit } from '@superdoc-dev/sdk';
 
     // 1. Open the document
     const client = createSuperDocClient();
@@ -441,19 +433,21 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
     const doc = await client.open({ doc: './contract.docx' });
 
     // 2. Load tools and system prompt
-    const { tools: sdkTools } = await chooseTools({ provider: 'vercel' });
-    const systemPrompt = await getSystemPrompt();
+    const { tools: sdkTools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'vercel',
+      preset: 'core',
+    });
 
     // 3. Convert SDK tools into Vercel AI tool objects
+    // The vercel dialect is flat: { name, description, inputSchema }.
     const tools: Record<string, any> = {};
     for (const t of sdkTools as any[]) {
-      const fn = t.function;
-      tools[fn.name] = {
-        description: fn.description,
-        inputSchema: jsonSchema<Record<string, unknown>>(fn.parameters),
+      tools[t.name] = {
+        description: t.description,
+        inputSchema: jsonSchema<Record<string, unknown>>(t.inputSchema),
         execute: async (args: Record<string, unknown>) => {
           try {
-            return await dispatchSuperDocTool(doc, fn.name, args);
+            return await dispatch(doc, t.name, args);
           } catch (err: any) {
             return { error: err.message };
           }
@@ -486,22 +480,25 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
 
 ### AWS Bedrock
 
-Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec` shape:
+Use the toolkit with `provider: 'anthropic'` and convert to Bedrock's `toolSpec` shape:
 
 <Tabs>
   <Tab title="Node.js">
     ```typescript
     import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+    import { createSuperDocClient, createAgentToolkit } from '@superdoc-dev/sdk';
 
     const client = createSuperDocClient();
     await client.connect();
     const doc = await client.open({ doc: './contract.docx' });
 
     // Get tools in Anthropic format, convert to Bedrock toolSpec shape
-    const { tools } = await chooseTools({ provider: 'anthropic' });
+    const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+      provider: 'anthropic',
+      preset: 'core',
+    });
     const toolConfig = {
-      tools: tools.map((t) => ({
+      tools: tools.map((t: any) => ({
         toolSpec: {
           name: t.name,
           description: t.description,
@@ -517,9 +514,11 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
     while (true) {
       const res = await bedrock.send(new ConverseCommand({
+        // Bedrock uses regional inference-profile IDs, not Anthropic model
+        // names — copy the exact ID from your Bedrock console's model catalog.
         modelId: 'us.anthropic.claude-sonnet-4-6',
         messages,
-        system: [{ text: 'You edit .docx files using SuperDoc tools. Use tracked changes for all edits.' }],
+        system: [{ text: systemPrompt }],
         toolConfig,
       }));
 
@@ -533,7 +532,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
       const results = [];
       for (const block of toolUses) {
         const { name, input, toolUseId } = block.toolUse;
-        const result = await dispatchSuperDocTool(doc, name, input ?? {});
+        const result = await dispatch(doc, name, input ?? {});
         const json = typeof result === 'object' && result !== null ? result : { result };
         results.push({ toolResult: { toolUseId, content: [{ json }] } });
       }
@@ -548,14 +547,14 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
   <Tab title="Python">
     ```python
     import boto3
-    from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+    from superdoc import SuperDocClient, create_agent_toolkit
 
     client = SuperDocClient()
     client.connect()
     doc = client.open({"doc": "./contract.docx"})
 
     # Get tools in Anthropic format, convert to Bedrock toolSpec shape
-    sd_tools = choose_tools({"provider": "anthropic"})
+    kit = create_agent_toolkit({"provider": "anthropic", "preset": "core"})
     tool_config = {
         "tools": [
             {
@@ -565,7 +564,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
                     "inputSchema": {"json": t.get("input_schema", {})},
                 }
             }
-            for t in sd_tools["tools"]
+            for t in kit["tools"]
         ]
     }
 
@@ -574,9 +573,11 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
     while True:
         response = bedrock.converse(
+            # Bedrock uses regional inference-profile IDs, not Anthropic model
+            # names — copy the exact ID from your Bedrock console's model catalog.
             modelId="us.anthropic.claude-sonnet-4-6",
             messages=messages,
-            system=[{"text": "You edit .docx files using SuperDoc tools. Use tracked changes for all edits."}],
+            system=[{"text": kit["system_prompt"]}],
             toolConfig=tool_config,
         )
 
@@ -590,7 +591,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
         tool_results = []
         for block in tool_uses:
             tu = block["toolUse"]
-            result = dispatch_superdoc_tool(doc, tu["name"], tu.get("input", {}))
+            result = kit["dispatch"](doc, tu["name"], tu.get("input", {}))
             json_result = result if isinstance(result, dict) else {"result": result}
             tool_results.append(
                 {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": json_result}]}}

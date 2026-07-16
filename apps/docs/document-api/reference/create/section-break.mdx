@@ -37,6 +37,7 @@ Returns a CreateSectionBreakResult with the new section break position and secti
 | `pageMargins.left` | number | no |  |
 | `pageMargins.right` | number | no |  |
 | `pageMargins.top` | number | no |  |
+| `representation` | enum | no | `"asNewParagraph"`, `"attachToPreviousParagraph"` |
 
 ### Example request
 
@@ -45,7 +46,7 @@ Returns a CreateSectionBreakResult with the new section break position and secti
   "at": {
     "kind": "documentStart"
   },
-  "breakType": "continuous"
+  "representation": "asNewParagraph"
 }
 ```
 
@@ -59,6 +60,7 @@ Returns a CreateSectionBreakResult with the new section break position and secti
 | `breakParagraph.kind` | `"block"` | no | Constant: `"block"` |
 | `breakParagraph.nodeId` | string | no |  |
 | `breakParagraph.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `breakParagraph.story` | StoryLocator | no | StoryLocator |
 | `section` | SectionAddress | yes | SectionAddress |
 | `section.kind` | `"section"` | yes | Constant: `"section"` |
 | `section.sectionId` | string | yes |  |
@@ -81,7 +83,11 @@ Returns a CreateSectionBreakResult with the new section break position and secti
   "breakParagraph": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "section": {
     "kind": "section",
@@ -219,6 +225,12 @@ Returns a CreateSectionBreakResult with the new section break position and secti
         }
       },
       "type": "object"
+    },
+    "representation": {
+      "enum": [
+        "asNewParagraph",
+        "attachToPreviousParagraph"
+      ]
     }
   },
   "type": "object"

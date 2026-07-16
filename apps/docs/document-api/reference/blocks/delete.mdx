@@ -14,7 +14,7 @@ Delete an entire block node (paragraph, heading, list item, table, image, or sdt
 - API member path: `editor.doc.blocks.delete(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -30,6 +30,7 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -38,7 +39,11 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -47,16 +52,21 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `affectedStories` | StoryLocator[] | no |  |
 | `deleted` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
 | `deleted.kind` | `"block"` | yes | Constant: `"block"` |
 | `deleted.nodeId` | string | yes |  |
 | `deleted.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
+| `deleted.story` | StoryLocator | no | StoryLocator |
 | `deletedBlock` | object | no |  |
 | `deletedBlock.nodeId` | string | no |  |
 | `deletedBlock.nodeType` | string | no |  |
 | `deletedBlock.ordinal` | number | no |  |
 | `deletedBlock.textPreview` | string \| null | no | One of: string, null |
+| `invalidatedRefs` | AffectedRef[] | no |  |
 | `success` | `true` | yes | Constant: `true` |
+| `textRangeShifts` | TextRangeShift[] | no |  |
+| `txId` | string | no |  |
 
 ### Example response
 
@@ -65,12 +75,30 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
   "deleted": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "deletedBlock": {
     "nodeId": "node-def456",
     "ordinal": 1
   },
+  "invalidatedRefs": [
+    {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 10,
+        "start": 0
+      },
+      "story": {
+        "kind": "story",
+        "storyType": "body"
+      }
+    }
+  ],
   "success": true
 }
 ```
@@ -83,6 +111,11 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
 - `INVALID_TARGET`
 - `INVALID_INPUT`
 - `INTERNAL_ERROR`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -112,6 +145,12 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
 {
   "additionalProperties": false,
   "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
     "deleted": {
       "$ref": "#/$defs/DeletableBlockNodeAddress"
     },
@@ -140,8 +179,23 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
       },
       "type": "object"
     },
+    "invalidatedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRef"
+      },
+      "type": "array"
+    },
     "success": {
       "const": true
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "txId": {
+      "type": "string"
     }
   },
   "required": [
@@ -158,6 +212,12 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
 {
   "additionalProperties": false,
   "properties": {
+    "affectedStories": {
+      "items": {
+        "$ref": "#/$defs/StoryLocator"
+      },
+      "type": "array"
+    },
     "deleted": {
       "$ref": "#/$defs/DeletableBlockNodeAddress"
     },
@@ -186,8 +246,23 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
       },
       "type": "object"
     },
+    "invalidatedRefs": {
+      "items": {
+        "$ref": "#/$defs/AffectedRef"
+      },
+      "type": "array"
+    },
     "success": {
       "const": true
+    },
+    "textRangeShifts": {
+      "items": {
+        "$ref": "#/$defs/TextRangeShift"
+      },
+      "type": "array"
+    },
+    "txId": {
+      "type": "string"
     }
   },
   "required": [
@@ -214,7 +289,12 @@ Returns a BlocksDeleteResult receipt confirming the block was removed, including
             "CAPABILITY_UNAVAILABLE",
             "INVALID_TARGET",
             "INVALID_INPUT",
-            "INTERNAL_ERROR"
+            "INTERNAL_ERROR",
+            "STORY_NOT_FOUND",
+            "STORY_MISMATCH",
+            "STORY_NOT_SUPPORTED",
+            "CROSS_STORY_PLAN",
+            "MATERIALIZATION_FAILED"
           ]
         },
         "details": {},

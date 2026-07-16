@@ -2,6 +2,7 @@
 import { Extension } from '@core/Extension.js';
 import { computeDiff } from './computeDiff.ts';
 import { replayDiffs } from './replayDiffs.ts';
+import { STALE_POSITION_WARNING_TAG } from './replay/replay-inline.ts';
 import { captureHeaderFooterState } from './algorithm/header-footer-diffing.ts';
 import { capturePartsState } from './algorithm/parts-diffing.ts';
 
@@ -94,6 +95,18 @@ export const Diffing = Extension.create({
             tr.setMeta('forceTrackChanges', true);
           } else {
             tr.setMeta('skipTrackChanges', true);
+          }
+
+          const staleWarnings = replayResult.warnings.filter((w) => w.startsWith(STALE_POSITION_WARNING_TAG));
+          if (staleWarnings.length > 0) {
+            console.error(
+              '[diffing] Stale positions detected during replay — re-capture and re-compare:',
+              staleWarnings,
+            );
+            this.editor.emit('diffApplyError', { type: 'stalePositions', details: staleWarnings });
+            // Do not dispatch: the transaction may be partially mutated. The caller
+            // must re-capture and re-compare before applying again.
+            return true;
           }
 
           if (dispatch && (tr.docChanged || replayResult.appliedDiffs > 0)) {

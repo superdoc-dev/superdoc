@@ -610,7 +610,7 @@ export function removeCustomXmlPart(convertedXml, target, converter) {
   return true;
 }
 
-function invalidateConverterCachesForPath(converter, partName) {
+export function invalidateConverterCachesForPath(converter, partName) {
   if (!converter || typeof partName !== 'string') return;
   const biblio = converter.bibliographyPart;
   if (biblio && biblio.partPath === partName) {

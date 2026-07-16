@@ -681,10 +681,16 @@ describe('common-workflows.mdx: Find text and insert at position', () => {
     }));
     const doc = makeApi({ query: { match: queryMatch } as DocumentApiAdapters['query'] });
 
-    doc.query.match({ type: 'text', pattern: 'Materials and methods', require: 'first', limit: 1 } as any);
+    doc.query.match({
+      type: 'text',
+      pattern: 'Materials and methods',
+      wholeWord: true,
+      require: 'first',
+      limit: 1,
+    } as any);
 
     expect(queryMatch).toHaveBeenCalledWith({
-      select: { type: 'text', pattern: 'Materials and methods' },
+      select: { type: 'text', pattern: 'Materials and methods', wholeWord: true },
       require: 'first',
       limit: 1,
     });

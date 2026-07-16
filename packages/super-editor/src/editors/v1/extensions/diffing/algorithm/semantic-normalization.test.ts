@@ -183,6 +183,23 @@ describe('normalizeParagraphNodeJSON', () => {
     const result = normalizeParagraphNodeJSON(paragraphJSON) as any;
     expect(result.content[0].content[0]).toEqual({ type: 'text', text: 'hello' });
   });
+
+  it('strips volatile rsid attrs from run nodes within a paragraph', () => {
+    const paragraphJSON = {
+      type: 'paragraph',
+      attrs: { paraId: 'P1', align: 'left' },
+      content: [
+        {
+          type: 'run',
+          attrs: { rsidR: '00112233', rsidRPr: 'aabbccdd', rsidDel: 'eeff0011', styleId: 'Normal' },
+          content: [{ type: 'text', text: 'Hello' }],
+        },
+      ],
+    };
+
+    const result = normalizeParagraphNodeJSON(paragraphJSON) as any;
+    expect(result.content[0].attrs).toEqual({ styleId: 'Normal' });
+  });
 });
 
 describe('normalizeDocJSON', () => {

@@ -104,6 +104,22 @@ const decode = (params) => {
   // Separate tracked changes from regular text
   const trackedMarks = ['trackDelete', 'trackInsert'];
   const trackedMark = node.marks?.find((m) => trackedMarks.includes(m.type));
+  const isLinkNode = node.marks?.some((m) => m.type === 'link');
+  const isGroupedHyperlinkExport =
+    isLinkNode &&
+    !extraParams?.linkProcessed &&
+    Array.isArray(extraParams?.hyperlinkGroup) &&
+    extraParams.hyperlinkGroup.length > 1;
+
+  // Standalone final-doc linked deletions must resolve as w:del before hyperlink export
+  // so accepted deletions do not leave an empty w:hyperlink wrapper.
+  if (params.isFinalDoc && trackedMark?.type === 'trackDelete' && !isGroupedHyperlinkExport) {
+    return wDelTranslator.decode(params);
+  }
+
+  if (isLinkNode && trackedMark && !extraParams?.linkProcessed) {
+    return wHyperlinkTranslator.decode(params);
+  }
 
   if (trackedMark) {
     switch (trackedMark.type) {
@@ -115,7 +131,6 @@ const decode = (params) => {
   }
 
   // Separate links from regular text
-  const isLinkNode = node.marks?.some((m) => m.type === 'link');
   if (isLinkNode && !extraParams?.linkProcessed) {
     return wHyperlinkTranslator.decode(params);
   }

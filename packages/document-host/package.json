@@ -1,0 +1,28 @@
+{
+  "name": "@superdoc/document-host",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Neutral headless structured document session over the SuperDoc engine: open a .docx, invoke operations by operationId, export .docx. No CLI argv, no agent vocabulary.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "pretest": "pnpm --filter superdoc run build:dev",
+    "test": "bun test",
+    "pretypecheck": "pnpm --filter superdoc run build:es",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@superdoc/document-api": "workspace:*",
+    "superdoc": "workspace:*",
+    "happy-dom": "catalog:"
+  },
+  "devDependencies": {
+    "yjs": "catalog:"
+  }
+}

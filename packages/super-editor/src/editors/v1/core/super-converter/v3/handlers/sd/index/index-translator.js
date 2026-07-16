@@ -1,7 +1,7 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '../../../../exporter.js';
-import { buildInstructionElements } from '../shared/index.js';
+import { buildInstructionElements, wrapParagraphsAsComplexField } from '../shared/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:index';
@@ -28,6 +28,7 @@ const encode = (params) => {
     attrs: {
       instruction: node.attributes?.instruction || '',
       instructionTokens: node.attributes?.instructionTokens || null,
+      wrapperParagraphProperties: node.attributes?.wrapperParagraphProperties || null,
     },
     content: processedContent,
   };
@@ -45,47 +46,11 @@ const decode = (params) => {
   const contentNodes = (node.content ?? []).map((n) => exportSchemaToJson({ ...params, node: n }));
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 
-  const indexBeginElements = [
-    {
-      name: 'w:r',
-      elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' }, elements: [] }],
-    },
-    {
-      name: 'w:r',
-      elements: instructionElements,
-    },
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' }, elements: [] }] },
-  ];
-
-  if (contentNodes.length > 0) {
-    const firstParagraph = contentNodes[0];
-    let insertIndex = 0;
-    if (firstParagraph.elements) {
-      const pPrIndex = firstParagraph.elements.findIndex((el) => el.name === 'w:pPr');
-      insertIndex = pPrIndex >= 0 ? pPrIndex + 1 : 0;
-    } else {
-      firstParagraph.elements = [];
-    }
-
-    firstParagraph.elements.splice(insertIndex, 0, ...indexBeginElements);
-  } else {
-    contentNodes.push({
-      name: 'w:p',
-      elements: indexBeginElements,
-    });
-  }
-
-  const indexEndElements = [
-    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' }, elements: [] }] },
-  ];
-  const lastParagraph = contentNodes[contentNodes.length - 1];
-  if (lastParagraph.elements) {
-    lastParagraph.elements.push(...indexEndElements);
-  } else {
-    lastParagraph.elements = [...indexEndElements];
-  }
-
-  return contentNodes;
+  return wrapParagraphsAsComplexField(
+    contentNodes,
+    instructionElements,
+    node.attrs?.wrapperParagraphProperties ?? null,
+  );
 };
 
 /** @type {import('@translator').NodeTranslatorConfig} */

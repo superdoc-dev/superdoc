@@ -12,7 +12,10 @@ const typeSurface = require('./type-surface.config.cjs');
 // Verify that vite-plugin-dts generated the expected type entry points.
 // Path aliases are resolved by vite-plugin-dts via tsconfig.json paths.
 const distRoot = path.resolve(__dirname, '..', 'dist');
+const packageRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const binExtension = process.platform === 'win32' ? '.cmd' : '';
+const resolvePackageBin = (name) => path.join(packageRoot, 'node_modules', '.bin', `${name}${binExtension}`);
 
 // SD-2842: vite-plugin-dts skips hand-written `.d.ts` files in its include
 // glob (it only emits declarations from `.ts`/`.js`). When a file like
@@ -68,7 +71,7 @@ if (handwrittenCopiedSuperEditor > 0) {
 const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
 {
   const { spawnSync: _spawnSync } = require('node:child_process');
-  const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
+  const tscBin = resolvePackageBin('tsc');
   const sharedCommonDistDir = path.join(distRoot, 'shared/common');
   fs.mkdirSync(sharedCommonDistDir, { recursive: true });
   const sources = SHARED_COMMON_DTS_TARGETS.map((f) => path.join(repoRoot, 'shared/common', f));
@@ -107,6 +110,54 @@ const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
     process.exit(1);
   }
   console.log(`[ensure-types] ✓ Emitted ${SHARED_COMMON_DTS_TARGETS.length} shared/common declarations`);
+}
+
+// Emit @superdoc/font-system public declarations into the published dist tree. Its font
+// report types surface on `superdoc.fonts` / `fonts-changed`. Like shared/common, adding
+// it to vite-plugin-dts would shift the common-ancestor, so emit it standalone from the
+// package's `index.ts` (which has no asset imports). The relocation rule rewrites bare
+// `@superdoc/font-system` specifiers in other dist files to `shared/font-system/src/index.d.ts`.
+{
+  const { spawnSync: _spawnSync } = require('node:child_process');
+  const tscBin = resolvePackageBin('tsc');
+  const fontSystemSrc = path.join(repoRoot, 'shared/font-system/src');
+  const fontSystemDistDir = path.join(distRoot, 'shared/font-system/src');
+  fs.mkdirSync(fontSystemDistDir, { recursive: true });
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'superdoc-ensure-types-fs-'));
+  const tempTsconfig = path.join(tempDir, 'tsconfig.font-system.json');
+  fs.writeFileSync(
+    tempTsconfig,
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          declaration: true,
+          emitDeclarationOnly: true,
+          skipLibCheck: true,
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          types: [],
+          lib: ['ES2022', 'DOM'],
+          outDir: fontSystemDistDir,
+          rootDir: fontSystemSrc,
+        },
+        files: [path.join(fontSystemSrc, 'index.ts')],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  let tscResult;
+  try {
+    tscResult = _spawnSync(tscBin, ['-p', tempTsconfig], { stdio: 'inherit' });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+  if (tscResult.status !== 0) {
+    console.error('[ensure-types] tsc failed emitting @superdoc/font-system declarations');
+    process.exit(1);
+  }
+  console.log('[ensure-types] ✓ Emitted @superdoc/font-system declarations');
 }
 
 // SD-2978: the package advertises CJS runtime entry points for `.`, `./types`,

@@ -5,9 +5,11 @@
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes to combine.
  * @param {string} instrText The instruction text.
+ * @param {object} [_options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
-export function preProcessRefInstruction(nodesToCombine, instrText) {
+export function preProcessRefInstruction(nodesToCombine, instrText, options = {}) {
+  void options;
   return [
     {
       name: 'sd:crossReference',

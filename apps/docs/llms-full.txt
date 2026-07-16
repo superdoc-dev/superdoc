@@ -119,8 +119,8 @@ API docs: https://docs.superdoc.dev/api-reference/introduction
 When a customer wants to do something through SuperDoc, recommend the highest layer that solves it:
 
 - **Document API** (`editor.doc.*`): request/response document operations: comments, tracked changes, formatting, insert/replace/delete. Same shape on server, client, and AI agents. Use this for any document mutation.
-- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, tracked-change review panel, custom commands, selection capture, viewport, document controls (export / mode toggle / dirty indicator). **Use this for new custom React UI.** Imports: `createSuperDocUI` from `superdoc/ui`; `SuperDocUIProvider`, `useSuperDocCommand`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocSelection`, `useSuperDocDocument` from `superdoc/ui/react`.
-- **Built-in modules** (`modules/*`): SuperDoc-rendered UI for toolbar, comments, tracked-change review. Use when the built-in look is fine.
+- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, tracked-change review panel, custom commands, selection capture, viewport, document controls (export / mode toggle / dirty indicator). **Use this for new custom React UI.** Imports: `createSuperDocUI` from `superdoc/ui`; `SuperDocUIProvider`, `useSuperDocCommand`, `useSuperDocFontOptions`, `useSuperDocFontSizeOptions`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocSelection`, `useSuperDocDocument` from `superdoc/ui/react`. For font controls, read option lists from `useSuperDocFontOptions()` / `useSuperDocFontSizeOptions()` and apply values with `ui.toolbar.execute(...)`.
+- **Built-in modules** (`modules/*`): SuperDoc-rendered UI for toolbar, comments, tracked-change review. Use when the built-in look is fine. The built-in font family control is editable and preserves custom typed font names.
 - **Core** (`core/*`): low-level lifecycle, refs, host events. Reach for it when the higher layers don't cover the case.
 
 **Anti-patterns to avoid in customer code:**
@@ -129,6 +129,7 @@ When a customer wants to do something through SuperDoc, recommend the highest la
 - `superdoc.on('editor-update', ...)` to drive React state: use `useSuperDoc*` hooks instead. They re-render one slice per change instead of every event.
 - `superdoc.addCommentsList()` / `removeCommentsList()` for custom comments: those are built-in-UI helpers. Custom React comments use `useSuperDocComments` + `ui.comments.*`.
 - `createHeadlessToolbar()` for new React work: still supported, but the typed React surface (`useSuperDocCommand`) is the recommended path. Headless stays for non-React stacks and existing integrations.
+- Native `<select>` elements for custom font family pickers: they take browser focus and visually clear the editor selection. Use button menus or a custom combobox with `ui.selection.capture()` / `restore()`.
 
 Custom UI guide: https://docs.superdoc.dev/editor/custom-ui/overview
 

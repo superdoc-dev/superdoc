@@ -3,11 +3,12 @@
 /**
  * Full generation DAG — produces all derived artifacts from source-of-truth inputs.
  *
- * Phases (sequential — each depends on the previous):
+ * Phases (run in order; 1-4 are sequential, 5 is independent):
  *   1. docapi:sync             → packages/document-api/generated/** + apps/docs/document-api/reference/**
  *   2. cli:export-sdk-contract → apps/cli/generated/sdk-contract.json
  *   3. docs:sync-engine        → SDK overview operations table in apps/docs/document-engine/sdks.mdx
  *   4. sdk codegen             → packages/sdk/langs/{node,python}/…/generated/** + packages/sdk/tools/*.json
+ *   5. @superdoc-dev/fonts generate → packages/fonts/src/{asset-urls,bundled-families}.ts (from font-system)
  *
  * Before generation, gitignored output directories are cleaned to prevent stale file accumulation.
  * apps/docs/document-api/reference/ is NOT cleaned here — it stays committed (Mintlify deploys from git)
@@ -97,6 +98,12 @@ async function main() {
   // Phase 5: SDK codegen (Node + Python clients + tool catalogs)
   console.log('\n--- Phase 4: sdk codegen ---');
   await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
+
+  // Phase 5: @superdoc-dev/fonts derived sources: bundled asset URLs (from the asset dir) plus curatable
+  // family names (from font-system offerings). Kept out of the package's build/prepare lifecycle so a
+  // standalone install never needs tsx; regenerated here, in the workspace pipeline.
+  console.log('\n--- Phase 5: @superdoc-dev/fonts generate ---');
+  await run('pnpm', ['--filter', '@superdoc-dev/fonts', 'generate']);
 
   console.log('\ngenerate:all complete.');
 }

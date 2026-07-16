@@ -354,13 +354,14 @@ describe('translateAnchorNode', () => {
             attributes: expect.objectContaining({
               distL: 12000,
               distR: 18000,
-              distT: 5000,
-              distB: 8000,
               wrapText: 'bothSides',
             }),
           }),
         ]),
       );
+      const wrapElement = result.elements.find((el) => el.name === 'wp:wrapTight');
+      expect(wrapElement.attributes.distT).toBeUndefined();
+      expect(wrapElement.attributes.distB).toBeUndefined();
     });
 
     it('should add wp:wrapTight without attributes when no distance specified', () => {

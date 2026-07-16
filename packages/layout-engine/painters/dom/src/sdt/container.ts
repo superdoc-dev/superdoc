@@ -22,6 +22,11 @@ export type SdtBoundaryOptions = {
   widthOverride?: number;
   paddingBottomOverride?: number;
   showLabel?: boolean;
+  ownIsStart?: boolean;
+  ownIsEnd?: boolean;
+  ownShowLabel?: boolean;
+  ownIsNested?: boolean;
+  nextOwnContainerStartsNested?: boolean;
 };
 
 export type SdtAncestorOptions = {
@@ -30,6 +35,55 @@ export type SdtAncestorOptions = {
   ancestorContainerKeys?: readonly (string | null | undefined)[];
   ancestorContainerSdts?: readonly (SdtMetadata | null | undefined)[];
 };
+
+type OwnContainerFlagOptions = Pick<
+  SdtBoundaryOptions,
+  'showLabel' | 'ownIsStart' | 'ownIsEnd' | 'ownShowLabel' | 'ownIsNested' | 'nextOwnContainerStartsNested'
+>;
+
+export function computeOwnContainerFlags({
+  containerKey,
+  ownContainerKey,
+  previousOwnContainerKey,
+  nextOwnContainerKey,
+  nextContainerKey,
+  sdtLabelsRendered,
+}: {
+  containerKey: string;
+  ownContainerKey: string | null;
+  previousOwnContainerKey: string | null;
+  nextOwnContainerKey: string | null;
+  nextContainerKey: string | null;
+  sdtLabelsRendered: Set<string>;
+}): OwnContainerFlagOptions {
+  const ownIsStart = Boolean(ownContainerKey && ownContainerKey !== previousOwnContainerKey);
+  const ownIsEnd = Boolean(ownContainerKey && ownContainerKey !== nextOwnContainerKey);
+  const ownIsNested = Boolean(ownContainerKey && ownContainerKey !== containerKey);
+  const nextOwnContainerStartsNested = Boolean(
+    nextOwnContainerKey &&
+      nextOwnContainerKey !== ownContainerKey &&
+      nextOwnContainerKey !== containerKey &&
+      nextContainerKey === containerKey,
+  );
+  const showLabel = Boolean(!ownIsNested && !sdtLabelsRendered.has(containerKey));
+  if (showLabel) {
+    sdtLabelsRendered.add(containerKey);
+  }
+
+  const ownShowLabel = Boolean(ownContainerKey && ownIsNested && ownIsStart && !sdtLabelsRendered.has(ownContainerKey));
+  if (ownShowLabel && ownContainerKey) {
+    sdtLabelsRendered.add(ownContainerKey);
+  }
+
+  return {
+    showLabel,
+    ownIsStart,
+    ownIsEnd,
+    ownShowLabel,
+    ownIsNested,
+    nextOwnContainerStartsNested,
+  };
+}
 
 export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is StructuredContentMetadata {
   return (
@@ -105,6 +159,56 @@ export function getSdtSiblingBoundaries(
   });
 }
 
+export function getSdtSiblingBoundariesWithOwnContainers(
+  containerKeys: readonly (string | null)[],
+  ownContainerKeys: readonly (string | null)[],
+  sdtLabelsRendered: Set<string> = new Set(),
+): Array<SdtBoundaryOptions | undefined> {
+  return containerKeys.map((key, index): SdtBoundaryOptions | undefined => {
+    if (!key) return undefined;
+
+    const prev = index > 0 ? containerKeys[index - 1] : null;
+    const next = index < containerKeys.length - 1 ? containerKeys[index + 1] : null;
+    const ownKey = ownContainerKeys[index] ?? null;
+    const previousOwnKey = index > 0 ? ownContainerKeys[index - 1] : null;
+    const nextOwnKey = index < ownContainerKeys.length - 1 ? ownContainerKeys[index + 1] : null;
+    const nextContainerKey = index < containerKeys.length - 1 ? containerKeys[index + 1] : null;
+    const ownFlags = computeOwnContainerFlags({
+      containerKey: key,
+      ownContainerKey: ownKey,
+      previousOwnContainerKey: previousOwnKey,
+      nextOwnContainerKey: nextOwnKey,
+      nextContainerKey,
+      sdtLabelsRendered,
+    });
+
+    return {
+      isStart: key !== prev,
+      isEnd: key !== next,
+      ...ownFlags,
+    };
+  });
+}
+
+export function resolveRenderedSdtBoundary(
+  sdt: SdtMetadata | null | undefined,
+  containerSdt: SdtMetadata | null | undefined,
+  boundaryOptions: SdtBoundaryOptions | undefined,
+): SdtBoundaryOptions | undefined {
+  if (!boundaryOptions) return undefined;
+
+  const ownKey = getSdtContainerKey(sdt);
+  const boundaryKey = getSdtContainerKey(containerSdt) ?? getSdtContainerKey(sdt);
+  if (!ownKey || ownKey === boundaryKey || boundaryOptions.ownIsStart == null) {
+    return boundaryOptions;
+  }
+
+  return {
+    ...boundaryOptions,
+    showLabel: boundaryOptions.ownShowLabel,
+  };
+}
+
 export function applySdtContainerChrome(
   doc: Document,
   container: HTMLElement,
@@ -126,6 +230,18 @@ export function applySdtContainerChrome(
   container.classList.add(config.className);
   container.dataset.sdtContainerStart = String(isStart);
   container.dataset.sdtContainerEnd = String(isEnd);
+  if (boundaryOptions?.ownIsStart != null) {
+    container.dataset.sdtOwnContainerStart = String(boundaryOptions.ownIsStart);
+  }
+  if (boundaryOptions?.ownIsEnd != null) {
+    container.dataset.sdtOwnContainerEnd = String(boundaryOptions.ownIsEnd);
+  }
+  if (boundaryOptions?.ownIsNested != null) {
+    container.dataset.sdtOwnContainerNested = String(boundaryOptions.ownIsNested);
+  }
+  if (boundaryOptions?.nextOwnContainerStartsNested != null) {
+    container.dataset.sdtNextOwnContainerStartsNested = String(boundaryOptions.nextOwnContainerStartsNested);
+  }
   container.style.overflow = 'visible';
 
   if (isStructuredContentMetadata(metadata)) {
@@ -142,6 +258,10 @@ export function applySdtContainerChrome(
   }
 
   const shouldShowLabel = boundaryOptions?.showLabel ?? isStart;
+  container.dataset.sdtContainerShowLabel = String(shouldShowLabel);
+  if (boundaryOptions?.ownShowLabel != null) {
+    container.dataset.sdtOwnContainerShowLabel = String(boundaryOptions.ownShowLabel);
+  }
 
   if (shouldShowLabel) {
     if (chrome === 'none' && isStructuredContentMetadata(metadata)) {
@@ -164,10 +284,32 @@ export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtB
   }
   const startAttr = element.dataset.sdtContainerStart;
   const endAttr = element.dataset.sdtContainerEnd;
+  const showLabelAttr = element.dataset.sdtContainerShowLabel;
+  const ownStartAttr = element.dataset.sdtOwnContainerStart;
+  const ownEndAttr = element.dataset.sdtOwnContainerEnd;
+  const ownShowLabelAttr = element.dataset.sdtOwnContainerShowLabel;
+  const ownNestedAttr = element.dataset.sdtOwnContainerNested;
+  const nextOwnStartsNestedAttr = element.dataset.sdtNextOwnContainerStartsNested;
   const expectedStart = String(boundary.isStart ?? true);
   const expectedEnd = String(boundary.isEnd ?? true);
+  const expectedShowLabel = boundary.showLabel == null ? undefined : String(boundary.showLabel);
+  const expectedOwnStart = boundary.ownIsStart == null ? undefined : String(boundary.ownIsStart);
+  const expectedOwnEnd = boundary.ownIsEnd == null ? undefined : String(boundary.ownIsEnd);
+  const expectedOwnShowLabel = boundary.ownShowLabel == null ? undefined : String(boundary.ownShowLabel);
+  const expectedOwnNested = boundary.ownIsNested == null ? undefined : String(boundary.ownIsNested);
+  const expectedNextOwnStartsNested =
+    boundary.nextOwnContainerStartsNested == null ? undefined : String(boundary.nextOwnContainerStartsNested);
   if (startAttr === undefined || endAttr === undefined) {
     return true;
   }
-  return startAttr !== expectedStart || endAttr !== expectedEnd;
+  return (
+    startAttr !== expectedStart ||
+    endAttr !== expectedEnd ||
+    (expectedShowLabel !== undefined && showLabelAttr !== expectedShowLabel) ||
+    (expectedOwnStart !== undefined && ownStartAttr !== expectedOwnStart) ||
+    (expectedOwnEnd !== undefined && ownEndAttr !== expectedOwnEnd) ||
+    (expectedOwnShowLabel !== undefined && ownShowLabelAttr !== expectedOwnShowLabel) ||
+    (expectedOwnNested !== undefined && ownNestedAttr !== expectedOwnNested) ||
+    (expectedNextOwnStartsNested !== undefined && nextOwnStartsNestedAttr !== expectedNextOwnStartsNested)
+  );
 }

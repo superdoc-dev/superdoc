@@ -65,7 +65,7 @@ For any entry classified as legacy public:
 | `packages/layout-engine/dom-contract` | `@superdoc/dom-contract` | Internal implementation | DOM rendering contracts |
 | `packages/layout-engine/painters/dom` | `@superdoc/painter-dom` | Internal implementation | DOM rendering pipeline |
 | `packages/layout-engine/measuring/dom` | `@superdoc/measuring-dom` | Internal implementation | Measurement pipeline |
-| `packages/layout-engine/pm-adapter` | `@superdoc/pm-adapter` | Internal implementation | ProseMirror to FlowBlock bridge |
+| `packages/super-editor/src/editors/v1/core/layout-adapter` | (internal to `@superdoc/super-editor`) | Internal implementation | v1 ProseMirror → FlowBlock projection; owned by super-editor, not a standalone package |
 | `packages/layout-engine/style-engine` | `@superdoc/style-engine` | Internal implementation | OOXML cascade resolution |
 | `packages/layout-engine/layout-bridge` | `@superdoc/layout-bridge` | Internal implementation | Pipeline orchestration |
 | `packages/layout-engine/layout-engine` | `@superdoc/layout-engine` | Internal implementation | Pagination algorithms |
@@ -174,7 +174,7 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 ### Decision 3. The layout-engine sub-packages stay separate.
 
-**Context.** `packages/layout-engine/` contains ten sub-packages (`contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `pm-adapter`, `style-engine`, `painters/dom`, `measuring/dom`), all private, all internal implementation.
+**Context.** `packages/layout-engine/` contains nine sub-packages (`contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `style-engine`, `painters/dom`, `measuring/dom`), all private, all internal implementation. (The v1 ProseMirror → FlowBlock adapter is no longer here; it is owned by `@superdoc/super-editor` at `src/editors/v1/core/layout-adapter`.)
 
 **Decision.** Keep as-is. The audit gate (SD-2832) plus the type ownership rules remove the customer-visible cost of the split. Restructuring without a strong forcing function is scope creep. Revisit only if the audit gate proves expensive to maintain because of the package count.
 

@@ -10,6 +10,7 @@ import {
 } from '@superdoc/layout-bridge';
 import {
   getParagraphInlineDirection,
+  type DrawingFragment,
   type FlowBlock,
   type Layout,
   type Line,
@@ -18,8 +19,10 @@ import {
   type TableBlock,
   type TableFragment,
   type TableMeasure,
+  type TextboxDrawing,
 } from '@superdoc/contracts';
 import { computeTableCaretLayoutRectFromDom } from '../tables/TableCaretDomGeometry.js';
+import { computeTextboxCaretLayoutRectFromDom } from '../textboxes/TextboxCaretDomGeometry.js';
 import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
 
 /**
@@ -157,6 +160,21 @@ export function computeCaretLayoutRectGeometry(
       hit.fragment as TableFragment,
       block as TableBlock,
       measure as TableMeasure,
+      hit.pageIndex,
+    );
+  }
+
+  if (
+    hit.fragment.kind === 'drawing' &&
+    block?.kind === 'drawing' &&
+    block.drawingKind === 'textboxShape' &&
+    measure?.kind === 'drawing'
+  ) {
+    return computeTextboxCaretLayoutRectFromDom(
+      { viewportHost, visibleHost, zoom },
+      effectivePos,
+      hit.fragment as DrawingFragment,
+      block as TextboxDrawing,
       hit.pageIndex,
     );
   }

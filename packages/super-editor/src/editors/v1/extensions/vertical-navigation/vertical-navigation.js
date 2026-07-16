@@ -11,6 +11,7 @@ export const VerticalNavigationPluginKey = new PluginKey('verticalNavigation');
  */
 const createDefaultState = () => ({
   goalX: null,
+  goalClientX: null,
 });
 
 /**
@@ -50,24 +51,28 @@ export const VerticalNavigation = Extension.create({
           if (meta?.type === 'vertical-move') {
             return {
               goalX: meta.goalX ?? value.goalX ?? null,
+              goalClientX: meta.goalClientX ?? value.goalClientX ?? null,
             };
           }
           if (meta?.type === 'set-goal-x') {
             return {
               ...value,
               goalX: meta.goalX ?? null,
+              goalClientX: meta.goalClientX ?? null,
             };
           }
           if (meta?.type === 'reset-goal-x') {
             return {
               ...value,
               goalX: null,
+              goalClientX: null,
             };
           }
           if (tr.selectionSet) {
             return {
               ...value,
               goalX: null,
+              goalClientX: null,
             };
           }
           return value;
@@ -114,15 +119,20 @@ export const VerticalNavigation = Extension.create({
           // 3. Perform hit test at (goal X, adjacent line center Y) to find target position.
           // 4. Move selection to target position, extending if Shift is held.
 
-          // 1. Get or set goal X
+          // 1. Get or set goal X (layout space for the body fallback, client
+          //    space for hit testing — the two only coincide for body surfaces).
           const pluginState = VerticalNavigationPluginKey.getState(view.state);
           let goalX = pluginState?.goalX;
+          let goalClientX = pluginState?.goalClientX;
           const coords = getCurrentCoords(editor, view.state.selection);
           if (!coords) return false;
-          if (goalX == null) {
+          if (goalX == null || goalClientX == null) {
             goalX = coords?.x;
-            if (!Number.isFinite(goalX)) return false;
-            view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX }));
+            goalClientX = coords?.clientX;
+            if (!Number.isFinite(goalX) || !Number.isFinite(goalClientX)) return false;
+            view.dispatch(
+              view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'set-goal-x', goalX, goalClientX }),
+            );
           }
 
           // 2. Find adjacent line
@@ -134,7 +144,20 @@ export const VerticalNavigation = Extension.create({
           //    a page boundary), hit testing with screen coordinates produces incorrect
           //    positions. In that case, fall back to layout-based position resolution
           //    using the line's PM position range and computeCaretLayoutRect.
-          let hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+          // SD-3400: note sessions resolve the goal column natively on the
+          // painted adjacent line via caretRangeFromPoint — pure client space,
+          // no layout conversions (which mix coordinate systems for notes).
+          const isNoteSession = Boolean(editor?.options?.parentEditor && !editor?.options?.isHeaderOrFooter);
+          let hit = null;
+          if (isNoteSession && adjacent.lineElement) {
+            const ownerDoc = editor.presentationEditor?.visibleHost?.ownerDocument ?? document;
+            hit = resolvePositionAtClientPoint(ownerDoc, adjacent.lineElement, goalClientX);
+          }
+          if (!hit) {
+            // Hit test directly in client space — the goal column came from the
+            // painted caret, so no layout-to-client conversion is needed.
+            hit = editor.presentationEditor.hitTest(goalClientX, adjacent.clientY);
+          }
 
           // Check if the hit test result is plausible: if the adjacent line has PM
           // position data, the hit should land within or very close to that range.
@@ -145,7 +168,7 @@ export const VerticalNavigation = Extension.create({
           // lands on the current line's fragment start instead of the adjacent
           // line — this causes the cursor to appear stuck since the "new" position
           // equals the current one.
-          if (adjacent.pmStart != null && adjacent.pmEnd != null) {
+          if (!isNoteSession && adjacent.pmStart != null && adjacent.pmEnd != null) {
             const TOLERANCE = 5;
             const hitPos = hit?.pos;
             if (
@@ -167,7 +190,7 @@ export const VerticalNavigation = Extension.create({
           if (!selection) return false;
           view.dispatch(
             view.state.tr
-              .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX })
+              .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX, goalClientX })
               .setSelection(selection),
           );
           return true;
@@ -229,6 +252,23 @@ function isPresenting(editor) {
 function getCurrentCoords(editor, selection) {
   const presentationEditor = editor.presentationEditor;
   const layoutSpaceCoords = presentationEditor.computeCaretLayoutRect(selection.head);
+
+  // SD-3400: the painted caret overlay is the ground truth in client space.
+  // computeCaretLayoutRect + denormalizeClientPoint disagree on coordinate
+  // spaces for note sessions (stacked vs page-local y), which broke goal-x
+  // and produced off-screen client points for arrows inside footnotes.
+  const doc = presentationEditor?.visibleHost?.ownerDocument ?? document;
+  const caretRect = doc.querySelector('.presentation-editor__selection-caret')?.getBoundingClientRect?.();
+  if (caretRect && caretRect.height > 0) {
+    return {
+      clientX: caretRect.left,
+      clientY: caretRect.top,
+      height: caretRect.height,
+      x: layoutSpaceCoords?.x ?? caretRect.left,
+      y: layoutSpaceCoords?.y ?? caretRect.top,
+    };
+  }
+
   if (!layoutSpaceCoords) return null;
   const clientCoords = presentationEditor.denormalizeClientPoint(
     layoutSpaceCoords.x,
@@ -262,10 +302,145 @@ function resolveLineBoundaryPosition(editor, selection, key) {
   const lineEl = findLineElementAtPoint(doc, caretX, caretY);
   if (!lineEl) return null;
 
-  const pmStart = Number(lineEl.dataset?.pmStart);
-  const pmEnd = Number(lineEl.dataset?.pmEnd);
+  let pmStart = Number(lineEl.dataset?.pmStart);
+  let pmEnd = Number(lineEl.dataset?.pmEnd);
   if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) return null;
+  // SD-3400: translate stale note ranges into current coordinates.
+  ({ pmStart, pmEnd } = translateStaleNoteLineRange(editor, lineEl, pmStart, pmEnd));
   return key === 'Home' ? pmStart : pmEnd;
+}
+
+/**
+ * Browser-portable caret-from-point: WebKit/Blink expose caretRangeFromPoint,
+ * Firefox exposes caretPositionFromPoint. Normalizes both to {node, offset}.
+ * Without the Firefox branch, note sessions silently fell back to the
+ * mixed-coordinate hitTest path and the goal column drifted.
+ *
+ * @param {Document} ownerDoc
+ * @param {number} x
+ * @param {number} y
+ * @returns {{ node: Node, offset: number } | null}
+ */
+function caretPointFromClientPoint(ownerDoc, x, y) {
+  if (typeof ownerDoc.caretRangeFromPoint === 'function') {
+    const range = ownerDoc.caretRangeFromPoint(x, y);
+    if (range?.startContainer) return { node: range.startContainer, offset: range.startOffset };
+  }
+  if (typeof ownerDoc.caretPositionFromPoint === 'function') {
+    const caret = ownerDoc.caretPositionFromPoint(x, y);
+    if (caret?.offsetNode) return { node: caret.offsetNode, offset: caret.offset };
+  }
+  return null;
+}
+
+/**
+ * Resolves the ProseMirror position at a client X on a painted line using the
+ * browser's native point-to-text mapping ({@link caretPointFromClientPoint})
+ * and the line's leaf pm attributes. Pure client space — no layout/client
+ * conversions.
+ *
+ * @param {Document} ownerDoc
+ * @param {Element} lineEl
+ * @param {number} clientX
+ * @returns {{ pos: number } | null}
+ */
+function resolvePositionAtClientPoint(ownerDoc, lineEl, clientX) {
+  const lineRect = lineEl.getBoundingClientRect?.();
+  if (!lineRect || lineRect.height === 0) return null;
+  const y = lineRect.top + lineRect.height / 2;
+  const x = Math.max(lineRect.left, Math.min(clientX, lineRect.right - 1));
+
+  // Browser globals via the document's own window (also keeps the file free
+  // of DOM globals for lint environments without them).
+  const win = ownerDoc.defaultView;
+  if (!win) return null;
+
+  const hit = caretPointFromClientPoint(ownerDoc, x, y);
+  if (hit?.node) {
+    const node = hit.node;
+    const host = node.nodeType === win.Node.TEXT_NODE ? node.parentElement : node;
+    const leaf = host?.closest?.('[data-pm-start][data-pm-end]');
+    if (leaf && lineEl.contains(leaf)) {
+      const pmStart = Number(leaf.dataset?.pmStart);
+      const pmEnd = Number(leaf.dataset?.pmEnd);
+      if (Number.isFinite(pmStart)) {
+        let offset = 0;
+        const walker = ownerDoc.createTreeWalker(leaf, win.NodeFilter.SHOW_TEXT);
+        let current = walker.nextNode();
+        while (current) {
+          if (current === node) {
+            offset += hit.offset;
+            break;
+          }
+          offset += current.textContent?.length ?? 0;
+          current = walker.nextNode();
+        }
+        const pos = pmStart + offset;
+        return { pos: Number.isFinite(pmEnd) ? Math.min(pos, pmEnd) : pos };
+      }
+    }
+  }
+
+  // Point fell outside text (margins): clamp to the line's edges.
+  const lineStart = Number(lineEl.dataset?.pmStart);
+  const lineEnd = Number(lineEl.dataset?.pmEnd);
+  if (clientX <= lineRect.left && Number.isFinite(lineStart)) return { pos: lineStart };
+  if (Number.isFinite(lineEnd)) return { pos: lineEnd };
+  return null;
+}
+
+/**
+ * SD-3400: painted pm ranges of unchanged note paragraphs drift after edits
+ * (the painter skips repainting them), so the adjacent line's data-pm range
+ * can be stale. Translate it into CURRENT session coordinates by anchoring on
+ * the line's paragraph block: find the block in the live doc by sdBlockId and
+ * shift the range by (current block content start - fragment first pmStart).
+ * Returns the input range unchanged when translation is not applicable.
+ *
+ * @param {Object} editor
+ * @param {Element} lineEl
+ * @param {number} pmStart
+ * @param {number} pmEnd
+ * @returns {{ pmStart: number, pmEnd: number }}
+ */
+function translateStaleNoteLineRange(editor, lineEl, pmStart, pmEnd) {
+  const isNoteSession = Boolean(editor?.options?.parentEditor && !editor?.options?.isHeaderOrFooter);
+  if (!isNoteSession) return { pmStart, pmEnd };
+
+  const fragEl = lineEl.closest?.('[data-block-id]');
+  const blockIdAttr = fragEl?.getAttribute?.('data-block-id') ?? '';
+  const doc = editor.state?.doc;
+  if (!fragEl || !blockIdAttr || !doc) return { pmStart, pmEnd };
+
+  // Anchor: the smallest painted pmStart across the fragment's lines.
+  let fragmentFirstStart = Infinity;
+  for (const line of fragEl.querySelectorAll('.superdoc-line[data-pm-start]')) {
+    const start = Number(line.dataset?.pmStart);
+    if (Number.isFinite(start)) fragmentFirstStart = Math.min(fragmentFirstStart, start);
+  }
+  if (!Number.isFinite(fragmentFirstStart)) return { pmStart, pmEnd };
+
+  let delta = null;
+  doc.descendants((node, pos) => {
+    if (delta != null) return false;
+    if (!node.isBlock) return true;
+    const id = node.attrs?.sdBlockId;
+    if (typeof id !== 'string' || !id || !blockIdAttr.endsWith(id)) return true;
+    let firstLeaf = null;
+    node.descendants((child, childPos) => {
+      if (firstLeaf != null) return false;
+      if (child.isInline && (child.isLeaf || child.isText)) {
+        firstLeaf = pos + 1 + childPos;
+        return false;
+      }
+      return true;
+    });
+    const currentStart = firstLeaf ?? pos + 1;
+    delta = currentStart - fragmentFirstStart;
+    return false;
+  });
+  if (delta == null || delta === 0) return { pmStart, pmEnd };
+  return { pmStart: pmStart + delta, pmEnd: pmEnd + delta };
 }
 
 /**
@@ -295,9 +470,13 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const clientY = rect.top + rect.height / 2;
   if (!Number.isFinite(clientY)) return null;
 
-  // Read PM position range from data attributes for layout-based fallback
-  const pmStart = Number(adjacentLine.dataset?.pmStart);
-  const pmEnd = Number(adjacentLine.dataset?.pmEnd);
+  // Read PM position range from data attributes for layout-based fallback.
+  // SD-3400: translate stale note ranges into current coordinates.
+  let pmStart = Number(adjacentLine.dataset?.pmStart);
+  let pmEnd = Number(adjacentLine.dataset?.pmEnd);
+  if (Number.isFinite(pmStart) && Number.isFinite(pmEnd)) {
+    ({ pmStart, pmEnd } = translateStaleNoteLineRange(editor, adjacentLine, pmStart, pmEnd));
+  }
 
   // Read direction from the visual DOM — DomPainter sets dir="rtl" on RTL lines
   // using fully resolved properties (style cascade, not just inline attrs).
@@ -309,24 +488,8 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
     pmStart: Number.isFinite(pmStart) ? pmStart : undefined,
     pmEnd: Number.isFinite(pmEnd) ? pmEnd : undefined,
     isRtl,
+    lineElement: adjacentLine,
   };
-}
-
-/**
- * Converts layout coords to client coords and performs a hit test.
- * @param {Object} editor
- * @param {number} goalX
- * @param {number} clientY
- * @param {{ y: number }} coords
- * @param {number | undefined} pageIndex
- * @returns {{ pos: number } | null}
- */
-function getHitFromLayoutCoords(editor, goalX, clientY, coords, pageIndex) {
-  const presentationEditor = editor.presentationEditor;
-  const clientPoint = presentationEditor.denormalizeClientPoint(goalX, coords.y, pageIndex);
-  const clientX = clientPoint?.x;
-  if (!Number.isFinite(clientX)) return null;
-  return presentationEditor.hitTest(clientX, clientY);
 }
 
 /**

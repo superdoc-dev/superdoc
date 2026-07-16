@@ -1,22 +1,22 @@
 # SD-3212 A1 — root classification
 
 Generated: 2026-05-25T00:00:00.000Z
-Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names, locked baseline)
+Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (234 names, locked baseline)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 146 |
+| supported-root | 166 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **214** |
+| **total** | **234** |
 
-Confidence: high=111, medium=101, needs-review=0.
+Confidence: high=131, medium=101, needs-review=0.
 
-## supported-root (146)
+## supported-root (166)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -42,6 +42,7 @@ Confidence: high=111, medium=101, needs-review=0.
 | `DirectSurfaceRequest` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `DocRange` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `Document` | high | core | Consumer-supplied document descriptor used in Config.documents and SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal). |
+| `DocumentFontOption` | high | font-api | Document-scoped font picker option returned by superdoc.fonts.getDocumentFontOptions() and surfaced through ui.fonts / useSuperDocFontOptions for custom toolbar integrations. |
 | `DocumentApi` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `DocumentMode` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `DocumentProtectionState` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
@@ -66,7 +67,14 @@ Confidence: high=111, medium=101, needs-review=0.
 | `FindReplaceHandle` | medium | find-replace | FindReplace surface API type. Public. |
 | `FindReplaceRenderContext` | medium | find-replace | FindReplace surface API type. Public. |
 | `FindReplaceResolution` | medium | find-replace | FindReplace surface API type. Public. |
+| `FontAssetUrlContext` | high | config-supported | Context passed to the public FontsConfig.resolveAssetUrl resolver. |
+| `FontAssetUrlResolver` | high | config-supported | Type of the public FontsConfig.resolveAssetUrl hook. |
 | `FontConfig` | medium | config-supported | Configuration type for a supported feature. |
+| `FontFaceConfig` | high | config-supported | Public URL-backed font-face shape used by FontsConfig.families and superdoc.fonts.add. |
+| `FontFamilyConfig` | high | config-supported | Public font-family shape used by FontsConfig.families and superdoc.fonts.add. |
+| `FontResolutionRecord` | high | locked | Per-font logical-to-physical resolution record returned by superdoc.fonts.getReport(). |
+| `FontsChangedPayload` | high | locked | Payload of the public fonts-changed event / onFontsChanged callback and fonts.onReport. |
+| `FontsConfig` | high | config-supported | Consumer fonts configuration (custom families, logical mappings, and bundled asset URL hooks); part of the public SuperDoc Config. |
 | `FontsResolvedPayload` | high | locked | Types the documented onFontsResolved callback (apps/docs/editor/superdoc/events.mdx) and appears in core/types/index.ts. Public callback payload despite originating in layout-internal code. |
 | `HTML` | high | locked | Content-format constant. Heavily used (85 docs, 204 demos). Customer-facing. |
 | `ImageDeselectedEvent` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
@@ -120,6 +128,9 @@ Confidence: high=111, medium=101, needs-review=0.
 | `SuperDocAwarenessUpdatePayload` | high | core | Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
 | `SuperDocCommentsUpdatePayload` | high | core | Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
 | `SuperDocEditorPayload` | high | core | Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor. |
+| `SuperDocFontFace` | high | locked | Public font-face shape for superdoc.fonts.add (URL source + optional weight/style). |
+| `SuperDocFontFamily` | high | locked | Public font-family shape for superdoc.fonts.add (family name + faces). |
+| `SuperDocFontsApi` | high | locked | Return type of the public superdoc.fonts read + write surface (getReport/getMissingFonts/getDocumentFonts/onReport + map/unmap/add/preload). |
 | `SuperDocLayoutEngineOptions` | high | locked | Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field. |
 | `SuperDocLockedPayload` | high | core | Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User \| null contract is consumer-typable. |
 | `SuperDocReadyPayload` | high | core | Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads. |
@@ -137,6 +148,8 @@ Confidence: high=111, medium=101, needs-review=0.
 | `TextAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TextSegment` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TextTarget` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
+| `TrackChangeAuthor` | high | locked | Structured author identity passed to modules.trackChanges.authorColors.resolve. |
+| `TrackChangesAuthorColorsConfig` | high | locked | Module config for per-author tracked-change colors (modules.trackChanges.authorColors). Documented at the module-config layer. |
 | `TrackChangesModuleConfig` | high | locked | Module config for track-changes (modules.trackChanges). Documented at the module-config layer. |
 | `TrackedChangeAddress` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `TrackedChangesMode` | medium | comments-track | Comments/track-changes type used by Document API consumers. |
@@ -240,4 +253,3 @@ Confidence: high=111, medium=101, needs-review=0.
 | `registeredHandlers` | high | locked | Registry side-effect; 0 docs, 0 examples. Not customer-facing API. |
 | `superEditorHelpers` | high | locked | Helper namespace bag. 0 docs, 0 examples. Likely accidental export. |
 | `trackChangesHelpers` | high | locked | Track-changes helpers. Document API trackChanges.* has partial coverage; helpers are the lower-level access; no public docs. |
-

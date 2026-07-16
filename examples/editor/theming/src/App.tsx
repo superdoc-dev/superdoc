@@ -3,6 +3,13 @@ import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 import { themes, presets, themeLabels, type ThemeKey } from './themes';
 
+declare global {
+  interface Window {
+    __SUPERDOC__?: SuperDoc;
+    __SUPERDOC_READY__?: boolean;
+  }
+}
+
 const allThemeClasses = [
   ...Object.values(themes).filter(Boolean),
   ...Object.values(presets),
@@ -22,6 +29,7 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeKey>('default');
   const containerRef = useRef<HTMLDivElement>(null);
   const superdocRef = useRef<any>(null);
+  const withToolbar = new URLSearchParams(window.location.search).get('withToolbar') === '1';
 
   useEffect(() => {
     applyTheme(theme);
@@ -30,20 +38,34 @@ export default function App() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    if (withToolbar) window.__SUPERDOC_READY__ = false;
     superdocRef.current?.destroy();
     superdocRef.current = new SuperDoc({
       selector: containerRef.current,
       document: file ?? undefined,
       documentMode: 'editing',
+      ...(withToolbar
+        ? {
+            toolbar: '#toolbar',
+            onReady: ({ superdoc }: { superdoc: SuperDoc }) => {
+              window.__SUPERDOC__ = superdoc;
+              window.__SUPERDOC_READY__ = true;
+            },
+          }
+        : {}),
       user: { name: 'Jane Doe', email: 'jane@example.com' },
-      modules: { toolbar: true },
+      modules: { toolbar: withToolbar ? {} : true },
     });
 
     return () => {
       superdocRef.current?.destroy();
       superdocRef.current = null;
+      if (withToolbar) {
+        window.__SUPERDOC__ = undefined;
+        window.__SUPERDOC_READY__ = false;
+      }
     };
-  }, [file]);
+  }, [file, withToolbar]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -93,6 +115,7 @@ export default function App() {
         </span>
       </header>
 
+      {withToolbar ? <div id="toolbar" /> : null}
       <div ref={containerRef} style={{ flex: 1, overflow: 'auto' }} />
     </div>
   );

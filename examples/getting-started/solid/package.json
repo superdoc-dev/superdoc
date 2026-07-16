@@ -6,6 +6,7 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@superdoc-dev/fonts": "workspace:*",
     "solid-js": "^1.9.5",
     "superdoc": "latest"
   },

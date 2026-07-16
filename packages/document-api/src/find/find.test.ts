@@ -68,6 +68,14 @@ describe('normalizeFindQuery', () => {
     expect(result.includeNodes).toBeUndefined();
     expect(result.includeUnknown).toBeUndefined();
   });
+
+  it('preserves wholeWord on text selectors', () => {
+    const selector: Selector = { type: 'text', pattern: 'alpha', wholeWord: true };
+
+    expect(normalizeFindQuery(selector)).toEqual({
+      select: { type: 'text', pattern: 'alpha', wholeWord: true },
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

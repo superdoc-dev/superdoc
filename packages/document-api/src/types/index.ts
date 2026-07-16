@@ -1,3 +1,5 @@
+/* eslint-disable import-x/export */
+
 export * from './base.js';
 export * from './node.js';
 export * from './query.js';

@@ -11,6 +11,8 @@ Minimal examples for integrating SuperDoc into your project. Each example loads 
 | [vanilla](./vanilla) | Plain JavaScript with Vite | [Guide](https://docs.superdoc.dev/getting-started/quickstart) |
 | [cdn](./cdn) | Zero build tools — just an HTML file | [Guide](https://docs.superdoc.dev/getting-started/quickstart) |
 
+The bundler examples pass [`@superdoc-dev/fonts`](https://docs.superdoc.dev/getting-started/fonts), so SuperDoc's bundled fallback fonts (Carlito for Calibri, and more) render without copying any assets. The CDN example loads them from the script's path; the Laravel example copies them into `public/fonts/`.
+
 ## Running
 
 ```bash

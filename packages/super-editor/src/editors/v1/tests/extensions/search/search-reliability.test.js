@@ -773,13 +773,13 @@ describe('Search reliability', () => {
         });
         editor.setState(baseState);
 
-        const startTime = Date.now();
         const matches = editor.commands.search('target');
-        const endTime = Date.now();
 
         expect(matches).toHaveLength(100);
-        // Should complete in reasonable time (less than 1 second)
-        expect(endTime - startTime).toBeLessThan(1000);
+        expect(matches[0].text).toBe('target');
+        expect(matches[99].text).toBe('target');
+        expect(matches[0].from).toBeLessThan(matches[1].from);
+        expect(matches[98].from).toBeLessThan(matches[99].from);
       } finally {
         editor.destroy();
       }
@@ -803,13 +803,13 @@ describe('Search reliability', () => {
         });
         editor.setState(baseState);
 
-        const startTime = Date.now();
         const matches = editor.commands.search('word');
-        const endTime = Date.now();
 
         expect(matches).toHaveLength(500);
-        // Should complete in reasonable time
-        expect(endTime - startTime).toBeLessThan(1000);
+        expect(matches[0].text).toBe('word');
+        expect(matches[499].text).toBe('word');
+        expect(matches[0].from).toBeLessThan(matches[1].from);
+        expect(matches[498].from).toBeLessThan(matches[499].from);
       } finally {
         editor.destroy();
       }

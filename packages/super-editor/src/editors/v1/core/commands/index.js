@@ -53,6 +53,7 @@ export * from './backspaceNextToRun.js';
 export * from './backspaceAcrossRuns.js';
 export * from './backspaceAtomBefore.js';
 export * from './selectInlineSdtBeforeRunStart.js';
+export * from './selectFootnoteMarkerBefore.js';
 export * from './selectBlockSdtAtTextBlockBoundary.js';
 export * from './deleteBlockSdtAtTextBlockStart.js';
 export * from './moveIntoBlockSdtBeforeTextBlockStart.js';

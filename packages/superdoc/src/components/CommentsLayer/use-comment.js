@@ -5,6 +5,39 @@ import { syncCommentsToClients } from '@superdoc/core/collaboration/helpers.js';
 import { comments_module_events } from '@superdoc/common';
 import useSelection from '@superdoc/helpers/use-selection';
 
+const getCommentIds = (comment) =>
+  [comment?.commentId, comment?.importedId].filter((id) => id != null).map((id) => String(id));
+
+function getThreadDescendants(superdoc, rootComment) {
+  const store = superdoc?.commentsStore;
+  if (!store) return [];
+  const raw = store.commentsList;
+  const list = Array.isArray(raw) ? raw : (raw?.value ?? []);
+  const threadIds = new Set(getCommentIds(rootComment));
+  const descendants = [];
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    for (const comment of list) {
+      if (!comment) continue;
+      const ids = getCommentIds(comment);
+      if (ids.some((id) => threadIds.has(id))) continue;
+
+      const parentIds = [comment.parentCommentId, comment.threadingParentCommentId]
+        .filter((id) => id != null)
+        .map((id) => String(id));
+      if (!parentIds.some((id) => threadIds.has(id))) continue;
+
+      descendants.push(comment);
+      ids.forEach((id) => threadIds.add(id));
+      expanded = true;
+    }
+  }
+
+  return descendants;
+}
+
 /**
  * Comment composable
  *
@@ -69,6 +102,9 @@ export default function useComment(params) {
   const resolvedById = ref(params.resolvedById || null);
   const resolvedByEmail = ref(params.resolvedByEmail || null);
   const resolvedByName = ref(params.resolvedByName || null);
+  // For tracked-change threads: which decision resolved the thread
+  // ('accept' | 'reject'). Null for plain comments and legacy payloads.
+  const trackedChangeDecision = ref(params.trackedChangeDecision || null);
 
   /**
    * Mark this conversation as resolved with UTC date
@@ -76,25 +112,48 @@ export default function useComment(params) {
    * @param {String} id The actor id of the user marking this conversation as done
    * @param {String} email The email of the user marking this conversation as done
    * @param {String} name The name of the user marking this conversation as done
+   * @param {'accept' | 'reject'} [decision] The tracked-change decision that resolved this thread
    * @returns {void}
    */
-  const resolveComment = ({ id, email, name, superdoc }) => {
+  const resolveComment = ({ id, email, name, superdoc, decision }) => {
     if (resolvedTime.value) return;
     resolvedTime.value = Date.now();
     resolvedById.value = id ?? null;
     resolvedByEmail.value = email;
     resolvedByName.value = name;
-
-    if (trackedChange.value) {
-      const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
-      propagateUpdate(superdoc, emitData);
-      superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
-      return;
+    if (decision === 'accept' || decision === 'reject') {
+      trackedChangeDecision.value = decision;
     }
 
     const emitData = { type: comments_module_events.RESOLVED, comment: getValues() };
     propagateUpdate(superdoc, emitData);
-    superdoc.activeEditor?.commands?.resolveComment({ commentId, importedId });
+
+    const commands = superdoc.activeEditor?.commands;
+
+    // Tracked-change comments are standalone — resolve only this comment.
+    if (trackedChange.value) {
+      commands?.resolveComment({ commentId, importedId });
+      return;
+    }
+
+    // Replies can carry their own reconstructed anchor marks. Convert the
+    // whole thread in one editor transaction so resolved text stops rendering
+    // as open while the root remains the thread-level resolved state.
+    const replies = getThreadDescendants(superdoc, { commentId, importedId });
+    if (replies.length && typeof commands?.resolveCommentThread === 'function') {
+      commands.resolveCommentThread({
+        comments: [
+          { commentId, importedId, preserveAnchor: true },
+          ...replies.map((reply) => ({
+            commentId: reply.commentId,
+            importedId: reply.importedId,
+            preserveAnchor: false,
+          })),
+        ],
+      });
+    } else {
+      commands?.resolveComment({ commentId, importedId });
+    }
   };
 
   /**
@@ -266,6 +325,7 @@ export default function useComment(params) {
       trackedChangeStoryKind: trackedChangeStoryKind.value,
       trackedChangeStoryLabel: trackedChangeStoryLabel.value,
       trackedChangeAnchorKey: trackedChangeAnchorKey.value,
+      trackedChangeDecision: trackedChangeDecision.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
       resolvedById: resolvedById.value,
@@ -308,6 +368,7 @@ export default function useComment(params) {
     trackedChangeStoryKind,
     trackedChangeStoryLabel,
     trackedChangeAnchorKey,
+    trackedChangeDecision,
     resolvedTime,
     resolvedById,
     resolvedByEmail,

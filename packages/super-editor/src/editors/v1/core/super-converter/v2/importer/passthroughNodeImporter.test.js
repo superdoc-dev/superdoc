@@ -17,7 +17,7 @@ describe('passthrough node importer', () => {
     expect(nodes[0].type).toBe('passthroughBlock');
     expect(nodes[0].attrs.originalName).toBe('w:customBlock');
     expect(nodes[0].attrs.originalXml).toEqual(node);
-    expect(nodes[0].content).toEqual([]);
+    expect(nodes[0].content).toBeUndefined();
   });
 
   it('creates passthroughInline when inside inline context', () => {
@@ -27,7 +27,7 @@ describe('passthrough node importer', () => {
     expect(nodes[0].type).toBe('passthroughInline');
   });
 
-  it('stores converted child content and original xml children', () => {
+  it('preserves original xml children but does not attach content to block passthrough', () => {
     const child = { name: 'w:r', elements: [{ name: 'w:t', elements: [], attributes: {} }] };
     const node = { name: 'w:unknown', elements: [child] };
     const handler = vi.fn(() => [{ type: 'text', text: 'child' }]);
@@ -35,9 +35,12 @@ describe('passthrough node importer', () => {
       nodeListHandler: { handler, handlerEntities: [] },
     });
     const { nodes } = handlePassthroughNode(params);
+    // Children still run through the handler (import side effects)...
     expect(handler).toHaveBeenCalled();
-    expect(nodes[0].content).toEqual([{ type: 'text', text: 'child' }]);
+    expect(nodes[0].type).toBe('passthroughBlock');
+    // ...but passthroughBlock is an atom: child markup is preserved only in originalXml.
     expect(nodes[0].attrs.originalXml.elements).toEqual([child]);
+    expect(nodes[0].content).toBeUndefined();
   });
 
   it('treats math nodes as inline context', () => {
@@ -53,5 +56,23 @@ describe('passthrough node importer', () => {
     const node = { name: 'w:unknown', elements: [] };
     const { nodes } = handlePassthroughNode(createParams(node, { path: [{ name: 'w:p' }] }));
     expect(nodes[0].type).toBe('passthroughInline');
+  });
+
+  it('does not attach content to inline passthrough with child text (w:instrText MERGEFIELD)', () => {
+    const node = {
+      name: 'w:instrText',
+      attributes: { 'xml:space': 'preserve' },
+      elements: [{ type: 'text', text: ' MERGEFIELD System_Date ' }],
+    };
+    const handler = vi.fn(() => [{ type: 'text', text: ' MERGEFIELD System_Date ' }]);
+    const params = createParams(node, {
+      path: [{ name: 'w:p' }, { name: 'w:r' }],
+      nodeListHandler: { handler, handlerEntities: [] },
+    });
+    const { nodes } = handlePassthroughNode(params);
+    expect(nodes[0].type).toBe('passthroughInline');
+    expect(nodes[0].attrs.originalName).toBe('w:instrText');
+    expect(nodes[0].attrs.originalXml.elements).toEqual(node.elements);
+    expect(nodes[0].content).toBeUndefined();
   });
 });

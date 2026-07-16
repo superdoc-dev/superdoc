@@ -8,6 +8,7 @@ import {
 } from '../../core/helpers/collaboration-provider-sync.js';
 import { bootstrapPartSync } from './part-sync/index.js';
 import { seedPartsFromEditor } from './part-sync/seed-parts.js';
+import { registerNoteTombstoneSync } from './note-tombstone-sync.js';
 import { normalizeYjsFragmentEventsForSchema, normalizeYjsFragmentForSchema } from './normalize-yjs-fragment.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
@@ -194,10 +195,16 @@ export const Collaboration = Extension.create({
       partSyncPendingCleanup: null,
       bodySectPrPendingCleanup: null,
       bodySectPrTransactionHandler: null,
+      noteTombstoneSyncHandle: null,
     };
     collaborationCleanupByEditor.set(this.editor, cleanupState);
 
     registerBodySectPrSync(this.editor, this.options.ydoc, this.editor.options.collaborationProvider, cleanupState);
+
+    // Share SD-3400 note tombstones across peers and late joiners via the Yjs
+    // meta map so deleted footnote/endnote text does not reappear in peer
+    // exports or revision-story enumeration.
+    cleanupState.noteTombstoneSyncHandle = registerNoteTombstoneSync(this.editor, this.options.ydoc);
 
     // Bootstrap part-sync (publisher + consumer) — always active.
     // Requires a full editor with event emitter — skip for minimal test mocks.
@@ -276,6 +283,7 @@ export const cleanupCollaborationSideEffects = (editor) => {
   cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
   cleanup.partSyncHandle?.destroy();
   cleanup.partSyncPendingCleanup?.();
+  cleanup.noteTombstoneSyncHandle?.destroy();
   cleanup.bodySectPrPendingCleanup?.();
   if (cleanup.bodySectPrTransactionHandler && typeof editor.off === 'function') {
     editor.off('transaction', cleanup.bodySectPrTransactionHandler);

@@ -1,15 +1,21 @@
 ---
 title: Skills
 sidebarTitle: Skills
-description: Reusable prompt templates that teach LLMs how to edit documents with SuperDoc tools
-keywords: "llm skills, prompt templates, ai document editing, superdoc skills"
+description: Install reusable instructions that help coding agents work with SuperDoc
+keywords: "coding agent skills, custom actions, claude code, codex, superdoc skills"
 ---
 
-Skills are reusable prompt files that teach LLMs how to use SuperDoc tools effectively. A skill contains editing instructions, tool usage patterns, and best practices: so your LLM agent knows how to query, mutate, and format documents without trial and error.
+SuperDoc skills are reusable instruction bundles for coding agents. They provide task-specific guidance, examples, and verification steps for working with the SDK.
 
-<Info>
-We haven't shipped skills yet. Follow the repo for updates.
-</Info>
+## Custom actions
+
+The `superdoc-custom-actions` skill helps Claude Code and Codex define, wire, and test custom LLM actions.
+
+```bash
+npx skills add superdoc-dev/superdoc/packages/sdk/skills/superdoc-custom-actions --copy
+```
+
+See [Custom actions](/ai/agents/custom-actions) for the SDK workflow, execution tiers, and installation details.
 
 ## Related
 

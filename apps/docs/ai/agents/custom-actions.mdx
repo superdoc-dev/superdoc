@@ -1,0 +1,248 @@
+---
+title: Custom actions
+sidebarTitle: Custom actions
+description: "Add custom document actions to the core preset with defineAction and createAgentToolkit."
+keywords: "superdoc custom actions, defineAction, createAgentToolkit, extendPreset, composePreset, superdoc_perform_action, llm document actions, authoring skill"
+---
+
+The [`core` preset](/ai/agents/core-preset) ships 40 built-in actions. Add a custom action when your agent needs another named document operation. Custom actions run through `superdoc_perform_action` alongside the built-ins.
+
+You define custom actions in your application with the installed SDK. The toolkit adds them to the tool schema, system prompt, and dispatcher together.
+
+## Quick start
+
+Define an action, pass it to `createAgentToolkit`, then call the returned dispatcher. These examples assume your application already has an open document handle named `doc`.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { createAgentToolkit, defineAction } from '@superdoc-dev/sdk';
+
+    const stampBanner = defineAction({
+      name: 'superdoc.stamp_banner',
+      description: 'Insert a banner at the top of the document.',
+      input: {
+        type: 'object',
+        properties: {
+          label: { type: 'string', default: 'CONFIDENTIAL' },
+        },
+      },
+      steps: [
+        {
+          action: 'insert_paragraphs',
+          args: {
+            texts: ['{{label}}'],
+            placement: { at: 'document_start' },
+          },
+        },
+      ],
+    });
+
+    const toolkit = await createAgentToolkit({
+      provider: 'openai',
+      actions: [stampBanner],
+    });
+
+    const receipt = await toolkit.dispatch(doc, 'superdoc_perform_action', {
+      action: 'superdoc.stamp_banner',
+      label: 'CONFIDENTIAL',
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import create_agent_toolkit, define_action
+
+    stamp_banner = define_action(
+        name="superdoc.stamp_banner",
+        description="Insert a banner at the top of the document.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "label": {"type": "string", "default": "CONFIDENTIAL"},
+            },
+        },
+        steps=[
+            {
+                "action": "insert_paragraphs",
+                "args": {
+                    "texts": ["{{label}}"],
+                    "placement": {"at": "document_start"},
+                },
+            },
+        ],
+    )
+
+    toolkit = create_agent_toolkit({
+        "provider": "openai",
+        "actions": [stamp_banner],
+    })
+
+    receipt = toolkit["dispatch"](doc, "superdoc_perform_action", {
+        "action": "superdoc.stamp_banner",
+        "label": "CONFIDENTIAL",
+    })
+    ```
+  </Tab>
+</Tabs>
+
+Custom arguments are flat beside `action`. Do not nest them under an `args` property.
+
+`createAgentToolkit` builds an ephemeral preset over `core`. The returned tools, system prompt, and dispatcher use the same action surface. Provider shaping for Anthropic, OpenAI, Vercel, and generic tools is automatic.
+
+## Choose an execution tier
+
+`defineAction` returns an `ActionSpec`. Every action spec uses exactly one execution tier:
+
+| Tier | What it does | Use it when |
+| --- | --- | --- |
+| **`steps`** | Runs a sequence of built-in `core` actions | The built-ins already cover the operation. This keeps their targeting and verification behavior. |
+| **`run`** | Runs your function against the document handle | You need Document API operations or application logic that the built-ins do not provide. |
+
+Prefer `steps` when possible. In a step argument, a value that is exactly `{{label}}` passes the original argument value. Text around the placeholder interpolates it into a string.
+
+Use `run` for operations such as footnotes, headers, bookmarks, or table borders. The function runs in your application process.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { defineAction } from '@superdoc-dev/sdk';
+
+    const listFootnotes = defineAction({
+      name: 'superdoc.list_footnotes',
+      description: 'List all footnotes in the document.',
+      input: { type: 'object', properties: {} },
+      run: (doc) => doc.footnotes.list({}),
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import define_action
+
+    def _list_footnotes(doc, _args):
+        return doc.footnotes.list({})
+
+    list_footnotes = define_action(
+        name="superdoc.list_footnotes",
+        description="List all footnotes in the document.",
+        input_schema={"type": "object", "properties": {}},
+        run=_list_footnotes,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Limit the built-in actions
+
+Pass `includeCoreActions` to keep only selected built-ins. Custom actions passed through `actions` remain available alongside that subset.
+
+```typescript
+import { createAgentToolkit } from '@superdoc-dev/sdk';
+
+const toolkit = await createAgentToolkit({
+  provider: 'openai',
+  includeCoreActions: ['insert_paragraphs', 'add_comments'],
+});
+```
+
+Python accepts the same option in the input dictionary: `"includeCoreActions": ["insert_paragraphs", "add_comments"]`.
+
+## Generate an action with a coding agent
+
+The `superdoc-custom-actions` skill guides Claude Code and Codex through choosing a tier, defining the action, wiring it into the toolkit, and testing it against a document.
+
+Install it from your application's root directory:
+
+```bash
+npx skills add superdoc-dev/superdoc/packages/sdk/skills/superdoc-custom-actions --copy
+```
+
+Then ask your coding agent for the operation you need:
+
+> Add a custom action that inserts a footnote after a piece of text.
+
+The skill instructs the agent to verify the action against a real document when possible. If the environment cannot provide a suitable document, the agent should label the action as unverified and include a test for the first real run.
+
+<Info>`--copy` vendors the skill into your project. Add `-a <agent>` if you want to install it for one supported coding agent only.</Info>
+
+## Python async clients
+
+If your application uses `AsyncSuperDocClient` or `dispatch_async`, a `run` action must use `async def` and await every `doc.*` call. A synchronous function receives coroutine values from the async document handle. `steps` actions do not require changes.
+
+## Reuse a named preset
+
+<Accordion title="Advanced: register a named preset">
+  Register a preset when several toolkit instances or standalone SDK functions need to resolve the same action set by ID.
+
+  <Tabs>
+    <Tab title="Node.js">
+      ```typescript
+      import { createAgentToolkit, defineAction, extendPreset, registerPreset } from '@superdoc-dev/sdk';
+
+      const listFootnotes = defineAction({
+        name: 'superdoc.list_footnotes',
+        description: 'List all footnotes in the document.',
+        input: { type: 'object', properties: {} },
+        run: (doc) => doc.footnotes.list({}),
+      });
+
+      registerPreset(extendPreset('core', {
+        id: 'custom_superdoc_preset',
+        actions: [listFootnotes],
+      }));
+
+      const toolkit = await createAgentToolkit({
+        provider: 'openai',
+        preset: 'custom_superdoc_preset',
+      });
+      ```
+    </Tab>
+    <Tab title="Python">
+      ```python
+      from superdoc import create_agent_toolkit, define_action, extend_preset, register_preset
+
+      def _list_footnotes(doc, _args):
+          return doc.footnotes.list({})
+
+      list_footnotes = define_action(
+          name="superdoc.list_footnotes",
+          description="List all footnotes in the document.",
+          input_schema={"type": "object", "properties": {}},
+          run=_list_footnotes,
+      )
+
+      register_preset(extend_preset(
+          "core",
+          id="custom_superdoc_preset",
+          actions=[list_footnotes],
+      ))
+
+      toolkit = create_agent_toolkit({
+          "provider": "openai",
+          "preset": "custom_superdoc_preset",
+      })
+      ```
+    </Tab>
+  </Tabs>
+
+  Registration is process-local. Run it during application startup before resolving the preset. Pass the preset ID to every preset-scoped standalone function. Common examples include:
+
+  - Node.js: `chooseTools`, `getToolCatalog`, `listTools`, `getSystemPrompt`, and `dispatchSuperDocTool`
+  - Python: `choose_tools`, `get_tool_catalog`, `list_tools`, `get_system_prompt`, `dispatch_superdoc_tool`, and `dispatch_superdoc_tool_async`
+
+  The dispatchers returned by `createAgentToolkit` and `create_agent_toolkit` are already bound to the preset.
+
+  Use `composePreset` or `compose_preset` instead when a named preset should keep only selected built-in actions.
+</Accordion>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Core preset" href="/ai/agents/core-preset" icon="wrench">
+    The 40 built-in actions your custom actions extend.
+  </Card>
+  <Card title="LLM Tools" href="/ai/agents/llm-tools" icon="bot">
+    The toolkit, dispatch, and agent loop.
+  </Card>
+</CardGroup>

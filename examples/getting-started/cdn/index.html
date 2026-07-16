@@ -6,6 +6,8 @@
     <title>SuperDoc — CDN</title>
     <link href="./style.css" rel="stylesheet" />
     <script src="./superdoc.min.js"></script>
+    <!-- Optional reviewed fallback fonts. Without it the editor shows the baseline (system fonts). -->
+    <script src="./superdoc-fonts.min.js"></script>
     <style>
       body { margin: 0; font-family: system-ui, sans-serif; }
       #controls { padding: .5rem 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; display: flex; gap: .5rem; align-items: center; }
@@ -30,6 +32,8 @@
           document: source,
           documentMode: 'editing',
           user: { name: 'Guest', email: 'guest@example.com' },
+          // Use the bundled fallback pack when the optional script above loaded; baseline otherwise.
+          fonts: window.SuperDocFonts ? window.SuperDocFonts.superdocFonts : undefined,
           onReady: () => (window.__SUPERDOC_READY__ = true),
         });
       }

@@ -10,11 +10,14 @@ import { useDecidedChanges } from './components/useDecidedChanges';
 import { CitationsPanel } from './components/CitationsPanel';
 import { CitationHighlights } from './components/CitationHighlights';
 import { CitationPopover } from './components/CitationPopover';
+import { TrackedChangeActivation } from './components/TrackedChangeActivation';
+import { E2EProbe } from './e2e/E2EProbe';
 
 export function App() {
   return (
     <SuperDocUIProvider>
       <AppInner />
+      <E2EProbe />
     </SuperDocUIProvider>
   );
 }
@@ -73,6 +76,7 @@ function AppInner() {
           <SelectionPopover onComposeComment={openComposer} />
           <ContextMenu />
           <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
+          <TrackedChangeActivation />
           <CitationHighlights />
           <CitationPopover />
         </section>

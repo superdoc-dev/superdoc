@@ -163,12 +163,22 @@ export class VectorShapeView {
       // Add text content if present
       if (attrs.textContent && attrs.textContent.parts) {
         const pageNumber = this.editor?.options?.currentPageNumber;
+        const pageNumberText = this.editor?.options?.currentPageNumberText;
+        const pageNumberDisplayNumber = this.editor?.options?.currentPageDisplayNumber;
+        const pageNumberChapterText = this.editor?.options?.currentPageChapterNumberText;
+        const pageNumberChapterSeparator = this.editor?.options?.currentPageChapterSeparator;
         const totalPages = this.editor?.options?.totalPageCount;
+        const sectionPageCount = this.editor?.options?.sectionPageCount;
         const textElement = this.createTextElement(attrs.textContent, attrs.textAlign, attrs.width, attrs.height, {
           textVerticalAlign: attrs.textVerticalAlign,
           textInsets: attrs.textInsets,
           pageNumber,
+          pageNumberText,
+          pageNumberDisplayNumber,
+          pageNumberChapterText,
+          pageNumberChapterSeparator,
           totalPages,
+          sectionPageCount,
         });
         if (textElement) {
           svg.appendChild(textElement);

@@ -90,7 +90,7 @@ Fixed bottom bar. Compact, mobile-inspired layout with Svelte 5 runes for reacti
 
 ## Vanilla JS
 
-Zero-framework proof. Plain buttons, native selects, DOM manipulation. No build step required.
+Zero-framework proof. Plain buttons, focus-preserving menus, DOM manipulation. No build step required.
 
 **Stack:** No framework, plain HTML/CSS/JS, Lucide
 
@@ -119,6 +119,8 @@ document.querySelector('#toolbar').addEventListener('click', (e) => {
   <button data-cmd="underline"><u>U</u></button>
 </div>
 ```
+
+For font family, font size, and other selection commands, use a button menu that prevents `mousedown` focus changes before executing the command. Native selects can move browser focus and visually clear the editor selection while their menu is open.
 
 <Card
   title="Full source"

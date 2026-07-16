@@ -30,6 +30,9 @@ function makeSuperdocStub(): SuperDocLike {
       },
     },
     config: { documentMode: 'editing' },
+    fonts: {
+      getDocumentFontOptions: vi.fn(() => []),
+    },
     on: vi.fn(),
     off: vi.fn(),
   };
@@ -101,6 +104,17 @@ describe('domain handle observe() aliases (SD-2919)', () => {
     const off = ui.trackChanges.observe(fn);
     expect(fn).toHaveBeenCalledTimes(1);
     expect(fn.mock.calls[0]![0]).toEqual(ui.trackChanges.getSnapshot());
+    off();
+  });
+
+  it('ui.fonts.observe fires synchronously with the snapshot', () => {
+    const ui = createSuperDocUI({ superdoc: makeSuperdocStub() });
+    teardown.push(() => ui.destroy());
+
+    const fn = vi.fn();
+    const off = ui.fonts.observe(fn);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn.mock.calls[0]![0]).toEqual(ui.fonts.getSnapshot());
     off();
   });
 

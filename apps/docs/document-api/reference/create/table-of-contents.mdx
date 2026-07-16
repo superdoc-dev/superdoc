@@ -45,6 +45,7 @@ Returns a CreateTableOfContentsResult with the new TOC block address.
 | `config.tcFieldLevels.from` | integer | no |  |
 | `config.tcFieldLevels.to` | integer | no |  |
 | `config.useAppliedOutlineLevel` | boolean | no |  |
+| `instruction` | string | no |  |
 
 ### Example request
 
@@ -53,13 +54,7 @@ Returns a CreateTableOfContentsResult with the new TOC block address.
   "at": {
     "kind": "documentStart"
   },
-  "config": {
-    "outlineLevels": {
-      "from": 0,
-      "to": 10
-    },
-    "useAppliedOutlineLevel": true
-  }
+  "instruction": "TOC \\o \"1-3\" \\u \\h \\z"
 }
 ```
 
@@ -260,6 +255,9 @@ Returns a CreateTableOfContentsResult with the new TOC block address.
         }
       },
       "type": "object"
+    },
+    "instruction": {
+      "type": "string"
     }
   },
   "type": "object"

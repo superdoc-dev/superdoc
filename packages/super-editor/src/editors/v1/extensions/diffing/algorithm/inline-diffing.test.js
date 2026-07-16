@@ -5,7 +5,13 @@ vi.mock('./myers-diff.ts', async () => {
     myersDiff: vi.fn(actual.myersDiff),
   };
 });
-import { getInlineDiff, tokenizeInlineContent } from './inline-diffing.ts';
+import {
+  buildInlineDiffPlan,
+  getInlineDiff,
+  isSafeSpan,
+  segmentInlineTokens,
+  tokenizeInlineContent,
+} from './inline-diffing.ts';
 
 /**
  * Builds text tokens with offsets for inline diff tests.
@@ -17,10 +23,30 @@ import { getInlineDiff, tokenizeInlineContent } from './inline-diffing.ts';
  */
 const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
-    char,
+    text: char,
+    length: 1,
     runAttrs: { ...runAttrs },
     kind: 'text',
     offset: offsetStart + index,
+    endOffset: offsetStart + index,
+  }));
+
+/**
+ * Builds text tokens with explicit offsets for multi-run position tests.
+ *
+ * @param {string} text Text content to tokenize.
+ * @param {number[]} offsets Absolute offsets for each character token.
+ * @param {Record<string, unknown>} runAttrs Run attributes to attach.
+ * @returns {import('./inline-diffing.ts').InlineTextToken[]}
+ */
+const buildTextRunsWithOffsets = (text, offsets, runAttrs = {}) =>
+  text.split('').map((char, index) => ({
+    text: char,
+    length: 1,
+    runAttrs: { ...runAttrs },
+    kind: 'text',
+    offset: offsets[index],
+    endOffset: offsets[index],
   }));
 
 /**
@@ -34,10 +60,12 @@ const buildTextRuns = (text, runAttrs = {}, offsetStart = 0) =>
  */
 const buildMarkedTextRuns = (text, marks, runAttrs = {}, offsetStart = 0) =>
   text.split('').map((char, index) => ({
-    char,
+    text: char,
+    length: 1,
     runAttrs: { ...runAttrs },
     kind: 'text',
     offset: offsetStart + index,
+    endOffset: offsetStart + index,
     marks,
   }));
 
@@ -97,7 +125,8 @@ const buildImageNodeToken = (attrs = {}, pos = 0) => {
  */
 const buildTextTokens = (text, runAttrs = {}, marks = []) =>
   text.split('').map((char) => ({
-    char,
+    text: char,
+    length: 1,
     runAttrs,
     kind: 'text',
     marks,
@@ -191,7 +220,8 @@ const stripTokenOffsets = (tokens) =>
     if (token.kind === 'text') {
       return {
         kind: token.kind,
-        char: token.char,
+        text: token.text,
+        length: token.length,
         runAttrs: token.runAttrs,
         marks: token.marks,
       };
@@ -202,6 +232,46 @@ const stripTokenOffsets = (tokens) =>
       nodeJSON: token.nodeJSON,
     };
   });
+
+/**
+ * Collects text diff fragments for readability assertions.
+ *
+ * @param {import('./inline-diffing.ts').InlineDiffResult[]} diffs Inline diff results.
+ * @returns {{ added: string[]; deleted: string[]; modifiedOld: string[]; modifiedNew: string[] }}
+ */
+const collectTextDiffFragments = (diffs) => {
+  const added = [];
+  const deleted = [];
+  const modifiedOld = [];
+  const modifiedNew = [];
+
+  for (const diff of diffs) {
+    if (diff.kind !== 'text') {
+      continue;
+    }
+
+    if (diff.action === 'added' && typeof diff.text === 'string') {
+      added.push(diff.text);
+      continue;
+    }
+
+    if (diff.action === 'deleted' && typeof diff.text === 'string') {
+      deleted.push(diff.text);
+      continue;
+    }
+
+    if (diff.action === 'modified') {
+      if (typeof diff.oldText === 'string') {
+        modifiedOld.push(diff.oldText);
+      }
+      if (typeof diff.newText === 'string') {
+        modifiedNew.push(diff.newText);
+      }
+    }
+  }
+
+  return { added, deleted, modifiedOld, modifiedNew };
+};
 
 describe('getInlineDiff', () => {
   it('returns an empty diff list when both strings are identical', () => {
@@ -218,12 +288,14 @@ describe('getInlineDiff', () => {
 
     expect(diffs).toEqual([
       {
-        action: 'added',
+        action: 'modified',
         kind: 'text',
-        startPos: 12,
+        startPos: 10,
         endPos: 12,
-        text: 'X',
-        runAttrs: {},
+        oldText: 'abc',
+        newText: 'abXc',
+        runAttrsDiff: null,
+        marksDiff: null,
       },
     ]);
   });
@@ -235,20 +307,14 @@ describe('getInlineDiff', () => {
 
     expect(diffs).toEqual([
       {
-        action: 'deleted',
+        action: 'modified',
         kind: 'text',
-        startPos: 7,
-        endPos: 7,
-        text: 'c',
-        runAttrs: {},
-      },
-      {
-        action: 'added',
-        kind: 'text',
-        startPos: 8,
+        startPos: 5,
         endPos: 8,
-        text: 'XY',
-        runAttrs: {},
+        oldText: 'abcd',
+        newText: 'abXYd',
+        runAttrsDiff: null,
+        marksDiff: null,
       },
     ]);
   });
@@ -366,6 +432,248 @@ describe('getInlineDiff', () => {
       },
     ]);
   });
+
+  it('marks plain text spans with matching formatting as safe', () => {
+    const oldRuns = buildMarkedTextRuns('word', [{ type: 'bold', attrs: {} }], { styleId: 'BodyText' });
+    const newRuns = buildMarkedTextRuns('text', [{ type: 'bold', attrs: {} }], { styleId: 'BodyText' });
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(true);
+  });
+
+  it('rejects spans with tracked-change marks', () => {
+    const oldRuns = buildMarkedTextRuns('word', [{ type: 'trackInsert', attrs: { id: 'tracked-1' } }]);
+    const newRuns = buildTextRuns('text');
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(false);
+  });
+
+  it('rejects spans with comment anchors or inline nodes', () => {
+    const commentAnchor = {
+      kind: 'inlineNode',
+      nodeType: 'commentRangeStart',
+      node: {
+        type: { name: 'commentRangeStart' },
+        attrs: { id: 'c1' },
+        toJSON: () => ({ type: 'commentRangeStart', attrs: { id: 'c1' } }),
+      },
+      nodeJSON: { type: 'commentRangeStart', attrs: { id: 'c1' } },
+      pos: 0,
+    };
+
+    expect(isSafeSpan([commentAnchor], buildTextRuns('text'))).toBe(false);
+  });
+
+  it('rejects spans with PAGEREF-like run attrs', () => {
+    const oldRuns = buildTextRuns('9', { instruction: 'PAGEREF _Toc123456789 h' });
+    const newRuns = buildTextRuns('10', { instruction: 'PAGEREF _Toc123456789 h' });
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(false);
+  });
+
+  it('rejects spans with formatting drift between old and new tokens', () => {
+    const oldRuns = buildMarkedTextRuns('word', [{ type: 'bold', attrs: {} }], { styleId: 'BodyText' });
+    const newRuns = buildMarkedTextRuns('text', [{ type: 'italic', attrs: {} }], { styleId: 'BodyText' });
+    const newRunAttrs = buildMarkedTextRuns('text', [{ type: 'bold', attrs: {} }], { styleId: 'Quote' });
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(false);
+    expect(isSafeSpan(oldRuns, newRunAttrs)).toBe(false);
+  });
+
+  it('ignores volatile run attrs when checking safe spans', () => {
+    const oldRuns = buildTextRuns('LEASE', { rsidR: '001', rsidRPr: 'aaa', rsidDel: null });
+    const newRuns = buildTextRuns('RENTAL', { rsidR: '002', rsidRPr: 'bbb', rsidDel: 'deleted' });
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(true);
+  });
+
+  it('ignores importer font-family churn when checking safe spans', () => {
+    const oldRuns = buildTextRuns('LEASE', {
+      runProperties: {
+        kern: 0,
+        ligatures: 'none',
+      },
+      runPropertiesInlineKeys: ['kern', 'ligatures', 'fontFamily', 'fontSize', 'fontSizeCs'],
+      rsidRPr: null,
+    });
+    const newRuns = buildTextRuns('RENTAL', {
+      runProperties: {
+        fontFamily: {
+          eastAsia: 'Aptos',
+          cs: 'Aptos',
+          asciiTheme: 'minorHAnsi',
+          hAnsiTheme: 'minorHAnsi',
+        },
+        kern: 0,
+        ligatures: 'none',
+      },
+      runPropertiesInlineKeys: ['fontFamily', 'fontSize', 'fontSizeCs'],
+      rsidRPr: '00952A78',
+    });
+
+    expect(isSafeSpan(oldRuns, newRuns)).toBe(true);
+  });
+
+  it('does not emit text modifications for volatile run-attr churn alone', () => {
+    const oldRuns = buildTextRuns('same', { rsidR: '001', rsidRPr: null, rsidDel: null });
+    const newRuns = buildTextRuns('same', { rsidR: '002', rsidRPr: 'abc', rsidDel: 'def' });
+
+    expect(getInlineDiff(oldRuns, newRuns, oldRuns.length)).toEqual([]);
+  });
+
+  it('still emits text modifications for equal text when font attrs really differ', () => {
+    const oldRuns = buildTextRuns('same', {
+      runProperties: {
+        kern: 0,
+        ligatures: 'none',
+      },
+      runPropertiesInlineKeys: ['kern', 'ligatures', 'fontFamily', 'fontSize', 'fontSizeCs'],
+      rsidRPr: null,
+    });
+    const newRuns = buildTextRuns('same', {
+      runProperties: {
+        fontFamily: {
+          eastAsia: 'Aptos',
+          cs: 'Aptos',
+          asciiTheme: 'minorHAnsi',
+          hAnsiTheme: 'minorHAnsi',
+        },
+        kern: 0,
+        ligatures: 'none',
+      },
+      runPropertiesInlineKeys: ['fontFamily', 'fontSize', 'fontSizeCs'],
+      rsidRPr: '00952A78',
+    });
+
+    expect(getInlineDiff(oldRuns, newRuns, oldRuns.length)).toEqual([
+      expect.objectContaining({
+        action: 'modified',
+        kind: 'text',
+        oldText: 'same',
+        newText: 'same',
+        runAttrsDiff: expect.objectContaining({
+          added: expect.objectContaining({
+            'runProperties.fontFamily.eastAsia': 'Aptos',
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it('keeps LEASE to RENTAL AGREEMENT as a whole-word replacement', () => {
+    const oldRuns = buildTextRuns('LEASE');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('RENTAL AGREEMENT'), oldRuns.length);
+    const fragments = collectTextDiffFragments(diffs);
+    const removedText = [...fragments.deleted, ...fragments.modifiedOld];
+    const addedText = [...fragments.added, ...fragments.modifiedNew];
+
+    expect(removedText).toEqual(expect.arrayContaining(['LEASE']));
+    expect(addedText).toEqual(expect.arrayContaining(['RENTAL', ' AGREEMENT']));
+    expect(removedText).not.toEqual(expect.arrayContaining(['R', 'NT', 'L']));
+    expect(addedText).not.toEqual(expect.arrayContaining(['L', 'SE']));
+  });
+
+  it('keeps electronic to electric as a whole-word replacement', () => {
+    const oldRuns = buildTextRuns('electronic');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('electric'), oldRuns.length);
+    const fragments = collectTextDiffFragments(diffs);
+    const removedText = [...fragments.deleted, ...fragments.modifiedOld];
+    const addedText = [...fragments.added, ...fragments.modifiedNew];
+
+    expect(removedText).toEqual(expect.arrayContaining(['electronic']));
+    expect(addedText).toEqual(expect.arrayContaining(['electric']));
+    expect(removedText).not.toEqual(expect.arrayContaining(['on']));
+    expect(addedText).not.toEqual(expect.arrayContaining(['lectr']));
+  });
+
+  it('keeps endPos aligned to the last source token for multi-run word replacements', () => {
+    const oldRuns = buildTextRunsWithOffsets('electronic', [2, 5, 6, 7, 8, 9, 12, 13, 14, 15]);
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('electric', {}, 2), 16);
+
+    expect(diffs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'modified',
+          kind: 'text',
+          oldText: 'electronic',
+          newText: 'electric',
+          startPos: 2,
+          endPos: 15,
+        }),
+      ]),
+    );
+  });
+
+  it('keeps warranties to what as a whole-word replacement', () => {
+    const oldRuns = buildTextRuns('warranties');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('what'), oldRuns.length);
+    const fragments = collectTextDiffFragments(diffs);
+    const removedText = [...fragments.deleted, ...fragments.modifiedOld];
+    const addedText = [...fragments.added, ...fragments.modifiedNew];
+
+    expect(removedText).toEqual(expect.arrayContaining(['warranties']));
+    expect(addedText).toEqual(expect.arrayContaining(['what']));
+    expect(removedText).not.toEqual(expect.arrayContaining(['what']));
+    expect(addedText).not.toEqual(expect.arrayContaining(['w', 'arranties']));
+  });
+
+  it('keeps sentence to phrase as a whole-word replacement', () => {
+    const oldRuns = buildTextRuns('sentence');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('phrase'), oldRuns.length);
+    const fragments = collectTextDiffFragments(diffs);
+    const removedText = [...fragments.deleted, ...fragments.modifiedOld];
+    const addedText = [...fragments.added, ...fragments.modifiedNew];
+
+    expect(removedText).toEqual(expect.arrayContaining(['sentence']));
+    expect(addedText).toEqual(expect.arrayContaining(['phrase']));
+    expect(removedText).not.toEqual(expect.arrayContaining(['phra']));
+    expect(addedText).not.toEqual(expect.arrayContaining(['ntence']));
+  });
+
+  it('keeps goods to products as a whole-word replacement', () => {
+    const oldRuns = buildTextRuns('goods');
+    const diffs = getInlineDiff(oldRuns, buildTextRuns('products'), oldRuns.length);
+    const fragments = collectTextDiffFragments(diffs);
+    const removedText = [...fragments.deleted, ...fragments.modifiedOld];
+    const addedText = [...fragments.added, ...fragments.modifiedNew];
+
+    expect(removedText).toEqual(expect.arrayContaining(['goods']));
+    expect(addedText).toEqual(expect.arrayContaining(['products']));
+    expect(removedText).not.toEqual(expect.arrayContaining(['od']));
+    expect(addedText).not.toEqual(expect.arrayContaining(['uct']));
+  });
+});
+
+describe('segmentInlineTokens', () => {
+  it('starts a new segment at unsafe tokens instead of appending them to the previous span', () => {
+    const tokens = [
+      ...buildTextRuns('ab', {}, 0),
+      ...buildMarkedTextRuns('c', [{ type: 'trackInsert', attrs: { id: 'tracked-1' } }], {}, 2),
+      ...buildTextRuns('de', {}, 3),
+    ];
+
+    expect(
+      segmentInlineTokens(tokens).map((segment) => ({
+        text: segment.tokens.map((token) => (token.kind === 'text' ? token.text : `[${token.nodeType}]`)).join(''),
+        isTextOnly: segment.isTextOnly,
+        isIndividuallySafe: segment.isIndividuallySafe,
+        sourceStartTokenIdx: segment.sourceStartTokenIdx,
+      })),
+    ).toEqual([
+      { text: 'ab', isTextOnly: true, isIndividuallySafe: true, sourceStartTokenIdx: 0 },
+      { text: 'c', isTextOnly: true, isIndividuallySafe: false, sourceStartTokenIdx: 2 },
+      { text: 'de', isTextOnly: true, isIndividuallySafe: true, sourceStartTokenIdx: 3 },
+    ]);
+  });
+
+  it('falls back when segment counts are asymmetric', () => {
+    const oldSegments = segmentInlineTokens(buildTextRuns('LEASE'));
+    const newSegments = segmentInlineTokens([
+      ...buildTextRuns('RENTAL', {}, 0),
+      ...buildTextRuns(' body', { styleId: 'Quote' }, 6),
+    ]);
+
+    expect(buildInlineDiffPlan(oldSegments, newSegments)).toBeNull();
+  });
 });
 
 describe('tokenizeInlineContent', () => {
@@ -447,6 +755,54 @@ describe('tokenizeInlineContent', () => {
     expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Nested', {}, []));
     expect(tokens[0]?.offset).toBe(11);
     expect(tokens[5]?.offset).toBe(16);
+  });
+
+  it('treats structuredContent as atomic and does not emit descendant text tokens', () => {
+    // Simulates: paragraph → "before" text + structuredContent (non-leaf, with text
+    // children) + "after" text. The structuredContent should appear as a single
+    // inlineNode token; its internal text should not produce additional text tokens.
+    const sdtAttrs = { sdtId: '446128060', sdtTag: 'my field 2' };
+    const sdtNode = {
+      isInline: true,
+      isLeaf: false,
+      type: { name: 'structuredContent', spec: {} },
+      attrs: sdtAttrs,
+      toJSON: () => ({ type: 'structuredContent', attrs: sdtAttrs }),
+    };
+
+    const mockParagraph = {
+      content: { size: 30 },
+      nodesBetween: (_from, _to, callback) => {
+        // text before SDT
+        'hi'.split('').forEach((ch, i) => {
+          callback({ isText: true, text: ch, marks: [] }, i);
+        });
+        // structuredContent (non-leaf inline container)
+        const shouldDescend = callback(sdtNode, 2);
+        // simulate PM: only call children if callback did NOT return false
+        if (shouldDescend !== false) {
+          'field content'.split('').forEach((ch, i) => {
+            callback({ isText: true, text: ch, marks: [] }, 3 + i);
+          });
+        }
+        // text after SDT
+        'ok'.split('').forEach((ch, i) => {
+          callback({ isText: true, text: ch, marks: [] }, 20 + i);
+        });
+      },
+      nodeAt: () => ({ attrs: {} }),
+    };
+
+    const tokens = tokenizeInlineContent(mockParagraph);
+
+    const inlineNodeTokens = tokens.filter((t) => t.kind === 'inlineNode');
+    const textTokens = tokens.filter((t) => t.kind === 'text');
+
+    expect(inlineNodeTokens).toHaveLength(1);
+    expect(inlineNodeTokens[0].nodeType).toBe('structuredContent');
+    // Only "hi" (2) and "ok" (2) — no tokens from SDT's internal content
+    expect(textTokens).toHaveLength(4);
+    expect(textTokens.map((t) => t.text).join('')).toBe('hiok');
   });
 });
 

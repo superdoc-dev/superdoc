@@ -18,6 +18,7 @@
     "./list-rendering": "./list-rendering.ts",
     "./layout-constants": "./layout-constants.ts",
     "./list-marker-utils": "./list-marker-utils.ts",
+    "./atomic-run-size": "./atomic-run-size.ts",
     "./*.ts": "./*.ts",
     "./*": {
       "source": "./*"

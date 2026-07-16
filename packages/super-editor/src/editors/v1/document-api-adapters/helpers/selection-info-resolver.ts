@@ -3,7 +3,7 @@ import type { SelectionCurrentInput, SelectionInfo, TextTarget, TextSegment } fr
 import type { Editor } from '../../core/Editor.js';
 import { NodeSelection } from 'prosemirror-state';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
-import { groupTrackedChanges } from './tracked-change-resolver.js';
+import { buildTrackedChangeCanonicalIdMap } from './tracked-change-resolver.js';
 import { resolveCommentIdFromAttrs } from './value-utils.js';
 
 /**
@@ -142,30 +142,26 @@ function readBlockId(node: ProseMirrorNode): string | null {
 }
 
 /**
- * Translate raw PM-mark `attrs.id`s to the canonical Document API
- * tracked-change ids that `trackChanges.list()` returns.
+ * Translate PM-mark aliases to the canonical Document API tracked-change ids
+ * that `trackChanges.list()` returns.
  *
- * `groupTrackedChanges(editor)` is the single source of truth for the
- * raw → canonical mapping; it's already cached per
- * `editor.state.doc`, so a typical selection.current() call hits the
- * cache and runs O(grouped). Unmapped raw ids (a partial editor or
- * a mark that wasn't grouped for some reason) are dropped from the
- * result rather than emitted as raw — leaking raw ids past this point
- * would re-introduce the silent-no-match bug consumers report.
+ * `buildTrackedChangeCanonicalIdMap(editor)` is the single source of truth for
+ * the aliases tracked-change consumers understand: public source-wrapper ids,
+ * raw command ids, replacement group ids, and projected-side ids. Unmapped
+ * aliases (a partial editor or a mark that wasn't grouped for some reason) are
+ * dropped from the result rather than emitted as raw — leaking raw ids past
+ * this point would re-introduce silent no-match highlights in consumer
+ * sidebars.
  */
 function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] {
   if (rawIds.length === 0) return rawIds;
-  let grouped: ReturnType<typeof groupTrackedChanges>;
+  let canonicalIdByAlias: Map<string, string>;
   try {
-    grouped = groupTrackedChanges(editor);
+    canonicalIdByAlias = buildTrackedChangeCanonicalIdMap(editor);
   } catch {
     // Defensive: a partial editor mid-tear-down shouldn't wedge
     // selection.current(). Fall back to dropping the change ids.
     return [];
-  }
-  const rawToCanonical = new Map<string, string>();
-  for (const change of grouped) {
-    rawToCanonical.set(change.rawId, change.id);
   }
   // Dedupe through a Set: when two raw ids in `rawIds` group to the
   // same canonical (e.g. paired tracked-change pieces — insert + delete
@@ -176,7 +172,7 @@ function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] 
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of rawIds) {
-    const canonical = rawToCanonical.get(raw);
+    const canonical = canonicalIdByAlias.get(raw);
     if (!canonical) continue;
     if (seen.has(canonical)) continue;
     seen.add(canonical);

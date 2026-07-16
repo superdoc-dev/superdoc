@@ -56,12 +56,12 @@ const FORCE_PARAM: CliOperationParamSpec = {
   type: 'boolean',
   description: 'Bypass confirmation checks.',
 };
-const SAVE_MODE_PARAM: CliOperationParamSpec = {
+const EXPORT_MODE_PARAM: CliOperationParamSpec = {
   name: 'mode',
   kind: 'flag',
   type: 'string',
-  schema: { type: 'string', enum: ['review-preserving', 'final'] } as CliTypeSpec,
-  description: 'Save mode: review-preserving keeps revision markup; final exports accepted content.',
+  schema: { type: 'string', enum: ['review-preserving', 'final', 'original'] } as CliTypeSpec,
+  description: 'DOCX export mode: review-preserving, final, or original.',
 };
 const DRY_RUN_PARAM: CliOperationParamSpec = {
   name: 'dryRun',
@@ -110,7 +110,7 @@ const PASSWORD_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'in']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
 
 type ObjectSchemaVariant = {
   properties: Record<string, JsonSchema>;
@@ -395,7 +395,11 @@ function envelopeParams(docApiId: OperationId): CliOperationParamSpec[] {
   envelope.push(SESSION_PARAM);
 
   if (catalog.mutates) {
-    envelope.push(OUT_PARAM, FORCE_PARAM, EXPECTED_REVISION_PARAM, CHANGE_MODE_PARAM);
+    envelope.push(OUT_PARAM, FORCE_PARAM);
+    if (docApiId !== 'trackChanges.decide') {
+      envelope.push(EXPECTED_REVISION_PARAM);
+    }
+    envelope.push(CHANGE_MODE_PARAM);
 
     if (catalog.supportsDryRun) {
       envelope.push(DRY_RUN_PARAM);
@@ -520,9 +524,9 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {};
 // schema-derived and envelope params.
 // ---------------------------------------------------------------------------
 
-// Flat-flag shortcut params for text-range target normalization.
-// These are convenience alternatives to --target-json; invoke-input.ts
-// normalizes them into canonical target objects before dispatch.
+// Flat-flag shortcut params for target normalization. These are convenience
+// alternatives to --target-json; invoke-input.ts normalizes them into
+// canonical target objects before dispatch.
 const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
   { name: 'start', kind: 'flag', type: 'number', description: 'Start offset within the block (character index).' },
@@ -535,6 +539,15 @@ const TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN: CliOperationParamSpec[] = TEXT_TARGE
   ...p,
   agentVisible: false as const,
 }));
+
+const PARAGRAPH_BLOCK_ID_PARAM_AGENT_HIDDEN: CliOperationParamSpec = {
+  name: 'blockId',
+  kind: 'flag',
+  flag: 'block-id',
+  type: 'string',
+  description: 'Block ID of the target paragraph. Shortcut for a paragraph block target.',
+  agentVisible: false,
+};
 
 const SELECTION_TARGET_JSON_PARAM: CliOperationParamSpec = {
   name: 'target',
@@ -557,6 +570,12 @@ const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
 
 const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
   operationId.startsWith('format.'),
+);
+const PARAGRAPH_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter((operationId) =>
+  operationId.startsWith('format.paragraph.'),
+);
+const INLINE_FORMAT_OPERATION_IDS = FORMAT_OPERATION_IDS.filter(
+  (operationId) => !operationId.startsWith('format.paragraph.'),
 );
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
@@ -941,8 +960,12 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   ],
 };
 
-for (const operationId of FORMAT_OPERATION_IDS) {
+for (const operationId of INLINE_FORMAT_OPERATION_IDS) {
   EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN];
+}
+
+for (const operationId of PARAGRAPH_FORMAT_OPERATION_IDS) {
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [PARAGRAPH_BLOCK_ID_PARAM_AGENT_HIDDEN];
 }
 
 // ---------------------------------------------------------------------------
@@ -981,7 +1004,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
           oneOf: [
             {
               type: 'object',
-              description: 'WebSocket-based collaboration (y-websocket or Hocuspocus).',
+              description: 'WebSocket-based collaboration via `y-websocket` or `hocuspocus`.',
               properties: {
                 providerType: {
                   type: 'string',
@@ -1017,7 +1040,11 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
               type: 'object',
               description: 'Liveblocks collaboration with a public API key.',
               properties: {
-                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                providerType: {
+                  type: 'string',
+                  enum: ['liveblocks'],
+                  description: 'Collaboration provider.',
+                },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 publicApiKey: { type: 'string', description: 'Liveblocks public API key (pk_...).' },
                 syncTimeoutMs: { type: 'number', description: 'Max time (ms) to wait for initial sync.' },
@@ -1037,7 +1064,11 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
               type: 'object',
               description: 'Liveblocks collaboration with a custom auth endpoint.',
               properties: {
-                providerType: { type: 'string', enum: ['liveblocks'], description: 'Collaboration provider.' },
+                providerType: {
+                  type: 'string',
+                  enum: ['liveblocks'],
+                  description: 'Collaboration provider.',
+                },
                 roomId: { type: 'string', description: 'Liveblocks room identifier.' },
                 authEndpoint: { type: 'string', description: 'Absolute URL of the auth endpoint.' },
                 authHeadersEnv: {
@@ -1062,27 +1093,27 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
-      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
-      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
-      { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
-      { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
       {
         name: 'trackChanges',
         kind: 'jsonFlag',
         flag: 'track-changes-json',
         type: 'json',
-        description: 'Track-changes open configuration.',
+        description: 'Tracked-change projection options for the opened session.',
         schema: {
           type: 'object',
           properties: {
             replacements: {
               type: 'string',
               enum: ['paired', 'independent'],
-              description: 'Tracked replacement grouping mode.',
+              description: 'How adjacent insertion/deletion replacement wrappers are projected.',
             },
           },
         } as CliTypeSpec,
       },
+      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
+      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
+      { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
+      { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
       USER_NAME_PARAM,
       USER_EMAIL_PARAM,
       PASSWORD_PARAM,
@@ -1095,9 +1126,9 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     docRequirement: 'none',
     params: [
       SESSION_PARAM,
-      SAVE_MODE_PARAM,
       OUT_PARAM,
       FORCE_PARAM,
+      EXPORT_MODE_PARAM,
       { name: 'inPlace', kind: 'flag', flag: 'in-place', type: 'boolean' },
     ],
     constraints: null,
@@ -1157,6 +1188,23 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       mutuallyExclusive: [['target', 'ref']],
     },
   },
+  'doc.executeCode': {
+    command: 'execute code',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      SESSION_PARAM,
+      EXPECTED_REVISION_PARAM,
+      {
+        name: 'code',
+        kind: 'flag',
+        type: 'string',
+        description:
+          'JavaScript body run as an async function with `doc` (synchronous Document API — do NOT await) and `console` injected. Omit to pass code on stdin.',
+      },
+    ],
+    constraints: null,
+  },
   'doc.status': {
     command: 'status',
     positionalParams: [],
@@ -1212,6 +1260,137 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
     positionalParams: ['sessionId'],
     docRequirement: 'none',
     params: [{ name: 'sessionId', kind: 'doc', type: 'string', required: true }],
+    constraints: null,
+  },
+  'doc.preset.list': {
+    command: 'preset list',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [],
+    constraints: null,
+  },
+  'doc.preset.getCatalog': {
+    command: 'preset get-catalog',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      {
+        name: 'preset',
+        kind: 'flag',
+        type: 'string',
+        description: 'Preset id. Defaults to the SDK default preset (legacy).',
+      },
+    ],
+    constraints: null,
+  },
+  'doc.preset.getTools': {
+    command: 'preset get-tools',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      {
+        name: 'provider',
+        kind: 'flag',
+        type: 'string',
+        required: true,
+        schema: {
+          oneOf: [{ const: 'openai' }, { const: 'anthropic' }, { const: 'vercel' }, { const: 'generic' }],
+        } as CliTypeSpec,
+        description: 'Tool provider format: openai | anthropic | vercel | generic.',
+      },
+      {
+        name: 'preset',
+        kind: 'flag',
+        type: 'string',
+        description: 'Preset id. Defaults to the SDK default preset (legacy).',
+      },
+      {
+        name: 'cache',
+        kind: 'flag',
+        type: 'boolean',
+        description: 'Apply provider-specific prompt-cache markers.',
+      },
+      {
+        name: 'excludeActions',
+        kind: 'flag',
+        type: 'string',
+        description:
+          'Comma-separated action names to remove from the advertised action surface (core preset). Unknown names fail.',
+      },
+    ],
+    constraints: null,
+  },
+  'doc.preset.getSystemPrompt': {
+    command: 'preset get-system-prompt',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      {
+        name: 'preset',
+        kind: 'flag',
+        type: 'string',
+        description: 'Preset id. Defaults to the SDK default preset (legacy).',
+      },
+      {
+        name: 'excludeActions',
+        kind: 'flag',
+        type: 'string',
+        description:
+          'Comma-separated action names whose per-action documentation lines are dropped from the prompt (core preset).',
+      },
+    ],
+    constraints: null,
+  },
+  'doc.preset.getMcpPrompt': {
+    command: 'preset get-mcp-prompt',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      {
+        name: 'preset',
+        kind: 'flag',
+        type: 'string',
+        description: 'Preset id. Defaults to the SDK default preset (legacy).',
+      },
+    ],
+    constraints: null,
+  },
+  'doc.preset.dispatch': {
+    command: 'preset dispatch',
+    positionalParams: [],
+    docRequirement: 'none',
+    params: [
+      SESSION_PARAM,
+      EXPECTED_REVISION_PARAM,
+      {
+        name: 'toolName',
+        kind: 'flag',
+        flag: 'tool-name',
+        type: 'string',
+        required: true,
+        description: 'Tool name to dispatch (e.g. superdoc_perform_action, superdoc_inspect, superdoc_execute_code).',
+      },
+      {
+        name: 'args',
+        kind: 'jsonFlag',
+        flag: 'args-json',
+        type: 'json',
+        description: 'Tool arguments as a JSON object (matches the preset tool input schema).',
+      },
+      {
+        name: 'excludeActions',
+        kind: 'flag',
+        type: 'string',
+        description:
+          'Comma-separated action names to refuse at dispatch (defense-in-depth for a narrowed tool surface).',
+      },
+      {
+        name: 'preset',
+        kind: 'flag',
+        type: 'string',
+        description: 'Preset id. Defaults to the SDK default preset (legacy).',
+      },
+    ],
     constraints: null,
   },
 };

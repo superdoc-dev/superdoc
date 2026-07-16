@@ -46,7 +46,7 @@ export interface MarksDiff {
 export function getAttributesDiff(
   objectA: Record<string, unknown> | null | undefined = {},
   objectB: Record<string, unknown> | null | undefined = {},
-  ignoreKeys: string[] = [],
+  ignoreKeys: readonly string[] = [],
 ): AttributesDiff | null {
   const diff: AttributesDiff = {
     added: {},

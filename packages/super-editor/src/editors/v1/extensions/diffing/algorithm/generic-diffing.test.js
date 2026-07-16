@@ -72,6 +72,17 @@ const createParagraph = (text, attrs = {}, options = {}) => {
   return { node: paragraphNode, pos, depth };
 };
 
+const createParagraphSequence = (texts, options = {}) => {
+  const { attrs = {}, textAttrs = {}, depth = 1, startPos = 0 } = options;
+  let pos = startPos;
+
+  return texts.map((text) => {
+    const paragraph = createParagraph(text, attrs, { pos, textAttrs, depth });
+    pos += paragraph.node.nodeSize;
+    return paragraph;
+  });
+};
+
 describe('diffParagraphs', () => {
   it('treats similar paragraphs without IDs as modifications', () => {
     const oldParagraphs = [createParagraph('Hello world from ProseMirror.')];
@@ -118,6 +129,172 @@ describe('diffParagraphs', () => {
     expect(diffs[0].contentDiff.length).toBeGreaterThan(0);
     expect(diffs[1].action).toBe('deleted');
     expect(diffs[2].action).toBe('added');
+  });
+
+  it('keeps a middle insertion in repeated paragraphs as a single added diff at the correct position', () => {
+    const repeatedText = 'Repeated boilerplate paragraph.';
+    const insertedText = 'Inserted middle paragraph.';
+    const oldParagraphs = createParagraphSequence(Array(10).fill(repeatedText));
+    const newParagraphs = createParagraphSequence([
+      ...Array(5).fill(repeatedText),
+      insertedText,
+      ...Array(5).fill(repeatedText),
+    ]);
+
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(oldParagraphs)),
+      normalizeNodes(createDocFromNodes(newParagraphs)),
+    );
+    const additions = diffs.filter((diff) => diff.action === 'added');
+    const nonAdditions = diffs.filter((diff) => diff.action !== 'added');
+
+    expect(additions).toHaveLength(1);
+    expect(nonAdditions).toEqual([]);
+    expect(additions[0]).toMatchObject({
+      action: 'added',
+      nodeType: 'paragraph',
+      text: insertedText,
+      pos: oldParagraphs[5].pos,
+    });
+  });
+
+  it('keeps a middle edit in repeated paragraphs as a single modified diff without surrounding noise', () => {
+    const repeatedText = 'Repeated boilerplate paragraph.';
+    const modifiedText = 'Repeated boilerplate paragraph with one edit.';
+    const oldParagraphs = createParagraphSequence(Array(10).fill(repeatedText));
+    const newParagraphs = createParagraphSequence([
+      ...Array(5).fill(repeatedText),
+      modifiedText,
+      ...Array(4).fill(repeatedText),
+    ]);
+
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(oldParagraphs)),
+      normalizeNodes(createDocFromNodes(newParagraphs)),
+    );
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({
+      action: 'modified',
+      nodeType: 'paragraph',
+      oldText: repeatedText,
+      newText: modifiedText,
+      pos: oldParagraphs[5].pos,
+    });
+  });
+
+  it('does not pair moderately similar repeated paragraphs as a modification in a larger document', () => {
+    const repeatedText = 'Repeated boilerplate paragraph.';
+    const oldCandidate = 'electronic warranties section';
+    const newCandidate = 'electric what section';
+    const oldParagraphs = createParagraphSequence([
+      ...Array(5).fill(repeatedText),
+      oldCandidate,
+      ...Array(4).fill(repeatedText),
+    ]);
+    const newParagraphs = createParagraphSequence([
+      ...Array(5).fill(repeatedText),
+      newCandidate,
+      ...Array(4).fill(repeatedText),
+    ]);
+
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(oldParagraphs)),
+      normalizeNodes(createDocFromNodes(newParagraphs)),
+    );
+
+    expect(diffs).toHaveLength(2);
+    expect(diffs[0]).toMatchObject({
+      action: 'deleted',
+      nodeType: 'paragraph',
+      oldText: oldCandidate,
+      pos: oldParagraphs[5].pos,
+    });
+    expect(diffs[1]).toMatchObject({
+      action: 'added',
+      nodeType: 'paragraph',
+      text: newCandidate,
+      // Replay processes diffs in reverse order. The added diff must land after the deleted
+      // paragraph in old-doc coordinates so that when replay reverses (insert first, then delete),
+      // the inserted node ends up at the deleted paragraph's original position.
+      pos: oldParagraphs[5].pos + oldParagraphs[5].node.nodeSize,
+    });
+  });
+
+  it('keeps an unrelated replacement in equal-length repeated sequences as deleted + added', () => {
+    const repeatedText = 'Repeated boilerplate paragraph.';
+    const unrelatedText = 'Zephyr quickly jinxed an entirely unrelated passage.';
+    // 5 identical old paragraphs; the 3rd is replaced with something with low similarity to P.
+    const oldParagraphs = createParagraphSequence(Array(5).fill(repeatedText));
+    const newParagraphs = createParagraphSequence([
+      ...Array(2).fill(repeatedText),
+      unrelatedText,
+      ...Array(2).fill(repeatedText),
+    ]);
+
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(oldParagraphs)),
+      normalizeNodes(createDocFromNodes(newParagraphs)),
+    );
+
+    expect(diffs).toHaveLength(2);
+    expect(diffs[0]).toMatchObject({
+      action: 'deleted',
+      nodeType: 'paragraph',
+      oldText: repeatedText,
+      pos: oldParagraphs[2].pos,
+    });
+    expect(diffs[1]).toMatchObject({
+      action: 'added',
+      nodeType: 'paragraph',
+      text: unrelatedText,
+      pos: oldParagraphs[2].pos + oldParagraphs[2].node.nodeSize,
+    });
+  });
+
+  it('emits deleted+added for a paragraph with similarity 0.65–0.70 when surrounded by repeated paragraphs', () => {
+    // Myers path: old is NOT all-identical (contains oldPara ≠ R), so positionalAlignDiffs
+    // is skipped and Myers + detectLocalRepeatedContent runs instead.
+    // sim("Repeated standard text here.", "Repeated standard paragraph.") ≈ 0.679 —
+    // above the base threshold (0.65) but below the repeated-content threshold (0.70).
+    // detectLocalRepeatedContent sees the surrounding R paragraphs and raises the
+    // threshold to 0.70, so the pair must be emitted as deleted+added, not modified.
+    const repeatedText = 'Repeated boilerplate paragraph.';
+    const oldPara = 'Repeated standard text here.'; // ≈ 0.679 similarity with newPara
+    const newPara = 'Repeated standard paragraph.';
+    const oldParagraphs = createParagraphSequence([
+      ...Array(4).fill(repeatedText),
+      oldPara,
+      ...Array(5).fill(repeatedText),
+    ]);
+    const newParagraphs = createParagraphSequence([
+      ...Array(4).fill(repeatedText),
+      newPara,
+      ...Array(5).fill(repeatedText),
+    ]);
+
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(oldParagraphs)),
+      normalizeNodes(createDocFromNodes(newParagraphs)),
+    );
+
+    expect(diffs).toHaveLength(2);
+    expect(diffs[0]).toMatchObject({ action: 'deleted', oldText: oldPara });
+    expect(diffs[1]).toMatchObject({ action: 'added', text: newPara });
+  });
+
+  it('emits modified for the same borderline pair when there are no repeated neighbours', () => {
+    // Without repeated neighbours detectLocalRepeatedContent does not raise the
+    // threshold, so similarity 0.679 clears the base 0.65 threshold → modified.
+    const oldText = 'Repeated standard text here.';
+    const newText = 'Repeated standard paragraph.';
+    const diffs = diffNodes(
+      normalizeNodes(createDocFromNodes(createParagraphSequence([oldText]))),
+      normalizeNodes(createDocFromNodes(createParagraphSequence([newText]))),
+    );
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({ action: 'modified', oldText, newText });
   });
 
   it('treats paragraph attribute-only changes as modifications', () => {

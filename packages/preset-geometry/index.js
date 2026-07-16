@@ -2054,32 +2054,419 @@ var _ = {
     ],
   },
 };
-var F = new Set(['leftRightArrow', 'upDownArrow']),
+var F = new Set([
+    'bentArrow',
+    'bentUpArrow',
+    'downArrow',
+    'leftArrow',
+    'leftRightArrow',
+    'leftRightUpArrow',
+    'leftUpArrow',
+    'quadArrow',
+    'rightArrow',
+    'upArrow',
+    'upDownArrow',
+    'uturnArrow',
+  ]),
   X = {
+    bentArrow: `<bentArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="588010" h="648335">
+        <moveTo>
+          <pt x="0" y="648335"/>
+        </moveTo>
+        <lnTo>
+          <pt x="0" y="330756"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="0" y="188679"/>
+          <pt x="115177" y="73502"/>
+          <pt x="257254" y="73502"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="441008" y="73501"/>
+        </lnTo>
+        <lnTo>
+          <pt x="441008" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="588010" y="147003"/>
+        </lnTo>
+        <lnTo>
+          <pt x="441008" y="294005"/>
+        </lnTo>
+        <lnTo>
+          <pt x="441008" y="220504"/>
+        </lnTo>
+        <lnTo>
+          <pt x="257254" y="220504"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="196364" y="220504"/>
+          <pt x="147002" y="269866"/>
+          <pt x="147002" y="330756"/>
+        </cubicBezTo>
+        <cubicBezTo>
+          <pt x="147002" y="436616"/>
+          <pt x="147003" y="542475"/>
+          <pt x="147003" y="648335"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="0" y="648335"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </bentArrow>`,
+    bentUpArrow: `<bentUpArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="850265" h="731520">
+        <moveTo>
+          <pt x="0" y="548640"/>
+        </moveTo>
+        <lnTo>
+          <pt x="575945" y="548640"/>
+        </lnTo>
+        <lnTo>
+          <pt x="575945" y="182880"/>
+        </lnTo>
+        <lnTo>
+          <pt x="484505" y="182880"/>
+        </lnTo>
+        <lnTo>
+          <pt x="667385" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="850265" y="182880"/>
+        </lnTo>
+        <lnTo>
+          <pt x="758825" y="182880"/>
+        </lnTo>
+        <lnTo>
+          <pt x="758825" y="731520"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="731520"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="548640"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </bentUpArrow>`,
+    downArrow: `<downArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="394970" h="576580">
+        <moveTo>
+          <pt x="0" y="379095"/>
+        </moveTo>
+        <lnTo>
+          <pt x="98743" y="379095"/>
+        </lnTo>
+        <lnTo>
+          <pt x="98743" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="296228" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="296228" y="379095"/>
+        </lnTo>
+        <lnTo>
+          <pt x="394970" y="379095"/>
+        </lnTo>
+        <lnTo>
+          <pt x="197485" y="576580"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="379095"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </downArrow>`,
+    leftArrow: `<leftArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="662549" h="367128">
+        <moveTo>
+          <pt x="0" y="183564"/>
+        </moveTo>
+        <lnTo>
+          <pt x="183564" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="183564" y="91782"/>
+        </lnTo>
+        <lnTo>
+          <pt x="662549" y="91782"/>
+        </lnTo>
+        <lnTo>
+          <pt x="662549" y="275346"/>
+        </lnTo>
+        <lnTo>
+          <pt x="183564" y="275346"/>
+        </lnTo>
+        <lnTo>
+          <pt x="183564" y="367128"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="183564"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </leftArrow>`,
     leftRightArrow: `<leftRightArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="985520" h="379730">
+        <moveTo>
+          <pt x="0" y="189865"/>
+        </moveTo>
+        <lnTo>
+          <pt x="189865" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="189865" y="94933"/>
+        </lnTo>
+        <lnTo>
+          <pt x="795655" y="94933"/>
+        </lnTo>
+        <lnTo>
+          <pt x="795655" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="985520" y="189865"/>
+        </lnTo>
+        <lnTo>
+          <pt x="795655" y="379730"/>
+        </lnTo>
+        <lnTo>
+          <pt x="795655" y="284798"/>
+        </lnTo>
+        <lnTo>
+          <pt x="189865" y="284798"/>
+        </lnTo>
+        <lnTo>
+          <pt x="189865" y="379730"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="189865"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </leftRightArrow>`,
+    leftRightUpArrow: `<leftRightUpArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="928370" h="634365">
+        <moveTo>
+          <pt x="0" y="475774"/>
+        </moveTo>
+        <lnTo>
+          <pt x="158591" y="317183"/>
+        </lnTo>
+        <lnTo>
+          <pt x="158591" y="396478"/>
+        </lnTo>
+        <lnTo>
+          <pt x="384889" y="396478"/>
+        </lnTo>
+        <lnTo>
+          <pt x="384889" y="158591"/>
+        </lnTo>
+        <lnTo>
+          <pt x="305594" y="158591"/>
+        </lnTo>
+        <lnTo>
+          <pt x="464185" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="622776" y="158591"/>
+        </lnTo>
+        <lnTo>
+          <pt x="543481" y="158591"/>
+        </lnTo>
+        <lnTo>
+          <pt x="543481" y="396478"/>
+        </lnTo>
+        <lnTo>
+          <pt x="769779" y="396478"/>
+        </lnTo>
+        <lnTo>
+          <pt x="769779" y="317183"/>
+        </lnTo>
+        <lnTo>
+          <pt x="928370" y="475774"/>
+        </lnTo>
+        <lnTo>
+          <pt x="769779" y="634365"/>
+        </lnTo>
+        <lnTo>
+          <pt x="769779" y="555069"/>
+        </lnTo>
+        <lnTo>
+          <pt x="158591" y="555069"/>
+        </lnTo>
+        <lnTo>
+          <pt x="158591" y="634365"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="475774"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </leftRightUpArrow>`,
+    leftUpArrow: `<leftUpArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="850265" h="850265">
+        <moveTo>
+          <pt x="0" y="637699"/>
+        </moveTo>
+        <lnTo>
+          <pt x="212566" y="425133"/>
+        </lnTo>
+        <lnTo>
+          <pt x="212566" y="531416"/>
+        </lnTo>
+        <lnTo>
+          <pt x="531416" y="531416"/>
+        </lnTo>
+        <lnTo>
+          <pt x="531416" y="212566"/>
+        </lnTo>
+        <lnTo>
+          <pt x="425133" y="212566"/>
+        </lnTo>
+        <lnTo>
+          <pt x="637699" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="850265" y="212566"/>
+        </lnTo>
+        <lnTo>
+          <pt x="743982" y="212566"/>
+        </lnTo>
+        <lnTo>
+          <pt x="743982" y="743982"/>
+        </lnTo>
+        <lnTo>
+          <pt x="212566" y="743982"/>
+        </lnTo>
+        <lnTo>
+          <pt x="212566" y="850265"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="637699"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </leftUpArrow>`,
+    quadArrow: `<quadArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="788670" h="831215">
+        <moveTo>
+          <pt x="0" y="415608"/>
+        </moveTo>
+        <lnTo>
+          <pt x="177451" y="238157"/>
+        </lnTo>
+        <lnTo>
+          <pt x="177451" y="326882"/>
+        </lnTo>
+        <lnTo>
+          <pt x="305610" y="326882"/>
+        </lnTo>
+        <lnTo>
+          <pt x="305610" y="177451"/>
+        </lnTo>
+        <lnTo>
+          <pt x="216884" y="177451"/>
+        </lnTo>
+        <lnTo>
+          <pt x="394335" y="0"/>
+        </lnTo>
+        <lnTo>
+          <pt x="571786" y="177451"/>
+        </lnTo>
+        <lnTo>
+          <pt x="483060" y="177451"/>
+        </lnTo>
+        <lnTo>
+          <pt x="483060" y="326882"/>
+        </lnTo>
+        <lnTo>
+          <pt x="611219" y="326882"/>
+        </lnTo>
+        <lnTo>
+          <pt x="611219" y="238157"/>
+        </lnTo>
+        <lnTo>
+          <pt x="788670" y="415608"/>
+        </lnTo>
+        <lnTo>
+          <pt x="611219" y="593058"/>
+        </lnTo>
+        <lnTo>
+          <pt x="611219" y="504333"/>
+        </lnTo>
+        <lnTo>
+          <pt x="483060" y="504333"/>
+        </lnTo>
+        <lnTo>
+          <pt x="483060" y="653764"/>
+        </lnTo>
+        <lnTo>
+          <pt x="571786" y="653764"/>
+        </lnTo>
+        <lnTo>
+          <pt x="394335" y="831215"/>
+        </lnTo>
+        <lnTo>
+          <pt x="216884" y="653764"/>
+        </lnTo>
+        <lnTo>
+          <pt x="305610" y="653764"/>
+        </lnTo>
+        <lnTo>
+          <pt x="305610" y="504333"/>
+        </lnTo>
+        <lnTo>
+          <pt x="177451" y="504333"/>
+        </lnTo>
+        <lnTo>
+          <pt x="177451" y="593058"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="415608"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </quadArrow>`,
+    rightArrow: `<rightArrow>
     <avLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
       <gd name="adj1" fmla="val 50000"/>
       <gd name="adj2" fmla="val 50000"/>
     </avLst>
     <gdLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <gd name="maxAdj2" fmla="*/ 50000 w ss"/>
+      <gd name="maxAdj2" fmla="*/ 100000 w ss"/>
       <gd name="a1" fmla="pin 0 adj1 100000"/>
       <gd name="a2" fmla="pin 0 adj2 maxAdj2"/>
-      <gd name="x2" fmla="*/ ss a2 100000"/>
-      <gd name="x3" fmla="+- r 0 x2"/>
-      <gd name="dy" fmla="*/ h a1 200000"/>
-      <gd name="y1" fmla="+- vc 0 dy"/>
-      <gd name="y2" fmla="+- vc dy 0"/>
-      <gd name="dx1" fmla="*/ y1 x2 hd2"/>
-      <gd name="x1" fmla="+- x2 0 dx1"/>
-      <gd name="x4" fmla="+- x3 dx1 0"/>
+      <gd name="dx1" fmla="*/ ss a2 100000"/>
+      <gd name="x1" fmla="+- r 0 dx1"/>
+      <gd name="dy1" fmla="*/ h a1 200000"/>
+      <gd name="y1" fmla="+- vc 0 dy1"/>
+      <gd name="y2" fmla="+- vc dy1 0"/>
     </gdLst>
     <ahLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
       <ahXY gdRefY="adj1" minY="0" maxY="100000">
-        <pos x="x3" y="y1"/>
+        <pos x="x1" y="y1"/>
       </ahXY>
       <ahXY gdRefX="adj2" minX="0" maxX="maxAdj2">
-        <pos x="x2" y="t"/>
+        <pos x="x1" y="t"/>
       </ahXY>
     </ahLst>
     <cxnLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -2087,147 +2474,177 @@ var F = new Set(['leftRightArrow', 'upDownArrow']),
         <pos x="r" y="vc"/>
       </cxn>
       <cxn ang="cd4">
-        <pos x="x3" y="b"/>
-      </cxn>
-      <cxn ang="cd4">
-        <pos x="x2" y="b"/>
+        <pos x="x1" y="b"/>
       </cxn>
       <cxn ang="cd2">
         <pos x="l" y="vc"/>
       </cxn>
       <cxn ang="3cd4">
-        <pos x="x2" y="t"/>
-      </cxn>
-      <cxn ang="3cd4">
-        <pos x="x3" y="t"/>
+        <pos x="x1" y="t"/>
       </cxn>
     </cxnLst>
-    <rect l="x1" t="y1" r="x4" b="y2" xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+    <rect l="l" t="y1" r="x1" b="y2" xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"/>
     <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
       <path>
         <moveTo>
-          <pt x="l" y="vc"/>
+          <pt x="l" y="y1"/>
         </moveTo>
         <lnTo>
-          <pt x="x2" y="t"/>
+          <pt x="x1" y="y1"/>
         </lnTo>
         <lnTo>
-          <pt x="x2" y="y1"/>
-        </lnTo>
-        <lnTo>
-          <pt x="x3" y="y1"/>
-        </lnTo>
-        <lnTo>
-          <pt x="x3" y="t"/>
+          <pt x="x1" y="t"/>
         </lnTo>
         <lnTo>
           <pt x="r" y="vc"/>
         </lnTo>
         <lnTo>
-          <pt x="x3" y="b"/>
+          <pt x="x1" y="b"/>
         </lnTo>
         <lnTo>
-          <pt x="x3" y="y2"/>
+          <pt x="x1" y="y2"/>
         </lnTo>
         <lnTo>
-          <pt x="x2" y="y2"/>
-        </lnTo>
-        <lnTo>
-          <pt x="x2" y="b"/>
+          <pt x="l" y="y2"/>
         </lnTo>
         <close/>
       </path>
     </pathLst>
-  </leftRightArrow>`,
-    upDownArrow: `<upDownArrow>
-    <avLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <gd name="adj1" fmla="val 50000"/>
-      <gd name="adj2" fmla="val 50000"/>
-    </avLst>
-    <gdLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <gd name="maxAdj2" fmla="*/ 50000 h ss"/>
-      <gd name="a1" fmla="pin 0 adj1 100000"/>
-      <gd name="a2" fmla="pin 0 adj2 maxAdj2"/>
-      <gd name="y2" fmla="*/ ss a2 100000"/>
-      <gd name="y3" fmla="+- b 0 y2"/>
-      <gd name="dx1" fmla="*/ w a1 200000"/>
-      <gd name="x1" fmla="+- hc 0 dx1"/>
-      <gd name="x2" fmla="+- hc dx1 0"/>
-      <gd name="dy1" fmla="*/ x1 y2 wd2"/>
-      <gd name="y1" fmla="+- y2 0 dy1"/>
-      <gd name="y4" fmla="+- y3 dy1 0"/>
-    </gdLst>
-    <ahLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <ahXY gdRefX="adj1" minX="0" maxX="100000">
-        <pos x="x1" y="y3"/>
-      </ahXY>
-      <ahXY gdRefY="adj2" minY="0" maxY="maxAdj2">
-        <pos x="l" y="y2"/>
-      </ahXY>
-    </ahLst>
-    <cxnLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <cxn ang="3cd4">
-        <pos x="hc" y="t"/>
-      </cxn>
-      <cxn ang="cd2">
-        <pos x="l" y="y2"/>
-      </cxn>
-      <cxn ang="cd2">
-        <pos x="x1" y="vc"/>
-      </cxn>
-      <cxn ang="cd2">
-        <pos x="l" y="y3"/>
-      </cxn>
-      <cxn ang="cd4">
-        <pos x="hc" y="b"/>
-      </cxn>
-      <cxn ang="0">
-        <pos x="r" y="y3"/>
-      </cxn>
-      <cxn ang="0">
-        <pos x="x2" y="vc"/>
-      </cxn>
-      <cxn ang="0">
-        <pos x="r" y="y2"/>
-      </cxn>
-    </cxnLst>
-    <rect l="x1" t="y1" r="x2" b="y4" xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+  </rightArrow>`,
+    upArrow: `<upArrow>
     <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
-      <path>
+      <path w="367127" h="550008">
         <moveTo>
-          <pt x="l" y="y2"/>
+          <pt x="0" y="183564"/>
         </moveTo>
         <lnTo>
-          <pt x="hc" y="t"/>
+          <pt x="183564" y="0"/>
         </lnTo>
         <lnTo>
-          <pt x="r" y="y2"/>
+          <pt x="367127" y="183564"/>
         </lnTo>
         <lnTo>
-          <pt x="x2" y="y2"/>
+          <pt x="275345" y="183564"/>
         </lnTo>
         <lnTo>
-          <pt x="x2" y="y3"/>
+          <pt x="275345" y="550008"/>
         </lnTo>
         <lnTo>
-          <pt x="r" y="y3"/>
+          <pt x="91782" y="550008"/>
         </lnTo>
         <lnTo>
-          <pt x="hc" y="b"/>
+          <pt x="91782" y="183564"/>
         </lnTo>
         <lnTo>
-          <pt x="l" y="y3"/>
+          <pt x="0" y="183564"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </upArrow>`,
+    upDownArrow: `<upDownArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="296545" h="746760">
+        <moveTo>
+          <pt x="0" y="148273"/>
+        </moveTo>
+        <lnTo>
+          <pt x="148273" y="0"/>
         </lnTo>
         <lnTo>
-          <pt x="x1" y="y3"/>
+          <pt x="296545" y="148273"/>
         </lnTo>
         <lnTo>
-          <pt x="x1" y="y2"/>
+          <pt x="222409" y="148273"/>
+        </lnTo>
+        <lnTo>
+          <pt x="222409" y="598488"/>
+        </lnTo>
+        <lnTo>
+          <pt x="296545" y="598488"/>
+        </lnTo>
+        <lnTo>
+          <pt x="148273" y="746760"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="598488"/>
+        </lnTo>
+        <lnTo>
+          <pt x="74136" y="598488"/>
+        </lnTo>
+        <lnTo>
+          <pt x="74136" y="148273"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="148273"/>
         </lnTo>
         <close/>
       </path>
     </pathLst>
   </upDownArrow>`,
+    uturnArrow: `<uturnArrow>
+    <pathLst xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <path w="886460" h="661035">
+        <moveTo>
+          <pt x="0" y="661035"/>
+        </moveTo>
+        <lnTo>
+          <pt x="0" y="289203"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="0" y="129481"/>
+          <pt x="129481" y="0"/>
+          <pt x="289203" y="0"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="514628" y="0"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="674350" y="0"/>
+          <pt x="803831" y="129481"/>
+          <pt x="803831" y="289203"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="803831" y="330518"/>
+        </lnTo>
+        <lnTo>
+          <pt x="886460" y="330518"/>
+        </lnTo>
+        <lnTo>
+          <pt x="721201" y="495776"/>
+        </lnTo>
+        <lnTo>
+          <pt x="555943" y="330518"/>
+        </lnTo>
+        <lnTo>
+          <pt x="638572" y="330518"/>
+        </lnTo>
+        <lnTo>
+          <pt x="638572" y="289203"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="638572" y="220751"/>
+          <pt x="583080" y="165259"/>
+          <pt x="514628" y="165259"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="289203" y="165259"/>
+        </lnTo>
+        <cubicBezTo>
+          <pt x="220751" y="165259"/>
+          <pt x="165259" y="220751"/>
+          <pt x="165259" y="289203"/>
+        </cubicBezTo>
+        <lnTo>
+          <pt x="165259" y="661035"/>
+        </lnTo>
+        <lnTo>
+          <pt x="0" y="661035"/>
+        </lnTo>
+        <close/>
+      </path>
+    </pathLst>
+  </uturnArrow>`,
   };
 function U() {
   if (typeof DOMParser < 'u') return new DOMParser();
@@ -2661,10 +3078,32 @@ function x0(t, n, o) {
     [l] = L0(e, { width: n, height: o });
   return l ? { viewBox: l.viewBox, paths: l.paths } : null;
 }
+function W0(t, n, o) {
+  let L = Math.max(0, Number(t) || 0),
+    e = Math.max(0, Number(n) || 0),
+    l = Math.min(L, e) * (16667 / 1e5),
+    r = Math.max(0, L - l),
+    i = Math.max(0, e - l);
+  return {
+    preset: 'roundRect',
+    viewBox: `0 0 ${L} ${e}`,
+    paths: l0(
+      [
+        {
+          d: `M 0 ${l} A ${l} ${l} 0 0 1 ${l} 0 L ${r} 0 A ${l} ${l} 0 0 1 ${L} ${l} L ${L} ${i} A ${l} ${l} 0 0 1 ${r} ${e} L ${l} ${e} A ${l} ${l} 0 0 1 0 ${i} Z`,
+          fill: '#000000',
+          stroke: '#000000',
+        },
+      ],
+      o,
+    ),
+  };
+}
 function i0(t) {
   let { preset: n, styleOverrides: o, width: L, height: e } = t;
   if (!n) throw new Error('createPresetShape requires a preset name.');
-  if (F.has(n) && L != null && e != null && L !== e) {
+  if (n === 'roundRect' && L != null && e != null) return W0(L, e, o);
+  if (F.has(n) && L != null && e != null && (L !== e || n === 'leftUpArrow')) {
     let i = x0(n, L, e);
     if (i) return { preset: n, viewBox: i.viewBox, paths: l0(i.paths, o) };
   }

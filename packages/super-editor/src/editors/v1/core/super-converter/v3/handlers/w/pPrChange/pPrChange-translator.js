@@ -3,6 +3,59 @@ import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { createNestedPropertiesTranslator, createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { basePropertyTranslators } from '../pPr/pPr-base-translators.js';
 
+/**
+ * OOXML `w:id` on `w:pPrChange` must be a decimal integer (CT_TrackChange).
+ * Imported pPrChanges already carry a decimal id; API-created ones use a
+ * `uuidv4`, which Word repairs/drops. Resolve a Word-safe decimal that stays
+ * unique across the whole document.
+ *
+ * Preferred path: the converter's Word revision-id allocator (the same
+ * doc-wide reservation the ins/del/row exporters use) — guarantees uniqueness
+ * across ALL tracked changes, so two pPrChanges (or a pPrChange and an ins/del)
+ * can never collide. An imported decimal is passed as `sourceId` so the
+ * allocator reserves and preserves it.
+ *
+ * Fallback (no allocator installed, e.g. isolated unit tests): a stable FNV-1a
+ * hash of the UUID in a high decimal range. Collision-prone in theory, but only
+ * reached when the allocator is absent.
+ *
+ * @param {import('@translator').SCDecoderConfig} params
+ * @param {{ id?: unknown }} change
+ * @returns {string}
+ */
+function resolvePprChangeWordId(params, change) {
+  const idStr = String(change?.id ?? '');
+  const allocator =
+    /** @type {{ converter?: { wordIdAllocator?: { allocate: (o: object) => string | number } | null }, currentPartPath?: string }} */ (
+      params
+    )?.converter?.wordIdAllocator;
+  if (allocator) {
+    const partPath = /** @type {{ currentPartPath?: string }} */ (params)?.currentPartPath || 'word/document.xml';
+    // Imported ids are decimal → reserve/keep them; UUIDs mint a fresh unique id.
+    const sourceId = /^\d+$/.test(idStr) ? idStr : undefined;
+    return String(allocator.allocate({ partPath, sourceId, logicalId: idStr }));
+  }
+  return toDecimalWordId(change?.id);
+}
+
+/**
+ * FNV-1a → `1,000,000..1,000,999,999` (below 2^31). Fallback only; see
+ * resolvePprChangeWordId. Imported decimals are kept as-is.
+ *
+ * @param {unknown} id
+ * @returns {string}
+ */
+function toDecimalWordId(id) {
+  const str = String(id);
+  if (/^\d+$/.test(str)) return str;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return String(1_000_000 + ((hash >>> 0) % 1_000_000_000));
+}
+
 const pPrTranslator = NodeTranslator.from(
   createNestedPropertiesTranslator('w:pPr', 'paragraphProperties', basePropertyTranslators),
 );
@@ -54,6 +107,11 @@ export const translator = NodeTranslator.from({
     const decodedAttrs = this.decodeAttributes({
       node: { ...params.node, attrs: change },
     });
+    // Ensure `w:id` is a Word-safe, doc-unique decimal (change.id is a uuidv4
+    // for API-created pPrChanges); prefers the revision-id allocator.
+    if (decodedAttrs['w:id'] != null) {
+      decodedAttrs['w:id'] = resolvePprChangeWordId(params, change);
+    }
     const hasParagraphProperties = Object.prototype.hasOwnProperty.call(change, 'paragraphProperties');
     const paragraphProperties = hasParagraphProperties ? change.paragraphProperties : undefined;
 

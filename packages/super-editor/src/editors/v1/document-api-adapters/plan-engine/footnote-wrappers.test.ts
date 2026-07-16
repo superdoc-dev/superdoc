@@ -56,6 +56,7 @@ vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
       return { changed: true, changedPaths: [], degraded: false, result: undefined };
     },
   ),
+  closeUndoGroup: vi.fn(),
 }));
 
 // Mock compoundMutation to execute immediately
@@ -73,6 +74,8 @@ import {
   footnotesUpdateWrapper,
   footnotesRemoveWrapper,
   footnotesConfigureWrapper,
+  removeNoteEverywhere,
+  removeNoteReferenceAt,
 } from './footnote-wrappers.js';
 
 // ---------------------------------------------------------------------------
@@ -153,6 +156,7 @@ function makeEditor(
     state: {
       doc: makeDocWithFootnoteRefs(refs),
       tr,
+      selection: { head: 1, from: 1, to: 1 },
     },
     schema: {
       nodes: {
@@ -193,6 +197,12 @@ function getFootnoteElements(editor: Editor): Array<{ name: string; attributes: 
   return xml.elements[0].elements.filter((el) => el.name === 'w:footnote');
 }
 
+function getSessionManagedIds(editor: Editor, key: 'footnotes' | 'endnotes'): Set<string> {
+  const converter = (editor as unknown as { converter: { sessionManagedNoteIds?: Record<string, Set<string>> } })
+    .converter;
+  return converter.sessionManagedNoteIds?.[key] ?? new Set();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -215,6 +225,205 @@ describe('footnote-wrappers', () => {
     const noteElements = getFootnoteElements(editor);
     expect(noteElements).toHaveLength(1);
     expect(noteElements[0].attributes['w:id']).toBe('1');
+  });
+
+  it('removeNoteEverywhere deletes ALL references but keeps the OOXML element (tombstone, SD-3400)', () => {
+    // Two references to footnote id '2' (multi-ref note emptied in the area):
+    // both markers go, the w:footnote element stays so undo can restore the
+    // note text; export prunes session-registered unreferenced ids.
+    const editor = makeEditor([{ id: '2', text: 'Shared note' }], ['2', '2']);
+
+    const result = removeNoteEverywhere(editor, { noteId: '2', type: 'footnote' });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(2);
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+    expect(getSessionManagedIds(editor, 'footnotes').has('2')).toBe(true);
+  });
+
+  it('removeNoteEverywhere is type-aware: endnote id N never touches footnote id N (SD-3400)', () => {
+    const editor = makeEditor([{ id: '2', text: 'Footnote two' }], []);
+    // Document carries BOTH a footnote ref and an endnote ref with id '2'.
+    const mixedDoc = {
+      descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
+        cb({ type: { name: 'footnoteReference' }, attrs: { id: '2' } }, 1);
+        cb({ type: { name: 'endnoteReference' }, attrs: { id: '2' } }, 5);
+        return true;
+      },
+      nodeAt: vi.fn(() => ({ nodeSize: 1 })),
+    };
+    (editor.state as unknown as { doc: unknown }).doc = mixedDoc;
+    (editor.state.tr as unknown as { doc: unknown }).doc = mixedDoc;
+
+    const result = removeNoteEverywhere(editor, { noteId: '2', type: 'footnote' });
+
+    expect(result.success).toBe(true);
+    // Only the footnote reference (pos 1) is deleted; the endnote ref survives.
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(1);
+    expect(editor.state.tr.delete).toHaveBeenCalledWith(1, 2);
+    // Tombstone: element kept; registered under the FOOTNOTE registry only.
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+    expect(getSessionManagedIds(editor, 'footnotes').has('2')).toBe(true);
+    expect(getSessionManagedIds(editor, 'endnotes').has('2')).toBe(false);
+  });
+
+  it('removeNoteReferenceAt deletes the reference at the exact position, not the first id match (SD-3400)', () => {
+    // Two references to footnote id '2' at positions 1 and 2; the staged
+    // delete targets the SECOND one. The element survives because the first
+    // reference still exists.
+    const editor = makeEditor([{ id: '2', text: 'Shared note' }], ['2', '2'], { refsAfterDispatch: ['2'] });
+
+    const removed = removeNoteReferenceAt(editor, { pos: 2, noteId: '2', type: 'footnote' });
+
+    expect(removed).toBe(true);
+    expect(editor.state.tr.delete).toHaveBeenCalledTimes(1);
+    expect(editor.state.tr.delete).toHaveBeenCalledWith(2, 3);
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('removeNoteReferenceAt keeps the w:footnote element (tombstone) and registers the id (SD-3400)', () => {
+    // Undo support: the element stays in the part so Cmd+Z restores the note
+    // text; export prunes session-registered ids with no surviving reference.
+    const editor = makeEditor([{ id: '2', text: 'Note 2' }], ['2'], { refsAfterDispatch: [] });
+
+    const removed = removeNoteReferenceAt(editor, { pos: 1, noteId: '2', type: 'footnote' });
+
+    expect(removed).toBe(true);
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+    expect(getSessionManagedIds(editor, 'footnotes').has('2')).toBe(true);
+  });
+
+  it('removeNoteEverywhere is a NO_OP failure when no reference of that type exists', () => {
+    const editor = makeEditor([{ id: '3', text: 'Orphan' }], []);
+
+    const result = removeNoteEverywhere(editor, { noteId: '3', type: 'footnote' });
+
+    expect(result.success).toBe(false);
+    expect(editor.state.tr.delete).not.toHaveBeenCalled();
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('rejects insertion from a story editor (footnote inside a note is non-conformant, SD-3400)', () => {
+    // §17.11.14: a footnoteReference inside a footnote/endnote makes the
+    // document non-conformant. Story editors carry options.parentEditor.
+    const editor = makeEditor([], []);
+    (editor as unknown as { options: Record<string, unknown> }).options = { parentEditor: makeEditor([], []) };
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('INVALID_TARGET');
+    }
+    // Nothing was inserted anywhere.
+    expect(editor.state.tr.insert).not.toHaveBeenCalled();
+    expect(getFootnoteElements(editor)).toHaveLength(0);
+  });
+
+  it('inserts at the current selection head when at is omitted (SD-3400 toolbar path)', () => {
+    const editor = makeEditor([], []);
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(true);
+    // The reference node lands at the selection head, no TextTarget required.
+    expect(editor.state.tr.insert).toHaveBeenCalledWith(1, expect.anything());
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('rejects target-less insert while the host editor has an active non-body story (SD-3400)', () => {
+    // The default-cursor path would drop the marker into the BODY at its stale
+    // selection head while the user is editing a header/footnote elsewhere.
+    // Mirrors canInsertNoteAtCursor() for the host-editor path.
+    const editor = makeEditor([], []);
+    (editor as unknown as { presentationEditor: unknown }).presentationEditor = {
+      getActiveStoryLocator: () => ({ kind: 'story', storyType: 'headerFooterPart', refId: 'rId1' }),
+    };
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('INVALID_TARGET');
+    }
+    expect(editor.state.tr.insert).not.toHaveBeenCalled();
+    expect(getFootnoteElements(editor)).toHaveLength(0);
+  });
+
+  it('allows target-less insert when no non-body story is active (locator null, SD-3400)', () => {
+    const editor = makeEditor([], []);
+    (editor as unknown as { presentationEditor: unknown }).presentationEditor = {
+      getActiveStoryLocator: () => null,
+    };
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: '' });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.tr.insert).toHaveBeenCalledWith(1, expect.anything());
+  });
+
+  it('preserves explicit-at insert even when a non-body story is active (SD-3400 AC3)', () => {
+    // An explicit `at` is a caller-chosen body position, so the active-story
+    // guard does not apply — explicit-target semantics are unchanged.
+    const editor = makeEditor([], []);
+    (editor as unknown as { presentationEditor: unknown }).presentationEditor = {
+      getActiveStoryLocator: () => ({ kind: 'story', storyType: 'footnote', noteId: '1' }),
+    };
+
+    const result = footnotesInsertWrapper(editor, {
+      at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      type: 'footnote',
+      content: 'Explicit target',
+    });
+
+    expect(result.success).toBe(true);
+    // resolveInlineInsertPosition is mocked to return { from: 5, to: 5 }.
+    expect(editor.state.tr.insert).toHaveBeenCalledWith(5, expect.anything());
+    expect(getFootnoteElements(editor)).toHaveLength(1);
+  });
+
+  it('stamps w:pStyle FootnoteText on generated note paragraphs (Word fidelity, SD-3400)', () => {
+    // Word always styles footnote body paragraphs with FootnoteText; without
+    // it, exported new footnotes render at Normal/11pt in Word.
+    const editor = makeEditor([], []);
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'Styled note' });
+
+    const note = getFootnoteElements(editor)[0] as unknown as {
+      elements: Array<{ name: string; elements?: Array<{ name: string; attributes?: Record<string, string> }> }>;
+    };
+    const paragraph = note.elements.find((el) => el.name === 'w:p');
+    const pPr = paragraph?.elements?.find((el) => el.name === 'w:pPr');
+    const pStyle = (pPr as { elements?: Array<{ name: string; attributes?: Record<string, string> }> })?.elements?.find(
+      (el) => el.name === 'w:pStyle',
+    );
+    expect(pStyle?.attributes?.['w:val']).toBe('FootnoteText');
+  });
+
+  it('bootstrap writes the special-footnote list to settings.xml (17.11.9, SD-3400)', () => {
+    const editor = makeEditor([], [], { omitFootnotesPart: true });
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'First footnote' });
+
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter;
+    const settingsRoot = (converter.convertedXml['word/settings.xml'] as XmlDoc).elements[0];
+    const pr = settingsRoot.elements.find((el) => el.name === 'w:footnotePr') as unknown as {
+      elements: Array<{ name: string; attributes: Record<string, string> }>;
+    };
+    const ids = pr.elements.filter((el) => el.name === 'w:footnote').map((el) => el.attributes['w:id']);
+    expect(ids).toEqual(['-1', '0']);
+  });
+
+  it('bootstrap leaves settings.xml untouched when the notes part already exists', () => {
+    // Imported documents own their settings; the special list is only seeded
+    // alongside a freshly bootstrapped notes part.
+    const editor = makeEditor([{ id: '1', text: 'Existing' }], ['1']);
+
+    footnotesInsertWrapper(editor, { type: 'footnote', content: 'Second' });
+
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter;
+    const settingsRoot = (converter.convertedXml['word/settings.xml'] as XmlDoc).elements[0];
+    expect(settingsRoot.elements.find((el) => el.name === 'w:footnotePr')).toBeUndefined();
   });
 
   it('allocates a note id that avoids all existing ids', () => {
@@ -252,7 +461,38 @@ describe('footnote-wrappers', () => {
     expect(update.success).toBe(true);
   });
 
-  it('removes the footnote via compoundMutation and cleans OOXML part', () => {
+  it('returns CAPABILITY_UNAVAILABLE for structured insert bodies on v1-backed sessions', () => {
+    const editor = makeEditor([], []);
+
+    const result = footnotesInsertWrapper(editor, {
+      at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      type: 'footnote',
+      body: { kind: 'paragraph', paragraph: { inlines: [] } } as any,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+    }
+  });
+
+  it('returns CAPABILITY_UNAVAILABLE for structured update bodies on v1-backed sessions', () => {
+    const editor = makeEditor([{ id: '3', text: 'Line A' }], ['3']);
+
+    const result = footnotesUpdateWrapper(editor, {
+      target: { kind: 'entity', entityType: 'footnote', noteId: '3' },
+      patch: {
+        body: { kind: 'paragraph', paragraph: { inlines: [] } } as any,
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+    }
+  });
+
+  it('footnotes.remove keeps the OOXML element and registers the id (undo-consistent API delete)', () => {
     const editor = makeEditor(
       [
         { id: '2', text: 'Note 2' },
@@ -268,10 +508,11 @@ describe('footnote-wrappers', () => {
 
     expect(result.success).toBe(true);
 
-    // The OOXML part should have note '2' removed
+    // Tombstone: both elements stay in the part; '2' is registered so export
+    // prunes it while it has no surviving reference.
     const noteElements = getFootnoteElements(editor);
-    expect(noteElements).toHaveLength(1);
-    expect(noteElements[0].attributes['w:id']).toBe('5');
+    expect(noteElements).toHaveLength(2);
+    expect(getSessionManagedIds(editor, 'footnotes').has('2')).toBe(true);
   });
 
   it('keeps OOXML note element when other references to the same note still exist', () => {
@@ -283,10 +524,44 @@ describe('footnote-wrappers', () => {
 
     expect(result.success).toBe(true);
 
-    // Note should still be in the OOXML part since another reference exists
+    // Note stays in the OOXML part since another reference exists. The id is
+    // still registered (always-add): a later delete of the surviving marker
+    // gets pruned at export by the reference scan.
     const noteElements = getFootnoteElements(editor);
     expect(noteElements).toHaveLength(1);
     expect(noteElements[0].attributes['w:id']).toBe('2');
+    expect(getSessionManagedIds(editor, 'footnotes').has('2')).toBe(true);
+  });
+
+  it('footnotesInsertWrapper registers the allocated id as session-managed (insert-then-undo prunes at export)', () => {
+    const editor = makeEditor([{ id: '1', text: 'Existing' }], ['1']);
+
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: 'New note' });
+
+    expect(result.success).toBe(true);
+    const allocated = (result as { footnote?: { noteId?: string } }).footnote?.noteId;
+    expect(allocated).toBeTruthy();
+    expect(getSessionManagedIds(editor, 'footnotes').has(String(allocated))).toBe(true);
+  });
+
+  it('a tombstoned id stays reserved: insert after staged delete allocates the next free id', () => {
+    // Staged-delete note '2' (element retained as tombstone), then insert:
+    // allocateNextNoteId scans the OOXML part, so '2' is not reused and an
+    // undo restoring marker '2' can never collide with the new note.
+    const editor = makeEditor(
+      [
+        { id: '1', text: 'One' },
+        { id: '2', text: 'Two' },
+      ],
+      ['1', '2'],
+      { refsAfterDispatch: ['1'] },
+    );
+
+    removeNoteReferenceAt(editor, { pos: 2, noteId: '2', type: 'footnote' });
+    const result = footnotesInsertWrapper(editor, { type: 'footnote', content: 'Fresh' });
+
+    expect(result.success).toBe(true);
+    expect((result as { footnote?: { noteId?: string } }).footnote?.noteId).toBe('3');
   });
 
   it('bootstraps a missing notes part and assigns unique ids (-1, 0, 1)', () => {

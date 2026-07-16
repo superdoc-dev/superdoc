@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "pnpm --silent --dir ../.. corpus:pull && rm -rf results",
+    "pretest": "pnpm --silent --dir ../visual docs:download && rm -rf results",
     "test": "pnpm --silent --prefix ../../packages/sdk run generate && pnpm --silent --prefix ../../packages/superdoc run build:es && pnpm --silent --prefix ../../apps/cli run build && pnpm --silent --prefix ../../packages/sdk/langs/node run build && vitest run --config ./vitest.config.ts"
   },
   "dependencies": {

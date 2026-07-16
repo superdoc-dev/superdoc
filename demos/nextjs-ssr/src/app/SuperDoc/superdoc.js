@@ -19,6 +19,8 @@ export default function SuperDocEditor() {
     const { SuperDoc } = await import('superdoc');
     const config = {
       selector: superdocContainerRef.current,
+      // Self-hosted bundled fallback fonts (copied to public/fonts/ by copy-fonts.mjs).
+      fonts: { assetBaseUrl: '/fonts/' },
       modules: { 
         toolbar: { 
           selector: '#toolbar', 
@@ -49,14 +51,14 @@ export default function SuperDocEditor() {
   }, []);
 
   const handleChange = (event) => {
-    const file = event.target.files[0];
-    initSuperDoc(file);
+    const file = event.target.files?.[0];
+    if (file) initSuperDoc(file);
   }
 
   const handleExport = useCallback(async () => {
     console.debug('Exporting document', superdoc.current);
-    superdoc.current.export();
-  });
+    superdoc.current?.export();
+  }, []);
 
   return (
     <div className="example-container">

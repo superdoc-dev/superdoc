@@ -2,9 +2,12 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { getAttributesDiff, getMarksDiff, type AttributesDiff, type MarksDiff } from './attributes-diffing';
 import { normalizeInlineNodeJSON, normalizeInlineNodeAttrs, semanticInlineNodeKey } from './semantic-normalization';
 import { diffSequences } from './sequence-diffing';
+import { VOLATILE_RUN_ATTR_KEYS } from './identity-attrs';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 type MarkJSON = { type: string; attrs?: Record<string, unknown> };
+const TRACK_CHANGE_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
+const SAFE_SPAN_IGNORED_INLINE_RUN_ATTR_KEYS = [...VOLATILE_RUN_ATTR_KEYS, 'runPropertiesInlineKeys', 'fontFamily'];
 
 /**
  * Supported diff operations for inline changes.
@@ -12,14 +15,17 @@ type MarkJSON = { type: string; attrs?: Record<string, unknown> };
 type InlineAction = 'added' | 'deleted' | 'modified';
 
 /**
- * Serialized representation of a single text character plus its run attributes.
+ * Serialized representation of a text segment plus its run attributes.
  */
 export type InlineTextToken = {
   kind: 'text';
-  char: string;
+  text: string;
+  length: number;
   runAttrs: Record<string, unknown>;
   marks: MarkJSON[];
   offset?: number | null;
+  // Inclusive PM position of the last source char in this token.
+  endOffset?: number | null;
 };
 
 /**
@@ -39,6 +45,19 @@ export type InlineNodeToken = {
  */
 export type InlineDiffToken = InlineTextToken | InlineNodeToken;
 
+export interface InlineTokenSegment {
+  tokens: InlineDiffToken[];
+  isTextOnly: boolean;
+  isIndividuallySafe: boolean;
+  sourceStartTokenIdx: number;
+}
+
+export interface InlineDiffPlanEntry {
+  oldSegment: InlineTokenSegment;
+  newSegment: InlineTokenSegment;
+  useWordLevel: boolean;
+}
+
 /**
  * Narrow an inline token to an inline-node token.
  *
@@ -47,6 +66,27 @@ export type InlineDiffToken = InlineTextToken | InlineNodeToken;
  */
 function isInlineNodeToken(token: InlineDiffToken): token is InlineNodeToken {
   return token.kind === 'inlineNode';
+}
+
+/**
+ * Determines whether a text-only span is eligible for word-level tokenization.
+ *
+ * The span must be semantically plain text on both sides: no inline anchors,
+ * no tracked/comment markers, no field-like run metadata, and no formatting
+ * drift between the old/new token sequences.
+ */
+export function isSafeSpan(oldTokens: InlineDiffToken[], newTokens: InlineDiffToken[]): boolean {
+  const spanTokens = [...oldTokens, ...newTokens];
+  if (spanTokens.some((token) => token.kind !== 'text')) {
+    return false;
+  }
+
+  const textTokens = spanTokens as InlineTextToken[];
+  if (textTokens.some((token) => hasUnsafeMarks(token.marks ?? []) || hasFieldLikeRunAttrs(token.runAttrs))) {
+    return false;
+  }
+
+  return hasUniformTextFormatting(textTokens);
 }
 
 /**
@@ -162,15 +202,19 @@ export function tokenizeInlineContent(pmNode: PMNode, baseOffset = 0): InlineDif
       }
 
       if (nodeText) {
+        // pos is the text node's first-character offset; pos-1 is the run's opening token,
+        // so nodeAt(pos-1) returns the parent run node and its OOXML attrs.
         const runNode = pos > 0 ? pmNode.nodeAt(pos - 1) : null;
         const runAttrs = runNode?.attrs ?? {};
         const tokenOffset = baseOffset + pos;
         for (let i = 0; i < nodeText.length; i += 1) {
           content.push({
             kind: 'text',
-            char: nodeText[i] ?? '',
+            text: nodeText[i] ?? '',
+            length: 1,
             runAttrs,
             offset: tokenOffset + i,
+            endOffset: tokenOffset + i,
             marks: node.marks?.map((mark) => mark.toJSON()) ?? [],
           });
         }
@@ -185,11 +229,69 @@ export function tokenizeInlineContent(pmNode: PMNode, baseOffset = 0): InlineDif
           nodeJSON: node.toJSON(),
           pos: baseOffset + pos,
         });
+        if (node.type.name === 'structuredContent') {
+          // Treat structuredContent as an atomic unit: emitting the parent as
+          // inlineNode and also descending into descendants produces both an
+          // inlineNode token and text tokens for the same content region, causing
+          // double-application during replay (boundary leak + duplicate edits).
+          return false;
+        }
       }
     },
     0,
   );
   return content;
+}
+
+/**
+ * Re-groups character-level text tokens into word-boundary tokens.
+ *
+ * Safe spans are guaranteed to be text-only and formatting-uniform, so we can
+ * preserve the first token's attrs/marks while coalescing adjacent characters
+ * that belong to the same lexical class.
+ */
+function reTokenizeAsWords(tokens: InlineDiffToken[]): InlineDiffToken[] {
+  const wordTokens: InlineDiffToken[] = [];
+  let currentGroup: InlineTextToken | null = null;
+  let currentCategory: 'word' | 'whitespace' | 'punctuation' | null = null;
+
+  const pushCurrentGroup = () => {
+    if (currentGroup) {
+      wordTokens.push(currentGroup);
+      currentGroup = null;
+      currentCategory = null;
+    }
+  };
+
+  for (const token of tokens) {
+    if (token.kind !== 'text') {
+      pushCurrentGroup();
+      wordTokens.push(token);
+      continue;
+    }
+
+    const tokenCategory = classifyTextToken(token.text);
+    if (
+      !currentGroup ||
+      currentCategory !== tokenCategory ||
+      !areInlineAttrsEqual(currentGroup.runAttrs, token.runAttrs) ||
+      !areInlineMarksEqual(currentGroup.marks, token.marks)
+    ) {
+      pushCurrentGroup();
+      currentGroup = { ...token };
+      currentCategory = tokenCategory;
+      continue;
+    }
+
+    currentGroup.text += token.text;
+    currentGroup.length += token.length;
+    // Preserve the right edge of the last source token so replay can span
+    // multi-run words without reconstructing positions from string length.
+    currentGroup.endOffset = token.endOffset ?? token.offset ?? currentGroup.endOffset ?? null;
+  }
+
+  pushCurrentGroup();
+  return wordTokens;
 }
 
 /**
@@ -205,70 +307,178 @@ export function getInlineDiff(
   newContent: InlineDiffToken[],
   oldParagraphEndPos: number,
 ): InlineDiffResult[] {
-  const buildInlineDiff = (
-    action: Exclude<InlineAction, 'modified'>,
-    token: InlineDiffToken,
-    oldIdx: number,
-  ): RawDiff => {
-    if (token.kind !== 'text') {
-      return {
-        action,
-        idx: oldIdx,
-        kind: 'inlineNode',
-        nodeJSON: token.nodeJSON ?? token.node.toJSON(),
-        nodeType: token.nodeType,
-      };
+  const oldSegments = segmentInlineTokens(oldContent);
+  const newSegments = segmentInlineTokens(newContent);
+  const segmentPlan = buildInlineDiffPlan(oldSegments, newSegments);
+
+  if (!segmentPlan) {
+    const shouldUseWordTokens = isSafeSpan(oldContent, newContent);
+    const diffOldContent = shouldUseWordTokens ? reTokenizeAsWords(oldContent) : oldContent;
+    const diffNewContent = shouldUseWordTokens ? reTokenizeAsWords(newContent) : newContent;
+    return groupDiffs(buildRawDiffs(diffOldContent, diffNewContent), diffOldContent, oldParagraphEndPos);
+  }
+
+  const mergedOldTokens: InlineDiffToken[] = [];
+  const allDiffs: RawDiff[] = [];
+
+  for (const planEntry of segmentPlan) {
+    const diffOldTokens = planEntry.useWordLevel
+      ? reTokenizeAsWords(planEntry.oldSegment.tokens)
+      : planEntry.oldSegment.tokens;
+    const diffNewTokens = planEntry.useWordLevel
+      ? reTokenizeAsWords(planEntry.newSegment.tokens)
+      : planEntry.newSegment.tokens;
+    const idxOffset = mergedOldTokens.length;
+
+    mergedOldTokens.push(...diffOldTokens);
+    allDiffs.push(...buildRawDiffs(diffOldTokens, diffNewTokens, idxOffset));
+  }
+
+  return groupDiffs(allDiffs, mergedOldTokens, oldParagraphEndPos);
+}
+
+export function segmentInlineTokens(tokens: InlineDiffToken[]): InlineTokenSegment[] {
+  const segments: InlineTokenSegment[] = [];
+  let currentSegment: InlineTokenSegment | null = null;
+
+  const pushCurrentSegment = () => {
+    if (currentSegment) {
+      segments.push(currentSegment);
+      currentSegment = null;
     }
+  };
+
+  tokens.forEach((token, index) => {
+    const tokenIsText = token.kind === 'text';
+    const tokenIsIndividuallySafe = tokenIsText ? isIndividuallySafeTextToken(token) : false;
+    const previousToken = currentSegment?.tokens[currentSegment.tokens.length - 1];
+    const shouldStartNewSegment =
+      !currentSegment ||
+      !previousToken ||
+      !tokenIsText ||
+      previousToken.kind !== 'text' ||
+      !currentSegment.isTextOnly ||
+      currentSegment.isIndividuallySafe !== tokenIsIndividuallySafe ||
+      !areInlineAttrsEqual(previousToken.runAttrs, token.runAttrs) ||
+      !areInlineMarksEqual(previousToken.marks, token.marks);
+
+    if (shouldStartNewSegment) {
+      pushCurrentSegment();
+      currentSegment = {
+        tokens: [token],
+        isTextOnly: tokenIsText,
+        isIndividuallySafe: tokenIsIndividuallySafe,
+        sourceStartTokenIdx: index,
+      };
+      return;
+    }
+
+    currentSegment.tokens.push(token);
+  });
+
+  pushCurrentSegment();
+  return segments;
+}
+
+export function buildInlineDiffPlan(
+  oldSegments: InlineTokenSegment[],
+  newSegments: InlineTokenSegment[],
+): InlineDiffPlanEntry[] | null {
+  if (oldSegments.length !== newSegments.length) {
+    return null;
+  }
+
+  return oldSegments.map((oldSegment, index) => {
+    const newSegment = newSegments[index]!;
+    return {
+      oldSegment,
+      newSegment,
+      useWordLevel:
+        oldSegment.isTextOnly &&
+        newSegment.isTextOnly &&
+        oldSegment.isIndividuallySafe &&
+        newSegment.isIndividuallySafe &&
+        isSafeSpan(oldSegment.tokens, newSegment.tokens),
+    };
+  });
+}
+
+function buildRawDiffs(oldContent: InlineDiffToken[], newContent: InlineDiffToken[], idxOffset = 0): RawDiff[] {
+  return diffSequences<InlineDiffToken, RawDiff, RawDiff, RawDiff>(oldContent, newContent, {
+    comparator: inlineComparator,
+    shouldProcessEqualAsModification,
+    canTreatAsModification: (oldToken, newToken) => {
+      if (isInlineNodeToken(oldToken) && isInlineNodeToken(newToken)) {
+        return oldToken.node.type.name === newToken.node.type.name;
+      }
+
+      if (oldToken.kind === 'text' && newToken.kind === 'text') {
+        return (
+          areInlineAttrsEqual(oldToken.runAttrs, newToken.runAttrs) &&
+          areInlineMarksEqual(oldToken.marks, newToken.marks)
+        );
+      }
+
+      return false;
+    },
+    buildAdded: (token, oldIdx) => buildInlineDiff('added', token, oldIdx + idxOffset),
+    buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx + idxOffset),
+    buildModified: (oldToken, newToken, oldIdx) => buildInlineModified(oldToken, newToken, oldIdx + idxOffset),
+  });
+}
+
+function buildInlineDiff(action: Exclude<InlineAction, 'modified'>, token: InlineDiffToken, oldIdx: number): RawDiff {
+  if (token.kind !== 'text') {
     return {
       action,
       idx: oldIdx,
-      kind: 'text',
-      text: token.char,
-      runAttrs: token.runAttrs,
-      marks: token.marks,
+      kind: 'inlineNode',
+      nodeJSON: token.nodeJSON ?? token.node.toJSON(),
+      nodeType: token.nodeType,
     };
+  }
+
+  return {
+    action,
+    idx: oldIdx,
+    kind: 'text',
+    text: token.text,
+    runAttrs: token.runAttrs,
+    marks: token.marks,
   };
+}
 
-  const diffs = diffSequences<InlineDiffToken, RawDiff, RawDiff, RawDiff>(oldContent, newContent, {
-    comparator: inlineComparator,
-    shouldProcessEqualAsModification,
-    canTreatAsModification: (oldToken, newToken) =>
-      isInlineNodeToken(oldToken) && isInlineNodeToken(newToken) && oldToken.node.type.name === newToken.node.type.name,
-    buildAdded: (token, oldIdx) => buildInlineDiff('added', token, oldIdx),
-    buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
-    buildModified: (oldToken, newToken, oldIdx) => {
-      if (oldToken.kind !== 'text' && newToken.kind !== 'text') {
-        const oldNormalized = normalizeInlineNodeAttrs(oldToken.node.type.name, oldToken.node.attrs);
-        const newNormalized = normalizeInlineNodeAttrs(newToken.node.type.name, newToken.node.attrs);
-        const attrsDiff = getAttributesDiff(oldNormalized, newNormalized);
-        return {
-          action: 'modified',
-          idx: oldIdx,
-          kind: 'inlineNode',
-          oldNodeJSON: oldToken.node.toJSON(),
-          newNodeJSON: newToken.node.toJSON(),
-          nodeType: oldToken.nodeType,
-          attrsDiff,
-        };
-      }
-      if (oldToken.kind === 'text' && newToken.kind === 'text') {
-        return {
-          action: 'modified',
-          idx: oldIdx,
-          kind: 'text',
-          newText: newToken.char,
-          oldText: oldToken.char,
-          oldAttrs: oldToken.runAttrs,
-          newAttrs: newToken.runAttrs,
-          oldMarks: oldToken.marks,
-          newMarks: newToken.marks,
-        };
-      }
-      return null;
-    },
-  });
+function buildInlineModified(oldToken: InlineDiffToken, newToken: InlineDiffToken, oldIdx: number): RawDiff | null {
+  if (oldToken.kind !== 'text' && newToken.kind !== 'text') {
+    const oldNormalized = normalizeInlineNodeAttrs(oldToken.node.type.name, oldToken.node.attrs);
+    const newNormalized = normalizeInlineNodeAttrs(newToken.node.type.name, newToken.node.attrs);
+    const attrsDiff = getAttributesDiff(oldNormalized, newNormalized);
+    return {
+      action: 'modified',
+      idx: oldIdx,
+      kind: 'inlineNode',
+      oldNodeJSON: oldToken.node.toJSON(),
+      newNodeJSON: newToken.node.toJSON(),
+      nodeType: oldToken.nodeType,
+      attrsDiff,
+    };
+  }
 
-  return groupDiffs(diffs, oldContent, oldParagraphEndPos);
+  if (oldToken.kind === 'text' && newToken.kind === 'text') {
+    return {
+      action: 'modified',
+      idx: oldIdx,
+      kind: 'text',
+      newText: newToken.text,
+      oldText: oldToken.text,
+      oldAttrs: oldToken.runAttrs,
+      newAttrs: newToken.runAttrs,
+      oldMarks: oldToken.marks,
+      newMarks: newToken.marks,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -282,7 +492,7 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
   }
 
   if (a.kind === 'text' && b.kind === 'text') {
-    return a.char === b.char;
+    return a.text === b.text;
   }
   if (a.kind === 'inlineNode' && b.kind === 'inlineNode') {
     return semanticInlineNodeKey(a.node) === semanticInlineNodeKey(b.node);
@@ -291,12 +501,82 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
 }
 
 /**
+ * Returns true when any mark in the token belongs to tracked changes or
+ * comment-anchored review metadata.
+ */
+function hasUnsafeMarks(marks: MarkJSON[] = []): boolean {
+  return marks.some(
+    (mark) => TRACK_CHANGE_MARK_NAMES.has(mark.type) || mark.type === 'commentMark' || mark.type === 'comment',
+  );
+}
+
+function isIndividuallySafeTextToken(token: InlineTextToken): boolean {
+  return !hasUnsafeMarks(token.marks ?? []) && !hasFieldLikeRunAttrs(token.runAttrs);
+}
+
+/**
+ * Conservatively detects field-like run metadata that should stay on the
+ * character-level diff path.
+ */
+function hasFieldLikeRunAttrs(runAttrs: Record<string, unknown>): boolean {
+  return objectContainsString(runAttrs, 'PAGEREF');
+}
+
+/**
+ * Ensures every text token in the span shares the same marks and run attrs,
+ * which implies there is no formatting drift between the old/new sides.
+ */
+function hasUniformTextFormatting(tokens: InlineTextToken[]): boolean {
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const [{ marks: referenceMarks, runAttrs: referenceRunAttrs }] = tokens;
+  return tokens.every((token) => {
+    return !getMarksDiff(referenceMarks, token.marks) && !getSafeSpanInlineAttrsDiff(referenceRunAttrs, token.runAttrs);
+  });
+}
+
+/**
+ * Recursively searches for a substring inside an arbitrary attribute payload.
+ */
+function objectContainsString(value: unknown, needle: string): boolean {
+  if (typeof value === 'string') {
+    return value.toUpperCase().includes(needle);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => objectContainsString(item, needle));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) => objectContainsString(item, needle));
+  }
+
+  return false;
+}
+
+/**
+ * Buckets text into word / whitespace / punctuation classes for word-level
+ * diff tokenization.
+ */
+function classifyTextToken(text: string): 'word' | 'whitespace' | 'punctuation' {
+  if (/^\s+$/u.test(text)) {
+    return 'whitespace';
+  }
+  if (/^\w+$/u.test(text)) {
+    return 'word';
+  }
+  return 'punctuation';
+}
+
+/**
  * Determines whether equal tokens should still be treated as modifications, either because run attributes changed or the node payload differs.
  */
 function shouldProcessEqualAsModification(oldToken: InlineDiffToken, newToken: InlineDiffToken): boolean {
   if (oldToken.kind === 'text' && newToken.kind === 'text') {
     return (
-      Boolean(getAttributesDiff(oldToken.runAttrs, newToken.runAttrs)) ||
+      Boolean(getInlineAttrsDiff(oldToken.runAttrs, newToken.runAttrs)) ||
       oldToken.marks?.length !== newToken.marks?.length ||
       Boolean(getMarksDiff(oldToken.marks, newToken.marks))
     );
@@ -407,6 +687,40 @@ function groupDiffs(diffs: RawDiff[], oldTokens: InlineDiffToken[], oldParagraph
   return grouped;
 }
 
+function canBridgeSingleSpaceGap(
+  currentGroup: TextDiffGroup,
+  diff: RawTextDiff,
+  oldTokens: InlineDiffToken[],
+  oldParagraphEndPos: number,
+): boolean {
+  if (currentGroup.action !== 'modified' || diff.action !== 'modified') {
+    return false;
+  }
+
+  if (
+    !areInlineAttrsEqual(currentGroup.oldAttrs, diff.oldAttrs) ||
+    !areInlineAttrsEqual(currentGroup.newAttrs, diff.newAttrs)
+  ) {
+    return false;
+  }
+  if (
+    !areInlineMarksEqual(currentGroup.oldMarks, diff.oldMarks) ||
+    !areInlineMarksEqual(currentGroup.newMarks, diff.newMarks)
+  ) {
+    return false;
+  }
+
+  const diffPos = resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos);
+  if (diffPos == null || currentGroup.endPos == null) {
+    return false;
+  }
+  if (diffPos !== currentGroup.endPos + 2) {
+    return false;
+  }
+
+  return resolveDocumentTextSlice(oldTokens, currentGroup.endPos + 1, diffPos - 1) === ' ';
+}
+
 /**
  * Builds a fresh text diff group seeded with the current diff token.
  */
@@ -417,7 +731,7 @@ function createTextGroup(diff: RawTextDiff, oldTokens: InlineDiffToken[], oldPar
           action: diff.action,
           kind: 'text' as const,
           startPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
-          endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
+          endPos: resolveTextGroupEndPosition(diff, oldTokens, oldParagraphEndPos),
           newText: diff.newText,
           oldText: diff.oldText,
           oldAttrs: diff.oldAttrs,
@@ -429,7 +743,10 @@ function createTextGroup(diff: RawTextDiff, oldTokens: InlineDiffToken[], oldPar
           action: diff.action,
           kind: 'text' as const,
           startPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
-          endPos: resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos),
+          endPos:
+            diff.action === 'added'
+              ? resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos)
+              : resolveTextGroupEndPosition(diff, oldTokens, oldParagraphEndPos),
           text: diff.text,
           runAttrs: diff.runAttrs,
           marks: diff.marks,
@@ -448,8 +765,16 @@ function extendTextGroup(
   oldTokens: InlineDiffToken[],
   oldParagraphEndPos: number,
 ): void {
-  group.endPos = resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos);
+  const shouldBridgeSingleSpace = canBridgeSingleSpaceGap(group, diff, oldTokens, oldParagraphEndPos);
+  group.endPos =
+    group.action === 'added'
+      ? resolveTokenPosition(oldTokens, diff.idx, oldParagraphEndPos)
+      : resolveTextGroupEndPosition(diff, oldTokens, oldParagraphEndPos);
   if (group.action === 'modified' && diff.action === 'modified') {
+    if (shouldBridgeSingleSpace) {
+      group.newText += ' ';
+      group.oldText += ' ';
+    }
     group.newText += diff.newText;
     group.oldText += diff.oldText;
   } else if (group.action !== 'modified' && diff.action !== 'modified') {
@@ -496,7 +821,18 @@ function canExtendGroup(
   if (diffPos == null || group.endPos == null) {
     return false;
   }
-  return group.endPos + 1 === diffPos;
+  return group.endPos + 1 === diffPos || canBridgeSingleSpaceGap(group, diff, oldTokens, oldParagraphEndPos);
+}
+
+/**
+ * Returns the inclusive end position in the old document for a text diff.
+ */
+function resolveTextGroupEndPosition(
+  diff: RawTextDiff,
+  oldTokens: InlineDiffToken[],
+  oldParagraphEndPos: number,
+): number | null {
+  return resolveTokenEndPosition(oldTokens, diff.idx, oldParagraphEndPos);
 }
 
 /**
@@ -525,6 +861,67 @@ function resolveTokenPosition(tokens: InlineDiffToken[], idx: number, paragraphE
 }
 
 /**
+ * Maps a raw diff index back to the inclusive end position for the
+ * corresponding token span in the old document.
+ *
+ * Text tokens can span multiple runs after word re-tokenization, so the end
+ * position must come from the last source token offset rather than
+ * `offset + text.length - 1`.
+ *
+ * @param tokens Flattened tokens from the old paragraph.
+ * @param idx Index provided by the Myers diff output.
+ * @param paragraphEndPos Absolute document position marking the paragraph boundary.
+ * @returns Inclusive end position or null when the index is outside the known ranges.
+ */
+function resolveTokenEndPosition(tokens: InlineDiffToken[], idx: number, paragraphEndPos: number): number | null {
+  if (idx < 0) {
+    return null;
+  }
+  const token = tokens[idx];
+  if (token) {
+    if (token.kind === 'text') {
+      if (token.endOffset != null) {
+        return token.endOffset;
+      }
+      if (token.offset == null) {
+        return null;
+      }
+      return token.offset + token.length - 1;
+    }
+    return token.pos ?? null;
+  }
+  if (idx === tokens.length) {
+    return paragraphEndPos;
+  }
+  return null;
+}
+
+function resolveDocumentTextSlice(tokens: InlineDiffToken[], startPos: number, endPos: number): string {
+  if (endPos < startPos) {
+    return '';
+  }
+
+  let text = '';
+  for (const token of tokens) {
+    if (token.kind !== 'text' || token.offset == null) {
+      continue;
+    }
+
+    const tokenStart = token.offset;
+    const tokenEnd = token.endOffset ?? token.offset + token.length - 1;
+    if (tokenEnd < startPos || tokenStart > endPos) {
+      continue;
+    }
+
+    const sliceStart = Math.max(startPos - tokenStart, 0);
+    const sliceEnd = Math.min(endPos - tokenStart + 1, token.text.length);
+    text += token.text.slice(sliceStart, sliceEnd);
+  }
+
+  return text;
+}
+
+/**
  * Compares two sets of inline attributes and determines if they are equal.
  *
  * @param a - The first set of attributes to compare.
@@ -532,7 +929,31 @@ function resolveTokenPosition(tokens: InlineDiffToken[], idx: number, paragraphE
  * @returns `true` if the attributes are equal, `false` otherwise.
  */
 function areInlineAttrsEqual(a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined): boolean {
-  return !getAttributesDiff(a ?? {}, b ?? {});
+  return !getInlineAttrsDiff(a ?? {}, b ?? {});
+}
+
+/**
+ * Computes attribute diffs for inline text semantics while ignoring volatile
+ * OOXML revision metadata that should not affect granularity decisions.
+ */
+function getInlineAttrsDiff(
+  a: Record<string, unknown> | undefined,
+  b: Record<string, unknown> | undefined,
+): AttributesDiff | null {
+  return getAttributesDiff(a ?? {}, b ?? {}, VOLATILE_RUN_ATTR_KEYS);
+}
+
+/**
+ * Computes the attr diff used only for granularity eligibility checks.
+ * This intentionally ignores importer/bookkeeping churn such as
+ * `runPropertiesInlineKeys` and OOXML font-family payload differences that do
+ * not necessarily correspond to a visible text-style change.
+ */
+function getSafeSpanInlineAttrsDiff(
+  a: Record<string, unknown> | undefined,
+  b: Record<string, unknown> | undefined,
+): AttributesDiff | null {
+  return getAttributesDiff(a ?? {}, b ?? {}, SAFE_SPAN_IGNORED_INLINE_RUN_ATTR_KEYS);
 }
 
 /**

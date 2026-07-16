@@ -108,6 +108,7 @@ describe('filterOutRootInlineNodes', () => {
       n('table'),
       n('pageNumber'),
       n('totalPageCount'),
+      n('section-page-count'),
       n('runItem'),
       n('image'),
       n('tab'),

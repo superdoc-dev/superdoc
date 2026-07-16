@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint"
   },
   "dependencies": {
     "superdoc": "latest",
@@ -40,7 +40,7 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "autoprefixer": "^10.4.20",
-    "axios": "^1.9.0",
+    "axios": "1.18.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
@@ -48,12 +48,11 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.511.0",
-    "next": "15.2.4",
+    "next": "16.2.9",
     "next-themes": "^0.4.4",
     "pdfjs-dist": "latest",
-    "react": "18.2.0",
-    "react-day-picker": "8.10.1",
-    "react-dom": "18.2.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-hook-form": "^7.54.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
@@ -67,8 +66,10 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"

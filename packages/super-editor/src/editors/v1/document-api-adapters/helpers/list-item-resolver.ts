@@ -1,4 +1,7 @@
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — JS module without type declarations
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 import type { Editor } from '../../core/Editor.js';
 import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import type {
@@ -83,7 +86,27 @@ export function projectListItemCandidate(editor: Editor, candidate: BlockCandida
     listRendering?: unknown;
   };
 
-  const { numId, level } = getNumberingProperties(candidate.node);
+  let { numId, level } = getNumberingProperties(candidate.node);
+  if (numId == null) {
+    // Style-linked numbering: the node renders a marker but carries no numPr
+    // on its attrs — the effective numbering lives in the resolved property
+    // chain (same resolver the numbering plugin uses). Without this fallback,
+    // lists.attach/setType reject blocks that visibly ARE numbered clauses.
+    try {
+      const resolved = calculateResolvedParagraphProperties(
+        editor,
+        candidate.node,
+        editor.state.doc.resolve(candidate.pos),
+      ) as { numberingProperties?: { numId?: unknown; ilvl?: unknown } | null } | null;
+      const effective = resolved?.numberingProperties;
+      if (effective) {
+        numId = toFiniteNumber(effective.numId);
+        level = toFiniteNumber(effective.ilvl) ?? level ?? 0;
+      }
+    } catch {
+      // best-effort: fall through with attrs-only numbering
+    }
+  }
   const listRendering = getListRendering(attrs.listRendering);
   const path = listRendering?.path;
   const ordinal = getListOrdinalFromPath(path);
@@ -224,11 +247,29 @@ export function listListItems(editor: Editor, query?: ListsListQuery): ListsList
   });
 }
 
+function hasNumberingMetadata(candidate: BlockCandidate): boolean {
+  const { numId } = getNumberingProperties(candidate.node);
+  if (numId != null) return true;
+  const attrs = (candidate.node.attrs ?? {}) as { listRendering?: unknown };
+  return getListRendering(attrs.listRendering) != null;
+}
+
 export function resolveListItem(editor: Editor, address: ListItemAddress): ListItemProjection {
   const index = getBlockIndex(editor);
-  const matches = index.candidates.filter(
+  let matches = index.candidates.filter(
     (candidate) => candidate.nodeType === 'listItem' && candidate.nodeId === address.nodeId,
   );
+
+  if (matches.length === 0) {
+    // Numbered paragraphs/headings ARE list participants in Word terms (the
+    // editor's own list toolbar treats them as such): legal clause numbering
+    // ("2.3.") lives on heading-styled paragraphs that block classification
+    // maps to 'heading', making them unreachable for lists.attach/setType by
+    // nodeId. Fall back to any block carrying numbering metadata.
+    matches = index.candidates.filter(
+      (candidate) => candidate.nodeId === address.nodeId && hasNumberingMetadata(candidate),
+    );
+  }
 
   if (matches.length === 0) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'List item target was not found.', {

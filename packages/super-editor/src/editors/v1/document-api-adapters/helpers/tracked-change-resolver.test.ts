@@ -6,16 +6,22 @@ import {
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
 import { getTrackChanges } from '../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
+import { enumerateStructuralRowChanges } from '../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js';
 import {
   buildTrackedChangeCanonicalIdMap,
   groupTrackedChanges,
   resolveTrackedChange,
+  resolveTrackedChangeNavigationSelection,
   resolveTrackedChangeType,
   toCanonicalTrackedChangeId,
 } from './tracked-change-resolver.js';
 
 vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: vi.fn(),
+}));
+
+vi.mock('../../extensions/track-changes/trackChangesHelpers/structuralRowChanges.js', () => ({
+  enumerateStructuralRowChanges: vi.fn(() => []),
 }));
 
 function makeEditor(options: Record<string, unknown> = { trackedChanges: {} }): Editor {
@@ -58,6 +64,17 @@ describe('resolveTrackedChangeType', () => {
 
   it('returns replacement when both hasInsert and hasDelete are true (no format)', () => {
     expect(resolveTrackedChangeType({ hasInsert: true, hasDelete: true, hasFormat: false })).toBe('replacement');
+  });
+
+  it('keeps whole-table revisions structural internally', () => {
+    expect(
+      resolveTrackedChangeType({
+        hasInsert: false,
+        hasDelete: false,
+        hasFormat: false,
+        structural: { side: 'insertion', subtype: 'table-insert' },
+      }),
+    ).toBe('structural');
   });
 });
 
@@ -269,6 +286,22 @@ describe('groupTrackedChanges', () => {
     expect(grouped[0]?.excerpt).toBe('O ');
   });
 
+  it('does not duplicate excerpt text for overlapping imported format marks', () => {
+    const mark = makeTrackMark(TrackFormatMarkName, 'format', { sourceId: '1' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'Format ', marks: [mark.mark] }, from: 2, to: 9 },
+      { ...mark, from: 1, to: 10 },
+    ] as never);
+
+    const editor = makeEditor();
+    vi.mocked(editor.state.doc.textBetween).mockReturnValue('Format ');
+
+    const grouped = groupTrackedChanges(editor);
+
+    expect(grouped[0]?.rawId).toBe(`word:${TrackFormatMarkName}:1`);
+    expect(grouped[0]?.excerpt).toBe('Format ');
+  });
+
   it('sorts results by from position', () => {
     vi.mocked(getTrackChanges).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-2'), from: 10, to: 15 },
@@ -277,6 +310,103 @@ describe('groupTrackedChanges', () => {
 
     const grouped = groupTrackedChanges(makeEditor());
     expect(grouped[0]?.from).toBeLessThan(grouped[1]?.from ?? 0);
+  });
+
+  // A whole inserted/deleted table is ONE logical change. Inline cell marks
+  // inside its range (native authoring stamps these, and imported-with-text
+  // tables carry them) must be subsumed by the structural change, not returned
+  // as separate review items.
+  const wholeTableInsert = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: 'logical-1',
+      side: 'insertion',
+      subtype: 'table-insert',
+      tableFrom: 10,
+      tableTo: 40,
+      tablePos: 10,
+      wholeTable: true,
+      decidable: true,
+      rows: [],
+      author: 'Alice',
+      sourceId: '7',
+      ...overrides,
+    }) as never;
+
+  it('subsumes inline cell marks inside a decidable whole-table change', () => {
+    const cell = makeTrackMark(TrackInsertMarkName, 'inline-cell', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...cell, node: { text: 'Hi', marks: [cell.mark] }, from: 20, to: 25 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    // Only the structural change remains; the inline cell mark is owned by it.
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.id).toBe('word:structural:7');
+    expect(grouped.find((change) => change.rawId === 'inline-cell')).toBeUndefined();
+  });
+
+  it('does NOT subsume an inline change outside the whole-table range', () => {
+    const outside = makeTrackMark(TrackInsertMarkName, 'inline-outside', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...outside, node: { text: 'Out', marks: [outside.mark] }, from: 50, to: 55 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    // The structural change AND the unrelated inline change both surface.
+    expect(grouped.find((change) => change.id === 'word:structural:7')).toBeDefined();
+    expect(grouped.find((change) => change.rawId === 'inline-outside')).toBeDefined();
+  });
+
+  it('does NOT subsume inline marks for a NON-decidable (partial) structural shape', () => {
+    const cell = makeTrackMark(TrackInsertMarkName, 'inline-partial', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...cell, node: { text: 'Hi', marks: [cell.mark] }, from: 20, to: 25 },
+    ] as never);
+    // Partial / undecidable structural shape is not one logical change.
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([
+      wholeTableInsert({ wholeTable: false, decidable: false }),
+    ]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'inline-partial')).toBeDefined();
+  });
+
+  it('subsumes a single revision id whose disjoint segments each sit in a different whole table', () => {
+    // One imported id reused across two tables: marks at [20,25] (table A 10-40)
+    // and [70,75] (table B 60-90). The collapsed envelope [20,75] spans the gap
+    // between the tables, so an envelope-only check would wrongly keep it — the
+    // per-segment rule correctly subsumes it (every segment is table-owned).
+    const shared = makeTrackMark(TrackInsertMarkName, 'shared-across-tables', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...shared, node: { text: 'A', marks: [shared.mark] }, from: 20, to: 25 },
+      { ...shared, node: { text: 'B', marks: [shared.mark] }, from: 70, to: 75 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([
+      wholeTableInsert({ id: 'logical-a', sourceId: '7', tableFrom: 10, tableTo: 40, tablePos: 10 }),
+      wholeTableInsert({ id: 'logical-b', sourceId: '8', tableFrom: 60, tableTo: 90, tablePos: 60 }),
+    ]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'shared-across-tables')).toBeUndefined();
+    // Both structural tables survive.
+    expect(grouped.filter((change) => change.id?.startsWith('word:structural:'))).toHaveLength(2);
+  });
+
+  it('does NOT subsume an inline change whose segment straddles a table edge', () => {
+    // Segment [35,45] crosses the table's right edge (table 10-40): it is not
+    // wholly inside any whole-table range, so the change is kept.
+    const straddle = makeTrackMark(TrackInsertMarkName, 'edge-straddle', { author: 'Alice' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...straddle, node: { text: 'edge', marks: [straddle.mark] }, from: 35, to: 45 },
+    ] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([wholeTableInsert()]);
+
+    const grouped = groupTrackedChanges(makeEditor());
+    expect(grouped.find((change) => change.rawId === 'edge-straddle')).toBeDefined();
   });
 });
 
@@ -302,6 +432,129 @@ describe('resolveTrackedChange', () => {
   it('returns null for unknown ids', () => {
     vi.mocked(getTrackChanges).mockReturnValue([] as never);
     expect(resolveTrackedChange(makeEditor(), 'unknown')).toBeNull();
+  });
+});
+
+describe('resolveTrackedChangeNavigationSelection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('prefers the matching text node in the document over raw mark ranges', () => {
+    const mark = makeTrackMark(TrackInsertMarkName, 'command-1', { sourceId: '132' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'fallback', marks: [mark.mark] }, from: 1847, to: 1853 },
+    ] as never);
+    const editor = makeEditor();
+    const nodesBetween = vi.fn((_from: number, _to: number, callback: (node: unknown, pos: number) => void) => {
+      callback({ isText: true, text: 'Buying', marks: [mark.mark] }, 1847);
+    });
+    (editor.state.doc as unknown as { nodesBetween: typeof nodesBetween }).nodesBetween = nodesBetween;
+
+    expect(resolveTrackedChangeNavigationSelection(editor, `word:${TrackInsertMarkName}:132`)).toEqual({
+      from: 1848,
+      to: 1848,
+    });
+    expect(nodesBetween).toHaveBeenCalledWith(1847, 1853, expect.any(Function));
+  });
+
+  it('chooses the requested adjacent Word revision instead of a neighboring boundary mark', () => {
+    const first = makeTrackMark(TrackInsertMarkName, 'command-1', { sourceId: '132' });
+    const second = makeTrackMark(TrackInsertMarkName, 'command-2', { sourceId: '133' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...first, node: { text: 'Buy', marks: [first.mark] }, from: 10, to: 13 },
+      { ...second, node: { text: 'ing', marks: [second.mark] }, from: 13, to: 16 },
+    ] as never);
+    const editor = makeEditor();
+    (editor.state.doc as unknown as { nodesBetween: unknown }).nodesBetween = vi.fn(
+      (_from: number, _to: number, callback: (node: unknown, pos: number) => boolean | void) => {
+        callback({ isText: true, text: 'Buy', marks: [first.mark] }, 10);
+        callback({ isText: true, text: 'ing', marks: [second.mark] }, 13);
+      },
+    );
+
+    expect(resolveTrackedChangeNavigationSelection(editor, `word:${TrackInsertMarkName}:133`)).toEqual({
+      from: 14,
+      to: 14,
+    });
+  });
+
+  it('chooses the requested overlapping child revision when parent and child share text', () => {
+    const parent = makeTrackMark(TrackInsertMarkName, 'parent-overlap', { sourceId: '132' });
+    const child = makeTrackMark(TrackDeleteMarkName, 'child-overlap', {
+      sourceId: '133',
+      overlapParentId: 'parent-overlap',
+    });
+    const node = { text: 'review', marks: [parent.mark, child.mark] };
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...parent, node, from: 20, to: 26 },
+      { ...child, node, from: 20, to: 26 },
+    ] as never);
+    const editor = makeEditor();
+    (editor.state.doc as unknown as { nodesBetween: unknown }).nodesBetween = vi.fn(
+      (_from: number, _to: number, callback: (node: unknown, pos: number) => boolean | void) => {
+        callback(node, 20);
+      },
+    );
+
+    expect(resolveTrackedChangeNavigationSelection(editor, `word:${TrackDeleteMarkName}:133`)).toEqual({
+      from: 21,
+      to: 21,
+    });
+  });
+
+  it('uses an interior collapsed caret for multi-character text changes', () => {
+    const mark = makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '132' });
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'review', marks: [mark.mark] }, from: 1847, to: 1853 },
+    ] as never);
+
+    expect(resolveTrackedChangeNavigationSelection(makeEditor(), `word:${TrackInsertMarkName}:132`)).toEqual({
+      from: 1848,
+      to: 1848,
+    });
+  });
+
+  it('falls back to the raw mark range when no document text node matches', () => {
+    const mark = makeTrackMark(TrackInsertMarkName, 'tc-1', { sourceId: '132' });
+    vi.mocked(getTrackChanges).mockReturnValue([{ ...mark, from: 1847, to: 1853 }] as never);
+    const editor = makeEditor();
+    (editor.state.doc as unknown as { nodesBetween: unknown }).nodesBetween = vi.fn();
+
+    expect(resolveTrackedChangeNavigationSelection(editor, `word:${TrackInsertMarkName}:132`)).toEqual({
+      from: 1848,
+      to: 1848,
+    });
+  });
+
+  it('uses a non-empty text selection for one-character text changes', () => {
+    const mark = makeTrackMark(TrackInsertMarkName, 'tc-1');
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...mark, node: { text: 'x', marks: [mark.mark] }, from: 10, to: 11 },
+    ] as never);
+
+    expect(resolveTrackedChangeNavigationSelection(makeEditor(), 'tc-1')).toEqual({ from: 10, to: 11 });
+  });
+
+  it('returns null for structural changes so rendered-element fallback can handle them', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+    vi.mocked(enumerateStructuralRowChanges).mockReturnValueOnce([
+      {
+        id: 'logical-1',
+        side: 'insertion',
+        subtype: 'table-insert',
+        tableFrom: 10,
+        tableTo: 40,
+        tablePos: 10,
+        wholeTable: true,
+        decidable: true,
+        rows: [],
+        author: 'Alice',
+        sourceId: '7',
+      },
+    ] as never);
+
+    expect(resolveTrackedChangeNavigationSelection(makeEditor(), 'word:structural:7')).toBeNull();
   });
 });
 

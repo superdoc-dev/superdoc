@@ -1,7 +1,8 @@
 import { SuperDoc } from 'superdoc';
 import 'superdoc/style.css';
 
-let superdoc = new SuperDoc({ selector: '#editor' });
+// Self-hosted bundled fallback fonts (copied to public/fonts/ by copy-fonts.mjs).
+let superdoc = new SuperDoc({ selector: '#editor', fonts: { assetBaseUrl: '/fonts/' } });
 
 document.getElementById('file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -11,5 +12,6 @@ document.getElementById('file-input').addEventListener('change', (e) => {
     superdoc = new SuperDoc({
         selector: '#editor',
         document: file,
+        fonts: { assetBaseUrl: '/fonts/' },
     });
 });

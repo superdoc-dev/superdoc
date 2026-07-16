@@ -30,6 +30,7 @@ Returns a CaptionMutationResult indicating success with the caption address or a
 | `adjacentTo.kind` | `"block"` | yes | Constant: `"block"` |
 | `adjacentTo.nodeId` | string | yes |  |
 | `adjacentTo.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `adjacentTo.story` | StoryLocator | no | StoryLocator |
 | `label` | string | yes |  |
 | `position` | enum | yes | `"above"`, `"below"` |
 | `text` | string | no |  |
@@ -41,7 +42,11 @@ Returns a CaptionMutationResult indicating success with the caption address or a
   "adjacentTo": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "label": "Paragraph 1",
   "position": "above",

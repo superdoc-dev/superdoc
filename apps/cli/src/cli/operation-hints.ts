@@ -45,6 +45,7 @@ const PARAGRAPH_OPERATION_IDS = [
   'format.paragraph.clearBorder',
   'format.paragraph.setShading',
   'format.paragraph.clearShading',
+  'format.paragraph.setNumbering',
 ] as const satisfies readonly CliExposedOperationId[];
 
 type ParagraphOperationId = (typeof PARAGRAPH_OPERATION_IDS)[number];
@@ -93,6 +94,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   ...buildFormatInlineAliasRecord('applied style'),
   ...buildParagraphRecord('updated paragraph formatting'),
   'styles.apply': 'applied stylesheet defaults',
+  'templates.apply': 'applied template substrate',
   'create.paragraph': 'created paragraph',
   'create.heading': 'created heading',
   'create.tableOfContents': 'created table of contents',
@@ -145,6 +147,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'query.match': 'matched selectors',
   'mutations.preview': 'previewed mutations',
   'mutations.apply': 'applied mutations',
+  'plan.execute': 'executed plan batch',
   'capabilities.get': 'retrieved capabilities',
 
   // Tables
@@ -479,6 +482,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   ...buildFormatInlineAliasRecord('mutationReceipt'),
   ...buildParagraphRecord('plain'),
   'styles.apply': 'receipt',
+  'templates.apply': 'receipt',
   'create.paragraph': 'createResult',
   'create.heading': 'createResult',
   'create.tableOfContents': 'createResult',
@@ -531,6 +535,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'query.match': 'plain',
   'mutations.preview': 'plain',
   'mutations.apply': 'plain',
+  'plan.execute': 'plain',
   'capabilities.get': 'plain',
 
   // Tables
@@ -847,6 +852,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   ...buildFormatInlineAliasRecord(null),
   ...buildParagraphRecord('result'),
   'styles.apply': 'receipt',
+  'templates.apply': 'receipt',
   'create.paragraph': 'result',
   'create.heading': 'result',
   'create.tableOfContents': 'result',
@@ -899,6 +905,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'query.match': 'result',
   'mutations.preview': 'result',
   'mutations.apply': 'result',
+  'plan.execute': 'result',
   'capabilities.get': 'capabilities',
 
   // Tables
@@ -1222,6 +1229,7 @@ export type OperationFamily =
   | 'blocks'
   | 'query'
   | 'diff'
+  | 'templates'
   | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
@@ -1247,6 +1255,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   ...buildFormatInlineAliasRecord('textMutation'),
   ...buildParagraphRecord('textMutation'),
   'styles.apply': 'general',
+  'templates.apply': 'templates',
   'create.paragraph': 'create',
   'create.heading': 'create',
   'create.tableOfContents': 'create',
@@ -1299,6 +1308,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'query.match': 'query',
   'mutations.preview': 'general',
   'mutations.apply': 'general',
+  'plan.execute': 'general',
   'capabilities.get': 'general',
 
   // Tables

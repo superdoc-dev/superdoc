@@ -23,6 +23,7 @@ interface ConverterShape {
   footers?: Record<string, unknown>;
   footnotes?: NoteEntry[];
   endnotes?: NoteEntry[];
+  sessionManagedNoteIds?: { footnotes: Set<string>; endnotes: Set<string> };
 }
 
 function getConverter(editor: Editor): ConverterShape | undefined {
@@ -69,20 +70,53 @@ export function enumerateRevisionCapableStories(editor: Editor): StoryLocator[] 
   }
 
   if (Array.isArray(converter.footnotes)) {
+    const tombstoned = collectTombstonedNoteIds(editor, converter, 'footnote');
     for (const note of converter.footnotes) {
       const noteId = toRevisionCapableNoteId(note);
-      if (!noteId) continue;
+      if (!noteId || tombstoned.has(noteId)) continue;
       stories.push({ kind: 'story', storyType: 'footnote', noteId });
     }
   }
 
   if (Array.isArray(converter.endnotes)) {
+    const tombstoned = collectTombstonedNoteIds(editor, converter, 'endnote');
     for (const note of converter.endnotes) {
       const noteId = toRevisionCapableNoteId(note);
-      if (!noteId) continue;
+      if (!noteId || tombstoned.has(noteId)) continue;
       stories.push({ kind: 'story', storyType: 'endnote', noteId });
     }
   }
 
   return stories;
+}
+
+/**
+ * Ids of session-deleted (tombstoned) notes: registered as session-managed
+ * AND without a surviving reference node in the host doc (SD-3400). Their
+ * elements stay in the part so undo can restore them, but they must not
+ * surface as revision-capable stories. Pre-existing orphan notes are never
+ * registered, so their enumeration behavior is unchanged.
+ */
+function collectTombstonedNoteIds(
+  editor: Editor,
+  converter: ConverterShape,
+  type: 'footnote' | 'endnote',
+): Set<string> {
+  const registry = converter.sessionManagedNoteIds?.[type === 'endnote' ? 'endnotes' : 'footnotes'];
+  if (!registry || registry.size === 0) return new Set();
+
+  const referenceNodeName = type === 'endnote' ? 'endnoteReference' : 'footnoteReference';
+  const referenced = new Set<string>();
+  editor.state?.doc?.descendants((node) => {
+    if (node.type?.name === referenceNodeName && node.attrs?.id != null) {
+      referenced.add(String(node.attrs.id));
+    }
+    return true;
+  });
+
+  const tombstoned = new Set<string>();
+  for (const id of registry) {
+    if (!referenced.has(id)) tombstoned.add(id);
+  }
+  return tombstoned;
 }

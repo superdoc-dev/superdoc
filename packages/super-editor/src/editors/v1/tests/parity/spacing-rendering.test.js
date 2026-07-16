@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphReference.js';
-import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
+import { computeParagraphAttrs } from '@core/layout-adapter/attributes/paragraph.js';
 import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const findParagraphAt = (doc, predicate) => {

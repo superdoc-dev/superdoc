@@ -1,8 +1,8 @@
 /**
- * MCP_PRESET env var selects which LLM-tools preset the server registers.
- * Currently only 'legacy' is supported. Unknown preset ids must fail fast at
- * startup so misconfiguration is visible instead of silently falling back to
- * the default.
+ * MCP_PRESET env var selects which LLM-tools preset the server registers
+ * ('legacy' — grouped intent tools; 'core' — the actions surface). Unknown
+ * preset ids must fail fast at startup so misconfiguration is visible instead
+ * of silently falling back to the default.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -54,6 +54,11 @@ describe('MCP_PRESET env var', () => {
     const result = await runServer({ MCP_PRESET: 'legacy' });
     // Server should still be running when we kill it (SIGTERM → code is null
     // or signal-derived non-2). Either way, it must NOT exit with 2.
+    expect(result.code).not.toBe(2);
+  });
+
+  test('explicit MCP_PRESET=core is accepted (server stays alive)', async () => {
+    const result = await runServer({ MCP_PRESET: 'core' });
     expect(result.code).not.toBe(2);
   });
 });

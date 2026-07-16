@@ -1,57 +1,116 @@
 ---
 title: Best practices
 sidebarTitle: Best practices
-description: "Get better results from LLM document editing: prompting, tool call patterns, and workflow tips"
+description: "Get better results from LLM document editing: prompting, tool call patterns, and workflow tips for both presets"
 keywords: "llm best practices, ai document editing, prompt engineering, superdoc tools, tool calling, document automation"
 ---
 
-These patterns help your LLM agent produce reliable, efficient document edits.
+These patterns help your LLM agent produce reliable, efficient document edits. The first group applies to every integration; the rest is split by preset — [core](/ai/agents/core-preset) (recommended) and [legacy](/ai/agents/legacy-preset) work differently enough that their playbooks are separate.
 
-## Use the bundled system prompt
+## Practices for every integration
 
-`getSystemPrompt()` returns a tested prompt that teaches the model how to use SuperDoc tools: targeting, workflow order, and multi-action tools. Load it once and pass it as the system message.
+### Use the bundled system prompt — from the same preset as your tools
 
-```typescript
-import { getSystemPrompt } from '@superdoc-dev/sdk';
-
-const systemPrompt = await getSystemPrompt();
-// Pass as the system message in your LLM call
-```
-
-You can extend it with task-specific instructions. Append your own rules after the bundled prompt:
+Each preset ships the prompt it was designed and evaluated with. Load both through the toolkit so they can never mismatch:
 
 ```typescript
-const systemPrompt = await getSystemPrompt();
-const fullPrompt = `${systemPrompt}\n\n## Additional rules\n- Use tracked changes for all edits.\n- Always search before editing.`;
+import { createAgentToolkit } from '@superdoc-dev/sdk';
+
+const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+  provider: 'openai',
+  preset: 'core',
+});
 ```
 
-Or start from scratch with something like this:
+Extend it with task-specific rules rather than replacing it:
 
-````markdown
-You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize tool calls.
+```typescript
+const fullPrompt = `${systemPrompt}\n\n## Additional rules\n- Use tracked changes for all edits.\n- End with a one-sentence summary of what changed.`;
+```
 
-## Workflow
+### Feed errors back
 
-1. **Read**: Use `superdoc_get_content` to understand the document.
-2. **Search**: Use `superdoc_search` to find stable handles or block addresses.
-3. **Edit**: Use the focused tool that matches the job:
-   - `superdoc_edit` for insert, replace, delete, undo, redo
-   - `superdoc_format` for inline or paragraph formatting
-   - `superdoc_create` for paragraphs and headings
-   - `superdoc_comment` for comment threads
-   - `superdoc_track_changes` for review decisions
-4. **Batch only when useful**: Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
+Dispatch failures are written for the model to act on. Pass them back as tool results — most models self-correct on the next turn:
 
-## Rules
+```typescript
+try {
+  const result = await dispatch(doc, call.function.name, JSON.parse(call.function.arguments));
+  messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+} catch (err: any) {
+  // Return the error as a tool result: the model will see it and adjust
+  messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: err.message }) });
+}
+```
 
-- Search before mutating so targets come from fresh results.
-- Use focused intent tools for normal edits.
-- Use `superdoc_mutations` when you need an atomic batch or preview/apply flow.
-- Set `changeMode: "tracked"` when edits need human review.
-- Feed tool errors back so you can recover.
-````
+### Cache tools and prompts
 
-## Read first, search, then edit
+Tools and the system prompt don't change between requests. Build the toolkit once at startup and reuse it across conversations. On Anthropic, also pass `cache: true` so the tool array carries prompt-caching markers (see [token budget](/ai/agents/llm-tools#token-budget)).
+
+```typescript
+let kit: Awaited<ReturnType<typeof createAgentToolkit>> | null = null;
+
+async function ensureToolkit() {
+  kit ??= await createAgentToolkit({ provider: 'openai', preset: 'core' });
+  return kit;
+}
+```
+
+### Use tracked changes for review workflows
+
+Set `changeMode: "tracked"` (or instruct it in your appended prompt rules): every AI edit lands as a tracked change users can accept or reject in SuperDoc or Microsoft Word. A "suggest vs. apply directly" toggle in your UI maps 1:1 to this flag.
+
+### Add examples for repeatable workflows
+
+If the same kind of edit runs across many documents, include a concrete tool call example in your system prompt. Models that see a working example of the exact invocation produce correct calls more reliably than models that only see the schema.
+
+### Pin your model version
+
+Use a specific model ID rather than an alias. Aliases can change behavior between releases and break working tool call patterns.
+
+## Core preset (recommended)
+
+The core surface is two tools — `superdoc_inspect` and `superdoc_perform_action` — with 40 named actions that resolve their own targets and return receipts. The playbook follows from that.
+
+### Inspect narrowly, then act
+
+A typical edit is 2–3 calls: one narrow inspect, one action, and (only when the receipt says so) a follow-up. Steer the model away from full-document reads:
+
+- `{countsOnly: true}` for orientation; `includeDomains` to fetch only what the task needs.
+- On large documents, window with `blockOffset`/`blockLimit` — ordinals are absolute, so windows line up.
+
+### Trust receipts, not vibes
+
+Every action returns real pre/post evidence. Teach your loop (and your users) to read it:
+
+- `status: "ok"` with `verificationPassed: true` — done; don't re-inspect "to be sure."
+- `status: "partial"` — some of the work landed; the receipt says which part. Re-inspect, then fix forward.
+- `status: "failed"` — nothing changed unless the receipt explicitly says otherwise. `errors[].message` usually contains the exact recovery step, and `recovery`/`revertHint` are machine-usable.
+
+### Batch with selectors, not with repeated calls
+
+Actions absorb batching: `add_comments` takes `selectors[]` for many blocks in one call; `replace_text` takes `edits[]`; `format_text` takes `targetTexts[]`. One action call with a batch argument beats N calls every time — cheaper, atomic, one receipt.
+
+### Narrow the surface for your product
+
+If your product should never delete tables or fill placeholders, exclude those actions — [`excludeActions`](/ai/agents/core-preset#narrowing-the-surface-excludeactions) removes them from the enum, the prompt, and dispatch in one move. A smaller surface is also cheaper per turn.
+
+### Prompt examples
+
+Tested against the core action surface — use as inspiration or few-shot examples:
+
+- "Find the termination clause and rewrite it to require 30-day written notice. Use tracked changes."
+- "Replace all references to 'Contractor' with 'Service Provider' as tracked changes."
+- "Add a comment to every paragraph that mentions personally identifiable information: 'Verify PII handling.'"
+- "Number the unnumbered obligation at the end of section 2 like its siblings."
+- "Accept all formatting revisions but leave text edits pending review."
+- "Move the PREAMBLE section after SCHEDULE A."
+- "Add a 2×3 table under the second heading with headers Owner and Stage, then style it."
+
+## Legacy preset
+
+The legacy surface is low-level: the model searches for handles, then edits by address. If you're on it, these patterns matter — and [migrating to core](/ai/agents/legacy-preset#migrating-to-core) removes most of them.
+
+### Read first, search, then edit
 
 A typical edit takes 3-5 tool calls:
 
@@ -59,17 +118,11 @@ A typical edit takes 3-5 tool calls:
 2. `superdoc_search`: find the exact location (returns stable handles/addresses)
 3. Edit tool (`superdoc_edit`, `superdoc_format`, etc.): apply the change using targets from search
 
-This matters because handles from search results point to the exact right location. If the model guesses a block address instead of searching for it, edits land in the wrong place.
+Handles from search results point to the exact right location. If the model guesses a block address instead of searching, edits land in the wrong place. **Search again after every mutation** — refs expire when the revision bumps.
 
-## Minimize tool calls
+### Prefer markdown insert for multi-block creation
 
-Instruct the LLM to plan all edits before calling tools. A well-structured prompt like "Find the termination clause and rewrite it to allow 30-day notice" should take 3-5 calls, not 15.
-
-Batch multiple changes only when atomic execution is genuinely helpful: use `superdoc_mutations` for that.
-
-## Prefer markdown insert for multi-block creation
-
-When you need to create multiple headings and paragraphs in one operation, use `superdoc_edit` with `type: "markdown"` instead of calling `superdoc_create` once per block. A single markdown insert produces the entire structure in one call.
+When creating multiple headings and paragraphs, use `superdoc_edit` with `type: "markdown"` instead of one `superdoc_create` per block:
 
 ```json
 {
@@ -79,128 +132,31 @@ When you need to create multiple headings and paragraphs in one operation, use `
 }
 ```
 
-After inserting, apply formatting in a single `superdoc_mutations` batch using `format.apply` steps: one step per block or range. This reduces a workflow that might otherwise take 40+ calls down to 4: read, search, insert, format.
+After inserting, apply formatting in a single `superdoc_mutations` batch using `format.apply` steps — one step per block or range. This reduces a workflow that might otherwise take 40+ calls down to 4: read, search, insert, format.
 
-## Use focused tools: `superdoc_mutations` is an escape hatch
+### Use focused tools; `superdoc_mutations` is an escape hatch
 
-For straightforward edits, use the focused intent tools (`superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`). They validate arguments, give clear errors, and are easier for models to call correctly.
+For straightforward edits, use the focused intent tools — they validate arguments and give clear errors. Reach for `superdoc_mutations` only when you need preview/apply semantics, an atomic multi-step batch, or a workflow that would otherwise require refreshing targets between steps (it resolves all targets before any step executes).
 
-Reach for `superdoc_mutations` only when you need:
-- Preview/apply semantics (show what will change before committing)
-- Atomic multi-step edits (all-or-nothing batch)
-- A workflow that would otherwise require refreshing targets between steps
+### Choose formatting values from the document
 
-## Feed errors back
+Don't hardcode formatting values — read them from existing content and match:
 
-`dispatchSuperDocTool` returns structured errors. Pass them back as tool results: most models self-correct on the next turn.
+- **Body text**: read `fontFamily`, `fontSize`, `color` from non-empty paragraphs; set `bold: false` for body.
+- Many DOCX documents report `underline: true` on all blocks due to style inheritance — a DOCX artifact, not intentional formatting. Don't carry it forward.
+- **Headings**: read from existing heading blocks; confirm bold/centering against the document rather than assuming.
 
-```typescript
-try {
-  const result = await dispatchSuperDocTool(doc, toolCall.function.name, JSON.parse(toolCall.function.arguments));
-  messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) });
-} catch (err: any) {
-  // Return the error as a tool result: the model will see it and adjust
-  messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: err.message }) });
-}
-```
-
-## Choose formatting values from the document
-
-Don't hardcode formatting values. Read them from the document's existing content and match what's already there.
-
-**Body text:** Read `fontFamily`, `fontSize`, and `color` from non-empty paragraphs with `alignment: "justify"` or `alignment: "left"`. Set `bold: false` for body paragraphs.
-
-Many DOCX documents report `underline: true` on all blocks due to style inheritance. This is a DOCX artifact: not intentional formatting. Do not carry it forward when inserting new paragraphs.
-
-**Headings:** Read from existing heading blocks in the document. Scale `fontSize` up relative to body text. Headings are typically bold and sometimes centered: confirm against what's already in the document rather than assuming.
-
-```typescript
-// Get content first, find a representative body paragraph
-const content = await superdoc.getContent();
-const bodyParagraph = content.blocks.find(
-  (b) => b.type === 'paragraph' && b.text?.trim().length > 0
-);
-const { fontFamily, fontSize, color } = bodyParagraph?.formatting ?? {};
-
-// Use those values when formatting inserted content
-```
-
-## Add examples for repeatable workflows
-
-If the same kind of edit runs across many documents (e.g., always rewriting a specific clause, always adding a comment to a section), include a concrete tool call example in your system prompt. Models that see a working example of the exact tool invocation produce correct calls more reliably than models that only see the schema.
-
-## Use tracked changes for review workflows
-
-Add `changeMode: "tracked"` to edit tool calls, or instruct the model via the system prompt:
-
-```
-Use tracked changes for all edits so a human can review them.
-```
-
-This way every AI edit appears as a tracked change that users can accept or reject in SuperDoc or Microsoft Word.
-
-## Pin your model version
-
-Use a specific model ID (e.g., `gpt-4.1` or `claude-sonnet-4-6`) rather than an alias like `gpt-4o`. Aliases can change behavior between releases and break working tool call patterns.
-
-## Cache tools and prompts
-
-Tools and the system prompt don't change between requests. Load them once at startup and reuse across all conversations.
-
-```typescript
-let cachedTools: any[] | null = null;
-let cachedSystemPrompt: string | null = null;
-
-async function ensureToolsLoaded() {
-  if (!cachedTools) {
-    const result = await chooseTools({ provider: 'openai' });
-    cachedTools = result.tools;
-  }
-  if (!cachedSystemPrompt) {
-    cachedSystemPrompt = await getSystemPrompt();
-  }
-  return { tools: cachedTools, systemPrompt: cachedSystemPrompt };
-}
-```
-
-## Prompt examples
-
-These prompts have been tested against the SuperDoc tool set. Use them as inspiration for your own workflows, or include them as few-shot examples in your system prompt.
-
-### Document review
-
-- "Find the termination clause and rewrite it to require 30-day written notice. Use tracked changes."
-- "Apply yellow highlight to every sentence that contains an indemnification obligation."
-- "Replace all references to 'Contractor' with 'Service Provider' and make each replacement italic with tracked changes enabled."
-- "Underline every sentence that references payment terms or late fees."
-- "Insert CONFIDENTIAL: DO NOT DISTRIBUTE at the very top of the document and make it bold, red, 14pt."
-- "Scan the document for inconsistent capitalization of defined terms and fix them with tracked changes enabled."
-
-### Formatting and structure
+### Prompt examples
 
 - "Format the entire document in Times New Roman, 12-point."
 - "Make all Heading 2 paragraphs bold and set them to 14-point font."
-- "Keep each section heading with the paragraph that follows it so they don't split across pages."
-- "Remove all extra blank paragraphs and convert all double spaces after periods to single spaces."
-- "Right-align all section headings."
-
-### Content generation and editing
-
-- "Add a new heading 'Learning Objectives' at the top, followed by a bullet list with 3 key takeaways from the document content."
-- "Read the document and add a heading 'Executive Summary' at the end, followed by a one-paragraph summary and a bullet list of the 5 key provisions."
-- "Find the governing law section and insert a new paragraph after it: 'Any disputes arising under this Agreement shall be resolved through binding arbitration.'"
-- "Find all paragraphs that mention 'personally identifiable information' and add a comment: 'Verify PII handling complies with current data retention policy.'"
-- "Convert the list of references at the end into a numbered list and restart numbering at 1."
-
-### Search and replace
-
-- "Rewrite all dates in this document in the format January 1, 2026."
 - "Replace every occurrence of 'FY2024' with 'FY2025' throughout the document."
-- "Add the § symbol before every section number reference."
+- "Insert CONFIDENTIAL: DO NOT DISTRIBUTE at the very top, bold, red, 14pt."
+- "Convert the list of references at the end into a numbered list and restart numbering at 1."
 
 ## Related
 
-- [LLM tools](/ai/agents/llm-tools): tool catalog and SDK functions
+- [Core preset reference](/ai/agents/core-preset) · [Legacy preset reference](/ai/agents/legacy-preset)
 - [How to use](/ai/agents/integrations): step-by-step integration guide
 - [Debugging](/ai/agents/debugging): troubleshoot tool call failures
-- [Document API](/document-api/overview): the operation set behind the tools
+- [How it works](/ai/agents/architecture): SDK ↔ CLI ↔ LLM mechanics

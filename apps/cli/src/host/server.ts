@@ -273,6 +273,7 @@ class HostServer {
         ioNow: this.io.now,
         sessionPool: this.sessionPool,
         maxStdinBytes: this.maxStdinBytes,
+        requestTimeoutMs: this.requestTimeoutMs,
       }),
       this.requestTimeoutMs,
     );

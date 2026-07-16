@@ -1,4 +1,7 @@
 import { Fragment, Slice } from 'prosemirror-model';
+
+/** Tag prefix for stale-position warnings in ReplayResult.warnings. */
+export const STALE_POSITION_WARNING_TAG = '[STALE_POSITION]';
 import { ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 
 import { deepEquals } from '../algorithm/attributes-diffing';
@@ -70,12 +73,31 @@ export function replayInlineDiff({
   }
 
   if (diff.kind === 'text') {
-    const textForRange = diff.action === 'modified' ? diff.oldText : diff.text;
-    const rangeLength = typeof textForRange === 'string' ? textForRange.length : null;
-    if (!isAddition && rangeLength !== null && from !== null) {
-      to = from + rangeLength;
-    } else if (!isAddition && to !== null && from !== null) {
+    if (!isAddition && to !== null && from !== null) {
+      // Diff end positions are inclusive; PM ReplaceStep expects an exclusive
+      // upper bound. We trust diff.endPos instead of recomputing from text length.
       to = to + 1;
+    }
+
+    // Staleness guard: verify the document still has the expected text at the
+    // captured range. A mismatch means the document changed between compare()
+    // and apply() — skip the step and surface a tagged warning so the caller
+    // can emit an error event and prompt a re-compare.
+    // For modified diffs oldText carries the expected value; for deleted diffs
+    // the expected value is stored in diff.text (groupDiffs only sets oldText
+    // on modified results).
+    if (!isAddition && from !== null && to !== null) {
+      const expectedText = diff.oldText ?? diff.text ?? null;
+      if (expectedText != null) {
+        const actualText = tr.doc.textBetween(from, to);
+        if (actualText !== expectedText) {
+          result.skipped += 1;
+          result.warnings.push(
+            `${STALE_POSITION_WARNING_TAG} expected "${expectedText}" at ${from}–${to - 1}, found "${actualText}". Re-capture and re-compare before applying.`,
+          );
+          return result;
+        }
+      }
     }
 
     if (isAddition) {
@@ -116,47 +138,61 @@ export function replayInlineDiff({
         skipWithWarning('Missing newText for inline modification.');
         return result;
       }
+      const oldMarks = getMarksAtPosition(tr.doc, from);
       const marks = marksFromDiff({
         schema,
         action: diff.action,
         marks: diff.marks,
         marksDiff: diff.marksDiff,
-        oldMarks: getMarksAtPosition(tr.doc, from),
-      });
-      marks.forEach((mark) => {
-        const step = new AddMarkStep(from, to!, mark);
-        const stepResult = tr.maybeStep(step);
-        if (stepResult.failed) {
-          skipWithWarning(`Failed to add mark ${mark.type.name} at ${from}-${to}.`);
-        }
+        oldMarks,
       });
 
-      (diff.marksDiff?.deleted ?? []).forEach((markEntry) => {
-        const markType = schema.marks[markEntry.name];
-        if (!markType) {
-          skipWithWarning(`Unknown mark type ${markEntry.name} for deletion.`);
-          return;
-        }
-        const mark = markType.create(markEntry.attrs || {});
-        const step = new RemoveMarkStep(from, to!, mark);
+      if (diff.oldText !== diff.newText) {
+        const slice =
+          diff.newText.length > 0 ? new Slice(Fragment.from(schema.text(diff.newText, marks)), 0, 0) : Slice.empty;
+        const step = new ReplaceStep(from, to, slice);
         const stepResult = tr.maybeStep(step);
         if (stepResult.failed) {
-          skipWithWarning(`Failed to remove mark ${mark.type.name} at ${from}-${to}.`);
+          skipWithWarning(`Failed to replace text at ${from}-${to}.`);
+          return result;
         }
-      });
-      (diff.marksDiff?.modified ?? []).forEach((markEntry) => {
-        const markType = schema.marks[markEntry.name];
-        if (!markType) {
-          skipWithWarning(`Unknown mark type ${markEntry.name} for modification.`);
-          return;
-        }
-        const oldMark = markType.create(markEntry.oldAttrs || {});
-        const step = new RemoveMarkStep(from, to!, oldMark);
-        const stepResult = tr.maybeStep(step);
-        if (stepResult.failed) {
-          skipWithWarning(`Failed to remove old mark ${oldMark.type.name} at ${from}-${to}.`);
-        }
-      });
+        to = from + diff.newText.length;
+      } else {
+        marks.forEach((mark) => {
+          const step = new AddMarkStep(from, to!, mark);
+          const stepResult = tr.maybeStep(step);
+          if (stepResult.failed) {
+            skipWithWarning(`Failed to add mark ${mark.type.name} at ${from}-${to}.`);
+          }
+        });
+
+        (diff.marksDiff?.deleted ?? []).forEach((markEntry) => {
+          const markType = schema.marks[markEntry.name];
+          if (!markType) {
+            skipWithWarning(`Unknown mark type ${markEntry.name} for deletion.`);
+            return;
+          }
+          const mark = markType.create(markEntry.attrs || {});
+          const step = new RemoveMarkStep(from, to!, mark);
+          const stepResult = tr.maybeStep(step);
+          if (stepResult.failed) {
+            skipWithWarning(`Failed to remove mark ${mark.type.name} at ${from}-${to}.`);
+          }
+        });
+        (diff.marksDiff?.modified ?? []).forEach((markEntry) => {
+          const markType = schema.marks[markEntry.name];
+          if (!markType) {
+            skipWithWarning(`Unknown mark type ${markEntry.name} for modification.`);
+            return;
+          }
+          const oldMark = markType.create(markEntry.oldAttrs || {});
+          const step = new RemoveMarkStep(from, to!, oldMark);
+          const stepResult = tr.maybeStep(step);
+          if (stepResult.failed) {
+            skipWithWarning(`Failed to remove old mark ${oldMark.type.name} at ${from}-${to}.`);
+          }
+        });
+      }
 
       if (diff.runAttrsDiff) {
         // Metadata attributes are independent of mark replay and can always be applied.

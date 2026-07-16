@@ -305,6 +305,24 @@ describe('trackChangesHelpers', () => {
     expect(plainHasOldDeleteId).toBe(false);
   });
 
+  it('trackedTransaction bypasses composition tracking flush transactions', () => {
+    const state = createState(createDocWithText('Hello'));
+    const textPos = findTextPos(state.doc, 'Hello');
+    expect(textPos).toBeTypeOf('number');
+
+    const tr = state.tr
+      .insertText('X', textPos)
+      .setMeta('inputType', 'programmatic')
+      .setMeta('compositionTrackingFlush', true);
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const nextState = state.apply(tracked);
+
+    expect(tracked).toBe(tr);
+    expect(nextState.doc.textContent).toBe('XHello');
+    expect(hasAnyMark(nextState.doc, TrackInsertMarkName)).toBe(false);
+  });
+
   it('removes unattributed Word-imported insertions without authorEmail when deleted', () => {
     const insertXml = `<w:ins w:id="1" w:date="2024-09-02T15:56:00Z">
         <w:r>

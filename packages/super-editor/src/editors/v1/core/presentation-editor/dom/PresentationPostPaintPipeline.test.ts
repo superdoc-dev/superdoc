@@ -25,6 +25,7 @@ describe('PresentationPostPaintPipeline', () => {
       commentHighlightDecorator: {
         setContainer: vi.fn(),
         setActiveComment: vi.fn(() => false),
+        setActiveTrackChangeIds: vi.fn(() => false),
         apply: vi.fn(() => calls.push('comments')),
         destroy: vi.fn(),
       },
@@ -87,6 +88,7 @@ describe('PresentationPostPaintPipeline', () => {
       commentHighlightDecorator: {
         setContainer: vi.fn(),
         setActiveComment: vi.fn(() => false),
+        setActiveTrackChangeIds: vi.fn(() => false),
         apply: vi.fn(() => calls.push('comments')),
         destroy: vi.fn(),
       },
@@ -133,6 +135,7 @@ describe('PresentationPostPaintPipeline', () => {
       commentHighlightDecorator: {
         setContainer: vi.fn(),
         setActiveComment: vi.fn(() => false),
+        setActiveTrackChangeIds: vi.fn(() => false),
         apply: vi.fn(() => calls.push('comments')),
         destroy: vi.fn(),
       },
@@ -169,6 +172,7 @@ describe('PresentationPostPaintPipeline', () => {
       commentHighlightDecorator: {
         setContainer: vi.fn(),
         setActiveComment: vi.fn(() => false),
+        setActiveTrackChangeIds: vi.fn(() => false),
         apply: vi.fn(),
         destroy: vi.fn(),
       },

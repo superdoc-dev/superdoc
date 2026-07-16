@@ -1,28 +1,143 @@
 ---
 title: Font support
 sidebarTitle: Font Support
-keywords: "fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts"
+keywords: 'fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts'
 ---
 
-SuperDoc keeps the font name from the Word document. Rendering that font is the browser's job. If the browser can't find Calibri, Cambria, Aptos, or your brand font, it falls back to another font and the layout shifts.
+SuperDoc keeps the font name from the Word document. When SuperDoc ships an approved fallback for that font, it renders with the fallback but keeps the original name for export. When no fallback is available, load the real font in your app.
 
-## Load fonts in your app
+## Bundled fallback fonts
 
-Fonts are your host page's responsibility. `@font-face`, a hosted stylesheet, or a font CDN: anything the browser can resolve.
+A Word document asks for fonts like Calibri, Cambria, and Times New Roman. Most are proprietary, or not installed on every machine. SuperDoc renders them with reviewed open substitutes that match the metrics: Carlito for Calibri, Liberation Serif for Times New Roman, and more. The original name is kept for export.
+
+Without the pack, the toolbar lists one widely available font per CSS generic: Arial for sans-serif, Times New Roman for serif, Courier New for monospace. Each is applied with that generic as a fallback, so it renders acceptably even where the exact font is absent - a readable floor, not an exact-typography guarantee. Wire the pack and the toolbar lists the full reviewed set, and SuperDoc renders the substitutes everywhere. Either way, the Word font name is kept for export.
+
+These substitutes are real `.woff2` files the browser fetches from a URL. The `superdoc` core does not ship them; the optional `@superdoc-dev/fonts` package does. Pick one path below.
+
+### Recommended: the `@superdoc-dev/fonts` package
+
+Install the optional pack and pass it. Your bundler (Vite, Webpack, Next, Nuxt) emits the files and rewrites the URLs. No copy step. No path config.
+
+```bash
+npm install @superdoc-dev/fonts
+```
+
+```js
+import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc-dev/fonts';
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: superdocFonts,
+});
+```
+
+### Choose which bundled fonts
+
+By default the pack enables every reviewed font. To narrow it, use `createSuperDocFonts` and name the families. Think in Word names (`Calibri`, not the substitute `Carlito`).
+
+Drop a few:
+
+```js
+import { createSuperDocFonts } from '@superdoc-dev/fonts';
+
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: createSuperDocFonts({ exclude: ['Cooper Black', 'Brush Script MT'] }),
+});
+```
+
+Or allow only a set:
+
+```js
+fonts: createSuperDocFonts({ include: ['Calibri', 'Cambria', 'Arial'] }),
+```
+
+Curation changes the toolbar list and which families SuperDoc substitutes. It does not touch your own licensed fonts (see [Load your own fonts](#load-your-own-fonts)). A curated-out family a document still uses keeps its Word name for export and renders with a system font.
+
+### Alternative: host the files yourself
+
+Serve the `.woff2` from your own path or a CDN, then point SuperDoc at them. The files ship in the `@superdoc-dev/fonts` package at `node_modules/@superdoc-dev/fonts/assets/`; copy them into your served folder.
+
+```js
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: { assetBaseUrl: '/fonts/' },
+});
+```
+
+Use `fonts.resolveAssetUrl` instead for signed or versioned URLs.
+
+### CDN script build
+
+The `superdoc` CDN build ships no fonts: by default the toolbar shows the baseline and documents render with system fonts. To load the reviewed pack, add the `@superdoc-dev/fonts` browser build and pass the `SuperDocFonts` global.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@superdoc-dev/fonts/dist/superdoc-fonts.min.js"></script>
+<script>
+  new SuperDoc({
+    selector: '#editor',
+    document: 'contract.docx',
+    fonts: SuperDocFonts.superdocFonts, // or SuperDocFonts.createSuperDocFonts({ exclude: [...] })
+  });
+</script>
+```
+
+From a public CDN (jsDelivr or unpkg) the faces resolve automatically, relative to `superdoc-fonts.min.js`. If you self-host it, keep the package's `dist/` and `assets/` folders in their relative layout.
+
+### Skipping the pack
+
+The pack is optional. Skip it if you load your own fonts for every family, or only need fonts the user's OS already has. With no pack configured the toolbar shows the baseline and documents render with system fonts, quietly. If you do wire the pack but the `.woff2` cannot be fetched, SuperDoc logs a one-time warning that names the fix; until then text falls back to the original font name, so it can look unchanged on a machine that lacks it.
+
+## Load your own fonts
+
+For a brand font, a licensed font, or any family SuperDoc does not ship a fallback for, load the real file yourself. Use `@font-face`, a hosted stylesheet, or a font CDN. Anything the browser can resolve.
 
 ```css
 @font-face {
-  font-family: 'Calibri';
-  src: url('/fonts/Carlito-Regular.woff2') format('woff2');
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
   font-display: swap;
 }
 ```
 
-For Office fonts that aren't free (Calibri, Cambria, Aptos), either license them or alias compatible substitutes: [Carlito](https://fonts.google.com/specimen/Carlito) for Calibri, [Caladea](https://fonts.google.com/specimen/Caladea) for Cambria.
+SuperDoc's built-in fallbacks cover only the fonts it ships and verifies. For everything else, the real file is yours to provide.
 
-## Register fonts in the toolbar
+To register a font through SuperDoc instead of CSS, pass it in `fonts.families` (which composes with `@superdoc-dev/fonts`). Give one file per face so bold and italic resolve correctly:
 
-The toolbar's font dropdown shows whatever you register in `modules.toolbar.fonts`. Each entry is a `{ label, key }` pair where `key` is the CSS `font-family` value:
+```js
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  fonts: {
+    families: [
+      {
+        family: 'Brand Sans',
+        faces: [
+          { source: '/fonts/BrandSans-Regular.woff2' },
+          { source: '/fonts/BrandSans-Italic.woff2', style: 'italic' },
+          { source: '/fonts/BrandSans-Bold.woff2', weight: 700 },
+          { source: '/fonts/BrandSans-BoldItalic.woff2', weight: 700, style: 'italic' },
+        ],
+      },
+    ],
+  },
+});
+```
+
+SuperDoc passes each `source` URL to the browser; it does not read the font file, so register one file per weight and style you use. `weight` defaults to 400 and `style` to `normal`. Use WOFF2 for the widest browser support.
+
+Registering a family makes it render wherever a document uses it. It does not add the font to the toolbar; to offer it there, list it in `modules.toolbar.fonts` (see [Toolbar font list](#toolbar-font-list)).
+
+## Toolbar font list
+
+The built-in toolbar lists the fonts SuperDoc can render, plus the fonts the active document uses, sorted alphabetically. With no pack configured that is the baseline of one font per CSS generic (Arial, Times New Roman, Courier New); with the pack it is the full reviewed set, minus anything you curated out with `createSuperDocFonts`. If you pass `modules.toolbar.fonts`, that custom list replaces it entirely.
+
+Each custom entry is a `{ label, key }` pair where `key` is the CSS `font-family` value:
 
 ```javascript
 new SuperDoc({
@@ -40,24 +155,31 @@ new SuperDoc({
 });
 ```
 
-Registering a font makes it **selectable** in the dropdown. It does **not** load the font file. You still need the `@font-face` (or equivalent) on your host page.
+Registering a custom toolbar font makes it selectable. It does not load the font file. You still need the `@font-face` (or equivalent) on your host page.
+
+For custom UI, use `useSuperDocFontOptions()` or `ui.fonts` to get the same default-plus-document font list. Use `useSuperDocFontSizeOptions()` or `ui.fonts.getSizeOptions()` for size pickers.
 
 ## Programmatic font changes
 
 For AI agents or scripts setting a brand font:
 
 ```javascript
-editor.doc.format.fontFamily({ target, value: 'Inter' });
+editor.doc.format.apply({
+  target,
+  inline: { fontFamily: 'Inter', fontSize: 15 },
+});
 ```
 
 ## Common pitfalls
 
-- **Font name preserved, browser falls back.** The font name from the DOCX is intact, but the actual file isn't loaded. Add `@font-face`.
-- **Dropdown doesn't show a font.** Imported documents don't auto-populate the toolbar list. If a `.docx` uses Cambria but Cambria isn't in `fonts`, the user can't pick it from the dropdown: even though the current selection indicator may show "Cambria" if that's what the run uses.
-- **Office font licensing.** Calibri, Cambria, and Aptos are licensed Microsoft fonts. Self-hosting requires a license. Free substitutes are common in non-pixel-perfect contexts.
+- **Font name preserved, browser falls back.** SuperDoc keeps the DOCX font name. If no bundled fallback or loaded real font exists, the browser chooses its own fallback.
+- **Custom toolbar list hides document fonts.** Passing `modules.toolbar.fonts` replaces the built-in list. Include every option you want users to pick.
+- **Not every bundled family ships every weight and style.** A few substitutes are a single face. For a bold or italic run the substitute lacks, SuperDoc renders the faces it has and leaves the missing ones to the browser's fallback rather than synthesizing a face, so spacing stays predictable.
+- **Office font licensing.** Calibri, Cambria, and Aptos are licensed Microsoft fonts. Self-hosting the real files requires a license.
 
 ## Where to next
 
 - [Built-in UI > Toolbar](/editor/built-in-ui/toolbar#font-configuration): full toolbar font configuration options
+- [Custom UI > Toolbar and commands](/editor/custom-ui/toolbar-and-commands#font-family-picker): custom font picker example
 - [Document API > Available operations](/document-api/available-operations): programmatic font formatting
 - [Editor > Theming](/editor/theming/overview): set the default font for SuperDoc's UI chrome

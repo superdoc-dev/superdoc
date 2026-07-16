@@ -88,11 +88,13 @@ console.log('[audit-bundle] ✓ Verified single prosemirror-view copy per emitte
 
 // Size budgets (raw file size in bytes). Hard = fail the build, soft = warn.
 // Keep headroom above current sizes so legitimate growth doesn't break CI.
-// Missing files are skipped — some build phases (e.g. build:es) don't emit
-// every output. `build:cdn` fails loudly on its own if the CDN bundle is
-// broken, so a second gate here would double-count and break partial builds.
+// The CDN IIFE bundle now carries both the v1 + v2 runtime plus bundled peer
+// deps for the single-script-tag path, so its raw size no longer fits the
+// original 6 MiB gate. On-wire gzip remains materially smaller (see AGENTS.md).
+// `postbuild` now runs only after the full package build, including the CDN
+// artifact, so missing advertised files are treated as build failures.
 const SIZE_BUDGETS = [
-  { file: 'superdoc.min.js', soft: 5_242_880, hard: 6_291_456 }, // 5 MB warn / 6 MB fail
+  { file: 'superdoc.min.js', soft: 6_815_744, hard: 8_388_608 }, // 6.5 MiB warn / 8 MiB fail
   { file: 'superdoc.es.js', soft: 3_145_728, hard: 4_194_304 }, // 3 MB warn / 4 MB fail
   { file: 'style.css', soft: 153_600, hard: 204_800 }, // 150 KB warn / 200 KB fail
 ];
@@ -100,7 +102,11 @@ const SIZE_BUDGETS = [
 let sizeFailed = false;
 for (const { file, soft, hard } of SIZE_BUDGETS) {
   const full = path.join(distRoot, file);
-  if (!fs.existsSync(full)) continue;
+  if (!fs.existsSync(full)) {
+    console.error(`[audit-bundle] ✗ Missing required build artifact ${file}`);
+    sizeFailed = true;
+    continue;
+  }
   const size = fs.statSync(full).size;
   const kb = (size / 1024).toFixed(0);
   if (size > hard) {

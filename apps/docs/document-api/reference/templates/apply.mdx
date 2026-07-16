@@ -1,0 +1,939 @@
+---
+title: templates.apply
+sidebarTitle: templates.apply
+description: Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Apply detected DOCX template/substrate (styles, numbering, settings, theme, font table, web settings, headers/footers, section defaults) from a source package onto the current document, preserving body content. Scopes are auto-detected from source package evidence.
+
+- Operation ID: `templates.apply`
+- API member path: `await editor.doc.templates.apply(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Returns a promise (must be awaited): `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TemplatesApplyReceipt with detected/applied/skipped scopes, unsupported items, changed parts, id mappings, and warnings.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bodyPolicy` | `"preserve"` | no | Constant: `"preserve"` |
+| `source` | object(kind="path") \| object(kind="base64") | yes | One of: object(kind="path"), object(kind="base64") |
+
+### Example request
+
+```json
+{
+  "bodyPolicy": "preserve",
+  "source": {
+    "kind": "path",
+    "path": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `appliedScopes` | object[] | yes |  |
+| `bodyPolicy` | `"preserve"` | yes | Constant: `"preserve"` |
+| `changed` | boolean | yes |  |
+| `changedParts` | object[] | yes |  |
+| `detectedScopes` | object[] | yes |  |
+| `dryRun` | boolean | yes |  |
+| `idMappings` | object | yes |  |
+| `idMappings.numbering` | object[] | no |  |
+| `idMappings.relationships` | object[] | no |  |
+| `idMappings.styles` | object[] | no |  |
+| `skippedScopes` | object[] | yes |  |
+| `source` | object | yes |  |
+| `source.fingerprint` | string | yes |  |
+| `source.kind` | enum | yes | `"path"`, `"base64"` |
+| `source.partCount` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `unsupportedItems` | object[] | yes |  |
+| `warnings` | object[] | yes |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"UNSUPPORTED_SOURCE"`, `"INVALID_PACKAGE"`, `"CAPABILITY_UNAVAILABLE"`, `"UNSUPPORTED_TEMPLATE_CONTENT"` |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "appliedScopes": [
+    {
+      "detail": "example",
+      "part": "example",
+      "scope": "styles"
+    }
+  ],
+  "bodyPolicy": "preserve",
+  "changed": true,
+  "changedParts": [
+    {
+      "change": "created",
+      "part": "example",
+      "scope": "styles"
+    }
+  ],
+  "detectedScopes": [
+    {
+      "detail": "example",
+      "part": "example",
+      "scope": "styles"
+    }
+  ],
+  "dryRun": true,
+  "idMappings": {
+    "numbering": [
+      {
+        "from": "example",
+        "kind": "style",
+        "to": "example"
+      }
+    ],
+    "styles": [
+      {
+        "from": "example",
+        "kind": "style",
+        "to": "example"
+      }
+    ]
+  },
+  "skippedScopes": [
+    {
+      "message": "Operation failed.",
+      "part": "example",
+      "reason": "NOT_PRESENT_IN_SOURCE",
+      "scope": "all"
+    }
+  ],
+  "source": {
+    "fingerprint": "example",
+    "kind": "path",
+    "partCount": 1
+  },
+  "success": true,
+  "unsupportedItems": [
+    {
+      "category": "example",
+      "part": "example",
+      "reason": "example"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "INVALID_TARGET",
+      "message": "Operation failed."
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `REVISION_MISMATCH`
+
+## Non-applied failure codes
+
+- `UNSUPPORTED_SOURCE`
+- `INVALID_PACKAGE`
+- `CAPABILITY_UNAVAILABLE`
+- `UNSUPPORTED_TEMPLATE_CONTENT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "bodyPolicy": {
+      "const": "preserve"
+    },
+    "source": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "path"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "base64"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "source"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "appliedScopes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "part": {
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "styles",
+                  "numbering",
+                  "settings",
+                  "theme",
+                  "fontTable",
+                  "webSettings",
+                  "headersFooters",
+                  "sectionDefaults"
+                ]
+              }
+            },
+            "required": [
+              "scope",
+              "part"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "bodyPolicy": {
+          "const": "preserve"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "changedParts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "change": {
+                "enum": [
+                  "created",
+                  "replaced",
+                  "merged",
+                  "imported"
+                ]
+              },
+              "part": {
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "styles",
+                  "numbering",
+                  "settings",
+                  "theme",
+                  "fontTable",
+                  "webSettings",
+                  "headersFooters",
+                  "sectionDefaults",
+                  "package"
+                ]
+              }
+            },
+            "required": [
+              "part",
+              "scope",
+              "change"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "detectedScopes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "part": {
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "styles",
+                  "numbering",
+                  "settings",
+                  "theme",
+                  "fontTable",
+                  "webSettings",
+                  "headersFooters",
+                  "sectionDefaults"
+                ]
+              }
+            },
+            "required": [
+              "scope",
+              "part"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "idMappings": {
+          "additionalProperties": false,
+          "properties": {
+            "numbering": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "style",
+                      "numbering",
+                      "relationship"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "relationships": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "style",
+                      "numbering",
+                      "relationship"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "styles": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "style",
+                      "numbering",
+                      "relationship"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "skippedScopes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "part": {
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "NOT_PRESENT_IN_SOURCE",
+                  "OUT_OF_SCOPE",
+                  "NO_CHANGE",
+                  "CAPABILITY_UNAVAILABLE"
+                ]
+              },
+              "scope": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope",
+              "reason",
+              "message"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "fingerprint": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "path",
+                "base64"
+              ]
+            },
+            "partCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "fingerprint",
+            "partCount"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "unsupportedItems": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "part": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "part",
+              "category",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "changed",
+        "dryRun",
+        "bodyPolicy",
+        "source",
+        "detectedScopes",
+        "appliedScopes",
+        "skippedScopes",
+        "unsupportedItems",
+        "changedParts",
+        "idMappings",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "UNSUPPORTED_SOURCE",
+                "INVALID_PACKAGE",
+                "CAPABILITY_UNAVAILABLE",
+                "UNSUPPORTED_TEMPLATE_CONTENT"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "appliedScopes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "styles",
+              "numbering",
+              "settings",
+              "theme",
+              "fontTable",
+              "webSettings",
+              "headersFooters",
+              "sectionDefaults"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "part"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "bodyPolicy": {
+      "const": "preserve"
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "changedParts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "enum": [
+              "created",
+              "replaced",
+              "merged",
+              "imported"
+            ]
+          },
+          "part": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "styles",
+              "numbering",
+              "settings",
+              "theme",
+              "fontTable",
+              "webSettings",
+              "headersFooters",
+              "sectionDefaults",
+              "package"
+            ]
+          }
+        },
+        "required": [
+          "part",
+          "scope",
+          "change"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "detectedScopes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "styles",
+              "numbering",
+              "settings",
+              "theme",
+              "fontTable",
+              "webSettings",
+              "headersFooters",
+              "sectionDefaults"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "part"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "idMappings": {
+      "additionalProperties": false,
+      "properties": {
+        "numbering": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "style",
+                  "numbering",
+                  "relationship"
+                ]
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "relationships": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "style",
+                  "numbering",
+                  "relationship"
+                ]
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "styles": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "style",
+                  "numbering",
+                  "relationship"
+                ]
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "skippedScopes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "NOT_PRESENT_IN_SOURCE",
+              "OUT_OF_SCOPE",
+              "NO_CHANGE",
+              "CAPABILITY_UNAVAILABLE"
+            ]
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "reason",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "path",
+            "base64"
+          ]
+        },
+        "partCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "fingerprint",
+        "partCount"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "unsupportedItems": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "part",
+          "category",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "changed",
+    "dryRun",
+    "bodyPolicy",
+    "source",
+    "detectedScopes",
+    "appliedScopes",
+    "skippedScopes",
+    "unsupportedItems",
+    "changedParts",
+    "idMappings",
+    "warnings"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "UNSUPPORTED_SOURCE",
+            "INVALID_PACKAGE",
+            "CAPABILITY_UNAVAILABLE",
+            "UNSUPPORTED_TEMPLATE_CONTENT"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

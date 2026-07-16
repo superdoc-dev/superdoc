@@ -11,6 +11,7 @@ SuperDoc works with Laravel + Blade + Vite. Laravel serves the Blade template wi
 ```bash
 composer install
 npm install
+npm install superdoc @superdoc-dev/fonts
 ```
 
 ## Vite config
@@ -55,9 +56,10 @@ Create a Blade view that loads the Vite-bundled script and mounts the editor:
 
 ```js resources/js/app.js
 import { SuperDoc } from 'superdoc';
+import { superdocFonts } from '@superdoc-dev/fonts';
 import 'superdoc/style.css';
 
-let superdoc = new SuperDoc({ selector: '#editor' });
+let superdoc = new SuperDoc({ selector: '#editor', fonts: superdocFonts });
 
 document.getElementById('file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];

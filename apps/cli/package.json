@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/cli",
-  "version": "0.15.0",
+  "version": "0.22.0",
   "type": "module",
   "bin": {
     "superdoc": "./dist/index.js"
@@ -13,9 +13,9 @@
     "predev": "node scripts/ensure-superdoc-build.js",
     "dev": "bun run src/index.ts",
     "prebuild": "node scripts/ensure-superdoc-build.js",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm && node scripts/copy-runtime-assets.js && rm -rf dist/prompts && mkdir -p dist/prompts && cp ../../packages/sdk/langs/node/src/prompts/*.md dist/prompts/",
     "prebuild:native": "node scripts/ensure-superdoc-build.js",
-    "build:native": "bun build src/index.ts --compile --outfile dist/superdoc",
+    "build:native": "bun build src/index.ts --compile --outfile dist/superdoc && node scripts/copy-runtime-assets.js",
     "build:native:all": "node scripts/build-native-cli.js --all",
     "build:native:host": "node scripts/build-native-cli.js",
     "build:stage": "node scripts/stage-artifacts.js",
@@ -45,14 +45,16 @@
     "yjs": "catalog:"
   },
   "devDependencies": {
+    "@superdoc-dev/sdk": "workspace:*",
     "@superdoc/document-api": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "^8.5.13",
+    "lib0": "catalog:",
     "superdoc": "workspace:*",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "y-protocols": "catalog:"
   },
   "module": "src/index.ts",
   "publishConfig": {

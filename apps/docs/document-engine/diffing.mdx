@@ -118,12 +118,13 @@ asyncio.run(main())
 
 - `Doc3` is based on `Doc1`, not `Doc2`
 - Body edits from `Doc2` are replayed onto `Doc1` as tracked changes
+- Header and footer differences are detected and applied as part of the same compare flow
 - Comments, styles, and numbering changes are replayed directly
 - The output stays as a reviewable redline until someone accepts or rejects the tracked changes
 
 ## Current v1 limits
 
-- Header and footer content is not diffed in v1
+- Header and footer changes are applied directly — they do not appear as reviewable tracked-change entries and cannot be individually accepted or rejected
 - The diff payload is opaque and intended for replay, not semantic inspection
 - `diff.apply` checks that the current base document fingerprint still matches the diff's `baseFingerprint`
 

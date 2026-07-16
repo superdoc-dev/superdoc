@@ -1,78 +1,14 @@
-const PARAGRAPH_IDENTITY_ATTRS = ['sdBlockId', 'paraId'];
-const TABLE_IDENTITY_ATTRS = ['sdBlockId', 'paraId', 'blockId'];
-const DEFAULT_BLOCK_IDENTITY_ATTRS = ['sdBlockId', 'blockId', 'paraId'];
-const SYNTHETIC_PARA_ID_TYPES = new Set(['paragraph', 'tableRow']);
-const DOCX_ID_LENGTH = 8;
-const MAX_DOCX_ID = 0xffffffff;
-
-/** Maps block node types to safe block-identity attribute lookup order. */
-const BLOCK_IDENTITY_ATTRS = {
-  paragraph: PARAGRAPH_IDENTITY_ATTRS,
-  heading: DEFAULT_BLOCK_IDENTITY_ATTRS,
-  listItem: DEFAULT_BLOCK_IDENTITY_ATTRS,
-  table: TABLE_IDENTITY_ATTRS,
-  tableRow: TABLE_IDENTITY_ATTRS,
-  tableCell: TABLE_IDENTITY_ATTRS,
-  tableHeader: TABLE_IDENTITY_ATTRS,
-  sdt: DEFAULT_BLOCK_IDENTITY_ATTRS,
-  structuredContentBlock: DEFAULT_BLOCK_IDENTITY_ATTRS,
-};
-
-function toIdentityValue(value) {
-  if (typeof value === 'string' && value.length > 0) return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return undefined;
-}
-
-function getBlockIdentityAttrs(node) {
-  if (!node || typeof node !== 'object') return [];
-  return BLOCK_IDENTITY_ATTRS[node.type] ?? [];
-}
-
-function getExplicitIdentityEntries(node) {
-  const attrPriority = getBlockIdentityAttrs(node);
-  if (attrPriority.length === 0) return [];
-
-  const attrs = typeof node.attrs === 'object' && node.attrs ? node.attrs : {};
-  const identityEntries = [];
-
-  for (const attr of attrPriority) {
-    const value = toIdentityValue(attrs[attr]);
-    if (value) {
-      identityEntries.push({ attr, value });
-    }
-  }
-
-  return identityEntries;
-}
-
-function groupIdentityEntriesByValue(identityEntries) {
-  const groupsByValue = new Map();
-
-  for (const entry of identityEntries) {
-    const existingGroup = groupsByValue.get(entry.value);
-    if (existingGroup) {
-      existingGroup.attrs.push(entry.attr);
-      continue;
-    }
-
-    groupsByValue.set(entry.value, {
-      value: entry.value,
-      attrs: [entry.attr],
-    });
-  }
-
-  return [...groupsByValue.values()];
-}
-
-function shouldSynthesizeParaId(node) {
-  return Boolean(node && typeof node === 'object' && SYNTHETIC_PARA_ID_TYPES.has(node.type));
-}
+import {
+  shouldSynthesizeParaIdForType,
+  createDeterministicDocxIdAllocator,
+  getExplicitIdentityEntries,
+  groupIdentityEntriesByValue,
+} from './block-identity-renaming.js';
 
 function collectExplicitBlockIdentities(node, reservedIds) {
   if (!node || typeof node !== 'object') return;
 
-  const identityEntries = getExplicitIdentityEntries(node);
+  const identityEntries = getExplicitIdentityEntries(node.attrs, node?.type);
   for (const { value } of groupIdentityEntriesByValue(identityEntries)) {
     reservedIds.add(value);
   }
@@ -82,24 +18,6 @@ function collectExplicitBlockIdentities(node, reservedIds) {
   }
 }
 
-function createDeterministicDocxIdAllocator(reservedIds) {
-  let nextValue = 1;
-
-  return () => {
-    while (nextValue <= MAX_DOCX_ID) {
-      const id = nextValue.toString(16).toUpperCase().padStart(DOCX_ID_LENGTH, '0');
-      nextValue += 1;
-
-      if (reservedIds.has(id)) continue;
-
-      reservedIds.add(id);
-      return id;
-    }
-
-    throw new Error('Unable to allocate a unique synthetic DOCX block id.');
-  };
-}
-
 function setBlockIdentity(node, attrName, value) {
   node.attrs = { ...(node.attrs ?? {}), [attrName]: value };
 }
@@ -107,7 +25,7 @@ function setBlockIdentity(node, attrName, value) {
 function normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId) {
   if (!node || typeof node !== 'object') return;
 
-  const identityEntries = getExplicitIdentityEntries(node);
+  const identityEntries = getExplicitIdentityEntries(node.attrs, node?.type);
   const groupedIdentities = groupIdentityEntriesByValue(identityEntries);
 
   if (groupedIdentities.length > 0) {
@@ -122,7 +40,7 @@ function normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId) {
         seenIds.add(identityGroup.value);
       }
     }
-  } else if (shouldSynthesizeParaId(node)) {
+  } else if (shouldSynthesizeParaIdForType(node?.type)) {
     const syntheticParaId = allocateDocxId();
     setBlockIdentity(node, 'paraId', syntheticParaId);
     seenIds.add(syntheticParaId);

@@ -2,30 +2,69 @@ name: CI Examples
 
 on:
   pull_request:
-    paths:
-      - 'examples/**'
-      - 'packages/superdoc/**'
-      - 'packages/react/**'
-      - 'packages/super-editor/**'
-      - 'packages/collaboration-yjs/**'
-      - 'packages/sdk/**'
-      - 'packages/layout-engine/**'
-      - 'shared/**'
+  merge_group:
   workflow_dispatch:
 
+concurrency:
+  group: ci-examples-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      examples: ${{ steps.set.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            examples:
+              - '.github/workflows/ci-examples.yml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.nvmrc'
+              - 'examples/**'
+              - 'packages/superdoc/**'
+              - 'packages/react/**'
+              - 'packages/super-editor/**'
+              - 'packages/collaboration-yjs/**'
+              - 'packages/sdk/**'
+              - 'packages/layout-engine/**'
+              - 'shared/**'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "examples=${{ steps.filter.outputs.examples }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.examples == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -39,33 +78,48 @@ jobs:
       - name: Build collaboration package
         run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
 
-      - name: Install Playwright
-        working-directory: examples/__tests__
-        run: npx playwright install chromium
+      - name: Pack build artifact
+        run: tar -czf examples-build-dist.tgz packages/superdoc/dist packages/react/dist packages/collaboration-yjs/dist
 
-      - name: Cache workspace
-        uses: actions/cache/save@v4
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          name: examples-build-dist-${{ github.run_id }}
+          path: examples-build-dist.tgz
+          if-no-files-found: error
 
   getting-started:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [react, vue, vanilla, cdn, angular, nuxt, laravel, solid]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
 
       - name: Setup PHP
         if: matrix.example == 'laravel'
@@ -83,6 +137,28 @@ jobs:
         working-directory: examples/getting-started/laravel
         run: cp .env.example .env && php artisan key:generate
 
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
+
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=${{ matrix.example }} npx playwright test
@@ -91,24 +167,76 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [superdoc-yjs, hocuspocus, liveblocks]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
 
       - name: Create .env for cloud providers
         working-directory: examples/editor/collaboration/providers/${{ matrix.example }}
+        env:
+          VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}
         run: |
           if [ "${{ matrix.example }}" = "liveblocks" ]; then
-            echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
+            case "$VITE_LIVEBLOCKS_PUBLIC_KEY" in
+              pk_*) ;;
+              sk_*)
+                echo "::error::VITE_LIVEBLOCKS_PUBLIC_KEY must be a Liveblocks public key (pk_...), not a secret key (sk_...)."
+                exit 1
+                ;;
+              *)
+                echo "::error::VITE_LIVEBLOCKS_PUBLIC_KEY must be a Liveblocks public key beginning with pk_."
+                exit 1
+                ;;
+            esac
+            printf 'VITE_LIVEBLOCKS_PUBLIC_KEY=%s\n' "$VITE_LIVEBLOCKS_PUBLIC_KEY" > .env
           fi
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -118,17 +246,56 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [track-changes, comments, toolbar]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -138,25 +305,56 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [selection-capture, configurable-toolbar]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -166,17 +364,56 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [redlining]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -186,17 +423,56 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [react-shadcn, react-mui, vue-vuetify, svelte-shadcn, vanilla]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -206,17 +482,56 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [custom-mark, custom-node]
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: examples/__tests__
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright Chromium cache
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: examples/__tests__
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run smoke test
         working-directory: examples/__tests__
@@ -226,13 +541,30 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Restore workspace
-        uses: actions/cache/restore@v4
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
         with:
-          path: |
-            .
-            ~/.cache/ms-playwright
-          key: examples-workspace-${{ github.sha }}
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples-build-dist-${{ github.run_id }}
+          path: .
+
+      - name: Restore build artifact
+        run: tar -xzf examples-build-dist.tgz
 
       - name: Run AI redlining (server-side) tests
         working-directory: examples/document-engine/ai-redlining
@@ -241,11 +573,19 @@ jobs:
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
+    needs: [detect, build, getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.examples }}" != "true" ]]; then
+            echo "Examples CI skipped: no relevant paths changed."
+            exit 0
+          fi
           if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
             echo "One or more required jobs did not succeed."
             exit 1

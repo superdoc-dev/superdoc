@@ -263,12 +263,12 @@ input:focus {
 /* -----------------------------------------------------------------------
    Host-owned SDT styling.
    This demo turns off SuperDoc's built-in content-control chrome
-   (`modules.contentControls.chrome: 'none'` in main.ts) and paints its
-   own. The painter adds `.superdoc-cc-chrome-none` to the mount and resets
-   border/padding/radius/background on the SDT wrappers; scoping under that
-   class keeps these rules above the reset in specificity and cascade, and
-   restores the box properties the reset strips. No painter label element
-   exists under chrome-none, so there is nothing to style for it.
+   (`modules.contentControls.chrome: 'none'` in main.ts) and paints its own,
+   driving it entirely through SuperDoc's public --sd-content-controls-custom-*
+   variables. We set those variables per tag (on the data-sdt-tag selector) and
+   the painter applies them across rest, hover, selected, and locked-hover. So
+   there is no !important, and no .ProseMirror-selectednode / .sdt-group-hover
+   state selectors - this is the copy-pasteable pattern for styling custom SDTs.
    ----------------------------------------------------------------------- */
 
 /* Smart-tag token look, shared by the in-editor inline SDT and the Smart-tags
@@ -290,35 +290,22 @@ input:focus {
   --tag-block-bg-hover: color-mix(in srgb, var(--tag-color) 8%, var(--demo-bg));
   --tag-radius: 6px;
 }
-/* Inline smart fields: token pill (painted SDT wrapper under chrome:'none').
-   The box (border width + padding) is identical in every state so clicking /
-   hovering a field never shifts layout. Hover changes only the fill. */
+/* Inline smart fields: token pill, painted by SuperDoc under chrome:'none'. We
+   set the public --sd-content-controls-custom-inline-* variables, and SuperDoc
+   applies them across rest, hover, selected, and locked-hover. No !important, no
+   .ProseMirror-selectednode / .sdt-group-hover state selectors, and the box
+   (border + padding) stays identical in every state, so a field never shifts on
+   hover or click. Only the background changes; the border is constant. */
 .superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
-  padding: 1px 6px;
-  border: 1px solid var(--tag-border);
-  border-radius: var(--tag-radius);
-  background-color: var(--tag-bg);
+  --sd-content-controls-custom-inline-border: 1px solid var(--tag-border);
+  --sd-content-controls-custom-inline-radius: var(--tag-radius);
+  --sd-content-controls-custom-inline-padding: 1px 6px;
+  --sd-content-controls-custom-inline-bg: var(--tag-bg);
+  --sd-content-controls-custom-inline-hover-bg: var(--tag-bg-hover);
+  --sd-content-controls-custom-inline-selected-bg: var(--tag-bg-hover);
+  /* Text colour is not part of the custom border/fill layer and chrome:'none'
+     does not reset it, so it can be set directly and stays stable across states. */
   color: var(--tag-fg);
-}
-.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField']:hover {
-  /* Under chrome:'none' SuperDoc resets the field's border + fill (including on
-     hover) so the consumer owns the look. We re-assert the box so hover
-     never moves or recolors the field. The !important wins over that reset
-     without coupling to SuperDoc's selector specificity — a custom-UI styling
-     rough edge today (no first-class per-control styling hook yet). */
-  border: 1px solid var(--tag-border) !important;
-  background-color: var(--tag-bg-hover) !important;
-}
-/* Selecting a field is a ProseMirror NodeSelection (.ProseMirror-selectednode).
-   Under chrome:'none' SuperDoc resets the border + fill to transparent in that
-   state too; without re-asserting, the field loses its fill and the box can
-   shift (~2px) on click. Keep the same box and a controlled blue "selected"
-   fill so hover/click/selected stay on-brand and never move the field. */
-.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'].ProseMirror-selectednode {
-  /* !important to win over the chrome-none reset; same rough edge as hover. */
-  border: 1px solid var(--tag-border) !important;
-  background-color: var(--tag-bg-hover) !important;
-  color: var(--tag-fg) !important;
 }
 
 /* Smart-tags palette (sidebar). Chips reuse the --tag-* token look above, so a
@@ -364,23 +351,17 @@ input:focus {
 .smart-tag.is-active { box-shadow: 0 0 0 2px var(--demo-accent); }
 .smart-tag:focus-visible { outline: 1px solid var(--demo-accent); outline-offset: 1px; }
 
-/* Block clauses: a quiet card with a blue left rail, same field language as
-   the inline pills, but a region not a token: soft border, faint fill, a 4px
-   blue spine. */
+/* Block clauses: a quiet card with a blue left rail, same field language as the
+   inline pills but a region not a token (soft border, faint fill, a 4px blue
+   spine). Set the public --sd-content-controls-custom-block-* variables; SuperDoc
+   applies them across rest, hover, selected, and locked-hover - so, like the
+   inline fields, there's no !important and no .sdt-group-hover /
+   .ProseMirror-selectednode state selectors, and the box stays constant. */
 .superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
-  border: 1px solid var(--tag-block-border);
-  border-left: 4px solid var(--tag-color);
-  border-radius: var(--tag-radius);
-  background-color: var(--tag-block-bg);
-}
-/* Under chrome:'none' SuperDoc resets the block's border + fill on hover
-   (.sdt-group-hover) and select (.ProseMirror-selectednode) — via ::before/
-   ::after pseudo-elements, different mechanics than inline. Re-assert the exact
-   box (no jitter) and lift the fill slightly to show activity. !important wins
-   over the reset; same custom-UI rough edge as the inline rules above. */
-.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'].sdt-group-hover,
-.superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'].ProseMirror-selectednode {
-  border: 1px solid var(--tag-block-border) !important;
-  border-left: 4px solid var(--tag-color) !important;
-  background-color: var(--tag-block-bg-hover) !important;
+  --sd-content-controls-custom-block-border: 1px solid var(--tag-block-border);
+  --sd-content-controls-custom-block-border-left: 4px solid var(--tag-color);
+  --sd-content-controls-custom-block-radius: var(--tag-radius);
+  --sd-content-controls-custom-block-bg: var(--tag-block-bg);
+  --sd-content-controls-custom-block-hover-bg: var(--tag-block-bg-hover);
+  --sd-content-controls-custom-block-selected-bg: var(--tag-block-bg-hover);
 }

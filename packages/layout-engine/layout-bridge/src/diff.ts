@@ -10,6 +10,7 @@ import type {
   DrawingGeometry,
   ShapeGroupTransform,
   ShapeGroupChild,
+  TextboxDrawing,
   Run,
   ParagraphAttrs,
   ParagraphSpacing,
@@ -464,6 +465,8 @@ const imageRunsEqual = (a: ImageRun, b: ImageRun): boolean => {
     a.alt === b.alt &&
     a.title === b.title &&
     a.clipPath === b.clipPath &&
+    a.shapeClipPath === b.shapeClipPath &&
+    a.objectFit === b.objectFit &&
     a.distTop === b.distTop &&
     a.distBottom === b.distBottom &&
     a.distLeft === b.distLeft &&
@@ -514,19 +517,37 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
     return imageBlocksEqual(a, b);
   }
 
-  if (a.drawingKind === 'vectorShape' && b.drawingKind === 'vectorShape') {
+  if (
+    (a.drawingKind === 'vectorShape' || a.drawingKind === 'textboxShape') &&
+    (b.drawingKind === 'vectorShape' || b.drawingKind === 'textboxShape')
+  ) {
+    const textboxContentEqual =
+      a.drawingKind !== 'textboxShape' ||
+      b.drawingKind !== 'textboxShape' ||
+      jsonEqual((a as TextboxDrawing).contentBlocks, (b as TextboxDrawing).contentBlocks);
+
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
       a.shapeKind === b.shapeKind &&
+      jsonEqual(a.customGeometry, b.customGeometry) &&
       a.fillColor === b.fillColor &&
       a.strokeColor === b.strokeColor &&
-      a.strokeWidth === b.strokeWidth
+      a.strokeWidth === b.strokeWidth &&
+      a.textAlign === b.textAlign &&
+      a.textVerticalAlign === b.textVerticalAlign &&
+      jsonEqual(a.textInsets, b.textInsets) &&
+      jsonEqual(a.textContent, b.textContent) &&
+      jsonEqual(a.lineEnds, b.lineEnds) &&
+      jsonEqual(a.effects, b.effects) &&
+      jsonEqual(a.effectExtent, b.effectExtent) &&
+      textboxContentEqual
     );
   }
 
   if (a.drawingKind === 'shapeGroup' && b.drawingKind === 'shapeGroup') {
     return (
       drawingGeometryEqual(a.geometry, b.geometry) &&
+      jsonEqual(a.effectExtent, b.effectExtent) &&
       shapeGroupTransformEqual(a.groupTransform, b.groupTransform) &&
       shapeGroupSizeEqual(a.size, b.size) &&
       shapeGroupChildrenEqual(a.shapes, b.shapes)
@@ -623,7 +644,10 @@ const shapeGroupTransformEqual = (a?: ShapeGroupTransform, b?: ShapeGroupTransfo
     a.childWidth === b.childWidth &&
     a.childHeight === b.childHeight &&
     a.childOriginXEmu === b.childOriginXEmu &&
-    a.childOriginYEmu === b.childOriginYEmu
+    a.childOriginYEmu === b.childOriginYEmu &&
+    (a.rotation ?? 0) === (b.rotation ?? 0) &&
+    Boolean(a.flipH) === Boolean(b.flipH) &&
+    Boolean(a.flipV) === Boolean(b.flipV)
   );
 };
 

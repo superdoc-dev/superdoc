@@ -60,6 +60,79 @@ describe('ooxml - resolveStyleChain', () => {
     const result = resolveStyleChain('runProperties', params, 'MissingStyle');
     expect(result).toEqual({});
   });
+
+  it('uses canonical built-in heading properties for localized heading style conflicts', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          Kop1: {
+            type: 'paragraph',
+            styleId: 'Kop1',
+            name: 'heading 1',
+            runProperties: { fontSize: 20, bold: true, color: { val: '000000' } },
+            paragraphProperties: { spacing: { after: 120 } },
+          },
+          Heading1: {
+            type: 'paragraph',
+            styleId: 'Heading1',
+            name: 'heading 1',
+            runProperties: { fontSize: 32, bold: true, color: { val: '1F4E79' } },
+            paragraphProperties: { spacing: { after: 240 }, keepNext: true },
+          },
+        },
+      },
+    });
+
+    expect(resolveStyleChain('runProperties', params, 'Kop1')).toEqual({
+      fontSize: 32,
+      bold: true,
+      color: { val: '1F4E79' },
+    });
+    expect(resolveParagraphProperties(params, { styleId: 'Kop1' }, null)).toEqual({
+      styleId: 'Kop1',
+      spacing: { after: 240 },
+      keepNext: true,
+      indent: undefined,
+    });
+  });
+
+  it('resolves basedOn references through the canonical heading mapping for derived styles', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          MyHeading: {
+            type: 'paragraph',
+            styleId: 'MyHeading',
+            name: 'My Heading',
+            basedOn: 'Kop1',
+            runProperties: { italic: true },
+          },
+          Kop1: {
+            type: 'paragraph',
+            styleId: 'Kop1',
+            name: 'heading 1',
+            runProperties: { fontSize: 20, bold: true, color: { val: '000000' } },
+          },
+          Heading1: {
+            type: 'paragraph',
+            styleId: 'Heading1',
+            name: 'heading 1',
+            runProperties: { fontSize: 32, color: { val: '1F4E79' } },
+          },
+        },
+      },
+    });
+
+    // A custom style based on the localized `Kop1` must inherit the canonical
+    // `Heading1` formatting, not the literal small/black `Kop1` definition.
+    expect(resolveStyleChain('runProperties', params, 'MyHeading')).toEqual({
+      fontSize: 32,
+      color: { val: '1F4E79' },
+      italic: true,
+    });
+  });
 });
 
 describe('ooxml - getNumberingProperties', () => {
@@ -246,9 +319,11 @@ describe('ooxml - resolveRunProperties', () => {
       numCells: 2,
     };
     const result = resolveRunProperties(params, {}, null, tableInfo);
-    expect(result.fontSize).toBe(15);
-    expect(result.bold).toBe(true);
-    expect(result.italic).toBe(true);
+    expect(result.fontSize).toBe(15); // nwCell (corner) is highest priority
+    expect(result.bold).toBe(true); // wholeTable
+    expect(result.italic).toBe(true); // band1Horz
+    // Word applies COLUMN banding over row banding (verified vs Word renders, SD-3028),
+    // so band1Vert's color wins over band1Horz's.
     expect(result.color).toEqual({ val: 'CCCCCC' });
   });
   it('does not treat paragraph mark run properties as inherited text styling', () => {
@@ -421,6 +496,40 @@ describe('ooxml - resolveCellStyles', () => {
     const result = resolveCellStyles('runProperties', tableInfo, params.translatedLinkedStyles!);
     expect(result).toEqual([{ fontSize: 10 }, { fontSize: 50 }]);
   });
+
+  // SD-3028 (Gabriel review): Word applies COLUMN banding over row banding (verified by 150dpi
+  // Word renders of first_row_styling / conditional_style_regions: interior cells paint
+  // band1Vert/band2Vert #EEEEEE/#FAFAFA, not band1Horz/band2Horz). When both band axes are
+  // active, the vertical band must be the highest-priority (last) entry.
+  it('applies column banding over row banding when both axes are active (matches Word)', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          TableBandBoth: {
+            type: 'table',
+            tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
+            tableStyleProperties: {
+              wholeTable: { runProperties: { fontSize: 10 } },
+              band1Horz: { runProperties: { fontSize: 40 } },
+              band1Vert: { runProperties: { fontSize: 20 } },
+            },
+          },
+        },
+      },
+    });
+    const tableInfo = {
+      // both band axes active (noHBand/noVBand unset), no edge flags
+      tableProperties: { tableStyleId: 'TableBandBoth', tblLook: {} },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 4,
+      numCells: 4,
+    };
+    const result = resolveCellStyles('runProperties', tableInfo, params.translatedLinkedStyles!);
+    // Array is low -> high; the highest-priority (last) entry must be the column band.
+    expect(result[result.length - 1]).toEqual({ fontSize: 20 }); // band1Vert wins over band1Horz
+  });
 });
 
 describe('ooxml - resolveTableCellProperties', () => {
@@ -496,6 +605,47 @@ describe('ooxml - resolveTableCellProperties', () => {
     };
     const result = resolveTableCellProperties(null, tableInfo, gridTable4Styles);
     expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'EEEEEE' });
+  });
+
+  // SD-3028 (Gabriel review, conditional_style_regions): the fixture declares 3 gridCol but
+  // each row has 4 cells. Word auto-extends the grid to 4; SuperDoc must treat the actual cell
+  // count as the column boundary so lastCol/ne/se apply ONLY to the true last column, not to
+  // every column whose end reaches the (under-declared) grid width.
+  it('uses actual cell count as the last-column boundary when the grid under-declares columns', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        UnderGrid: {
+          type: 'table',
+          tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
+          tableStyleProperties: {
+            wholeTable: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'FFFFFF' } } },
+            lastCol: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'AAAAAA' } } },
+          },
+        },
+      },
+    };
+    const base = {
+      tableProperties: { tableStyleId: 'UnderGrid', tblLook: { lastColumn: true, noHBand: true, noVBand: true } },
+      rowIndex: 1,
+      numRows: 4,
+      numCells: 4,
+      numGridCols: 3, // grid under-declares: 3 cols for 4 cells
+    };
+    // 3rd cell (grid col 2, end 3): NOT the last column once the grid is reconciled to 4.
+    const col3 = resolveTableCellProperties(
+      null,
+      { ...base, cellIndex: 2, gridColumnStart: 2, gridColumnSpan: 1 },
+      styles,
+    );
+    expect(col3.shading).toEqual({ val: 'clear', color: 'auto', fill: 'FFFFFF' });
+    // 4th cell (grid col 3, end 4): the true last column.
+    const col4 = resolveTableCellProperties(
+      null,
+      { ...base, cellIndex: 3, gridColumnStart: 3, gridColumnSpan: 1 },
+      styles,
+    );
+    expect(col4.shading).toEqual({ val: 'clear', color: 'auto', fill: 'AAAAAA' });
   });
 
   it('inline cell shading overrides style shading', () => {
@@ -883,6 +1033,92 @@ describe('ooxml - resolveTableCellProperties basedOn tblStylePr inheritance', ()
     };
     const result = resolveTableCellProperties(null, tableInfoRow2, styles);
     expect(result.shading).toEqual({ fill: 'BBB' });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Style base-level tcPr as the wholeTable layer (ECMA-376 17.7.6, SD-3035)
+// A table style's base-level <w:tcPr><w:shd/></w:tcPr> is stored on the style
+// def's own tableCellProperties (sibling of tableStyleProperties) and IS the
+// wholeTable conditional layer. Word paints it on every cell.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - style base-level tcPr surfaces as wholeTable (SD-3035)', () => {
+  const interiorCell = (styleId: string) => ({
+    tableProperties: { tableStyleId: styleId, tblLook: { noHBand: true, noVBand: true } },
+    rowIndex: 1,
+    cellIndex: 1,
+    numRows: 3,
+    numCells: 3,
+  });
+
+  it('resolves a base-level shading with no explicit wholeTable region', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'F2F2F2' });
+  });
+
+  it('leaf base-level shading beats an ancestor base-level shading via basedOn', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'AAAAAA' } },
+        },
+        LeafStyle: {
+          type: 'table',
+          basedOn: 'BaseStyle',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('LeafStyle'), styles);
+    expect(result.shading).toEqual({ fill: 'F2F2F2' });
+  });
+
+  it('an explicit tableStyleProperties.wholeTable entry beats the base-level tcPr', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'BASE99' } },
+          tableStyleProperties: {
+            wholeTable: { tableCellProperties: { shading: { fill: 'EXPL77' } } },
+          },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ fill: 'EXPL77' });
+  });
+
+  it('inline cell shading still wins over the base-level wholeTable fill', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        CondStyle: {
+          type: 'table',
+          tableProperties: {},
+          tableCellProperties: { shading: { fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties({ shading: { fill: '4472C4' } }, interiorCell('CondStyle'), styles);
+    expect(result.shading).toEqual({ fill: '4472C4' });
   });
 });
 
@@ -1328,5 +1564,145 @@ describe('ooxml - corner cell gating matches Word behavior', () => {
     expect(fills).toContain('FIRST_ROW');
     expect(fills).toContain('LAST_COL');
     expect(fills).toContain('NE');
+  });
+});
+
+/**
+ * SD-3028 G7: conditional firstCol/lastCol regions are GRID positions in Word,
+ * not display-cell indices. gridSpan, vMerge continuations (merged away at
+ * import), and gridBefore placeholders all shift display indices off the grid,
+ * landing edge styling one column early. TableInfo carries optional grid
+ * positions; display indices remain the fallback for legacy callers.
+ *
+ * Fixture evidence: merged_cells_with_styles.docx, Word render 2026-06-06
+ * (B3 stays unshaded; the lastCol green follows grid column 3 through the
+ * vMerge; the gridSpan firstRow cell keeps firstCol at grid start).
+ */
+describe('grid-position conditional regions (SD-3028 G7)', () => {
+  const condGridStyles = {
+    ...emptyStyles,
+    styles: {
+      CondGrid: {
+        type: 'table',
+        tableStyleProperties: {
+          firstCol: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'FFFF00' } } },
+          lastCol: { tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: '92D050' } } },
+        },
+      },
+    },
+  };
+
+  const tableInfoBase = {
+    tableProperties: {
+      tableStyleId: 'CondGrid',
+      tblLook: { firstRow: false, lastRow: false, firstColumn: true, lastColumn: true, noHBand: true, noVBand: true },
+    },
+    numRows: 3,
+  };
+
+  it('does not mark a middle cell lastCol when a vMerge hides the trailing display cell', () => {
+    // Row 3 of the fixture: display cells [A3, B3] because C3 is a vMerge
+    // continuation. B3 is display-last but sits at grid column 1 of 3.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 2,
+      cellIndex: 1,
+      numCells: 2,
+      gridColumnStart: 1,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toBeUndefined();
+  });
+
+  it('marks lastCol when the cell grid span reaches the last grid column', () => {
+    // The vMerge restart cell in column C: display index 2, grid columns 2..3.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 2,
+      numCells: 3,
+      gridColumnStart: 2,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '92D050' });
+  });
+
+  it('keeps firstCol by grid start when a placeholder shifts the display index', () => {
+    // A gridBefore placeholder makes the first REAL cell display index 1, but
+    // it still starts at grid column 0.
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 1,
+      numCells: 3,
+      gridColumnStart: 0,
+      gridColumnSpan: 1,
+      numGridCols: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'FFFF00' });
+  });
+
+  it('falls back to display indices when grid positions are absent', () => {
+    const tableInfo = {
+      ...tableInfoBase,
+      rowIndex: 1,
+      cellIndex: 2,
+      numCells: 3,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, condGridStyles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: '92D050' });
+  });
+});
+
+/**
+ * SD-3028 G5 remainder, DISPROVEN and locked: a table STYLE's table-level
+ * shading (w:tblPr > w:shd) does NOT fill cells in Word. Measured from the
+ * nested_tables_with_styles.docx Word render (NestedSage style carries
+ * <w:tblPr><w:shd w:fill="C6E0B4"/> and no tcPr shading): the inner cells
+ * render pure white (zero C6E0B4 pixels); only the style's borders and run
+ * formatting apply. Cell fills come from the style's base tcPr (the
+ * wholeTable layer), conditional regions, or inline cell shading.
+ */
+describe('table style tblPr shading stays off cells (SD-3028 G5, Word-verified)', () => {
+  const tableInfo = {
+    tableProperties: { tableStyleId: 'NestedSage', tblLook: { noHBand: true, noVBand: true } },
+    rowIndex: 0,
+    cellIndex: 0,
+    numRows: 2,
+    numCells: 2,
+  };
+
+  it('does not paint the style table-level shading onto cells', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        NestedSage: {
+          type: 'table',
+          tableProperties: { shading: { val: 'clear', color: 'auto', fill: 'C6E0B4' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toBeUndefined();
+  });
+
+  it('still fills cells from the style base tcPr when both shadings exist', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        NestedSage: {
+          type: 'table',
+          tableProperties: { shading: { val: 'clear', color: 'auto', fill: 'C6E0B4' } },
+          tableCellProperties: { shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
+        },
+      },
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'F2F2F2' });
   });
 });

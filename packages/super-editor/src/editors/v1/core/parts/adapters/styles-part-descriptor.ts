@@ -38,8 +38,11 @@ export const stylesPartDescriptor: PartDescriptor = {
   },
 
   afterCommit(ctx: CommitContext) {
-    // For remote full-part replacements, rebuild the translated styles cache
-    if (ctx.source.startsWith('collab:remote:')) {
+    // For full-part replacements that don't share element identity with the
+    // live translated cache (remote collab applies and local `templates.apply`
+    // style-system transplants), rebuild the translated styles cache from the
+    // committed OOXML so in-session rendering reflects the adopted style system.
+    if (ctx.source.startsWith('collab:remote:') || ctx.source === 'templates.apply') {
       const converter = getConverter(ctx.editor);
       if (converter) {
         try {

@@ -397,3 +397,48 @@ test('adding the Return of Materials clause nests a real smart field that fills 
     .poll(async () => (await receivingPartyControls()).filter((t) => t === 'Beacon Bio').length, { timeout: 6_000 })
     .toBe(before + 1);
 });
+
+test('the public custom SDT variables drive the painted fields across states (no !important)', async ({ page }) => {
+  test.skip(process.env.DEMO !== 'contract-templates', 'contract-templates demo only');
+
+  await page.route('**/ingest.superdoc.dev/**', (r) =>
+    r.fulfill({ status: 204, contentType: 'application/json', body: '{}' }),
+  );
+  await page.goto('/');
+  await page.waitForFunction(
+    () => (window as any).__demo?.state?.ui?.contentControls?.getSnapshot()?.items?.length > 0,
+    null,
+    { timeout: 30_000 },
+  );
+  const sel = ".superdoc-structured-content-inline[data-sdt-tag*='smartField']";
+  await page.waitForSelector(sel);
+  const field = page.locator(sel).first();
+
+  const bg = () => field.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const borderTop = () =>
+    field.evaluate((el) => `${getComputedStyle(el).borderTopWidth} ${getComputedStyle(el).borderTopColor}`);
+
+  const restBg = await bg();
+  const restBorder = await borderTop();
+  await field.hover();
+  await page.waitForTimeout(250);
+  const hoverBg = await bg();
+  const hoverBorder = await borderTop();
+
+  // The custom hover background applies (the fill changes)...
+  expect(hoverBg).not.toBe(restBg);
+  // ...and it is NOT the built-in lock-hover tint. Fields carry data-lock-mode,
+  // which matches SuperDoc's lock-hover path; the custom variable must win.
+  expect(hoverBg).not.toBe('rgba(98, 155, 231, 0.08)');
+  // The border is constant across states (no jitter) - achieved with variables
+  // alone: the demo CSS has no !important and no .ProseMirror-selectednode /
+  // .sdt-group-hover state selectors.
+  expect(hoverBorder).toBe(restBorder);
+  expect(restBorder.startsWith('1px ')).toBe(true);
+
+  // No built-in label / chrome leaks under chrome:'none'.
+  const leakedLabels = await page
+    .locator('.superdoc-structured-content__label, .superdoc-structured-content-inline__label')
+    .count();
+  expect(leakedLabels).toBe(0);
+});

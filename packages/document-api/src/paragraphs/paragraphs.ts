@@ -8,6 +8,7 @@
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import type {
   ParagraphTarget,
   ParagraphMutationResult,
@@ -32,6 +33,7 @@ import type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
 } from './paragraphs.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
@@ -79,6 +81,7 @@ export type {
   ParagraphsClearShadingInput,
   ParagraphsSetDirectionInput,
   ParagraphsClearDirectionInput,
+  ParagraphsSetNumberingInput,
   ParagraphDirection,
   AlignmentPolicy,
 } from './paragraphs.types.js';
@@ -122,6 +125,7 @@ export interface ParagraphsAdapter {
   clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult;
   setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `format.paragraph.*`: direct paragraph formatting. */
@@ -148,6 +152,7 @@ export interface ParagraphFormatApi {
   clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult;
   setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  setNumbering(input: ParagraphsSetNumberingInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `styles.paragraph.*`: Word-like paragraph style application operations. */
@@ -194,6 +199,7 @@ function assertParagraphTarget(input: unknown, operation: string): asserts input
       value: target.nodeId,
     });
   }
+  validateStoryLocator(target.story, 'target.story');
 }
 
 function assertStrictBoolean(value: unknown, fieldName: string, operation: string): asserts value is boolean {
@@ -211,6 +217,16 @@ function assertNonNegativeInteger(value: unknown, fieldName: string, operation: 
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
       `${operation} ${fieldName} must be a non-negative integer, got ${JSON.stringify(value)}.`,
+      { field: fieldName, value },
+    );
+  }
+}
+
+function assertInteger(value: unknown, fieldName: string, operation: string): void {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operation} ${fieldName} must be an integer, got ${JSON.stringify(value)}.`,
       { field: fieldName, value },
     );
   }
@@ -277,7 +293,16 @@ const SET_SPACING_KEYS = new Set(['target', 'before', 'after', 'line', 'lineRule
 const CLEAR_SPACING_KEYS = new Set(['target']);
 const SET_KEEP_OPTIONS_KEYS = new Set(['target', 'keepNext', 'keepLines', 'widowControl']);
 const SET_OUTLINE_LEVEL_KEYS = new Set(['target', 'outlineLevel']);
-const SET_FLOW_OPTIONS_KEYS = new Set(['target', 'contextualSpacing', 'pageBreakBefore', 'suppressAutoHyphens']);
+const SET_FLOW_OPTIONS_KEYS = new Set([
+  'target',
+  'contextualSpacing',
+  'pageBreakBefore',
+  'suppressAutoHyphens',
+  'autoSpaceDE',
+  'autoSpaceDN',
+  'adjustRightInd',
+  'snapToGrid',
+]);
 const SET_TAB_STOP_KEYS = new Set(['target', 'position', 'alignment', 'leader']);
 const CLEAR_TAB_STOP_KEYS = new Set(['target', 'position']);
 const CLEAR_ALL_TAB_STOPS_KEYS = new Set(['target']);
@@ -286,6 +311,7 @@ const CLEAR_BORDER_KEYS = new Set(['target', 'side']);
 const SET_SHADING_KEYS = new Set(['target', 'fill', 'color', 'pattern']);
 const CLEAR_SHADING_KEYS = new Set(['target']);
 const SET_DIRECTION_KEYS = new Set(['target', 'direction', 'alignmentPolicy']);
+const SET_NUMBERING_KEYS = new Set(['target', 'numId', 'level']);
 const CLEAR_DIRECTION_KEYS = new Set(['target']);
 
 // ---------------------------------------------------------------------------
@@ -334,8 +360,8 @@ function validateSetIndentation(input: unknown): asserts input is ParagraphsSetI
   const rec = input as Record<string, unknown>;
   assertNotEmptyPatch(rec, ['left', 'right', 'firstLine', 'hanging'], op);
 
-  if (rec.left !== undefined) assertNonNegativeInteger(rec.left, 'left', op);
-  if (rec.right !== undefined) assertNonNegativeInteger(rec.right, 'right', op);
+  if (rec.left !== undefined) assertInteger(rec.left, 'left', op);
+  if (rec.right !== undefined) assertInteger(rec.right, 'right', op);
   if (rec.firstLine !== undefined) assertNonNegativeInteger(rec.firstLine, 'firstLine', op);
   if (rec.hanging !== undefined) assertNonNegativeInteger(rec.hanging, 'hanging', op);
 
@@ -417,11 +443,27 @@ function validateSetFlowOptions(input: unknown): asserts input is ParagraphsSetF
   assertParagraphTarget(input, op);
   assertNoUnknownFields(input as Record<string, unknown>, SET_FLOW_OPTIONS_KEYS, op);
   const rec = input as Record<string, unknown>;
-  assertNotEmptyPatch(rec, ['contextualSpacing', 'pageBreakBefore', 'suppressAutoHyphens'], op);
+  assertNotEmptyPatch(
+    rec,
+    [
+      'contextualSpacing',
+      'pageBreakBefore',
+      'suppressAutoHyphens',
+      'autoSpaceDE',
+      'autoSpaceDN',
+      'adjustRightInd',
+      'snapToGrid',
+    ],
+    op,
+  );
 
   if (rec.contextualSpacing !== undefined) assertStrictBoolean(rec.contextualSpacing, 'contextualSpacing', op);
   if (rec.pageBreakBefore !== undefined) assertStrictBoolean(rec.pageBreakBefore, 'pageBreakBefore', op);
   if (rec.suppressAutoHyphens !== undefined) assertStrictBoolean(rec.suppressAutoHyphens, 'suppressAutoHyphens', op);
+  if (rec.autoSpaceDE !== undefined) assertStrictBoolean(rec.autoSpaceDE, 'autoSpaceDE', op);
+  if (rec.autoSpaceDN !== undefined) assertStrictBoolean(rec.autoSpaceDN, 'autoSpaceDN', op);
+  if (rec.adjustRightInd !== undefined) assertStrictBoolean(rec.adjustRightInd, 'adjustRightInd', op);
+  if (rec.snapToGrid !== undefined) assertStrictBoolean(rec.snapToGrid, 'snapToGrid', op);
 }
 
 function validateSetTabStop(input: unknown): asserts input is ParagraphsSetTabStopInput {
@@ -433,7 +475,7 @@ function validateSetTabStop(input: unknown): asserts input is ParagraphsSetTabSt
   if (rec.position === undefined) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires a position field.`);
   }
-  assertNonNegativeInteger(rec.position, 'position', op);
+  assertInteger(rec.position, 'position', op);
 
   if (rec.alignment === undefined) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires an alignment field.`);
@@ -453,7 +495,7 @@ function validateClearTabStop(input: unknown): asserts input is ParagraphsClearT
   if (rec.position === undefined) {
     throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires a position field.`);
   }
-  assertNonNegativeInteger(rec.position, 'position', op);
+  assertInteger(rec.position, 'position', op);
 }
 
 function validateClearAllTabStops(input: unknown): asserts input is ParagraphsClearAllTabStopsInput {
@@ -531,6 +573,32 @@ function validateSetDirection(input: unknown): asserts input is ParagraphsSetDir
 function validateClearDirection(input: unknown): asserts input is ParagraphsClearDirectionInput {
   assertParagraphTarget(input, 'format.paragraph.clearDirection');
   assertNoUnknownFields(input as Record<string, unknown>, CLEAR_DIRECTION_KEYS, 'format.paragraph.clearDirection');
+}
+
+function validateSetNumbering(input: unknown): asserts input is ParagraphsSetNumberingInput {
+  const op = 'format.paragraph.setNumbering';
+  assertParagraphTarget(input, op);
+  assertNoUnknownFields(input as Record<string, unknown>, SET_NUMBERING_KEYS, op);
+  const rec = input as Record<string, unknown>;
+  if (rec.numId === undefined) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires a numId field.`);
+  }
+  if (typeof rec.numId !== 'number' || !Number.isInteger(rec.numId) || rec.numId < 1) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${op} numId must be a positive integer (numId 0 is the no-numbering sentinel). Got ${JSON.stringify(rec.numId)}.`,
+      { field: 'numId', value: rec.numId },
+    );
+  }
+  if (rec.level !== undefined) {
+    if (typeof rec.level !== 'number' || !Number.isInteger(rec.level) || rec.level < 0 || rec.level > 8) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${op} level must be an integer 0-8. Got ${JSON.stringify(rec.level)}.`,
+        { field: 'level', value: rec.level },
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -724,4 +792,13 @@ export function executeParagraphsClearDirection(
 ): ParagraphMutationResult {
   validateClearDirection(input);
   return adapter.clearDirection(input, normalizeMutationOptions(options));
+}
+
+export function executeParagraphsSetNumbering(
+  adapter: ParagraphsAdapter,
+  input: ParagraphsSetNumberingInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  validateSetNumbering(input);
+  return adapter.setNumbering(input, normalizeMutationOptions(options));
 }

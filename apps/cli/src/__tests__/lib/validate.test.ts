@@ -132,6 +132,40 @@ describe('validateCreateParagraphInput', () => {
     expect(result.at?.kind).toBe('before');
   });
 
+  test('preserves story locators on create-paragraph payloads', () => {
+    const result = validateCreateParagraphInput({
+      in: {
+        kind: 'story',
+        storyType: 'headerFooterPart',
+        refId: 'rId100',
+      },
+      at: {
+        kind: 'after',
+        target: {
+          kind: 'block',
+          nodeType: 'paragraph',
+          nodeId: 'p1',
+          story: {
+            kind: 'story',
+            storyType: 'headerFooterPart',
+            refId: 'rId100',
+          },
+        },
+      },
+    });
+    expect(result.in).toEqual({
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: 'rId100',
+    });
+    expect(result.at?.kind).toBe('after');
+    expect((result.at as { target?: { story?: unknown } }).target?.story).toEqual({
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: 'rId100',
+    });
+  });
+
   test('rejects bare nodeId shorthand in before location', () => {
     expect(() =>
       validateCreateParagraphInput({

@@ -77,6 +77,13 @@ const CLI_ONLY_OVERRIDES: Record<string, CliOnlySpecOverride> = {
       'superdoc insert line-break --target-json \'{"kind":"selection","start":{"kind":"text","blockId":"abc123","offset":5},"end":{"kind":"text","blockId":"abc123","offset":5}}\'',
     ],
   },
+  executeCode: {
+    mutates: true,
+    examples: [
+      "superdoc execute code --session my-session --code 'const t = doc.getText({}); return { length: t.length };'",
+      'superdoc execute code --session my-session   # large code via stdin',
+    ],
+  },
   status: { mutates: false, examples: ['superdoc status'] },
   describe: { mutates: false, examples: ['superdoc describe'] },
   describeCommand: { mutates: false, examples: ['superdoc describe command find'] },
@@ -92,6 +99,33 @@ const CLI_ONLY_OVERRIDES: Record<string, CliOnlySpecOverride> = {
   'session.setDefault': {
     mutates: true,
     examples: ['superdoc session set-default my-session', 'superdoc session set-default --session my-session'],
+  },
+  'preset.list': { mutates: false, examples: ['superdoc preset list'] },
+  'preset.getCatalog': {
+    mutates: false,
+    examples: ['superdoc preset get-catalog', 'superdoc preset get-catalog --preset core'],
+  },
+  'preset.getTools': {
+    mutates: false,
+    examples: [
+      'superdoc preset get-tools --provider openai',
+      'superdoc preset get-tools --provider anthropic --preset core --cache',
+    ],
+  },
+  'preset.getSystemPrompt': {
+    mutates: false,
+    examples: ['superdoc preset get-system-prompt', 'superdoc preset get-system-prompt --preset core'],
+  },
+  'preset.getMcpPrompt': {
+    mutates: false,
+    examples: ['superdoc preset get-mcp-prompt', 'superdoc preset get-mcp-prompt --preset core'],
+  },
+  'preset.dispatch': {
+    mutates: true,
+    examples: [
+      'superdoc preset dispatch --session my-session --tool-name superdoc_inspect --args-json \'{"countsOnly":true}\' --preset core',
+      'superdoc preset dispatch --session my-session --tool-name superdoc_perform_action --args-json \'{"action":"insert_paragraphs","text":"Hello"}\' --preset core',
+    ],
   },
 };
 

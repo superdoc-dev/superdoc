@@ -61,13 +61,29 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
-// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
-const shouldCommentOnRelease = !isPrerelease;
+// GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
+const shouldPublishGitHubRelease = !isLocalPreview && Boolean(branch) && !isPrerelease;
+// Linear release comments remain the shipped-version breadcrumb, so
+// prereleases link to their Git tags when no GitHub Release exists.
+const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
 const notesPlugin =
-  isLocalPreview || isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
+  isLocalPreview || isPrerelease
+    ? createReleaseNotesGenerator()
+    : [
+        'semantic-release-ai-notes',
+        {
+          style: 'concise',
+          scope: {
+            name: 'SuperDoc',
+            paths: SUPERDOC_PACKAGES,
+            audience: 'Developers embedding the SuperDoc editor in their own applications',
+            instructions:
+              'packages/super-editor, packages/layout-engine, packages/word-layout, and packages/preset-geometry are internal engine packages bundled directly into SuperDoc. Treat their changes as part of the editor itself, not as an external dependency.',
+          },
+        },
+      ];
 
 const config = {
   branches,
@@ -105,10 +121,10 @@ if (!isLocalPreview && !isPrerelease) {
 // Linear integration - labels issues with version on release
 if (!isLocalPreview) {
   config.plugins.push([
-    'semantic-release-linear-app',
+    '../../scripts/semantic-release/linear-commit-sync.cjs',
     {
       teamKeys: ['SD'],
-      addComment: shouldCommentOnRelease,
+      addComment: shouldCommentOnLinearRelease,
       packageName: 'superdoc',
       commentTemplate: 'shipped in {package} {releaseLink} {channel}',
     },
@@ -116,13 +132,12 @@ if (!isLocalPreview) {
 }
 
 // GitHub plugin comes last
-if (!isLocalPreview) {
+if (shouldPublishGitHubRelease) {
   config.plugins.push([
     '@semantic-release/github',
     {
       successComment:
         ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
-      successCommentCondition: shouldCommentOnRelease ? undefined : false,
     },
   ]);
 }

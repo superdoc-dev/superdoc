@@ -20,13 +20,16 @@ import { DocumentApiAdapterError } from '../errors.js';
 
 /**
  * Resolve a paragraph block address to its BlockCandidate.
- * Searches for both 'paragraph' and 'listItem' node types since a paragraph
- * with numbering properties is classified as 'listItem' in the block index.
+ * Searches 'paragraph', 'listItem', AND 'heading' node types: a paragraph
+ * with numbering properties is classified as 'listItem', and a paragraph
+ * with a heading style is classified as 'heading' — both are paragraph
+ * nodes in the document model (legal clauses are typically heading-styled,
+ * and converting them to a list must be able to address them).
  */
 export function resolveBlock(editor: Editor, nodeId: string): BlockCandidate {
   const index = getBlockIndex(editor);
   const matches = index.candidates.filter(
-    (c) => c.nodeId === nodeId && (c.nodeType === 'paragraph' || c.nodeType === 'listItem'),
+    (c) => c.nodeId === nodeId && (c.nodeType === 'paragraph' || c.nodeType === 'listItem' || c.nodeType === 'heading'),
   );
 
   if (matches.length === 0) {
@@ -58,8 +61,13 @@ export function resolveBlocksInRange(editor: Editor, fromId: string, toId: strin
   }
 
   const index = getBlockIndex(editor);
+  // Heading-classified blocks are paragraph nodes too (see resolveBlock) —
+  // a clause range being converted to a list is typically heading-styled.
   return index.candidates.filter(
-    (c) => (c.nodeType === 'paragraph' || c.nodeType === 'listItem') && c.pos >= from.pos && c.pos <= to.pos,
+    (c) =>
+      (c.nodeType === 'paragraph' || c.nodeType === 'listItem' || c.nodeType === 'heading') &&
+      c.pos >= from.pos &&
+      c.pos <= to.pos,
   );
 }
 

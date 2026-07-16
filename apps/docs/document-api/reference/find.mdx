@@ -38,6 +38,7 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 | `within.kind` | `"block"` | no | Constant: `"block"` |
 | `within.nodeId` | string | no |  |
 | `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `within.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -56,7 +57,11 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
   "within": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -79,7 +84,11 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
       "address": {
         "kind": "block",
         "nodeId": "node-def456",
-        "nodeType": "paragraph"
+        "nodeType": "paragraph",
+        "story": {
+          "kind": "story",
+          "storyType": "body"
+        }
       },
       "context": {},
       "node": {}
@@ -145,6 +154,9 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
             "caseSensitive": {
               "type": "boolean"
             },
+            "includeDeletedText": {
+              "type": "boolean"
+            },
             "mode": {
               "enum": [
                 "contains",
@@ -156,6 +168,9 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
             },
             "type": {
               "const": "text"
+            },
+            "wholeWord": {
+              "type": "boolean"
             }
           },
           "required": [

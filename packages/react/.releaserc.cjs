@@ -13,7 +13,7 @@ const {
  * When react migrates `superdoc` to peerDependencies, narrow this to
  * packages/react only. See .github/package-impact-map.md.
  */
-require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+const RELEASE_PATHS = [
   'packages/react',
   'packages/superdoc',
   'packages/super-editor',
@@ -22,7 +22,9 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/preset-geometry',
   'shared',
   'pnpm-workspace.yaml',
-]);
+];
+
+require('../../scripts/semantic-release/patch-commit-filter.cjs')(RELEASE_PATHS);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
@@ -33,12 +35,28 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-// stable -> main syncs (real merges) re-attribute prereleases to PRs already shipped on @latest.
-// Gate per-PR/issue success comments off on prereleases to avoid duplicate "shipped" comments.
-const shouldCommentOnRelease = !isPrerelease;
+// GitHub Releases are stable-only; prerelease tags and package publishing still proceed.
+const shouldPublishGitHubRelease = Boolean(branch) && !isPrerelease;
+// Linear release comments remain the shipped-version breadcrumb, so
+// prereleases link to their Git tags when no GitHub Release exists.
+const shouldCommentOnLinearRelease = true;
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease
+  ? createReleaseNotesGenerator()
+  : [
+      'semantic-release-ai-notes',
+      {
+        style: 'concise',
+        scope: {
+          name: 'SuperDoc React',
+          paths: RELEASE_PATHS,
+          audience: 'React developers embedding the @superdoc-dev/react component',
+          instructions:
+            "This package wraps the SuperDoc editor for React. Only mention editor changes when they affect the embedded editor's behavior or the component's props and API.",
+        },
+      },
+    ];
 
 const config = {
   branches,
@@ -74,17 +92,18 @@ if (!isPrerelease) {
 
 // Linear integration - labels issues with version on release
 config.plugins.push([
-  'semantic-release-linear-app',
-  { teamKeys: ['SD'], addComment: shouldCommentOnRelease, packageName: 'react' },
+  '../../scripts/semantic-release/linear-commit-sync.cjs',
+  { teamKeys: ['SD'], addComment: shouldCommentOnLinearRelease, packageName: 'react' },
 ]);
 
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/react** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
-    successCommentCondition: shouldCommentOnRelease ? undefined : false,
-  },
-]);
+if (shouldPublishGitHubRelease) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      successComment:
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/react** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+    },
+  ]);
+}
 
 module.exports = config;

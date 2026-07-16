@@ -58,7 +58,6 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.setLevelTrailingCharacter': [],
   'lists.setLevelMarkerFont': [],
   'lists.clearLevelOverrides': [],
-  'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'reopenComment', 'setCommentInternal'],
   'comments.delete': ['removeComment'],
@@ -420,7 +419,10 @@ function pushReason(reasons: CapabilityReasonCode[], reason: CapabilityReasonCod
 /** Operations that determine availability through non-command mechanisms. */
 function isNonCommandBackedOperation(operationId: OperationId): boolean {
   return (
-    operationId === 'format.apply' || operationId === 'styles.apply' || getInlineAliasKey(operationId) !== undefined
+    operationId === 'format.apply' ||
+    operationId === 'styles.apply' ||
+    operationId === 'templates.apply' ||
+    getInlineAliasKey(operationId) !== undefined
   );
 }
 
@@ -448,6 +450,18 @@ function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode |
   return undefined;
 }
 
+function isTemplatesApplyAvailable(editor: Editor): boolean {
+  const converter = (
+    editor as unknown as {
+      converter?: {
+        convertedXml?: Record<string, unknown>;
+        parseXmlToJson?: unknown;
+      };
+    }
+  ).converter;
+  return Boolean(converter?.convertedXml && typeof converter.parseXmlToJson === 'function');
+}
+
 function isOperationAvailable(editor: Editor, operationId: OperationId): boolean {
   // format.apply is available when at least one inline property can be executed.
   if (operationId === 'format.apply') {
@@ -463,6 +477,10 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
   // styles.apply requires converter + styles part
   if (operationId === 'styles.apply') {
     return isStylesApplyAvailable(editor);
+  }
+
+  if (operationId === 'templates.apply') {
+    return isTemplatesApplyAvailable(editor);
   }
 
   return hasAllCommands(editor, operationId) && hasRequiredHelpers(editor, operationId);
@@ -487,6 +505,8 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
       if (operationId === 'styles.apply') {
         const stylesReason = getStylesApplyUnavailableReason(editor);
         if (stylesReason) pushReason(reasons, stylesReason);
+      } else if (operationId === 'templates.apply') {
+        pushReason(reasons, 'OPERATION_UNAVAILABLE');
       } else if (isCommandBackedAvailability(operationId)) {
         if (!hasAllCommands(editor, operationId)) {
           pushReason(reasons, 'COMMAND_UNAVAILABLE');

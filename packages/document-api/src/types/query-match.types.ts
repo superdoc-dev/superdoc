@@ -220,7 +220,8 @@ export interface QueryMatchMeta {
 // ---------------------------------------------------------------------------
 
 export interface QueryMatchInput {
-  select: TextSelector | NodeSelector;
+  /** Text selector for query.match intentionally omits `includeDeletedText` — raw search is not supported here. */
+  select: Omit<TextSelector, 'includeDeletedText'> | NodeSelector;
   within?: BlockNodeAddress;
   /** Restrict matching to a specific story. Omit for body (backward compatible). */
   in?: StoryLocator;

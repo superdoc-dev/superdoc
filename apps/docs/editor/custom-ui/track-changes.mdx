@@ -12,16 +12,25 @@ description: 'Build your own track-changes review panel. Accept, reject, navigat
 import { useSuperDocTrackChanges, useSuperDocUI } from 'superdoc/ui/react';
 
 export function ReviewPanel() {
-  const { items, total } = useSuperDocTrackChanges();
+  const { items, total, authors } = useSuperDocTrackChanges();
   const ui = useSuperDocUI();
 
   return (
     <aside>
       <h2>Track changes · {total}</h2>
+      <div>
+        {authors.map((author) => (
+          <span key={`${author.email ?? ''}:${author.name ?? ''}`}>
+            <span style={{ background: author.color }} />
+            {author.name ?? author.email}
+          </span>
+        ))}
+      </div>
       {items.map((item) => (
         <ChangeRow
           key={item.id}
           change={item.change}
+          authorColor={item.authorColor}
           onAccept={() => ui?.trackChanges.accept(item.id)}
           onReject={() => ui?.trackChanges.reject(item.id)}
         />
@@ -31,7 +40,37 @@ export function ReviewPanel() {
 }
 ```
 
-`items` mirrors `editor.doc.trackChanges.list()`. Each item carries `id` plus the full `change` record (type, author, excerpt, address).
+`items` mirrors `editor.doc.trackChanges.list()`. Each item carries `id` plus the full `change` record (type, author, excerpt, address). If you configure `modules.trackChanges.authorColors`, each item also exposes `authorColor`, and `authors` contains the unique authors in document order with their resolved colors.
+
+## Per-author colors
+
+Use `modules.trackChanges.authorColors` when your review UI needs a stable legend or when imported DOCX files can contain authors your app did not know ahead of time.
+
+```tsx
+<SuperDocEditor
+  document="/contract.docx"
+  modules={{
+    trackChanges: {
+      visible: true,
+      authorColors: {
+        overrides: {
+          'alice@example.com': '#1f6feb',
+          'Bob Reviewer': '#d1242f',
+        },
+        resolve: (author) => {
+          if (author.email?.endsWith('@outside-counsel.com')) return '#8250df';
+          return undefined;
+        },
+      },
+    },
+  }}
+  hideToolbar
+  contained
+  onReady={({ superdoc }) => setSuperDoc(superdoc)}
+/>
+```
+
+SuperDoc uses the same resolver for the rendered document and the UI snapshot. That keeps custom cards, author legends, and document highlights in sync without app-side CSS selectors.
 
 ## Accept and reject
 
@@ -111,12 +150,13 @@ function ActiveAwareList() {
 | `items` | `TrackChangesItem[]` | Tracked changes in document order. |
 | `total` | `number` | Convenience count of `items.length`. |
 | `activeId` | `string \| null` | Active change driven by selection or by `next / previous / scrollTo`. |
+| `authors` | `TrackChangesAuthor[]` | Unique tracked-change authors in document order. Present with resolved `color` values when `modules.trackChanges.authorColors` is configured. |
 
-`TrackChangesItem` is `{ id, change }`. The `change` shape mirrors `editor.doc.trackChanges.list()`: `type`, `author`, `authorEmail`, `excerpt`, `address`, etc.
+`TrackChangesItem` is `{ id, change, authorColor? }`. The `change` shape mirrors `editor.doc.trackChanges.list()`: `type`, `author`, `authorEmail`, `excerpt`, `address`, etc. When author colors are configured, `change.authorColor` mirrors `item.authorColor`.
 
 ## Theming
 
-Insertion and deletion highlights are themable via `--sd-tracked-changes-*` CSS variables (`--sd-tracked-changes-insert-background`, `--sd-tracked-changes-delete-border`, etc.). See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.
+Insertion, deletion, and format-change highlights are themable via `--sd-tracked-changes-*` CSS variables (`--sd-tracked-changes-insert-background`, `--sd-tracked-changes-delete-border`, etc.). Per-author colors set those variables on the rendered tracked-change element. See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.
 
 ## Trade-offs
 

@@ -1,5 +1,12 @@
 import { describe, expect, it, mock } from 'bun:test';
-import type { ParagraphBlock, ParagraphMeasure, Line } from '@superdoc/contracts';
+import type {
+  DrawingFragment,
+  ParagraphBlock,
+  ParagraphMeasure,
+  Line,
+  TextboxDrawing,
+  DrawingMeasure,
+} from '@superdoc/contracts';
 import { layoutParagraphBlock, type ParagraphLayoutContext } from './layout-paragraph.js';
 import type { PageState } from './paginator.js';
 import type { FloatingObjectManager } from './floating-objects.js';
@@ -61,6 +68,9 @@ const makePageState = (): PageState => ({
   lastParagraphStyleId: undefined,
   lastParagraphContextualSpacing: false,
   maxCursorY: 50,
+  pageFootnoteReserve: 0,
+  footnoteDemandThisPage: 0,
+  footnoteRefsThisPage: 0,
 });
 
 /**
@@ -549,6 +559,46 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
       layoutParagraphBlock(ctx);
 
       expect(remeasureParagraph).toHaveBeenCalledWith(block, 120, 24);
+    });
+
+    it('does not expand fragment width past column when negative indents meet float wrap', () => {
+      const remeasureParagraph = mock((_block, maxWidth) => makeMeasure([{ width: 100, lineHeight: 20, maxWidth }]));
+
+      const floatManager = makeFloatManager();
+      floatManager.computeAvailableWidth = mock(() => ({
+        width: 400,
+        offsetX: 80,
+      }));
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'negative-indent-float',
+        runs: [{ text: 'Wrapped text', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          indent: { left: -8, right: -2 },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 500 }]);
+      const pageState = makePageState();
+
+      layoutParagraphBlock({
+        block,
+        measure,
+        columnWidth: 500,
+        ensurePage: mock(() => pageState),
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager,
+        remeasureParagraph,
+      });
+
+      const fragment = pageState.page.fragments[0];
+      expect(fragment?.kind).toBe('para');
+      if (fragment?.kind !== 'para') return;
+      expect(fragment.x).toBe(130);
+      expect(fragment.width).toBe(400);
+      expect(fragment.x + fragment.width).toBe(530);
     });
   });
 });
@@ -1243,6 +1293,82 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
   });
 });
 
+describe('layoutParagraphBlock - anchored textbox drawings', () => {
+  it('attaches textbox content measures for anchored textbox fragments', () => {
+    const pageState = makePageState();
+    const ensurePage = mock(() => pageState);
+    const remeasureParagraph = mock((_block: ParagraphBlock, _maxWidth: number) => ({
+      kind: 'paragraph' as const,
+      lines: [],
+      totalHeight: 18,
+    }));
+
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'anchor-paragraph',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+    };
+
+    const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+    const textboxParagraph: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'textbox-paragraph',
+      runs: [{ text: 'Textbox text', fontFamily: 'Arial', fontSize: 10 }],
+      pmStart: 21,
+      pmEnd: 33,
+    };
+    const drawingBlock: TextboxDrawing = {
+      kind: 'drawing',
+      id: 'drawing-1',
+      drawingKind: 'textboxShape',
+      geometry: { width: 143, height: 45, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [textboxParagraph],
+      textInsets: { top: 10, right: 10, bottom: 10, left: 10 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 0,
+      },
+    };
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      width: 143,
+      height: 45,
+      geometry: drawingBlock.geometry,
+      scale: 1,
+    };
+
+    const ctx: ParagraphLayoutContext = {
+      block,
+      measure,
+      columnWidth: 150,
+      ensurePage,
+      advanceColumn: mock((state) => state),
+      columnX: mock(() => 50),
+      floatManager: makeFloatManager(),
+      remeasureParagraph,
+    };
+
+    layoutParagraphBlock(ctx, {
+      anchoredDrawings: [{ block: drawingBlock, measure: drawingMeasure }],
+      anchoredTables: [],
+      columnWidth: 150,
+      pageWidth: 600,
+      pageMargins: { top: 50, right: 50, bottom: 50, left: 50 },
+      columns: { width: 150, gap: 20, count: 1 },
+      placedAnchoredIds: new Set<string>(),
+    });
+
+    expect(remeasureParagraph).toHaveBeenCalledWith(textboxParagraph, 123);
+    expect(pageState.page.fragments).toHaveLength(2);
+    expect(pageState.page.fragments[0]?.kind).toBe('drawing');
+    const fragment = pageState.page.fragments[0] as DrawingFragment;
+    expect(fragment.contentMeasures).toEqual([{ kind: 'paragraph', lines: [], totalHeight: 18 }]);
+  });
+});
+
 describe('layoutParagraphBlock - keepLines', () => {
   it('advances to next page when keepLines is true and paragraph does not fit', () => {
     const block: ParagraphBlock = {
@@ -1442,5 +1568,60 @@ describe('layoutParagraphBlock - keepLines', () => {
     // Paragraph (600px) + collapsed spacing (10px) = 610px fits in 650px remaining
     // So it should NOT advance (it fits on current page)
     expect(advanceColumn).not.toHaveBeenCalled();
+  });
+});
+
+describe('SD-3049: footnote demand survives advanceColumn within one iteration', () => {
+  it('charges the block demand onto the page advanceColumn lands on', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'block-x',
+      runs: [{ text: 'Spilled block.', fontFamily: 'Arial', fontSize: 12 }],
+    };
+    // 3 lines that easily fit on the next page; the block only spills because
+    // the starting cursor is near the page bottom on P.
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+    ]);
+
+    // P starts near the bottom so the first break decision must advance.
+    const pageP: PageState = {
+      ...makePageState(),
+      page: { number: 1, fragments: [] },
+      cursorY: 600,
+      contentBottom: 620,
+    };
+
+    // Mirror the paginator: a fresh page Q with demand reset to 0 and cursor
+    // back at topMargin. Hold a reference so the test can read final state.
+    const pageQ: PageState = {
+      ...makePageState(),
+      page: { number: 2, fragments: [] },
+      cursorY: 50,
+      contentBottom: 620,
+    };
+
+    const BLOCK_DEMAND = 100;
+
+    layoutParagraphBlock({
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: mock(() => pageP),
+      advanceColumn: mock(() => pageQ),
+      columnX: mock(() => 50),
+      floatManager: makeFloatManager(),
+      // Phase 1 (SD-2656): body uses ORDERED minimum from anchors, not the
+      // legacy block-demand getter. Demand transfer on spill must still hold
+      // — express it via anchors whose ordered-minimum equals BLOCK_DEMAND.
+      getFootnoteAnchorsForBlockId: (blockId) =>
+        blockId === 'block-x'
+          ? [{ pmPos: 0, refId: 'r1', fullHeight: BLOCK_DEMAND, firstLineHeight: BLOCK_DEMAND }]
+          : [],
+    });
+
+    expect(pageQ.footnoteDemandThisPage).toBe(BLOCK_DEMAND);
   });
 });

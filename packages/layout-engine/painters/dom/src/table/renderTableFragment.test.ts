@@ -136,6 +136,59 @@ describe('renderTableFragment', () => {
     expect(element.dataset.pmEnd).toBe('34');
   });
 
+  it('renders a nested table SDT own label when the parent boundary label is suppressed', () => {
+    const parentSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'parent-sdt',
+      alias: 'Parent',
+    };
+    const childSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'child-sdt',
+      alias: 'Child',
+    };
+    const block = createTestTableBlock();
+    block.attrs = {
+      sdt: childSdt,
+      containerSdt: parentSdt,
+    };
+    const measure = createTestTableMeasure();
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      sdtBoundary: {
+        isStart: false,
+        isEnd: true,
+        showLabel: false,
+        ownIsStart: true,
+        ownIsEnd: true,
+        ownShowLabel: true,
+        ownIsNested: true,
+      },
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {
+        // Intentionally empty for test mock
+      },
+      applySdtDataset: () => {
+        // Intentionally empty for test mock
+      },
+      applyStyles: () => {
+        // Intentionally empty for test mock
+      },
+    });
+
+    expect(element.dataset.sdtContainerShowLabel).toBe('true');
+    expect(element.querySelector('.superdoc-structured-content-block__label')?.textContent).toBe('Child');
+  });
+
   it('applies outer left/right borders in separate mode even when cellSpacing is unset or zero', () => {
     const block = createTestTableBlock();
     block.attrs = {
@@ -168,6 +221,189 @@ describe('renderTableFragment', () => {
 
     expect(element.style.borderLeftWidth).toBe('2px');
     expect(element.style.borderRightWidth).toBe('3px');
+  });
+
+  // SD-3308 review: in separate-borders mode a COMPOUND table border (triple/thinThick*)
+  // is painted by the nested-rectangle outline/middle-grid overlay. The container's CSS
+  // border keeps its band WIDTH (separate-mode gap geometry) but its color must be
+  // transparent on compound sides, or applyBorder's solid band renders a filled slab
+  // under the overlay rules. A plain single border stays painted normally.
+  it('makes the separate-mode container border transparent on compound sides (no solid slab)', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      borderCollapse: 'separate',
+      borders: {
+        top: { style: 'triple', width: 2, color: '#000000' }, // compound -> transparent
+        left: { style: 'single', width: 2, color: '#ff0000' }, // plain -> stays painted
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 6,
+      effectiveColumnWidths: [100],
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // compound top: width kept (band), color transparent so the overlay rules are the only paint
+    expect(element.style.borderTopWidth).not.toBe('');
+    expect(element.style.borderTopColor).toBe('transparent');
+    // plain single left: normal solid paint, not transparent
+    expect(element.style.borderLeftStyle).toBe('solid');
+    expect(element.style.borderLeftColor).not.toBe('transparent');
+    // the compound overlay still paints the frame rules
+    expect(element.querySelector('.superdoc-compound-border-outline')).not.toBeNull();
+  });
+
+  // SD-3028: a table-level `double` is NOT a multi-rule overlay style — it renders via the
+  // boundary cells' native CSS `border-style: double` (two equal rules). The fragment outline
+  // and the separate-mode transparent treatment must skip it, or a third rule stacks on top.
+  it('does not draw the compound outline for a table-level double (native cells render it)', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      borders: {
+        top: { style: 'double', width: 2, color: '#000000' },
+        bottom: { style: 'double', width: 2, color: '#000000' },
+        left: { style: 'double', width: 2, color: '#000000' },
+        right: { style: 'double', width: 2, color: '#000000' },
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 0,
+      effectiveColumnWidths: [100],
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // No compound outline / mid-grid / per-cell rects for a plain double.
+    expect(element.querySelector('.superdoc-compound-border-outline')).toBeNull();
+    expect(element.querySelector('.superdoc-compound-border-midring')).toBeNull();
+    expect(element.querySelectorAll('.superdoc-compound-border-rect').length).toBe(0);
+    // The boundary cell carries a real, visible double border (not transparent-ized).
+    const cell = element.querySelector('div[style*="border"]') as HTMLElement | null;
+    expect(cell).not.toBeNull();
+    expect(cell!.style.borderTopStyle === 'double' || cell!.style.borderBottomStyle === 'double').toBe(true);
+  });
+
+  // SD-3308: Word paints the MIDDLE rule of table-level 3-rule bands as a continuous
+  // grid (measured: the divider's middle rule runs unbroken through the row band and
+  // meets the boundary band's middle ring). The fragment paints one ring inset by
+  // outer rule + gap plus full-length center strips per interior gridline.
+  it('paints a continuous middle grid for table-level triple borders', () => {
+    const para = (id: string): ParagraphBlock => ({ kind: 'paragraph', id: id as BlockId, runs: [] });
+    const block: TableBlock = {
+      kind: 'table',
+      id: 'triple-grid' as BlockId,
+      attrs: {
+        borders: {
+          top: { style: 'triple', width: 2, color: '#000000' },
+          bottom: { style: 'triple', width: 2, color: '#000000' },
+          left: { style: 'triple', width: 2, color: '#000000' },
+          right: { style: 'triple', width: 2, color: '#000000' },
+          insideH: { style: 'triple', width: 2, color: '#000000' },
+          insideV: { style: 'triple', width: 2, color: '#000000' },
+        },
+      },
+      rows: [
+        {
+          id: 'r0' as BlockId,
+          cells: [
+            { id: 'c00' as BlockId, blocks: [para('p00')] },
+            { id: 'c01' as BlockId, blocks: [para('p01')] },
+          ],
+        },
+        {
+          id: 'r1' as BlockId,
+          cells: [
+            { id: 'c10' as BlockId, blocks: [para('p10')] },
+            { id: 'c11' as BlockId, blocks: [para('p11')] },
+          ],
+        },
+      ],
+    };
+    const cellMeasure = {
+      blocks: [{ kind: 'paragraph' as const, lines: [], totalHeight: 20 }],
+      width: 100,
+      height: 20,
+    };
+    const measure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [cellMeasure, cellMeasure], height: 20 },
+        { cells: [cellMeasure, cellMeasure], height: 20 },
+      ],
+      columnWidths: [100, 100],
+      totalWidth: 200,
+      totalHeight: 40,
+    };
+    const fragment: TableFragment = {
+      kind: 'table',
+      blockId: 'triple-grid' as BlockId,
+      fromRow: 0,
+      toRow: 2,
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 40,
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment,
+      context,
+      block,
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {},
+      applySdtDataset: () => {},
+      applyStyles: () => {},
+    });
+
+    // Per-cell mids are suppressed (table-level provides the grid).
+    expect(element.querySelectorAll('.superdoc-compound-border-mid').length).toBe(0);
+
+    // Ring inset by outer rule + gap = 4, borders 2px.
+    const ring = element.querySelector('.superdoc-compound-border-midring') as HTMLElement;
+    expect(ring).toBeTruthy();
+    expect(ring.style.left).toBe('4px');
+    expect(ring.style.top).toBe('4px');
+    expect(ring.style.borderTop).toMatch(/2px solid/);
+    expect(ring.style.borderLeft).toMatch(/2px solid/);
+
+    // Interior vertical center strip: centered on the gridline (x=100), spanning
+    // between the ring's middle rules (continuous through the row band).
+    const verticals = [...element.querySelectorAll('.superdoc-compound-border-midv')] as HTMLElement[];
+    expect(verticals.length).toBe(1);
+    expect(verticals[0].style.left).toBe('99px');
+    expect(verticals[0].style.width).toBe('2px');
+    expect(verticals[0].style.top).toBe('4px');
+    expect(verticals[0].style.height).toBe(`${40 - 8}px`);
+
+    // Interior horizontal center strip: at row boundary + midOffset, full width
+    // between the ring's middle rules.
+    const horizontals = [...element.querySelectorAll('.superdoc-compound-border-midh')] as HTMLElement[];
+    expect(horizontals.length).toBe(1);
+    expect(horizontals[0].style.top).toBe('24px');
+    expect(horizontals[0].style.height).toBe('2px');
+    expect(horizontals[0].style.left).toBe('4px');
+    expect(horizontals[0].style.width).toBe(`${200 - 8}px`);
   });
 
   it('suppresses child chrome when table containerSdt shares id-less metadata', () => {
@@ -575,6 +811,61 @@ describe('renderTableFragment', () => {
         min: 25,
         r: 1,
       });
+    });
+
+    // Build a one-row measure whose single cell occupies only column 0, leaving
+    // the last grid column as an empty trailing gridAfter spacer.
+    const spacerMeasure = (spacerWidth: number): TableMeasure => ({
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+              width: 100,
+              height: 20,
+              gridColumnStart: 0,
+              colSpan: 1,
+            },
+          ],
+          height: 20,
+        },
+      ],
+      columnWidths: [100, spacerWidth],
+      totalWidth: 100 + spacerWidth,
+      totalHeight: 20,
+    });
+
+    const renderSpacerTable = (spacerWidth: number): Element =>
+      renderTableFragment({
+        doc,
+        fragment: createTestTableFragment([
+          { index: 0, x: 0, width: 100, minWidth: 25, resizable: true },
+          { index: 1, x: 100, width: spacerWidth, minWidth: 25, resizable: true },
+        ]),
+        context,
+        block: createTestTableBlock(),
+        measure: spacerMeasure(spacerWidth),
+        cellSpacingPx: 0,
+        effectiveColumnWidths: [100, spacerWidth],
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+    it('omits the resize boundary for a degenerate trailing gridAfter spacer column (SD-3345)', () => {
+      // Spacer is narrower than its own min width → degenerate → its left-edge
+      // resize boundary is suppressed so it does not crowd the table-edge handle.
+      const parsed = JSON.parse(renderSpacerTable(7).getAttribute('data-table-boundaries')!);
+      expect(parsed.segments[1]).toEqual([]);
+    });
+
+    it('keeps the resize boundary for a normal-width trailing column (control)', () => {
+      // Same shape but the trailing column meets its min width → not degenerate →
+      // the boundary is kept. Proves the suppression is gated on degeneracy.
+      const parsed = JSON.parse(renderSpacerTable(40).getAttribute('data-table-boundaries')!);
+      expect(parsed.segments[1].length).toBeGreaterThan(0);
     });
 
     it('should embed row boundary metadata when rowBoundaries are present', () => {
@@ -2049,6 +2340,235 @@ describe('renderTableFragment', () => {
 
       const positions = cells.map((c) => parseFloat(c.style.left)).sort((a, b) => a - b);
       expect(positions).toEqual([0, 100]);
+    });
+  });
+
+  describe('interior row boundary gap strips (SD-3028)', () => {
+    // Word paints the boundary between two rows as ONE continuous line across the UNION of
+    // both rows' extents (300dpi probes: gridBefore/gridAfter slivers render with insideH).
+    // Cells below own their own span; segments with a cell above but none below get a strip.
+    const para = (id: string) => ({ kind: 'paragraph' as const, id: id as BlockId, runs: [] });
+    const measuredCell = (gridColumnStart: number, colSpan: number, width: number, rowSpan = 1) => ({
+      paragraph: { kind: 'paragraph' as const, lines: [], totalHeight: 20 },
+      width,
+      height: 20,
+      gridColumnStart,
+      colSpan,
+      rowSpan,
+    });
+    const fragmentFor = (block: TableBlock, width: number, height: number, toRow: number): TableFragment => ({
+      kind: 'table',
+      blockId: block.id,
+      fromRow: 0,
+      toRow,
+      x: 0,
+      y: 0,
+      width,
+      height,
+    });
+    const render = (block: TableBlock, measure: TableMeasure, fragment: TableFragment) =>
+      renderTableFragment({
+        doc,
+        fragment,
+        context,
+        block,
+        measure,
+        cellSpacingPx: 0,
+        effectiveColumnWidths: measure.columnWidths,
+        renderLine: () => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+    const gapStrips = (el: HTMLElement): HTMLElement[] =>
+      Array.from(el.querySelectorAll('.superdoc-row-boundary-gap')) as HTMLElement[];
+
+    it('paints insideH strips over gridBefore/gridAfter slivers of a narrower row (SD-1513)', () => {
+      // Grid [20, 100, 15]: row 0 spans all three columns; row 1 covers only col 1.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'gap-table' as BlockId,
+        attrs: {
+          borders: {
+            top: { style: 'single', width: 1, color: '#000000' },
+            bottom: { style: 'single', width: 1, color: '#000000' },
+            left: { style: 'single', width: 1, color: '#000000' },
+            right: { style: 'single', width: 1, color: '#000000' },
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+            insideV: { style: 'single', width: 1, color: '#FF00FF' },
+          },
+        },
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 3, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 3, 135)], height: 20 },
+          { cells: [measuredCell(1, 1, 100)], height: 20 },
+        ],
+        columnWidths: [20, 100, 15],
+        totalWidth: 135,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 135, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(2);
+      const lefts = strips.map((s) => parseFloat(s.style.left)).sort((a, b) => a - b);
+      const widths = strips.map((s) => parseFloat(s.style.width)).sort((a, b) => a - b);
+      expect(lefts).toEqual([0, 120]);
+      expect(widths).toEqual([15, 20]);
+      for (const strip of strips) {
+        expect(strip.style.top).toBe('20px');
+        expect(strip.style.borderTopStyle).toBe('solid');
+        expect(strip.style.borderTopColor.toLowerCase()).toBe('#ff0000');
+      }
+      // The wide cell above must NOT paint its own interior bottom (the strip + the cell
+      // below own the boundary); painting it too would double the line.
+      const aboveCell = el.children[0] as HTMLElement;
+      expect(aboveCell.style.borderBottomWidth).toBe('');
+    });
+
+    it('paints the uncovered span with the above cell own bottom border when there are no table borders (SD-3345 callout)', () => {
+      // The 23_notification shape: a full-width callout cell with its own borders above a
+      // narrower row (gridAfter). The strip closes the bottom-right corner in the callout color.
+      const blue = { style: 'single' as const, width: 1, color: '#342D8C' };
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'callout-table' as BlockId,
+        rows: [
+          {
+            id: 'r0' as BlockId,
+            cells: [
+              {
+                id: 'callout' as BlockId,
+                colSpan: 2,
+                attrs: { borders: { top: blue, left: blue, right: blue, bottom: blue } },
+                paragraph: para('p0'),
+              },
+            ],
+          },
+          { id: 'r1' as BlockId, cells: [{ id: 'opt' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 200)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(1);
+      expect(strips[0].style.left).toBe('100px');
+      expect(strips[0].style.width).toBe('100px');
+      expect(strips[0].style.top).toBe('20px');
+      expect(strips[0].style.borderTopColor.toLowerCase()).toBe('#342d8c');
+      // The callout does not also paint its interior bottom (single line, no doubling).
+      const callout = el.children[0] as HTMLElement;
+      expect(callout.style.borderBottomWidth).toBe('');
+    });
+
+    it('does not paint a strip inside a rowspan crossing the boundary', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'span-table' as BlockId,
+        attrs: {
+          borders: {
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+          },
+        },
+        rows: [
+          {
+            id: 'r0' as BlockId,
+            cells: [
+              { id: 'tall' as BlockId, rowSpan: 2, paragraph: para('p0') },
+              { id: 'top' as BlockId, paragraph: para('p1') },
+            ],
+          },
+          { id: 'r1' as BlockId, cells: [{ id: 'under' as BlockId, paragraph: para('p2') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 1, 100, 2), measuredCell(1, 1, 100)], height: 20 },
+          { cells: [measuredCell(1, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      // Col 0 is a vMerge (no edge), col 1 is covered below (the cell paints its own top).
+      expect(gapStrips(el).length).toBe(0);
+    });
+
+    it('mirrors strip positions for RTL tables', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'rtl-gap-table' as BlockId,
+        attrs: {
+          tableProperties: { rightToLeft: true },
+          borders: {
+            insideH: { style: 'single', width: 1, color: '#FF0000' },
+          },
+        },
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 2, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 150)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 50],
+        totalWidth: 150,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 150, 40, 2));
+
+      const strips = gapStrips(el);
+      expect(strips.length).toBe(1);
+      // Logical gap is cols [1,2) = x 100..150; mirrored: left = 150 - 100 - 50 = 0.
+      expect(strips[0].style.left).toBe('0px');
+      expect(strips[0].style.width).toBe('50px');
+    });
+
+    it('paints no strip when neither the above cell nor the table defines a border for the edge', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'borderless-gap-table' as BlockId,
+        rows: [
+          { id: 'r0' as BlockId, cells: [{ id: 'c0' as BlockId, colSpan: 2, paragraph: para('p0') }] },
+          { id: 'r1' as BlockId, cells: [{ id: 'c1' as BlockId, paragraph: para('p1') }] },
+        ],
+      };
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          { cells: [measuredCell(0, 2, 200)], height: 20 },
+          { cells: [measuredCell(0, 1, 100)], height: 20 },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+      const el = render(block, measure, fragmentFor(block, 200, 40, 2));
+
+      expect(gapStrips(el).length).toBe(0);
     });
   });
 });

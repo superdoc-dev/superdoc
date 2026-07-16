@@ -1,22 +1,32 @@
 import { describe, expect, it, mock } from 'bun:test';
-import { executeBlocksDelete, executeBlocksList, type BlocksAdapter } from './blocks.js';
+import { executeBlocksDelete, executeBlocksDeleteRange, executeBlocksList, type BlocksAdapter } from './blocks.js';
 import type {
   BlocksDeleteInput,
   BlocksDeleteResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
   BlocksListInput,
   BlocksListResult,
 } from '../types/blocks.types.js';
 import { DocumentApiValidationError } from '../errors.js';
+import type { StoryLocator } from '../types/story.types.js';
 
 function makeAdapter(result?: BlocksDeleteResult): BlocksAdapter {
   const defaultResult: BlocksDeleteResult = {
     success: true,
     deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
   };
+  const defaultRangeResult: BlocksDeleteRangeResult = {
+    success: true,
+    deletedCount: 0,
+    deletedBlocks: [],
+    revision: { before: '1', after: '1' },
+    dryRun: false,
+  };
   return {
     delete: mock(() => result ?? defaultResult),
     list: mock(() => ({ total: 0, blocks: [], revision: '1' })),
-    deleteRange: mock(() => ({ success: true, deleted: [] })),
+    deleteRange: mock(() => defaultRangeResult),
   };
 }
 
@@ -29,13 +39,36 @@ function makeListAdapter(): BlocksAdapter & { list: ReturnType<typeof mock> } {
   return {
     delete: mock(() => ({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } })),
     list: mock(() => defaultResult),
-    deleteRange: mock(() => ({ success: true, deleted: [] })),
+    deleteRange: mock(() => ({
+      success: true,
+      deletedCount: 0,
+      deletedBlocks: [],
+      revision: { before: '1', after: '1' },
+      dryRun: false,
+    })),
   } as BlocksAdapter & { list: ReturnType<typeof mock> };
 }
 
 function makeInput(nodeType: string, nodeId: string): BlocksDeleteInput {
   return { target: { kind: 'block', nodeType: nodeType as BlocksDeleteInput['target']['nodeType'], nodeId } };
 }
+
+function makeDeleteRangeInput(
+  start: BlocksDeleteRangeInput['start'],
+  end: BlocksDeleteRangeInput['end'],
+): BlocksDeleteRangeInput {
+  return { start, end };
+}
+
+const footerStory: StoryLocator = {
+  kind: 'story',
+  storyType: 'headerFooterSlot',
+  section: { kind: 'section', sectionId: 's1' },
+  headerFooterKind: 'footer',
+  variant: 'default',
+  resolution: 'explicit',
+  onWrite: 'materializeIfInherited',
+};
 
 describe('executeBlocksDelete', () => {
   describe('input validation', () => {
@@ -166,6 +199,16 @@ describe('executeBlocksDelete', () => {
 });
 
 describe('executeBlocksList', () => {
+  const footerStory: StoryLocator = {
+    kind: 'story',
+    storyType: 'headerFooterSlot',
+    section: { kind: 'section', sectionId: 's1' },
+    headerFooterKind: 'footer',
+    variant: 'default',
+    resolution: 'explicit',
+    onWrite: 'materializeIfInherited',
+  };
+
   describe('normalizeBlocksListInput', () => {
     it('passes undefined through unchanged', () => {
       const adapter = makeListAdapter();
@@ -223,6 +266,13 @@ describe('executeBlocksList', () => {
       executeBlocksList(adapter, input);
       expect(adapter.list).toHaveBeenCalledWith(input);
     });
+
+    it('passes through a story locator unchanged', () => {
+      const adapter = makeListAdapter();
+      const input: BlocksListInput = { in: footerStory, includeText: true };
+      executeBlocksList(adapter, input);
+      expect(adapter.list).toHaveBeenCalledWith(input);
+    });
   });
 
   describe('input validation', () => {
@@ -231,5 +281,138 @@ describe('executeBlocksList', () => {
         DocumentApiValidationError,
       );
     });
+
+    it('rejects an invalid story locator with an unknown kind', () => {
+      expect(() => executeBlocksList(makeListAdapter(), { in: { kind: 'bogus' } as any })).toThrow(
+        DocumentApiValidationError,
+      );
+    });
+
+    it('rejects invalid story locators with a malformed shape', () => {
+      expect(() => executeBlocksList(makeListAdapter(), { in: { storyType: 'body' } as any })).toThrow(
+        DocumentApiValidationError,
+      );
+    });
+  });
+});
+
+describe('story-aware blocks.delete validation', () => {
+  it('accepts a story-scoped block target', () => {
+    const adapter = makeAdapter();
+    executeBlocksDelete(adapter, {
+      target: {
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'p1',
+        story: footerStory,
+      },
+    });
+    expect(adapter.delete).toHaveBeenCalled();
+  });
+
+  it('rejects invalid story-scoped block targets', () => {
+    expect(() =>
+      executeBlocksDelete(makeAdapter(), {
+        target: {
+          kind: 'block',
+          nodeType: 'paragraph',
+          nodeId: 'p1',
+          story: { storyType: 'body' } as any,
+        },
+      }),
+    ).toThrow(DocumentApiValidationError);
+  });
+});
+
+describe('executeBlocksDeleteRange', () => {
+  it('passes through matching story-scoped endpoints', () => {
+    const adapter = makeAdapter();
+    const locator = { kind: 'story', storyType: 'footnote', noteId: 'fn1' } as const;
+    const input = makeDeleteRangeInput(
+      {
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'p1',
+        story: locator,
+      },
+      {
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'p2',
+        story: locator,
+      },
+    );
+
+    executeBlocksDeleteRange(adapter, input, { dryRun: true });
+
+    expect(adapter.deleteRange).toHaveBeenCalledWith(input, expect.objectContaining({ dryRun: true }));
+  });
+
+  it('rejects invalid story locators on endpoints', () => {
+    expect(() =>
+      executeBlocksDeleteRange(
+        makeAdapter(),
+        makeDeleteRangeInput(
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p1',
+            story: { storyType: 'body' } as any,
+          },
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p2',
+          },
+        ),
+      ),
+    ).toThrow(DocumentApiValidationError);
+  });
+
+  it('rejects body/default vs non-body story mismatches', () => {
+    expect(() =>
+      executeBlocksDeleteRange(
+        makeAdapter(),
+        makeDeleteRangeInput(
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p1',
+          },
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p2',
+            story: { kind: 'story', storyType: 'footnote', noteId: 'fn1' },
+          },
+        ),
+      ),
+    ).toThrow(DocumentApiValidationError);
+  });
+
+  it('rejects cross-story endpoint mismatches', () => {
+    try {
+      executeBlocksDeleteRange(
+        makeAdapter(),
+        makeDeleteRangeInput(
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p1',
+            story: { kind: 'story', storyType: 'footnote', noteId: 'fn1' },
+          },
+          {
+            kind: 'block',
+            nodeType: 'paragraph',
+            nodeId: 'p2',
+            story: { kind: 'story', storyType: 'endnote', noteId: 'en1' },
+          },
+        ),
+      );
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentApiValidationError);
+      expect((error as DocumentApiValidationError).code).toBe('STORY_MISMATCH');
+    }
   });
 });

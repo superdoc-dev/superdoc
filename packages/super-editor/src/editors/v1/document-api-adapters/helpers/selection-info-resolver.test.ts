@@ -4,21 +4,23 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { resolveCurrentSelectionInfo } from './selection-info-resolver.js';
 
-// Stub `groupTrackedChanges` so tests don't need a fully PM-shaped
-// editor with `editor.state.doc.textBetween` and the tracked-change
-// mark walker. Each test that exercises tracked-change ids configures
-// the raw → canonical mapping it expects.
-const groupTrackedChangesMock = vi.hoisted(() =>
-  vi.fn(() => [] as Array<{ rawId: string; id: string; from: number; to: number }>),
-);
+// Stub the tracked-change canonical alias map so tests don't need a fully
+// PM-shaped editor with `editor.state.doc.textBetween` and the tracked-change
+// mark walker. Each test that exercises tracked-change ids configures the
+// mark alias → canonical mapping it expects.
+const buildTrackedChangeCanonicalIdMapMock = vi.hoisted(() => vi.fn(() => new Map<string, string>()));
 vi.mock('./tracked-change-resolver.js', () => ({
-  groupTrackedChanges: groupTrackedChangesMock,
+  buildTrackedChangeCanonicalIdMap: buildTrackedChangeCanonicalIdMapMock,
 }));
 
-const setTrackedChangeMapping = (mappings: Array<{ rawId: string; canonical: string }>) => {
-  groupTrackedChangesMock.mockReturnValue(
-    mappings.map((m) => ({ rawId: m.rawId, id: m.canonical, from: 0, to: 0 })) as never,
-  );
+const setTrackedChangeMapping = (mappings: Array<{ rawId: string; commandRawId?: string; canonical: string }>) => {
+  const map = new Map<string, string>();
+  for (const mapping of mappings) {
+    map.set(mapping.rawId, mapping.canonical);
+    map.set(mapping.canonical, mapping.canonical);
+    if (mapping.commandRawId) map.set(mapping.commandRawId, mapping.canonical);
+  }
+  buildTrackedChangeCanonicalIdMapMock.mockReturnValue(map);
 };
 
 // ---------------------------------------------------------------------------
@@ -480,6 +482,42 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
 
     expect([...info.activeChangeIds].sort()).toEqual(['tcA', 'tcB', 'tcC']);
     expect(info.activeCommentIds).toEqual([]);
+  });
+
+  it('maps imported Word tracked-change command ids to their public source-wrapper ids', () => {
+    setTrackedChangeMapping([
+      {
+        rawId: 'word:trackInsert:132',
+        commandRawId: '10107ac1-78b0-4031-afa8-5078a0115e17',
+        canonical: 'word:trackInsert:132',
+      },
+    ]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        {
+          text: 'Buying',
+          marksWithAttrs: [
+            { name: 'trackInsert', attrs: { id: '10107ac1-78b0-4031-afa8-5078a0115e17', sourceId: '132' } },
+          ],
+        },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 3, to: 3, empty: true });
+
+    // Collapsed caret inside the imported insertion should surface the same
+    // public id that trackChanges.list() exposes.
+    (editor.state.doc as unknown as { resolve: (pos: number) => unknown }).resolve = () => ({
+      marks: () => [
+        {
+          type: { name: 'trackInsert' },
+          attrs: { id: '10107ac1-78b0-4031-afa8-5078a0115e17', sourceId: '132' },
+        },
+      ],
+    });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeChangeIds).toEqual(['word:trackInsert:132']);
   });
 
   it('drops raw change ids that have no canonical mapping (defensive)', () => {

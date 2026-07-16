@@ -202,6 +202,84 @@ describe('w:hyperlink translator', () => {
         path: [...params.path, params.nodes[0]],
       });
     });
+
+    it('should import revision-wrapped runs with both link and track marks', () => {
+      const nodeListHandler = {
+        handler: vi.fn(({ nodes }) => {
+          const revisionNode = nodes[0];
+          const runNode = revisionNode.elements[0];
+          return [
+            {
+              type: 'text',
+              text: '[27]',
+              marks: [
+                ...runNode.marks,
+                {
+                  type: 'trackInsert',
+                  attrs: {
+                    id: '1',
+                    sourceId: '1',
+                    author: 'A',
+                    date: '2026-07-02T00:00:00Z',
+                  },
+                },
+              ],
+            },
+          ];
+        }),
+      };
+      const params = {
+        nodes: [
+          {
+            name: 'w:hyperlink',
+            attributes: { 'r:id': 'rId1' },
+            elements: [
+              {
+                name: 'w:ins',
+                attributes: { 'w:id': '1', 'w:author': 'A', 'w:date': '2026-07-02T00:00:00Z' },
+                elements: [{ name: 'w:r', elements: [] }],
+              },
+            ],
+          },
+        ],
+        docx: {
+          'word/_rels/document.xml.rels': {
+            elements: [
+              {
+                name: 'Relationships',
+                elements: [{ name: 'Relationship', attributes: { Id: 'rId1', Target: 'https://example.com' } }],
+              },
+            ],
+          },
+        },
+        nodeListHandler,
+        path: [],
+      };
+
+      const result = config.encode(params, { rId: 'rId1' });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].marks).toEqual([
+        { type: 'link', attrs: { rId: 'rId1', href: 'https://example.com' } },
+        {
+          type: 'trackInsert',
+          attrs: {
+            id: '1',
+            sourceId: '1',
+            author: 'A',
+            date: '2026-07-02T00:00:00Z',
+          },
+        },
+      ]);
+      expect(nodeListHandler.handler).toHaveBeenCalledWith({
+        ...params,
+        nodes: params.nodes[0].elements,
+        path: [...params.path, params.nodes[0]],
+      });
+      expect(params.nodes[0].elements[0].elements[0].marks).toEqual([
+        { type: 'link', attrs: { rId: 'rId1', href: 'https://example.com' } },
+      ]);
+    });
   });
 
   describe('config.decode', () => {
@@ -270,6 +348,72 @@ describe('w:hyperlink translator', () => {
       expect(params.relationships).toHaveLength(1);
       expect(params.relationships[0]).toBe(existingRel);
     });
+
+    it('preserves revision marks inside the hyperlink wrapper on export', () => {
+      const trackInsert = {
+        type: 'trackInsert',
+        attrs: {
+          id: 'track-1',
+          sourceId: '9',
+          author: 'A',
+          authorEmail: 'a@example.com',
+          date: '2026-07-02T00:00:00Z',
+        },
+      };
+      const params = {
+        node: {
+          type: 'text',
+          text: '[27]',
+          marks: [trackInsert, { type: 'link', attrs: { href: 'https://example.com/citation', rId: 'rId7' } }],
+        },
+        relationships: [],
+      };
+
+      vi.mocked(exportSchemaToJson).mockImplementation((p) => {
+        expect(p.extraParams.linkProcessed).toBe(true);
+        expect(p.node.marks).toEqual([trackInsert]);
+        return {
+          name: 'w:ins',
+          attributes: {
+            'w:id': '9',
+            'w:author': 'A',
+            'w:authorEmail': 'a@example.com',
+            'w:date': '2026-07-02T00:00:00Z',
+          },
+          elements: [
+            {
+              name: 'w:r',
+              elements: [{ name: 'w:t', elements: [{ type: 'text', text: '[27]' }] }],
+            },
+          ],
+        };
+      });
+
+      const result = translator.decode(params);
+
+      expect(result).toEqual({
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rId7' },
+        elements: [
+          {
+            name: 'w:ins',
+            attributes: {
+              'w:id': '9',
+              'w:author': 'A',
+              'w:authorEmail': 'a@example.com',
+              'w:date': '2026-07-02T00:00:00Z',
+            },
+            elements: [
+              {
+                name: 'w:r',
+                elements: [{ name: 'w:t', elements: [{ type: 'text', text: '[27]' }] }],
+              },
+            ],
+          },
+        ],
+      });
+    });
   });
 
   describe('with hyperlinkGroup', () => {
@@ -309,6 +453,64 @@ describe('w:hyperlink translator', () => {
       expect(result.elements).toHaveLength(2);
       expect(result.elements[0].elements[0].elements[0].text).toBe('link text 1');
       expect(result.elements[1].elements[0].elements[0].text).toBe('link text 2');
+    });
+
+    it('preserves surviving final-doc content in deletion-first tracked hyperlink groups', () => {
+      const linkMark = { type: 'link', attrs: { href: 'https://example.com/citation', rId: 'rId9' } };
+      const trackDelete = { type: 'trackDelete' };
+      const trackInsert = { type: 'trackInsert' };
+      const deletedNode = { type: 'text', text: 'old', marks: [trackDelete, linkMark] };
+      const insertedNode = { type: 'text', text: 'new', marks: [trackInsert, linkMark] };
+      const insertedRun = {
+        name: 'w:ins',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'new' }] }] }],
+      };
+      const params = {
+        node: deletedNode,
+        isFinalDoc: true,
+        extraParams: { hyperlinkGroup: [deletedNode, insertedNode] },
+        relationships: [],
+      };
+
+      vi.mocked(exportSchemaToJson).mockImplementation((p) => {
+        if (p.node.marks.some((mark) => mark.type === 'trackDelete')) return null;
+        return insertedRun;
+      });
+
+      const result = translator.decode(params);
+
+      expect(result).toEqual({
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rId9' },
+        elements: [insertedRun],
+      });
+      expect(exportSchemaToJson).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(exportSchemaToJson).mock.calls.map(([p]) => p.node.marks)).toEqual([
+        [trackDelete],
+        [trackInsert],
+      ]);
+    });
+
+    it('returns null when a hyperlink group has no exportable content', () => {
+      const linkMark = { type: 'link', attrs: { href: 'https://example.com/citation' } };
+      const deletedNode = { type: 'text', text: 'old', marks: [{ type: 'trackDelete' }, linkMark] };
+      const nextDeletedNode = { type: 'text', text: 'older', marks: [{ type: 'trackDelete' }, linkMark] };
+      const params = {
+        node: deletedNode,
+        isFinalDoc: true,
+        extraParams: { hyperlinkGroup: [deletedNode, nextDeletedNode] },
+        relationships: [],
+      };
+
+      vi.mocked(exportSchemaToJson).mockReturnValue(null);
+
+      const result = translator.decode(params);
+
+      expect(result).toBeNull();
+      expect(exportSchemaToJson).toHaveBeenCalledTimes(2);
+      expect(params.relationships).toHaveLength(0);
+      expect(generateDocxRandomId).not.toHaveBeenCalled();
     });
   });
 });

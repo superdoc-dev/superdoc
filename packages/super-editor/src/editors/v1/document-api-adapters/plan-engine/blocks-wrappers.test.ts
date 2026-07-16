@@ -5,6 +5,8 @@ import type { BlocksDeleteInput, MutationOptions } from '@superdoc/document-api'
 import { blocksDeleteWrapper, blocksDeleteRangeWrapper, blocksListWrapper } from './blocks-wrappers.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
+import { decodeRef } from '../story-runtime/story-ref-codec.js';
 
 // Ensure the domain.command executor is registered for executeDomainCommand
 registerBuiltInExecutors();
@@ -92,17 +94,24 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 // ---------------------------------------------------------------------------
 
 type BlockDeleteEditorOptions = {
-  /** Pass a mock fn, or `null` to simulate a missing command. Defaults to `vi.fn(() => true)`. */
-  deleteBlockNodeById?: ReturnType<typeof vi.fn> | null;
   /** Pass a mock fn, or `null` to simulate a missing helper. Defaults to an auto-matching mock. */
   getBlockNodeById?: ReturnType<typeof vi.fn> | null;
+  /** Pass a mock fn, or `null` to simulate tracked-command unavailability. */
+  insertTrackedChange?: ReturnType<typeof vi.fn> | null;
+  /** Pass `null` to simulate a missing tracked-mode user. */
+  user?: { name: string; email: string } | null;
   children?: ProseMirrorNode[];
 };
 
 function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   editor: Editor;
   dispatch: ReturnType<typeof vi.fn>;
-  deleteBlockNodeById: ReturnType<typeof vi.fn> | undefined;
+  tr: {
+    setMeta: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    mapping: { map: (pos: number) => number };
+    docChanged: boolean;
+  };
 } {
   const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
     attrs: { paraId: 'p1', sdBlockId: 'p1' },
@@ -114,14 +123,19 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
 
   const dispatch = vi.fn();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: vi.fn(),
+    delete: vi.fn(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
+  tr.setMeta.mockReturnValue(tr);
+  tr.delete.mockImplementation(() => {
+    tr.docChanged = true;
+    return tr;
+  });
 
-  // null = explicitly missing; undefined = use default mock
-  const deleteBlockNodeById =
-    options.deleteBlockNodeById === null ? undefined : (options.deleteBlockNodeById ?? vi.fn(() => true));
+  const insertTrackedChange =
+    options.insertTrackedChange === null ? undefined : (options.insertTrackedChange ?? vi.fn(() => true));
   const getBlockNodeById =
     options.getBlockNodeById === null
       ? undefined
@@ -132,8 +146,8 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
         }));
 
   const commands: Record<string, unknown> = {};
-  if (deleteBlockNodeById !== undefined) {
-    commands.deleteBlockNodeById = deleteBlockNodeById;
+  if (insertTrackedChange !== undefined) {
+    commands.insertTrackedChange = insertTrackedChange;
   }
 
   const helpers: Record<string, unknown> = {};
@@ -142,13 +156,16 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   }
 
   const editor = {
+    options: {
+      user: options.user === undefined ? { name: 'Test User', email: 'test@example.com' } : options.user,
+    },
     state: { doc, tr },
     dispatch,
     commands,
     helpers,
   } as unknown as Editor;
 
-  return { editor, dispatch, deleteBlockNodeById };
+  return { editor, dispatch, tr };
 }
 
 function makeInput(nodeType: string, nodeId: string): BlocksDeleteInput {
@@ -330,27 +347,32 @@ describe('blocksDeleteWrapper', () => {
       }
     });
 
-    it('throws CAPABILITY_UNAVAILABLE when tracked mode is requested', () => {
-      const { editor } = makeBlockDeleteEditor();
+    it('uses tracked transaction metadata when tracked mode is requested', () => {
+      const { editor, dispatch, tr } = makeBlockDeleteEditor();
 
-      try {
-        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' });
-        expect.unreachable('should have thrown');
-      } catch (error) {
-        expect((error as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-        expect((error as DocumentApiAdapterError).message).toContain('tracked mode');
-      }
+      const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' });
+
+      expect(result.success).toBe(true);
+      expect(tr.delete).toHaveBeenCalledWith(0, 7);
+      expect(tr.setMeta).toHaveBeenCalledWith('inputType', 'programmatic');
+      expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+      expect(dispatch).toHaveBeenCalledWith(tr);
     });
 
-    it('throws CAPABILITY_UNAVAILABLE when deleteBlockNodeById command is missing', () => {
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById: null });
+    it('throws CAPABILITY_UNAVAILABLE when tracked mode lacks insertTrackedChange support', () => {
+      const { editor } = makeBlockDeleteEditor({ insertTrackedChange: null });
 
-      try {
-        blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'));
-        expect.unreachable('should have thrown');
-      } catch (error) {
-        expect((error as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-      }
+      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' })).toThrow(
+        DocumentApiAdapterError,
+      );
+    });
+
+    it('throws CAPABILITY_UNAVAILABLE when tracked mode lacks a configured user', () => {
+      const { editor } = makeBlockDeleteEditor({ user: null });
+
+      expect(() => blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' })).toThrow(
+        DocumentApiAdapterError,
+      );
     });
 
     it('throws CAPABILITY_UNAVAILABLE when blockNode helper is missing', () => {
@@ -370,16 +392,16 @@ describe('blocksDeleteWrapper', () => {
   // -------------------------------------------------------------------------
 
   describe('dry run', () => {
-    it('returns success without executing the command', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
+    it('returns success without dispatching a transaction', () => {
+      const { editor, dispatch, tr } = makeBlockDeleteEditor();
       const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), {
         changeMode: 'direct',
         dryRun: true,
       });
       expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
       expect(result.deletedBlock).toBeDefined();
-      expect(deleteBlockNodeById).not.toHaveBeenCalled();
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('still validates target exists during dry run', () => {
@@ -389,8 +411,8 @@ describe('blocksDeleteWrapper', () => {
       ).toThrow(DocumentApiAdapterError);
     });
 
-    it('still rejects tracked mode during dry run', () => {
-      const { editor } = makeBlockDeleteEditor();
+    it('still validates tracked capability during dry run', () => {
+      const { editor } = makeBlockDeleteEditor({ insertTrackedChange: null });
       expect(() =>
         blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked', dryRun: true }),
       ).toThrow(DocumentApiAdapterError);
@@ -435,11 +457,10 @@ describe('blocksDeleteWrapper', () => {
   // -------------------------------------------------------------------------
 
   describe('cache invalidation', () => {
-    it('calls deleteBlockNodeById with the resolved sdBlockId', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
-      const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
+    it('deletes the resolved block range directly', () => {
+      const { editor, tr } = makeBlockDeleteEditor();
       blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'direct' });
-      expect(deleteBlockNodeById).toHaveBeenCalledWith('p1');
+      expect(tr.delete).toHaveBeenCalledWith(0, 7);
     });
   });
 
@@ -587,6 +608,103 @@ describe('blocksListWrapper', () => {
     expect(result.blocks[0]!.textPreview).toBe('Longer full text value');
   });
 
+  // Regression: blocks.list must report length/ref/isEmpty on the VISIBLE text
+  // model, matching `text`. A raw length would encode a whole-block ref ending
+  // past the visible text, and re-editing that already-redlined block via the
+  // ref throws "text offset out of range". See SD-3552.
+  it('encodes textPreview/ref on the visible model for a redlined block', () => {
+    const paragraph = createNode(
+      'paragraph',
+      [
+        // tracked-deleted "abc" (raw length 3) + visible "X" (visible length 1)
+        createNode('text', [], { text: 'abc', marks: [{ type: { name: TrackDeleteMarkName }, attrs: {} }] }),
+        createNode('text', [], { text: 'X' }),
+      ],
+      { attrs: { paraId: 'p1', sdBlockId: 'p1' }, isBlock: true, inlineContent: true },
+    );
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const entry = blocksListWrapper(editor, { includeText: true }).blocks[0]!;
+    expect(entry.text).toBe('X');
+    expect(entry.textPreview).toBe('X');
+    const decoded = decodeRef(entry.ref!) as { segments?: Array<{ end: number }> } | null;
+    // Visible length (1), NOT raw length (4). Raw would fail compilation later.
+    expect(decoded?.segments?.[0]?.end).toBe(1);
+  });
+
+  it('reports a fully tracked-deleted block as empty with no ref (visible model)', () => {
+    const paragraph = createNode(
+      'paragraph',
+      [createNode('text', [], { text: 'gone', marks: [{ type: { name: TrackDeleteMarkName }, attrs: {} }] })],
+      { attrs: { paraId: 'p1', sdBlockId: 'p1' }, isBlock: true, inlineContent: true },
+    );
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const entry = blocksListWrapper(editor, { includeText: true }).blocks[0]!;
+    expect(entry.text).toBe('');
+    expect(entry.isEmpty).toBe(true); // raw length (4) would report false
+    expect(entry.ref).toBeUndefined();
+  });
+
+  // Regression: formatting hints must come from the first VISIBLE run, matching
+  // the visible text model. The agent prompt tells callers to copy
+  // fontFamily/fontSize/bold from blocks.list, so sampling a tracked-deleted
+  // run would replicate rejected formatting into new content.
+  it('samples formatting from the first visible run, not a leading tracked-deleted run', () => {
+    const paragraph = createNode(
+      'paragraph',
+      [
+        createNode('text', [], {
+          text: 'gone',
+          marks: [
+            { type: { name: TrackDeleteMarkName }, attrs: {} },
+            { type: { name: 'textStyle' }, attrs: { fontFamily: 'DeletedFont', fontSize: 33 } },
+            { type: { name: 'bold' }, attrs: { value: true } },
+          ],
+        }),
+        createNode('text', [], {
+          text: 'X',
+          marks: [{ type: { name: 'textStyle' }, attrs: { fontFamily: 'VisibleFont', fontSize: 11 } }],
+        }),
+      ],
+      { attrs: { paraId: 'p1', sdBlockId: 'p1' }, isBlock: true, inlineContent: true },
+    );
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const entry = blocksListWrapper(editor, { includeText: true }).blocks[0]!;
+    expect(entry.text).toBe('X');
+    expect(entry.fontFamily).toBe('VisibleFont');
+    expect(entry.fontSize).toBe(11);
+    expect(entry.bold).toBeUndefined();
+  });
+
+  it('emits no run-formatting fields for a fully tracked-deleted block', () => {
+    const paragraph = createNode(
+      'paragraph',
+      [
+        createNode('text', [], {
+          text: 'gone',
+          marks: [
+            { type: { name: TrackDeleteMarkName }, attrs: {} },
+            { type: { name: 'textStyle' }, attrs: { fontFamily: 'DeletedFont' } },
+            { type: { name: 'bold' }, attrs: { value: true } },
+          ],
+        }),
+      ],
+      { attrs: { paraId: 'p1', sdBlockId: 'p1' }, isBlock: true, inlineContent: true },
+    );
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const entry = blocksListWrapper(editor, { includeText: true }).blocks[0]!;
+    // Nothing visible to copy from: no stale formatting may leak out.
+    expect(entry.fontFamily).toBeUndefined();
+    expect(entry.bold).toBeUndefined();
+  });
+
   it('omits full block text when includeText is false or omitted', () => {
     const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Body text' })], {
       attrs: { paraId: 'p1', sdBlockId: 'p1' },
@@ -598,6 +716,62 @@ describe('blocksListWrapper', () => {
 
     expect(blocksListWrapper(editor).blocks[0]!.text).toBeUndefined();
     expect(blocksListWrapper(editor, { includeText: false }).blocks[0]!.text).toBeUndefined();
+  });
+
+  it('exposes paragraphNumbering for numbered blocks (headings included) and omits it otherwise', () => {
+    // A Heading3 paragraph carrying a direct w:numPr resolves as `heading`, not
+    // `listItem`, yet must still surface its numbering for sequence discovery.
+    const numberedHeading = createNode('paragraph', [createNode('text', [], { text: 'Numbered clause' })], {
+      attrs: {
+        paraId: 'h1',
+        sdBlockId: 'h1',
+        paragraphProperties: { styleId: 'Heading3', numberingProperties: { numId: 2, ilvl: 1 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const plain = createNode('paragraph', [createNode('text', [], { text: 'Plain body' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2', paragraphProperties: { styleId: 'Normal' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // numPr with numId but no ilvl: OOXML treats absent ilvl as level 0.
+    const numberedNoLevel = createNode('paragraph', [createNode('text', [], { text: 'Implicit level' })], {
+      attrs: { paraId: 'p3', sdBlockId: 'p3', paragraphProperties: { numberingProperties: { numId: 3 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // numId 0 is the OOXML no-numbering sentinel; it must not surface as numbering.
+    const sentinelZero = createNode('paragraph', [createNode('text', [], { text: 'Explicitly unnumbered' })], {
+      attrs: {
+        paraId: 'p4',
+        sdBlockId: 'p4',
+        paragraphProperties: { styleId: 'Heading3', numberingProperties: { numId: 0, ilvl: 0 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // A plain paragraph carrying numId 0 (the no-numbering sentinel) must
+    // classify as `paragraph`, not `listItem` - isListItem stays aligned with
+    // the extractBlockNumbering reader.
+    const plainNumIdZero = createNode('paragraph', [createNode('text', [], { text: 'Cancelled numbering' })], {
+      attrs: { paraId: 'p5', sdBlockId: 'p5', paragraphProperties: { numberingProperties: { numId: 0, ilvl: 0 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [numberedHeading, plain, numberedNoLevel, sentinelZero, plainNumIdZero], {
+      isBlock: false,
+    });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect(result.blocks[0]!.nodeType).toBe('heading');
+    expect(result.blocks[0]!.paragraphNumbering).toEqual({ numId: 2, level: 1 });
+    expect(result.blocks[1]!.paragraphNumbering).toBeUndefined();
+    expect(result.blocks[2]!.paragraphNumbering).toEqual({ numId: 3, level: 0 });
+    expect(result.blocks[3]!.paragraphNumbering).toBeUndefined();
+    expect(result.blocks[4]!.nodeType).toBe('paragraph');
+    expect(result.blocks[4]!.paragraphNumbering).toBeUndefined();
   });
 
   it('returns null full text for non-text blocks when includeText is true', () => {

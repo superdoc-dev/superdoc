@@ -360,6 +360,21 @@ describe('collaboration helpers', () => {
     expect(superdoc.commentsStore.hasSyncedCollaborationComments).toBe(true);
   });
 
+  it('loadCommentsFromYdoc replaces local tracked-change rows from the room payload', () => {
+    superdoc.commentsStore.commentsList = [
+      {
+        commentId: 'tc-1',
+        trackedChange: true,
+        trackedChangeAnchorKey: 'tc::body::tc-1',
+      },
+    ];
+
+    const loaded = loadCommentsFromYdoc(superdoc);
+
+    expect(loaded).toBe(true);
+    expect(superdoc.commentsStore.commentsList).toEqual([]);
+  });
+
   it('initCollaborationComments re-hydrates store on repeated init without duplicating listeners', () => {
     commentsArray.items = [new MockYMap(Object.entries({ commentId: 'c1', text: 'first' }))];
 

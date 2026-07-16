@@ -19,6 +19,7 @@ import { replayStyles } from './replay/replay-styles';
 import { replayNumbering } from './replay/replay-numbering';
 import { replayHeaderFooters } from './replay/replay-header-footers';
 import { replayPartsDiff } from './replay/replay-parts';
+import { STALE_POSITION_WARNING_TAG } from './replay/replay-inline';
 
 type ReplayDiffsParams = {
   tr: import('prosemirror-state').Transaction;
@@ -92,6 +93,22 @@ export function replayDiffs({
   trackedChangesRequested = false,
 }: ReplayDiffsParams): ReplayDiffsResult {
   const docReplay = replayDocDiffs({ tr, docDiffs: diff.docDiffs, schema });
+
+  // If the document has stale positions the transaction is already partially
+  // mutated. Stop here so comment/style/numbering/header-footer side-effects
+  // (which mutate converter-backed state directly) are never applied. The
+  // caller is responsible for discarding the transaction and prompting
+  // re-capture before re-applying.
+  const staleDocWarnings = docReplay.warnings.filter((w) => w.startsWith(STALE_POSITION_WARNING_TAG));
+  if (staleDocWarnings.length > 0) {
+    return {
+      tr,
+      appliedDiffs: docReplay.applied,
+      skippedDiffs: docReplay.skipped,
+      warnings: docReplay.warnings,
+    };
+  }
+
   const commentsReplay = replayComments({ comments, commentDiffs: diff.commentDiffs, editor });
   const stylesReplay = replayStyles({ stylesDiff: diff.stylesDiff, editor });
   const numberingReplay = replayNumbering({ numberingDiff: diff.numberingDiff, editor });

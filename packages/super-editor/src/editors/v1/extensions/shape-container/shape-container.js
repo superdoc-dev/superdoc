@@ -73,7 +73,108 @@ export const ShapeContainer = Node.create({
         rendered: false,
       },
 
+      // Host-paragraph properties preserved when an inline drawing is the sole
+      // block content of a <w:p> and gets hoisted to the top level. Without this
+      // the paragraph's alignment (e.g. centered) is lost and the layout adapter
+      // cannot center the drawing. See legacy-handle-paragraph-node.js.
+      wrapperParagraph: {
+        default: null,
+        rendered: false,
+      },
+
+      anchorData: {
+        rendered: false,
+      },
+
+      marginOffset: {
+        rendered: false,
+      },
+
       attributes: {
+        rendered: false,
+      },
+
+      // DrawingML shape geometry
+      kind: {
+        default: null,
+        rendered: false,
+      },
+      width: {
+        default: null,
+        renderDOM: (attrs) => {
+          if (attrs.width == null) return {};
+          return { 'data-width': attrs.width };
+        },
+      },
+      height: {
+        default: null,
+        renderDOM: (attrs) => {
+          if (attrs.height == null) return {};
+          return { 'data-height': attrs.height };
+        },
+      },
+      fillColor: {
+        default: null,
+        rendered: false,
+      },
+      strokeColor: {
+        default: null,
+        rendered: false,
+      },
+      strokeWidth: {
+        default: null,
+        rendered: false,
+      },
+      rotation: {
+        default: 0,
+        rendered: false,
+      },
+      flipH: {
+        default: false,
+        rendered: false,
+      },
+      flipV: {
+        default: false,
+        rendered: false,
+      },
+      wrap: {
+        default: null,
+        rendered: false,
+      },
+      isAnchor: {
+        default: false,
+        rendered: false,
+      },
+      drawingContent: {
+        default: null,
+        rendered: false,
+      },
+      originalAttributes: {
+        default: null,
+        rendered: false,
+      },
+      effectExtent: {
+        default: null,
+        rendered: false,
+      },
+      effects: {
+        default: null,
+        rendered: false,
+      },
+      lineEnds: {
+        default: null,
+        rendered: false,
+      },
+      hidden: {
+        default: false,
+        rendered: false,
+      },
+      isTextBox: {
+        default: false,
+        rendered: false,
+      },
+      isWordArt: {
+        default: false,
         rendered: false,
       },
     };

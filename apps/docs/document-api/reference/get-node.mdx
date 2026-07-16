@@ -31,6 +31,7 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
 | `kind` | `"block"` | yes | Constant: `"block"` |
 | `nodeId` | string | yes |  |
 | `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `story` | StoryLocator | no | StoryLocator |
 
 ### Variant 2 (kind="inline")
 
@@ -45,6 +46,7 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
 | `anchor.start.offset` | integer | yes |  |
 | `kind` | `"inline"` | yes | Constant: `"inline"` |
 | `nodeType` | enum | yes | `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"sdt"`, `"image"`, `"footnoteRef"`, `"endnoteRef"`, `"crossRef"`, `"indexEntry"`, `"citation"`, `"authorityEntry"`, `"sequenceField"`, `"tab"`, `"lineBreak"` |
+| `story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -52,7 +54,11 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
 {
   "kind": "block",
   "nodeId": "node-def456",
-  "nodeType": "paragraph"
+  "nodeType": "paragraph",
+  "story": {
+    "kind": "story",
+    "storyType": "body"
+  }
 }
 ```
 
@@ -71,7 +77,11 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
   "address": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "paragraph",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "context": {},
   "node": {}

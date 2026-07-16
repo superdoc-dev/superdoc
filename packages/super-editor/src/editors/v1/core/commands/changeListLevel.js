@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { findParentNode } from '@helpers/index.js';
 import { isList } from '@core/commands/list-helpers';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
@@ -111,11 +112,30 @@ export const changeListLevel = (delta, editor, tr) => {
  * @param {import('../Editor').Editor} editor The editor that supplies numbering and style resolution helpers.
  * @param {import('prosemirror-state').Transaction} tr The transaction receiving the updated node markup.
  */
-export function updateNumberingProperties(newNumberingProperties, paragraphNode, pos, editor, tr) {
+export function updateNumberingProperties(newNumberingProperties, paragraphNode, pos, editor, tr, options = {}) {
+  const formerProperties = { ...(paragraphNode.attrs.paragraphProperties || {}) };
   const newProperties = {
-    ...(paragraphNode.attrs.paragraphProperties || {}),
+    ...formerProperties,
     numberingProperties: newNumberingProperties ? { ...newNumberingProperties } : null,
   };
+
+  // Tracked numbering change: record the FORMER paragraph properties (the
+  // unnumbered state) as a w:pPrChange so a reviewer sees a numbering revision
+  // and accept/reject toggles it. Only when ADDING numbering and no pPrChange
+  // is already recorded (never overwrite an existing reviewer's pPrChange).
+  if (options.trackChange && newNumberingProperties && !formerProperties.change) {
+    // Snapshot the former properties without any prior change record.
+    const former = { ...formerProperties };
+    delete former.change;
+    const user = editor?.options?.user || {};
+    newProperties.change = {
+      id: uuidv4(),
+      author: user.name || '',
+      authorEmail: user.email || '',
+      date: new Date().toISOString(),
+      paragraphProperties: former,
+    };
+  }
 
   // Only strip the default ListParagraph styleId when removing list formatting.
   // Keeping it on style swaps preserves the style's contextualSpacing, which Word

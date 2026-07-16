@@ -180,6 +180,21 @@
     "ci": true
   },
   {
+    "id": "editor-built-in-responsive-zoom",
+    "section": "editor",
+    "subsection": "built-in-ui",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Responsive zoom",
+    "category": "Editor",
+    "surface": "Built-in UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/built-in-ui/responsive-zoom",
+    "docs": "https://docs.superdoc.dev/editor/superdoc/configuration#param-zoom",
+    "ci": true
+  },
+  {
     "id": "editor-custom-ui-selection-capture",
     "section": "editor",
     "subsection": "custom-ui",
@@ -433,6 +448,21 @@
     "sourcePath": "examples/ai/redlining",
     "docs": "https://docs.superdoc.dev/ai/overview",
     "ci": true
+  },
+  {
+    "id": "ai-core-actions-agent",
+    "section": "ai",
+    "subsection": "agents",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Core actions agent",
+    "category": "AI",
+    "surface": "SDK (Node + Python)",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/core-actions-agent",
+    "docs": "https://docs.superdoc.dev/ai/agents/core-preset",
+    "ci": false
   },
   {
     "id": "document-engine-ai-redlining",

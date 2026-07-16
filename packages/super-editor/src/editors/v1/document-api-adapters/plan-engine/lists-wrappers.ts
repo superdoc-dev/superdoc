@@ -684,7 +684,14 @@ export function listsAttachWrapper(
   input: ListsAttachInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
-  rejectTrackedMode('lists.attach', options);
+  // Tracked mode is supported for attach: the former (unnumbered) paragraph
+  // properties are recorded as a w:pPrChange so accept/reject toggles the
+  // numbering. (Other list ops still reject tracked mode.)
+  const trackChange = (options?.changeMode ?? 'direct') === 'tracked';
+  // A tracked pPrChange carries author/date revision metadata; require a
+  // configured user so we never stamp a blank author (mirrors the ins/del and
+  // lists.insert tracked paths — never allow a tracked change with no author).
+  if (trackChange) ensureTrackedCapability(editor, { operation: 'lists.attach' });
 
   const attachTo = resolveListItem(editor, input.attachTo);
   if (attachTo.numId == null) {
@@ -720,7 +727,7 @@ export function listsAttachWrapper(
     () => {
       const { tr } = editor.state;
       for (const block of targets) {
-        updateNumberingProperties({ numId, ilvl: level }, block.node, block.pos, editor, tr);
+        updateNumberingProperties({ numId, ilvl: level }, block.node, block.pos, editor, tr, { trackChange });
       }
       dispatchEditorTransaction(editor, tr);
       clearIndexCache(editor);

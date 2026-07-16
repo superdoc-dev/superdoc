@@ -12,13 +12,158 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
+import { cellAround, findTable, inSameTable } from 'prosemirror-tables';
+import type { CellAnchorState } from '../types.js';
+import type { FlowBlock, Layout, Measure, TableBlock } from '@superdoc/contracts';
 import {
   hitTestTableFragment,
   type PageGeometryHelper,
   type PageHit,
   type TableHitResult,
 } from '@superdoc/layout-bridge';
+
+function getTableBlocks(blocks: FlowBlock[]): TableBlock[] {
+  return blocks.filter((block): block is TableBlock => block.kind === 'table');
+}
+
+function getTopLevelTablePosByIndex(doc: ProseMirrorNode, targetTableIndex: number): number | null {
+  if (!Number.isInteger(targetTableIndex) || targetTableIndex < 0) return null;
+
+  let tablePos: number | null = null;
+  let currentTableIndex = 0;
+  doc.descendants((node, pos) => {
+    if (tablePos !== null) return false;
+    if (node.type.name !== 'table') return true;
+
+    if (currentTableIndex === targetTableIndex) {
+      tablePos = pos;
+    }
+    currentTableIndex += 1;
+
+    // Layout blocks only represent top-level tables, so nested tables must not affect doc-order
+    // mapping.
+    return false;
+  });
+  return tablePos;
+}
+
+function getTopLevelTableIndexAtPos(doc: ProseMirrorNode, targetTablePos: number): number | null {
+  if (!Number.isFinite(targetTablePos) || targetTablePos < 0 || targetTablePos > doc.content.size) {
+    return null;
+  }
+
+  let tableIndex: number | null = null;
+  let currentTableIndex = 0;
+  doc.descendants((node, pos) => {
+    if (tableIndex !== null) return false;
+    if (node.type.name !== 'table') return true;
+
+    if (pos === targetTablePos) {
+      tableIndex = currentTableIndex;
+    }
+    currentTableIndex += 1;
+
+    return false;
+  });
+  return tableIndex;
+}
+
+function getCellCoordinatesFromCellPos(
+  doc: ProseMirrorNode,
+  tablePos: number,
+  cellPos: number,
+): { rowIndex: number; cellColIndex: number } | null {
+  const tableNode = doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return null;
+
+  let rowPos = tablePos + 1;
+  for (let rowIndex = 0; rowIndex < tableNode.childCount; rowIndex += 1) {
+    const rowNode = tableNode.child(rowIndex);
+    let currentCellPos = rowPos + 1;
+    for (let cellColIndex = 0; cellColIndex < rowNode.childCount; cellColIndex += 1) {
+      if (currentCellPos === cellPos) {
+        return { rowIndex, cellColIndex };
+      }
+      currentCellPos += rowNode.child(cellColIndex).nodeSize;
+    }
+    rowPos += rowNode.nodeSize;
+  }
+
+  return null;
+}
+
+export function getTopLevelTableBlockAtPos(
+  doc: ProseMirrorNode | null,
+  blocks: FlowBlock[],
+  tablePos: number,
+): TableBlock | null {
+  if (!doc) return null;
+
+  const tableIndex = getTopLevelTableIndexAtPos(doc, tablePos);
+  if (tableIndex === null) return null;
+
+  return getTableBlocks(blocks)[tableIndex] ?? null;
+}
+
+type ResolvedCellContext = {
+  $cell: ReturnType<ProseMirrorNode['resolve']>;
+  cellPos: number;
+  tablePos: number;
+};
+
+function resolveCellContextAtResolvedPos($pos: ReturnType<ProseMirrorNode['resolve']>): ResolvedCellContext | null {
+  const $cell = cellAround($pos);
+  if (!$cell) return null;
+
+  const table = findTable($cell);
+  if (!table) return null;
+
+  return {
+    $cell,
+    cellPos: $cell.pos,
+    tablePos: table.pos,
+  };
+}
+
+export function resolveCellAnchorStateFromCellPos(
+  doc: ProseMirrorNode | null,
+  blocks: FlowBlock[],
+  cellPos: number,
+): CellAnchorState | null {
+  if (!doc || !Number.isFinite(cellPos) || cellPos < 0 || cellPos > doc.content.size) {
+    return null;
+  }
+
+  const cellNode = doc.nodeAt(cellPos);
+  const tableRole = cellNode?.type.spec.tableRole;
+  if (tableRole !== 'cell' && tableRole !== 'header_cell') {
+    return null;
+  }
+
+  const contextPos = Math.min(cellPos + 1, doc.content.size);
+  const context = resolveCellContext(doc, contextPos);
+  if (!context || context.cellPos !== cellPos) {
+    return null;
+  }
+
+  const tableBlock = getTopLevelTableBlockAtPos(doc, blocks, context.tablePos);
+  if (!tableBlock) {
+    return null;
+  }
+
+  const cellCoordinates = getCellCoordinatesFromCellPos(doc, context.tablePos, cellPos);
+  if (!cellCoordinates) {
+    return null;
+  }
+
+  return {
+    tablePos: context.tablePos,
+    cellPos,
+    tableBlockId: tableBlock.id,
+    cellRowIndex: cellCoordinates.rowIndex,
+    cellColIndex: cellCoordinates.cellColIndex,
+  };
+}
 
 /**
  * Calculates the ProseMirror document position for a table cell identified by a hit test result.
@@ -80,26 +225,15 @@ export function getCellPosFromTableHit(
 
   if (!doc) return null;
 
-  // Find the table node in the document by searching for the block ID
-  // Get table blocks only and find the index of the target table
-  const tableBlocks = blocks.filter((b) => b.kind === 'table');
+  // Find the table node in the document by searching for the block ID among top-level layout
+  // tables. Nested tables are not represented in the top-level blocks array.
+  const tableBlocks = getTableBlocks(blocks);
   const targetTableIndex = tableBlocks.findIndex((b) => b.id === tableHit.block.id);
   if (targetTableIndex === -1) return null;
 
   let tablePos: number | null = null;
-  let currentTableIndex = 0;
-
   try {
-    doc.descendants((node, pos) => {
-      if (node.type.name === 'table') {
-        if (currentTableIndex === targetTableIndex) {
-          tablePos = pos;
-          return false; // Stop iteration
-        }
-        currentTableIndex++;
-      }
-      return true;
-    });
+    tablePos = getTopLevelTablePosByIndex(doc, targetTableIndex);
   } catch (error: unknown) {
     console.error('[getCellPosFromTableHit] Error during document traversal:', error);
     return null;
@@ -207,26 +341,78 @@ export function getTablePosFromHit(
 ): number | null {
   if (!doc) return null;
 
-  // Get table blocks only and find the index of the target table
-  const tableBlocks = blocks.filter((b) => b.kind === 'table');
+  // Match the layout block against top-level tables only.
+  const tableBlocks = getTableBlocks(blocks);
   const targetTableIndex = tableBlocks.findIndex((b) => b.id === tableHit.block.id);
   if (targetTableIndex === -1) return null;
 
-  let tablePos: number | null = null;
-  let currentTableIndex = 0;
+  return getTopLevelTablePosByIndex(doc, targetTableIndex);
+}
 
-  doc.descendants((node, pos) => {
-    if (node.type.name === 'table') {
-      if (currentTableIndex === targetTableIndex) {
-        tablePos = pos;
-        return false;
-      }
-      currentTableIndex++;
-    }
-    return true;
-  });
+/**
+ * Resolves the table cell that encloses a ProseMirror position.
+ *
+ * Walks the ancestors of `pos` to find the nearest `tableCell`/`tableHeader` and its enclosing
+ * `table`. Returns positions that point *at* the cell and table nodes (i.e. the position directly
+ * before each), which is the convention `CellSelection.create` expects.
+ *
+ * @param doc - The ProseMirror document.
+ * @param pos - A document position.
+ * @returns `{ cellPos, tablePos }` if `pos` is inside a table cell, otherwise null.
+ */
+export function resolveCellContext(
+  doc: ProseMirrorNode | null,
+  pos: number,
+): { cellPos: number; tablePos: number } | null {
+  if (!doc || !Number.isFinite(pos) || pos < 0 || pos > doc.content.size) return null;
 
-  return tablePos;
+  let $pos: ReturnType<ProseMirrorNode['resolve']>;
+  try {
+    $pos = doc.resolve(pos);
+  } catch {
+    return null;
+  }
+
+  const context = resolveCellContextAtResolvedPos($pos);
+  if (!context) return null;
+
+  return { cellPos: context.cellPos, tablePos: context.tablePos };
+}
+
+/**
+ * Determines whether a drag from `anchorPos` to `headPos` should be a cross-cell selection.
+ *
+ * SD-3328: The geometry trigger (`hitTestTable`) can miss empty cell paragraphs, leaving the cell
+ * anchor unset, so a drag across cells falls back to a plain text selection — which prosemirror-
+ * tables then collapses. Deriving the cells from the resolved PM positions is reliable. When both
+ * endpoints resolve to *different* cells of the *same* table, the caller should build a
+ * `CellSelection` (the cell-range highlight Word and Docs show) instead of a text selection.
+ *
+ * @returns Cell positions for `CellSelection.create`, or null when this is not a cross-cell drag
+ *   (one endpoint outside any table, both in the same cell, or in different tables).
+ */
+export function resolveCrossCellSelection(
+  doc: ProseMirrorNode | null,
+  anchorPos: number,
+  headPos: number,
+): { anchorCellPos: number; headCellPos: number } | null {
+  if (!doc) return null;
+
+  let $anchorPos: ReturnType<ProseMirrorNode['resolve']>;
+  let $headPos: ReturnType<ProseMirrorNode['resolve']>;
+  try {
+    $anchorPos = doc.resolve(anchorPos);
+    $headPos = doc.resolve(headPos);
+  } catch {
+    return null;
+  }
+
+  const anchor = resolveCellContextAtResolvedPos($anchorPos);
+  const head = resolveCellContextAtResolvedPos($headPos);
+  if (!anchor || !head) return null;
+  if (!inSameTable(anchor.$cell, head.$cell)) return null; // different tables
+  if (anchor.cellPos === head.cellPos) return null; // same cell -> text selection
+  return { anchorCellPos: anchor.cellPos, headCellPos: head.cellPos };
 }
 
 /**

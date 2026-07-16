@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ImageRun, ParagraphBlock, VectorShapeDrawing } from '@superdoc/contracts';
+import type { ImageRun, ParagraphBlock, ShapeGroupDrawing, VectorShapeDrawing } from '@superdoc/contracts';
 import { computeDirtyRegions } from '../src/diff';
 
 const block = (id: string, text: string) => ({
@@ -37,6 +37,21 @@ const drawing = (overrides?: Partial<VectorShapeDrawing>): VectorShapeDrawing =>
   fillColor: '#f00',
   strokeColor: '#000',
   strokeWidth: 2,
+  ...overrides,
+});
+
+const shapeGroup = (overrides?: Partial<ShapeGroupDrawing>): ShapeGroupDrawing => ({
+  kind: 'drawing',
+  id: 'shape-group-0',
+  drawingKind: 'shapeGroup',
+  geometry: { width: 100, height: 80, rotation: 0, flipH: false, flipV: false },
+  groupTransform: {
+    width: 100,
+    height: 80,
+    childWidth: 100,
+    childHeight: 80,
+  },
+  shapes: [],
   ...overrides,
 });
 
@@ -218,11 +233,46 @@ describe('computeDirtyRegions', () => {
     expect(result.stableBlockIds.has('0-paragraph')).toBe(true);
   });
 
+  it('detects textboxShape content changes as dirty', () => {
+    const prev = [
+      drawing({
+        drawingKind: 'textboxShape',
+        textContent: { parts: [{ text: 'Alpha', fontFamily: 'Arial', fontSize: 16 }] },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-1',
+            runs: [{ text: 'Alpha', fontFamily: 'Arial', fontSize: 16 }],
+          },
+        ],
+      }),
+    ];
+    const next = [
+      drawing({
+        drawingKind: 'textboxShape',
+        textContent: { parts: [{ text: 'Beta', fontFamily: 'Arial', fontSize: 16 }] },
+        contentBlocks: [
+          {
+            kind: 'paragraph',
+            id: 'textbox-para-1',
+            runs: [{ text: 'Beta', fontFamily: 'Arial', fontSize: 16 }],
+          },
+        ],
+      }),
+    ];
+
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+    expect(result.stableBlockIds.has('drawing-0')).toBe(false);
+  });
+
   it.each([
     ['src', { src: 'other.png' }],
     ['alt', { alt: 'Diagram' }],
     ['title', { title: 'Title' }],
     ['clipPath', { clipPath: 'inset(1px)' }],
+    ['shapeClipPath', { shapeClipPath: 'ellipse(50% 50% at 50% 50%)' }],
+    ['objectFit', { objectFit: 'cover' as const }],
     ['distTop', { distTop: 1 }],
     ['distBottom', { distBottom: 2 }],
     ['distLeft', { distLeft: 3 }],
@@ -325,6 +375,73 @@ describe('computeDirtyRegions', () => {
       drawing({
         id: 'drawing-0',
         fillColor: '#0f0',
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects vector shape effect changes', () => {
+    const prev = [
+      drawing({
+        effects: {
+          outerShadow: {
+            type: 'outerShadow',
+            blurRadius: 6,
+            distance: 4,
+            direction: 45,
+            color: '#999999',
+            opacity: 0.4,
+          },
+        },
+      }),
+    ];
+    const next = [
+      drawing({
+        effects: {
+          outerShadow: {
+            type: 'outerShadow',
+            blurRadius: 6,
+            distance: 4,
+            direction: 45,
+            color: '#999999',
+            opacity: 0.7,
+          },
+        },
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects shape group transform rotation changes', () => {
+    const prev = [shapeGroup()];
+    const next = [
+      shapeGroup({
+        groupTransform: {
+          width: 100,
+          height: 80,
+          childWidth: 100,
+          childHeight: 80,
+          rotation: 30,
+        },
+      }),
+    ];
+    const result = computeDirtyRegions(prev, next);
+    expect(result.firstDirtyIndex).toBe(0);
+  });
+
+  it('detects shape group transform flip changes', () => {
+    const prev = [shapeGroup()];
+    const next = [
+      shapeGroup({
+        groupTransform: {
+          width: 100,
+          height: 80,
+          childWidth: 100,
+          childHeight: 80,
+          flipH: true,
+        },
       }),
     ];
     const result = computeDirtyRegions(prev, next);

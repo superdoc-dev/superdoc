@@ -31,6 +31,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already mat
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `target.story` | StoryLocator | no | StoryLocator |
 | `template` | object | yes |  |
 | `template.levels` | object[] | yes |  |
 | `template.version` | `1` | yes | Constant: `1` |
@@ -45,7 +46,11 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already mat
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "template": {
     "levels": [
@@ -70,6 +75,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already mat
 | `item.kind` | `"block"` | yes | Constant: `"block"` |
 | `item.nodeId` | string | yes |  |
 | `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `item.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -89,7 +95,11 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already mat
   "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "listItem",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true
 }

@@ -68,6 +68,22 @@ describe('normalizeTrackChangesConfig', () => {
       expect(config.modules.trackChanges.mode).toBe('review');
       expect(config.modules.trackChanges.enabled).toBe(true);
     });
+
+    it('preserves canonical author color config for tracked-change rendering', () => {
+      const authorColors = {
+        enabled: true,
+        overrides: { Ada: '#8250df' },
+        resolve: vi.fn(),
+      };
+      const config = {
+        modules: { trackChanges: { visible: true, authorColors } },
+      };
+      const result = normalizeTrackChangesConfig(config);
+
+      expect(result.authorColors).toBe(authorColors);
+      expect(config.modules.trackChanges.authorColors).toBe(authorColors);
+      expect(config.layoutEngineOptions.trackedChanges).toEqual({ mode: 'review', enabled: true });
+    });
   });
 
   describe('legacy config.trackChanges (visibility alias)', () => {

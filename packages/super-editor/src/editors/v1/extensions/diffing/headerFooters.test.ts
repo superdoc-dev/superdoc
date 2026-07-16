@@ -11,11 +11,15 @@ import { resolveSectionProjections } from '../../document-api-adapters/helpers/s
 /**
  * Creates a headless editor from a DOCX fixture.
  *
+ * @param fixtureName DOCX fixture filename.
  * @param user Optional user config for tracked replay tests.
  * @returns Headless editor ready for diffing tests.
  */
-async function createEditor(user?: { name: string; email: string }): Promise<Editor> {
-  const buffer = await getTestDataAsBuffer('diffing/diff_before2.docx');
+async function createEditor(
+  fixtureName = 'diffing/diff_before2.docx',
+  user?: { name: string; email: string },
+): Promise<Editor> {
+  const buffer = await getTestDataAsBuffer(fixtureName);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 
   return new Editor({
@@ -554,6 +558,41 @@ describe('Header/footer diffing', () => {
     }
   });
 
+  it('detects real header/footer wording changes in SD-2238 fixtures', async () => {
+    const beforeEditor = await createEditor('diffing/word/sd_2238_header_footer_a.docx');
+    const afterEditor = await createEditor('diffing/word/sd_2238_header_footer_b.docx');
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor);
+      const modifiedParts = diff.headerFootersDiff?.modifiedParts ?? [];
+      const modifiedHeaderFooterParagraph = modifiedParts
+        .flatMap((part) => part.docDiffs)
+        .find(
+          (partDiff) =>
+            partDiff.action === 'modified' &&
+            partDiff.oldText?.toLowerCase().includes('rental') &&
+            partDiff.newText?.toLowerCase().includes('lease'),
+        );
+
+      expect(diff.headerFootersDiff).not.toBeNull();
+      expect(modifiedParts.length).toBeGreaterThan(0);
+      expect(modifiedHeaderFooterParagraph).toBeDefined();
+      expect(modifiedHeaderFooterParagraph?.contentDiff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'modified',
+            kind: 'text',
+            oldText: expect.stringMatching(/rental/i),
+            newText: expect.stringMatching(/lease/i),
+          }),
+        ]),
+      );
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
   it('treats header part path changes as a real diff', async () => {
     const beforeEditor = await createEditor();
     const afterEditor = await createEditor();
@@ -738,7 +777,7 @@ describe('Header/footer diffing', () => {
 
   it('keeps body replay tracked when header/footer diffs are present', async () => {
     const user = { name: 'Test User', email: 'test@example.com' };
-    const beforeEditor = await createEditor(user);
+    const beforeEditor = await createEditor(undefined, user);
     const afterEditor = await createEditor();
 
     try {

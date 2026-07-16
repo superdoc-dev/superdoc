@@ -29,9 +29,11 @@ Returns a FieldMutationResult indicating success or a failure.
 | `mode` | `"raw"` | yes | Constant: `"raw"` |
 | `target` | object(kind="field") | yes |  |
 | `target.blockId` | string | yes |  |
+| `target.fieldId` | string | no |  |
 | `target.kind` | `"field"` | yes | Constant: `"field"` |
 | `target.nestingDepth` | integer | no |  |
 | `target.occurrenceIndex` | integer | yes |  |
+| `target.storyId` | string | no |  |
 
 ### Example request
 
@@ -42,7 +44,8 @@ Returns a FieldMutationResult indicating success or a failure.
     "blockId": "block-abc123",
     "kind": "field",
     "nestingDepth": 1,
-    "occurrenceIndex": 1
+    "occurrenceIndex": 1,
+    "storyId": "example"
   }
 }
 ```
@@ -55,9 +58,11 @@ Returns a FieldMutationResult indicating success or a failure.
 | --- | --- | --- | --- |
 | `field` | object(kind="field") | yes |  |
 | `field.blockId` | string | yes |  |
+| `field.fieldId` | string | no |  |
 | `field.kind` | `"field"` | yes | Constant: `"field"` |
 | `field.nestingDepth` | integer | no |  |
 | `field.occurrenceIndex` | integer | yes |  |
+| `field.storyId` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -78,7 +83,8 @@ Returns a FieldMutationResult indicating success or a failure.
     "blockId": "block-abc123",
     "kind": "field",
     "nestingDepth": 1,
-    "occurrenceIndex": 1
+    "occurrenceIndex": 1,
+    "storyId": "example"
   },
   "success": true
 }
@@ -110,6 +116,9 @@ Returns a FieldMutationResult indicating success or a failure.
         "blockId": {
           "type": "string"
         },
+        "fieldId": {
+          "type": "string"
+        },
         "kind": {
           "const": "field"
         },
@@ -118,6 +127,9 @@ Returns a FieldMutationResult indicating success or a failure.
         },
         "occurrenceIndex": {
           "type": "integer"
+        },
+        "storyId": {
+          "type": "string"
         }
       },
       "required": [
@@ -150,6 +162,9 @@ Returns a FieldMutationResult indicating success or a failure.
             "blockId": {
               "type": "string"
             },
+            "fieldId": {
+              "type": "string"
+            },
             "kind": {
               "const": "field"
             },
@@ -158,6 +173,9 @@ Returns a FieldMutationResult indicating success or a failure.
             },
             "occurrenceIndex": {
               "type": "integer"
+            },
+            "storyId": {
+              "type": "string"
             }
           },
           "required": [
@@ -223,6 +241,9 @@ Returns a FieldMutationResult indicating success or a failure.
         "blockId": {
           "type": "string"
         },
+        "fieldId": {
+          "type": "string"
+        },
         "kind": {
           "const": "field"
         },
@@ -231,6 +252,9 @@ Returns a FieldMutationResult indicating success or a failure.
         },
         "occurrenceIndex": {
           "type": "integer"
+        },
+        "storyId": {
+          "type": "string"
         }
       },
       "required": [

@@ -41,7 +41,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
-import { checkRevision, getRevision } from './revision-tracker.js';
+import { checkRevision, getRevision, incrementRevision } from './revision-tracker.js';
 import { resolveTextTarget, paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getCachedProjectedTrackedChangeSnapshot, projectSnapshots } from './track-changes-wrappers.js';
@@ -63,6 +63,7 @@ import { getTrackedChangeIndex } from '../tracked-changes/tracked-change-index.j
 import type { TrackedChangeSnapshot } from '../tracked-changes/tracked-change-snapshot.js';
 import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
 import { resolveTrackedChangeInStory } from '../helpers/tracked-change-resolver.js';
+import { projectInternalTrackChangeType } from '../helpers/tracked-change-type-utils.js';
 import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
@@ -165,12 +166,22 @@ function isTrackedChangeCommentTargetShape(
   return typeof value.trackedChangeId === 'string' && value.trackedChangeId.length > 0;
 }
 
+function trackedChangeDisplayType(snapshot: TrackedChangeSnapshot): string | null {
+  if (snapshot.type !== 'structural') return null;
+  return snapshot.subtype === 'table-delete' ? 'tableDelete' : 'tableInsert';
+}
+
+function publicTrackedChangeType(snapshot: TrackedChangeSnapshot): TrackChangeType {
+  return projectInternalTrackChangeType(snapshot.type, { subtype: snapshot.subtype });
+}
+
 function buildTrackedChangeLink(snapshot: TrackedChangeSnapshot): CommentTrackedChangeLink {
   const { trackedChangeText, deletedText } = trackedChangeTextFields(snapshot);
   return {
     trackedChange: true,
-    trackedChangeType: snapshot.type,
-    trackedChangeDisplayType: null,
+    trackedChangeId: snapshot.address.entityId,
+    trackedChangeType: publicTrackedChangeType(snapshot),
+    trackedChangeDisplayType: trackedChangeDisplayType(snapshot),
     trackedChangeStory: snapshot.story,
     trackedChangeAnchorKey: snapshot.anchorKey,
     trackedChangeText,
@@ -232,7 +243,9 @@ function choosePreferredTrackedChangeSnapshot(
     const rightLength = Math.max(0, right.range.to - right.range.from);
     if (leftLength !== rightLength) return leftLength - rightLength;
 
-    const typeDelta = trackedChangeTypePriority(left.type) - trackedChangeTypePriority(right.type);
+    const typeDelta =
+      trackedChangeTypePriority(publicTrackedChangeType(left)) -
+      trackedChangeTypePriority(publicTrackedChangeType(right));
     if (typeDelta !== 0) return typeDelta;
 
     if (left.range.from !== right.range.from) return left.range.from - right.range.from;
@@ -562,7 +575,7 @@ function trackedChangeTextFields(
   snapshot: TrackedChangeSnapshot,
 ): Pick<TrackedChangeCommentInfo, 'trackedChangeText' | 'deletedText'> {
   const excerpt = snapshot.excerpt ?? '';
-  if (snapshot.type === 'delete') {
+  if (publicTrackedChangeType(snapshot) === 'delete') {
     return { trackedChangeText: '', deletedText: excerpt };
   }
   return { trackedChangeText: excerpt, deletedText: null };
@@ -586,7 +599,8 @@ function toTrackedChangeCommentInfo(snapshot: TrackedChangeSnapshot): TrackedCha
     anchoredText: snapshot.excerpt,
     story: snapshot.story,
     trackedChange: true,
-    trackedChangeType: snapshot.type,
+    trackedChangeType: publicTrackedChangeType(snapshot),
+    trackedChangeDisplayType: trackedChangeDisplayType(snapshot),
     trackedChangeStory: snapshot.story,
     trackedChangeAnchorKey: snapshot.anchorKey,
     trackedChangeText,
@@ -1256,6 +1270,15 @@ function replyToCommentHandler(
   if (trackedPayload && inheritedTrackedFields) {
     emitCommentLifecycleUpdate(editor, 'update', trackedPayload);
   }
+
+  // A threaded reply lives only in the comment entity store — the underlying
+  // ProseMirror transaction is not `docChanged`, so the transaction-driven
+  // revision tracker never advances. A reply IS caller-visible exported
+  // content (it adds a w:comment to comments.xml + threading in
+  // commentsExtended.xml), so bump the revision explicitly. Without this the
+  // CLI host's `mutated = revisionBefore !== revisionAfter` gate reads false
+  // and the working document is never re-exported, silently dropping the reply.
+  incrementRevision(editor);
 
   return { success: true, id: replyId, inserted: [toCommentAddress(replyId)] };
 }

@@ -240,4 +240,40 @@ describe('insertContentAt', () => {
     // empty textblock wrapper replacement [from-1, to+1]
     expect(tr.replaceWith).toHaveBeenCalledWith(9, 11, blockNode);
   });
+
+  it('parses inline HTML mixed with text via the HTML path (not literal insertText)', () => {
+    const value = '☒ <strong>yes</strong> ☐ no';
+
+    createNodeFromContent.mockImplementation(() => [
+      { isText: true, isBlock: false, marks: [], check: vi.fn() },
+      { isText: true, isBlock: false, marks: [{ type: 'bold' }], check: vi.fn() },
+      { isText: true, isBlock: false, marks: [], check: vi.fn() },
+    ]);
+
+    const tr = makeTr();
+    const editor = makeEditor();
+
+    const cmd = insertContentAt(5, value, { updateSelection: true });
+    const result = cmd({ tr, dispatch: true, editor });
+
+    expect(result).toBe(true);
+    expect(createNodeFromContent).toHaveBeenCalled(); // took the HTML path
+    expect(tr.replaceWith).toHaveBeenCalled();
+    expect(tr.insertText).not.toHaveBeenCalledWith(value, 5, 5); // not inserted verbatim
+  });
+
+  it('treats prose with stray angle brackets as plain text', () => {
+    const value = 'For all x, 5 < 10 and 20 > 3';
+
+    const tr = makeTr();
+    const editor = makeEditor();
+
+    const cmd = insertContentAt(5, value, { updateSelection: true });
+    const result = cmd({ tr, dispatch: true, editor });
+
+    expect(result).toBe(true);
+    expect(createNodeFromContent).not.toHaveBeenCalled(); // fast path, no HTML parsing
+    expect(tr.insertText).toHaveBeenCalledWith(value, 5, 5);
+    expect(tr.replaceWith).not.toHaveBeenCalled();
+  });
 });

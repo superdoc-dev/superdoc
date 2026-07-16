@@ -17,14 +17,15 @@ const isFragment = (nodeOrFragment) => {
 
 /**
  * Checks if a string looks like it contains HTML tags.
- * Matches complete tag pairs (e.g., <div>...</div>) or self-closing tags (e.g., <br/>, <img ...>).
+ * Detects a tag (tag pairs or self-closing tags) anywhere in the string.
+ *
  * @param {string} str
  * @returns {boolean}
  */
 const looksLikeHTML = (str) =>
-  /^\s*<[a-zA-Z][^>]*>.*<\/[a-zA-Z][^>]*>\s*$/s.test(str) || // Complete tag pair
-  /^\s*<[a-zA-Z][^>]*\/>\s*$/.test(str) || // Self-closing tag
-  /^\s*<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)\b[^>]*>\s*$/i.test(str); // Void elements
+  /<[a-zA-Z][^>]*>[\s\S]*?<\/[a-zA-Z][^>]*>/.test(str) || // Tag pair somewhere (incl. inline formatting inside text)
+  /<[a-zA-Z][^>]*\/>/.test(str) || // Self-closing tag somewhere
+  /<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)\b[^>]*>/i.test(str); // Void element somewhere
 
 /**
  * Inserts content at the specified position.

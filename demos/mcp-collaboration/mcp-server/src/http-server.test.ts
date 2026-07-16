@@ -64,6 +64,18 @@ describe('hosted SuperDoc MCP server', { concurrency: false }, () => {
     }
   });
 
+  it('AC-5 stops the Yjs relay process when startup fails', async () => {
+    const relayProcess = spawn(
+      process.execPath,
+      ['--eval', 'console.log(JSON.stringify({ port: 0 })); setInterval(() => {}, 1_000);'],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+
+    await assert.rejects(waitForYjsRelay(relayProcess), /Invalid relay port: 0/);
+    assert.equal(relayProcess.killed, true);
+    assert.ok(relayProcess.exitCode !== null || relayProcess.signalCode !== null);
+  });
+
   it(
     'AC-4 and AC-5 propagate an MCP edit over Yjs and destroy every session resource',
     { timeout: 30_000 },
@@ -242,12 +254,22 @@ async function startYjsRelay(): Promise<RunningYjsRelay> {
   const relayProcess = spawn(process.execPath, [RELAY_FIXTURE], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const port = await readRelayPort(relayProcess);
 
-  return {
-    url: `ws://127.0.0.1:${port}`,
-    close: () => stopRelay(relayProcess),
-  };
+  return waitForYjsRelay(relayProcess);
+}
+
+async function waitForYjsRelay(relayProcess: ChildProcess): Promise<RunningYjsRelay> {
+  try {
+    const port = await readRelayPort(relayProcess);
+
+    return {
+      url: `ws://127.0.0.1:${port}`,
+      close: () => stopRelay(relayProcess),
+    };
+  } catch (error) {
+    await stopRelay(relayProcess).catch(() => undefined);
+    throw error;
+  }
 }
 
 function readRelayPort(relayProcess: ChildProcess): Promise<number> {
@@ -291,7 +313,7 @@ function readRelayPort(relayProcess: ChildProcess): Promise<number> {
 }
 
 async function stopRelay(relayProcess: ChildProcess): Promise<void> {
-  if (relayProcess.exitCode !== null) return;
+  if (relayProcess.exitCode !== null || relayProcess.signalCode !== null) return;
   relayProcess.kill('SIGTERM');
 
   let timeout: NodeJS.Timeout | undefined;

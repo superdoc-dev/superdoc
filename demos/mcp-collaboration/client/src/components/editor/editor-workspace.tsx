@@ -24,17 +24,26 @@ interface CachedRoom {
   provider: WebsocketProvider;
 }
 
-let cached: CachedRoom | null = null;
+interface EditorWorkspaceHotData {
+  cachedRoom?: CachedRoom | null;
+}
+
+const hotData = import.meta.hot?.data as EditorWorkspaceHotData | undefined;
+let cached: CachedRoom | null = hotData?.cachedRoom ?? null;
+
+function destroyCachedRoom() {
+  if (!cached) return;
+  cached.provider.disconnect();
+  cached.provider.destroy();
+  cached.ydoc.destroy();
+  cached = null;
+}
 
 function getOrCreateRoom(roomId: string): CachedRoom {
   if (cached && cached.roomId === roomId) return cached;
 
   // Different room — tear down the old one
-  if (cached) {
-    cached.provider.disconnect();
-    cached.provider.destroy();
-    cached.ydoc.destroy();
-  }
+  destroyCachedRoom();
 
   const ydoc = new YDoc();
   const provider = new WebsocketProvider(COLLAB_URL, roomId, ydoc);
@@ -42,15 +51,12 @@ function getOrCreateRoom(roomId: string): CachedRoom {
   return cached;
 }
 
-// Clean up on full page unload (not HMR)
+// Clean up on full page unload, while preserving the room across HMR.
 if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    if (cached) {
-      cached.provider.disconnect();
-      cached.provider.destroy();
-      cached.ydoc.destroy();
-      cached = null;
-    }
+  window.addEventListener('beforeunload', destroyCachedRoom);
+  import.meta.hot?.dispose((data: EditorWorkspaceHotData) => {
+    data.cachedRoom = cached;
+    window.removeEventListener('beforeunload', destroyCachedRoom);
   });
 }
 

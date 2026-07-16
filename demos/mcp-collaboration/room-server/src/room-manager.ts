@@ -53,7 +53,7 @@ export class RoomManager {
 
     await mkdir(ROOM_OUTPUT_DIR, { recursive: true });
     const outputPath = join(ROOM_OUTPUT_DIR, `${room.id}-current.docx`);
-    await room.editor.document.save({ out: outputPath });
+    await room.editor.document.save({ out: outputPath, force: true });
     return outputPath;
   }
 

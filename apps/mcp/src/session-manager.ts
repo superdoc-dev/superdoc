@@ -258,6 +258,7 @@ export async function buildAttachEditor(ydoc: YDoc, documentId: string, user?: A
     mediaFiles,
     fonts,
     fileSource: blankBytes,
+    telemetry: { enabled: false },
     // Without a user, `forceTrackChanges` rejects tracked edits. Supplying one
     // lets the caller author attributable tracked changes over the attach.
     ...(user ? { user } : {}),

@@ -3,6 +3,10 @@ import { SuperDocEditor, type SuperDocModules } from '@superdoc-dev/react';
 import { Doc as YDoc } from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { Loader2 } from 'lucide-react';
+import {
+  onCollaborationProviderSynced,
+  type CollaborationSyncProvider,
+} from '../../lib/provider-sync';
 
 interface EditorWorkspaceProps {
   roomId: string;
@@ -58,20 +62,11 @@ export function EditorWorkspace({ roomId, displayName }: EditorWorkspaceProps) {
   const room = useMemo(() => getOrCreateRoom(roomId), [roomId]);
 
   useEffect(() => {
-    // Already synced from a previous mount (HMR)
-    if (room.provider.synced) {
-      setSynced(true);
-      return;
-    }
-
-    const onSync = (isSynced: boolean) => {
-      if (isSynced) setSynced(true);
-    };
-
-    room.provider.on('sync', onSync);
-    return () => {
-      room.provider.off('sync', onSync);
-    };
+    setSynced(false);
+    return onCollaborationProviderSynced(
+      room.provider as unknown as CollaborationSyncProvider,
+      () => setSynced(true),
+    );
   }, [room]);
 
   const modules = useMemo<SuperDocModules>(

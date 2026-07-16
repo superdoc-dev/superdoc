@@ -10,6 +10,7 @@ const DEFAULT_TOKEN = 'superdoc-demo';
 
 interface ProtocolSession extends SuperDocMcpServer {
   transport: StreamableHTTPServerTransport;
+  closePromise?: Promise<void>;
 }
 
 export interface McpHttpServerOptions {
@@ -89,7 +90,13 @@ async function handlePost(
   sessions: Map<string, ProtocolSession>,
   createMcpServer: () => SuperDocMcpServer | Promise<SuperDocMcpServer>,
 ): Promise<void> {
-  const body = await readJsonBody(request);
+  let body: unknown;
+  try {
+    body = await readJsonBody(request);
+  } catch (error) {
+    if (error instanceof SyntaxError) return sendJsonRpcError(response, 400, 'Parse error', -32700);
+    throw error;
+  }
   const sessionId = headerValue(request.headers['mcp-session-id']);
 
   if (sessionId) {
@@ -112,8 +119,15 @@ async function handlePost(
   protocolSession = { ...created, transport };
   transport.onclose = () => {
     const initializedSessionId = transport.sessionId;
-    if (initializedSessionId) sessions.delete(initializedSessionId);
-    void created.sessions.closeAll();
+    void closeProtocolSession(protocolSession)
+      .catch((error) => {
+        console.error('MCP protocol session cleanup failed:', error);
+      })
+      .finally(() => {
+        if (initializedSessionId && sessions.get(initializedSessionId) === protocolSession) {
+          sessions.delete(initializedSessionId);
+        }
+      });
   };
 
   try {
@@ -139,8 +153,26 @@ async function handleSessionRequest(
 }
 
 async function closeProtocolSession(session: ProtocolSession): Promise<void> {
-  await session.sessions.closeAll();
-  await session.server.close();
+  session.closePromise ??= closeProtocolSessionResources(session);
+  await session.closePromise;
+}
+
+async function closeProtocolSessionResources(session: ProtocolSession): Promise<void> {
+  let cleanupError: unknown;
+
+  try {
+    await session.sessions.closeAll();
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  try {
+    await session.server.close();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  if (cleanupError) throw cleanupError;
 }
 
 function isLocalHostHeader(hostHeader: string | undefined): boolean {
@@ -164,9 +196,9 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function sendJsonRpcError(response: ServerResponse, status: number, message: string): void {
+function sendJsonRpcError(response: ServerResponse, status: number, message: string, code = -32000): void {
   response.writeHead(status, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message }, id: null }));
+  response.end(JSON.stringify({ jsonrpc: '2.0', error: { code, message }, id: null }));
 }
 
 function sendText(response: ServerResponse, status: number, message: string): void {

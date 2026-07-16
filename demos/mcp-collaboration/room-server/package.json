@@ -10,7 +10,7 @@
   "dependencies": {
     "@fastify/cors": "^10.0.0",
     "@fastify/multipart": "^9.4.0",
-    "@superdoc-dev/sdk": "latest",
+    "@superdoc-dev/sdk": "workspace:*",
     "fastify": "^5.3.3",
     "y-websocket": "^2.1.0",
     "yjs": "13.6.19"

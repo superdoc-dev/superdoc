@@ -37,4 +37,14 @@ describe('collab attach user identity (tracked-change user wiring)', () => {
 
     editor.destroy();
   });
+
+  it('disables telemetry for headless room attach editors', async () => {
+    const ydoc = new YDoc({ gc: false });
+
+    const editor = await buildAttachEditor(ydoc, 'test-room');
+
+    expect(editor.options.telemetry).toEqual({ enabled: false });
+
+    editor.destroy();
+  });
 });

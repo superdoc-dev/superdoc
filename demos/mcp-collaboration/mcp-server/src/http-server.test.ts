@@ -44,8 +44,36 @@ describe('hosted SuperDoc MCP server', { concurrency: false }, () => {
     }
   });
 
-  it('AC-3 initializes with the official transport and preserves the legacy tool set', async () => {
+  it('AC-2 returns a JSON-RPC parse error for malformed request bodies', async () => {
     const server = await startMcpHttpServer({ port: 0 });
+
+    try {
+      const response = await rawMcpRequest(server, '{invalid json');
+      assert.equal(response.status, 400);
+      assert.deepEqual(JSON.parse(response.body), {
+        jsonrpc: '2.0',
+        error: { code: -32700, message: 'Parse error' },
+        id: null,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('AC-3 initializes with the official transport and preserves the legacy tool set', async () => {
+    let mcpServerCloseCount = 0;
+    const server = await startMcpHttpServer({
+      port: 0,
+      createMcpServer: async () => {
+        const created = await createSuperDocMcpServer();
+        const close = created.server.close.bind(created.server);
+        created.server.close = async () => {
+          mcpServerCloseCount += 1;
+          await close();
+        };
+        return created;
+      },
+    });
     const connection = createClientConnection(server.url);
 
     try {
@@ -56,8 +84,14 @@ describe('hosted SuperDoc MCP server', { concurrency: false }, () => {
       assert.deepEqual(tools.map(({ name }) => name).sort(), [...EXPECTED_TOOLS].sort());
 
       await connection.transport.terminateSession();
-      await pollUntil(() => server.sessionCount() === 0, 'protocol session cleanup');
+      await pollUntil(
+        () => server.sessionCount() === 0 && mcpServerCloseCount === 1,
+        'protocol session cleanup',
+      );
       assert.equal(connection.transport.sessionId, undefined);
+
+      await server.close();
+      assert.equal(mcpServerCloseCount, 1);
     } finally {
       await connection.client.close();
       await server.close();
@@ -209,6 +243,35 @@ function initializeRequest(
     request.once('response', (response) => {
       response.resume();
       response.once('end', () => resolve(response.statusCode ?? 0));
+    });
+    request.end(body);
+  });
+}
+
+function rawMcpRequest(
+  server: RunningMcpHttpServer,
+  body: string,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = sendHttpRequest({
+      hostname: server.host,
+      port: server.port,
+      path: '/mcp',
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    });
+    request.once('error', reject);
+    request.once('response', (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      response.once('end', () => {
+        resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') });
+      });
     });
     request.end(body);
   });

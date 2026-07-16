@@ -197,3 +197,7 @@ acceptance criteria. Do not rewrite completed requirements during review.
   Bun binary and approves its install script so `make test` can execute #3569's
   unchanged Bun-based MCP regressions on machines without a global Bun
   installation. Affects AC-1 and AC-6.
+- **2026-07-16 — Review-oriented room prompt:** the generated room prompt now
+  asks the connected agent to identify and make document improvements using
+  tracked changes, replacing the original request-driven edit wording. The
+  pure snippet test verifies the new exact prompt. Affects AC-6.

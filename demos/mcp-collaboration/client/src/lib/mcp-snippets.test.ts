@@ -33,8 +33,9 @@ describe('createMcpSnippets', () => {
         '- document_id: quiet-fox-42\n' +
         '- user: { id: "external-agent", name: "Codex" }\n' +
         '\n' +
-        'Read the open document and make the requested edits. Use tracked changes\n' +
-        'when requested. The document is already visible in SuperDoc.',
+        'Review the open document, identify opportunities for improvement, and make\n' +
+        'those improvements using tracked changes. The document is already visible\n' +
+        'in SuperDoc.',
     );
   });
 

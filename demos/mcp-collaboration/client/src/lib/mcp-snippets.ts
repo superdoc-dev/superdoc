@@ -41,8 +41,9 @@ export function createMcpSnippets(options: McpSnippetOptions): McpSnippets {
       `- document_id: ${roomId}`,
       '- user: { id: "external-agent", name: "Codex" }',
       '',
-      'Read the open document and make the requested edits. Use tracked changes',
-      'when requested. The document is already visible in SuperDoc.',
+      'Review the open document, identify opportunities for improvement, and make',
+      'those improvements using tracked changes. The document is already visible',
+      'in SuperDoc.',
     ].join('\n'),
   };
 }

@@ -201,3 +201,7 @@ acceptance criteria. Do not rewrite completed requirements during review.
   asks the connected agent to identify and make document improvements using
   tracked changes, replacing the original request-driven edit wording. The
   pure snippet test verifies the new exact prompt. Affects AC-6.
+- **2026-07-16 — Neutral external-agent identity:** the shared room prompt uses
+  an `External Agent` identity so edits made through Claude Code are not
+  attributed to Codex. The one neutral prompt remains valid for either client.
+  Affects AC-6.

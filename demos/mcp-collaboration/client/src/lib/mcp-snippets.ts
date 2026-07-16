@@ -39,7 +39,7 @@ export function createMcpSnippets(options: McpSnippetOptions): McpSnippets {
       'Call superdoc_attach with:',
       `- ws_url: ${collaborationUrl}`,
       `- document_id: ${roomId}`,
-      '- user: { id: "external-agent", name: "Codex" }',
+      '- user: { id: "external-agent", name: "External Agent" }',
       '',
       'Review the open document, identify opportunities for improvement, and make',
       'those improvements using tracked changes. The document is already visible',

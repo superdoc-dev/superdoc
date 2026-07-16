@@ -31,7 +31,7 @@ describe('createMcpSnippets', () => {
       'Call superdoc_attach with:\n' +
         '- ws_url: ws://127.0.0.1:9992\n' +
         '- document_id: quiet-fox-42\n' +
-        '- user: { id: "external-agent", name: "Codex" }\n' +
+        '- user: { id: "external-agent", name: "External Agent" }\n' +
         '\n' +
         'Review the open document, identify opportunities for improvement, and make\n' +
         'those improvements using tracked changes. The document is already visible\n' +

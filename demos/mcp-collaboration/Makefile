@@ -1,24 +1,49 @@
-.PHONY: install dev test clean
+.PHONY: install prepare dev test clean
 
 DEMO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT := $(abspath $(DEMO_DIR)/../..)
 PNPM := pnpm
 BUN := $(DEMO_DIR)/mcp-server/node_modules/.bin/bun
 
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+ifeq ($(UNAME_S),Darwin)
+  ifeq ($(UNAME_M),arm64)
+    CLI_TARGET := darwin-arm64
+  else
+    CLI_TARGET := darwin-x64
+  endif
+else ifeq ($(UNAME_S),Linux)
+  ifeq ($(UNAME_M),aarch64)
+    CLI_TARGET := linux-arm64
+  else
+    CLI_TARGET := linux-x64
+  endif
+endif
+CLI_BINARY := superdoc
+CLI_BIN := $(ROOT)/apps/cli/artifacts/$(CLI_TARGET)/$(CLI_BINARY)
+
 install: ## Install all monorepo and demo dependencies
 	cd $(ROOT) && $(PNPM) install
+	$(MAKE) prepare
+
+prepare: ## Build the workspace packages and native CLI used by the demo
+	cd $(ROOT) && PATH="$(DEMO_DIR)/mcp-server/node_modules/.bin:$$PATH" \
+		$(PNPM) --filter @superdoc-dev/cli run build:native:host
+	cd $(ROOT) && $(PNPM) --filter superdoc run build
+	cd $(ROOT) && $(PNPM) --filter @superdoc-dev/react run build
+	cd $(ROOT) && $(PNPM) --filter @superdoc-dev/sdk run build
 
 dev: ## Start the client, room server, Yjs relay, and MCP server
 	$(PNPM) exec concurrently -k \
 		-n CLIENT,ROOMS,COLLAB,MCP \
 		-c green,magenta,cyan,blue \
 		"cd $(DEMO_DIR)/client && $(PNPM) run dev" \
-		"cd $(DEMO_DIR)/room-server && $(PNPM) run dev" \
+		"cd $(DEMO_DIR)/room-server && SUPERDOC_CLI_BIN=$(CLI_BIN) $(PNPM) run dev" \
 		"cd $(DEMO_DIR)/room-server && HOST=127.0.0.1 PORT=8081 $(PNPM) exec y-websocket" \
 		"cd $(DEMO_DIR)/mcp-server && $(PNPM) run dev"
 
-test: ## Run deterministic checks; no model key or external service required
-	cd $(ROOT) && $(PNPM) --filter superdoc run build
+test: prepare ## Run deterministic checks; no model key or external service required
 	cd $(ROOT) && $(PNPM) --filter @superdoc-dev/mcp run typecheck
 	PATH="$(DEMO_DIR)/mcp-server/node_modules/.bin:$$PATH" NODE_ENV=test \
 		$(BUN) test $(abspath $(ROOT)/apps/mcp/src)

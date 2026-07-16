@@ -35,8 +35,8 @@ original file—is the live source of truth while the room is active.
 ## Quick start
 
 Prerequisites: Node.js 20+, pnpm, and either Codex or Claude Code. `make
-install` also installs the demo's local Bun test runner for the existing MCP
-regression suite.
+install` installs the demo's local Bun test runner and builds the local
+SuperDoc, React, SDK, and native CLI artifacts used by the four processes.
 
 ```bash
 cd demos/mcp-collaboration

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
+import { getAnchoredPosition } from '../../utils/anchored-position';
 
 defineOptions({
   inheritAttrs: false,
@@ -38,6 +39,7 @@ const isOpen = ref(false);
 const triggerRef = ref(null);
 const contentRef = ref(null);
 const position = ref({ top: '0px', left: '0px' });
+const placement = ref('top');
 
 let closeTimeout = null;
 let openTimeout = null;
@@ -86,17 +88,14 @@ const scheduleAutoHide = () => {
 const updatePosition = () => {
   if (!triggerRef.value || !contentRef.value) return;
 
-  const triggerRect = triggerRef.value.getBoundingClientRect();
-  const contentWidth = contentRef.value.offsetWidth;
-  const contentHeight = contentRef.value.offsetHeight;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const gutter = 8;
+  const { top, left, computedPlacement } = getAnchoredPosition(triggerRef.value, contentRef.value, {
+    placement: 'top',
+    offset: 10,
+  });
 
-  let left = triggerRect.left + triggerRect.width / 2 - contentWidth / 2;
-  left = Math.max(gutter, Math.min(left, viewportWidth - contentWidth - gutter));
-
+  placement.value = computedPlacement;
   position.value = {
-    top: `${triggerRect.top - contentHeight - 10}px`,
+    top: `${top}px`,
     left: `${left}px`,
   };
 };
@@ -221,7 +220,7 @@ onBeforeUnmount(() => {
         @mouseenter="handleContentMouseEnter"
         @mouseleave="handleContentMouseLeave"
       >
-        <span class="sd-tooltip-arrow" aria-hidden="true" />
+        <span :class="`sd-tooltip-arrow sd-tooltip-arrow-${placement}`" aria-hidden="true" />
         <slot />
       </div>
     </Transition>
@@ -248,16 +247,23 @@ onBeforeUnmount(() => {
 .sd-tooltip-arrow {
   position: absolute;
   left: 50%;
-  bottom: -5px;
   width: 10px;
   height: 10px;
   background-color: var(--sd-ui-tooltip-bg, #262626);
   transform: translateX(-50%) rotate(45deg);
 }
 
+.sd-tooltip-arrow-top {
+  bottom: -5px;
+}
+
+.sd-tooltip-arrow-bottom {
+  top: -5px;
+}
+
 .fade-in-scale-up-transition-enter-active,
 .fade-in-scale-up-transition-leave-active {
-  transform-origin: bottom center;
+  transform-origin: center;
 }
 
 .fade-in-scale-up-transition-enter-active {

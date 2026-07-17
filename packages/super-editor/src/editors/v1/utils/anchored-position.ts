@@ -177,3 +177,73 @@ export const getAvailableSpace = (triggerElem: HTMLElement, offset: number = 0) 
   const availableRight = Math.max(0, viewportWidth - rect.right - offset - GUTTER);
   return { availableBelow, availableAbove, availableLeft, availableRight };
 };
+
+/**
+ * Calculates the maximum available width and height for a content element based on the specified placement relative to a trigger element.
+ * @param triggerElem - The element that triggers the positioning of the content element.
+ * @param placement - The desired placement of the content element relative to the trigger element ('top', 'bottom', 'left', 'right', etc.).
+ * @param offset - An optional offset value to adjust the available space calculation (default is 0).
+ * @returns An object containing the maximum available width and height for the content element.
+ */
+export const getAvailableSpaceForPlacement = (triggerElem: HTMLElement, placement: Placement, offset: number = 0) => {
+  const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerElem, offset);
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const rect = triggerElem.getBoundingClientRect();
+
+  let maxHeight = 0;
+  let maxWidth = 0;
+
+  switch (placement) {
+    case 'top':
+      maxWidth = viewportWidth - GUTTER * 2;
+      maxHeight = availableAbove;
+      break;
+    case 'bottom':
+      maxWidth = viewportWidth - GUTTER * 2;
+      maxHeight = availableBelow;
+      break;
+    case 'left':
+      maxWidth = availableLeft;
+      maxHeight = viewportHeight - GUTTER * 2;
+      break;
+    case 'right':
+      maxWidth = availableRight;
+      maxHeight = viewportHeight - GUTTER * 2;
+      break;
+    case 'top-start':
+      maxWidth = availableRight + rect.width;
+      maxHeight = availableAbove;
+      break;
+    case 'top-end':
+      maxWidth = availableLeft + rect.width;
+      maxHeight = availableAbove;
+      break;
+    case 'bottom-start':
+      maxWidth = availableRight + rect.width;
+      maxHeight = availableBelow;
+      break;
+    case 'bottom-end':
+      maxWidth = availableLeft + rect.width;
+      maxHeight = availableBelow;
+      break;
+    case 'left-start':
+      maxWidth = availableLeft;
+      maxHeight = availableBelow + rect.height;
+      break;
+    case 'left-end':
+      maxWidth = availableLeft;
+      maxHeight = availableAbove + rect.height;
+      break;
+    case 'right-start':
+      maxWidth = availableRight;
+      maxHeight = availableBelow + rect.height;
+      break;
+    case 'right-end':
+      maxWidth = availableRight;
+      maxHeight = availableAbove + rect.height;
+      break;
+  }
+
+  return { maxWidth, maxHeight };
+};

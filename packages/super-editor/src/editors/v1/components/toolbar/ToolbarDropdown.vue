@@ -1,5 +1,6 @@
 <script setup>
 import { computed, defineComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { getAnchoredPosition, getAvailableSpaceForPlacement } from '../../utils/anchored-position.js';
 
 const props = defineProps({
   options: {
@@ -89,29 +90,14 @@ const updateMenuPosition = () => {
   if (!triggerRef.value) return;
   const rect = triggerRef.value.getBoundingClientRect();
   const menuEl = menuRef.value;
-  const menuWidth = menuEl?.offsetWidth ?? 0;
-  const menuHeight = menuEl?.scrollHeight ?? menuEl?.offsetHeight ?? 0;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const gutter = 8;
   const gap = 4;
-  const belowTop = rect.bottom + gap;
-  const aboveBottom = rect.top - gap;
-  const availableBelow = Math.max(0, viewportHeight - belowTop - gutter);
-  const availableAbove = Math.max(0, aboveBottom - gutter);
-  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow;
-  const maxHeight = openAbove ? availableAbove : availableBelow;
-  const menuRenderHeight = menuHeight ? Math.min(menuHeight, maxHeight) : maxHeight;
-  const top = openAbove ? Math.max(gutter, aboveBottom - menuRenderHeight) : belowTop;
-  let left = rect.left;
 
-  if (props.placement === 'bottom-end') {
-    left = rect.right - menuWidth;
-  }
+  const { top, left, computedPlacement } = getAnchoredPosition(triggerRef.value, menuEl, {
+    placement: props.placement,
+    offset: gap,
+  });
 
-  // Prevent horizontal overflow outside viewport.
-  const maxLeft = Math.max(gutter, viewportWidth - menuWidth - gutter);
-  left = Math.min(Math.max(gutter, left), maxLeft);
+  const { maxHeight } = getAvailableSpaceForPlacement(triggerRef.value, computedPlacement, gap);
 
   menuPosition.value = {
     top: `${top}px`,

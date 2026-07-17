@@ -181,4 +181,97 @@ describe('preProcessHyperlinkInstruction', () => {
       },
     ]);
   });
+
+  it('wraps runs per paragraph when the field spans a paragraph boundary', () => {
+    // A field whose collected content crosses a paragraph break yields whole
+    // <w:p> blocks. Because <w:hyperlink> is inline and cannot wrap a <w:p> or
+    // span the break, Word emits one <w:hyperlink> per paragraph sharing the
+    // same target. The paragraphs must survive as blocks so a table cell keeps
+    // its required block content.
+    const instruction = 'HYPERLINK "http://example.com"';
+    const mockDocx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+
+    const crossParagraphNodes = [
+      {
+        name: 'w:p',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'first ' }] }] }],
+      },
+      {
+        name: 'w:p',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'second' }] }] }],
+      },
+    ];
+
+    const result = preProcessHyperlinkInstruction(crossParagraphNodes, instruction, { docx: mockDocx });
+
+    expect(result).toEqual([
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:hyperlink',
+            type: 'element',
+            attributes: { 'r:id': 'rIdabc12345' },
+            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'first ' }] }] }],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:hyperlink',
+            type: 'element',
+            attributes: { 'r:id': 'rIdabc12345' },
+            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'second' }] }] }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps paragraph properties outside the per-paragraph hyperlink', () => {
+    // <w:pPr> is a paragraph-level property, not visible content, so it must stay
+    // a direct child of the paragraph rather than being pulled into the inline
+    // <w:hyperlink> alongside the runs.
+    const instruction = 'HYPERLINK "http://example.com"';
+    const mockDocx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+
+    const nodes = [
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:pPr', elements: [{ name: 'w:jc', attributes: { 'w:val': 'center' } }] },
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'only' }] }] },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'tail' }] }] }],
+      },
+    ];
+
+    const result = preProcessHyperlinkInstruction(nodes, instruction, { docx: mockDocx });
+
+    expect(result[0]).toEqual({
+      name: 'w:p',
+      elements: [
+        { name: 'w:pPr', elements: [{ name: 'w:jc', attributes: { 'w:val': 'center' } }] },
+        {
+          name: 'w:hyperlink',
+          type: 'element',
+          attributes: { 'r:id': 'rIdabc12345' },
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'only' }] }] }],
+        },
+      ],
+    });
+  });
 });

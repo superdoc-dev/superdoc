@@ -487,14 +487,17 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
+    // The field envelope crosses into a paragraph, so the collected content is a
+    // <w:p>. A <w:hyperlink> is inline and cannot wrap a <w:p>, so the link goes
+    // inside the paragraph around its runs — never around the paragraph itself.
     expect(processedNodes).toEqual([
       {
-        name: 'w:hyperlink',
-        type: 'element',
-        attributes: { 'r:id': 'rIdabc12345' },
+        name: 'w:p',
         elements: [
           {
-            name: 'w:p',
+            name: 'w:hyperlink',
+            type: 'element',
+            attributes: { 'r:id': 'rIdabc12345' },
             elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
           },
         ],
@@ -531,24 +534,22 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
+    // The collected content is a <w:p>, so the paragraph is preserved as a block
+    // rather than being wrapped in an inline <w:hyperlink> (which would drop it).
+    // The visible run lives inside a <w:sdt> wrapper, not directly under the
+    // paragraph, so it is kept intact; the link is applied only to runs that are
+    // direct paragraph children.
     expect(processedNodes).toEqual([
       {
-        name: 'w:hyperlink',
-        type: 'element',
-        attributes: { 'r:id': 'rIdabc12345' },
+        name: 'w:p',
         elements: [
           {
-            name: 'w:p',
+            name: 'w:sdt',
             elements: [
               {
-                name: 'w:sdt',
+                name: 'w:sdtContent',
                 elements: [
-                  {
-                    name: 'w:sdtContent',
-                    elements: [
-                      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
-                    ],
-                  },
+                  { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
                 ],
               },
             ],

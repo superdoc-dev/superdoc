@@ -1119,9 +1119,9 @@ describe('buildContentControlInfoFromAttrs completeness', () => {
   });
 });
 
-describe('choiceList.setSelected visual text sync', () => {
+describe('choiceList.setSelected visual text sync (inline scope)', () => {
   it('updates visible content text to the selected item displayText', () => {
-    const editor = makeSdtEditor({
+    const editor = makeInlineSdtEditor({
       controlType: 'dropDownList',
       type: 'dropDownList',
       sdtPr: {
@@ -1140,7 +1140,10 @@ describe('choiceList.setSelected visual text sync', () => {
     });
     const adapter = createContentControlsAdapter(editor);
 
-    const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'acme' }, { changeMode: 'direct' });
+    const result = adapter.choiceList.setSelected(
+      { target: INLINE_SDT_TARGET, value: 'acme' },
+      { changeMode: 'direct' },
+    );
     expect(result.success).toBe(true);
 
     const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
@@ -1149,7 +1152,7 @@ describe('choiceList.setSelected visual text sync', () => {
   });
 
   it('falls back to the selected value when no matching item is found', () => {
-    const editor = makeSdtEditor({
+    const editor = makeInlineSdtEditor({
       controlType: 'dropDownList',
       type: 'dropDownList',
       sdtPr: {
@@ -1167,12 +1170,72 @@ describe('choiceList.setSelected visual text sync', () => {
     });
     const adapter = createContentControlsAdapter(editor);
 
-    const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'unknown' }, { changeMode: 'direct' });
+    const result = adapter.choiceList.setSelected(
+      { target: INLINE_SDT_TARGET, value: 'unknown' },
+      { changeMode: 'direct' },
+    );
     expect(result.success).toBe(true);
 
     const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
     const textCall = updateCmd.mock.calls.find((call) => call[1]?.text === 'unknown');
     expect(textCall).toBeDefined();
+  });
+});
+
+describe('choiceList.setSelected visual text sync (block scope)', () => {
+  // Build a block-scope dropdown control (sdtContent wraps a paragraph carrying
+  // the displayed option), as produced by a "Yes/No" dropdown on its own line.
+  function makeBlockDropdownEditor() {
+    return makeSdtEditor(
+      {
+        controlType: 'dropDownList',
+        type: 'dropDownList',
+        sdtPr: {
+          name: 'w:sdtPr',
+          elements: [
+            {
+              name: 'w:dropDownList',
+              type: 'element',
+              elements: [
+                { name: 'w:listItem', type: 'element', attributes: { 'w:displayText': 'Yes', 'w:value': 'Yes' } },
+                { name: 'w:listItem', type: 'element', attributes: { 'w:displayText': 'No', 'w:value': 'No' } },
+              ],
+            },
+          ],
+        },
+      },
+      [createParagraphNode('Select an item.')],
+    );
+  }
+
+  // setSelected must rewrite the SDT's visible text for block-scope dropdowns,
+  // not only w:lastValue; otherwise the option never changes on screen. The
+  // block path can't use updateStructuredContentById (it builds inline text JSON
+  // the block schema rejects, rolling back the whole transaction incl. the
+  // w:lastValue write), so the rewrite surfaces as a tr.replaceWith of the inner
+  // range. Mirror the checkbox block-scope tests.
+  it('rewrites the visible text for block-scope dropdowns, not just w:lastValue', () => {
+    const editor = makeBlockDropdownEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'Yes' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
+  });
+
+  it('still writes w:lastValue to the dropdown sdtPr child', () => {
+    const editor = makeBlockDropdownEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'Yes' }, { changeMode: 'direct' });
+
+    const setAttr = (editor.state.tr as any).setNodeAttribute as ReturnType<typeof vi.fn>;
+    const sdtPrCall = setAttr.mock.calls.find((call: any[]) => call[1] === 'sdtPr');
+    expect(sdtPrCall).toBeDefined();
+    const writtenSdtPr = sdtPrCall?.[2] as { elements?: Array<{ name: string; attributes?: Record<string, string> }> };
+    const dropdownEl = writtenSdtPr?.elements?.find((el) => el.name === 'w:dropDownList');
+    expect(dropdownEl?.attributes?.['w:lastValue']).toBe('Yes');
   });
 });
 

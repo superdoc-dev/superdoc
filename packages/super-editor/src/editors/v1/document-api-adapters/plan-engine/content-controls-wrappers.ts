@@ -1591,11 +1591,23 @@ function choiceListSetSelectedWrapper(
     if (!selectedUpdated) return false;
 
     // Keep the SDT body text in sync so the selected option is visible in-editor and after export.
-    const updateCmd = editor.commands?.updateStructuredContentById;
-    if (typeof updateCmd === 'function') {
-      const visualUpdated = Boolean(
-        updateCmd(input.target.nodeId, { text: selectedDisplayText, keepTextNodeStyles: true }),
-      );
+    if (sdt.kind === 'inline') {
+      const updateCmd = editor.commands?.updateStructuredContentById;
+      if (typeof updateCmd === 'function') {
+        const visualUpdated = Boolean(
+          updateCmd(input.target.nodeId, { text: selectedDisplayText, keepTextNodeStyles: true }),
+        );
+        return visualUpdated || selectedUpdated;
+      }
+    } else if (sdt.kind === 'block') {
+      // Block-scope dropdowns can't reuse the inline branch above: it feeds
+      // updateStructuredContentById a bare text node, which a block SDT's schema
+      // (block content must be wrapped in a paragraph) rejects. PM's content
+      // check then rolls back the whole transaction — including the w:lastValue
+      // update above — so the selection fails silently. Mirror
+      // checkboxSetStateWrapper and use replaceSdtTextContent, which wraps the
+      // display text in a paragraph.
+      const visualUpdated = replaceSdtTextContent(editor, input.target, selectedDisplayText);
       return visualUpdated || selectedUpdated;
     }
 

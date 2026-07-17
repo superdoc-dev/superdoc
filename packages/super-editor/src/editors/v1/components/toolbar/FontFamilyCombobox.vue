@@ -3,6 +3,11 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 import { computeTypeahead, findPrefixMatchIndex, normalizeCustomFontFamily } from './font-typeahead.js';
+import {
+  getAnchoredPosition,
+  getAvailableSpace,
+  getAvailableSpaceForPlacement,
+} from '../../utils/anchored-position.js';
 
 const props = defineProps({
   item: {
@@ -95,20 +100,13 @@ const updatePosition = () => {
   if (!trigger) return;
   const rect = trigger.getBoundingClientRect();
   const menuEl = popupRef.value;
-  const menuHeight = menuEl?.scrollHeight ?? menuEl?.offsetHeight ?? 0;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const gutter = 8;
   const gap = 4;
-  const belowTop = rect.bottom + gap;
-  const aboveBottom = rect.top - gap;
-  const availableBelow = Math.max(0, viewportHeight - belowTop - gutter);
-  const availableAbove = Math.max(0, aboveBottom - gutter);
-  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow;
-  const maxHeight = openAbove ? availableAbove : availableBelow;
-  const renderHeight = menuHeight ? Math.min(menuHeight, maxHeight) : maxHeight;
-  const top = openAbove ? Math.max(gutter, aboveBottom - renderHeight) : belowTop;
-  const left = Math.min(Math.max(gutter, rect.left), Math.max(gutter, viewportWidth - rect.width - gutter));
+  const { top, left, computedPlacement } = getAnchoredPosition(trigger, menuEl, {
+    placement: 'bottom-start',
+    offset: gap,
+  });
+  const { availableBelow, availableAbove } = getAvailableSpace(trigger, gap);
+  const { maxHeight } = getAvailableSpaceForPlacement(trigger, computedPlacement, gap);
 
   menuPosition.value = {
     top: `${top}px`,

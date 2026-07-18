@@ -101,17 +101,17 @@ export const getAnchoredPosition = (
 
   switch (computedPlacement) {
     case 'top':
-      top = triggerRect.top - contentHeight - offset;
+      top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left + (triggerRect.width - contentWidth) / 2;
       left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
       break;
     case 'top-start':
-      top = triggerRect.top - contentHeight - offset;
+      top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left;
       left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
       break;
     case 'top-end':
-      top = triggerRect.top - contentHeight - offset;
+      top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.right - contentWidth;
       left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
       break;

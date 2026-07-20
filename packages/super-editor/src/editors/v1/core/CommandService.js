@@ -55,14 +55,18 @@ export class CommandService {
    * editor.commands.insertText('hello'); // falls back to editor.dispatch
    */
   get commands() {
-    const { editor, state } = this;
+    const { editor, state, rawCommands } = this;
     const { view } = editor;
     const { tr } = state;
     const props = this.createProps(tr);
 
-    const entries = Object.entries(this.rawCommands).map(([name, command]) => {
-      /** @type {(...args: any[]) => boolean} */
-      const method = (...args) => {
+    /**
+     * @param {string} name
+     * @returns {(...args: any[]) => boolean}
+     */
+    const buildMethod = (name) => {
+      const command = rawCommands[name];
+      return (...args) => {
         const fn = command(...args)(props);
 
         if (!tr.getMeta('preventDispatch')) {
@@ -73,11 +77,76 @@ export class CommandService {
 
         return fn;
       };
+    };
 
-      return [name, method];
-    });
+    const deletedCommandNames = new Set();
 
-    return /** @type {import('./commands/types/index.js').EditorCommands} */ Object.fromEntries(entries);
+    /** @param {PropertyKey} name */
+    const isRegisteredCommandName = (name) =>
+      typeof name === 'string' && Object.prototype.propertyIsEnumerable.call(rawCommands, name);
+
+    /** @param {PropertyKey} name */
+    const isCommandName = (name) => isRegisteredCommandName(name) && !deletedCommandNames.has(name);
+
+    /**
+     * @param {Record<PropertyKey, any>} target
+     * @param {PropertyKey} name
+     */
+    const materializeCommand = (target, name) => {
+      if (Object.prototype.hasOwnProperty.call(target, name) || !isCommandName(name)) return;
+      Object.defineProperty(target, name, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: buildMethod(/** @type {string} */ (name)),
+      });
+    };
+
+    /** @param {Record<PropertyKey, any>} target */
+    const materializeAllCommands = (target) => {
+      Object.keys(rawCommands).forEach((name) => materializeCommand(target, name));
+    };
+
+    return /** @type {import('./commands/types/index.js').EditorCommands} */ (
+      new Proxy(
+        {},
+        {
+          get: (target, name, receiver) => {
+            materializeCommand(target, name);
+            return Reflect.get(target, name, receiver);
+          },
+          has: (target, name) => isCommandName(name) || Reflect.has(target, name),
+          ownKeys: (target) => {
+            materializeAllCommands(target);
+            const commandNames = Object.keys(rawCommands).filter((name) => !deletedCommandNames.has(name));
+            const commandNameSet = new Set(commandNames);
+            const targetKeys = Reflect.ownKeys(target).filter(
+              (name) => typeof name !== 'string' || !commandNameSet.has(name),
+            );
+            return [...commandNames, ...targetKeys];
+          },
+          getOwnPropertyDescriptor: (target, name) => {
+            materializeCommand(target, name);
+            return Reflect.getOwnPropertyDescriptor(target, name);
+          },
+          defineProperty: (target, name, descriptor) => {
+            materializeCommand(target, name);
+            return Reflect.defineProperty(target, name, descriptor);
+          },
+          deleteProperty: (target, name) => {
+            const deleted = Reflect.deleteProperty(target, name);
+            if (deleted && isRegisteredCommandName(name)) {
+              deletedCommandNames.add(name);
+            }
+            return deleted;
+          },
+          preventExtensions: (target) => {
+            materializeAllCommands(target);
+            return Reflect.preventExtensions(target);
+          },
+        },
+      )
+    );
   }
 
   /**

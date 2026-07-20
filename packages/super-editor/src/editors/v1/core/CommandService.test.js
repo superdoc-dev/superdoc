@@ -548,4 +548,194 @@ describe('CommandService', () => {
       expect(editorDispatch).toHaveBeenNthCalledWith(2, tr2);
     });
   });
+
+  describe('lazy command access (perf)', () => {
+    const makeTrackedRawCommands = (names, reads, enumerations = []) => {
+      const target = {};
+      for (const name of names) {
+        target[name] = () => () => true;
+      }
+      return new Proxy(target, {
+        get(t, key, receiver) {
+          if (typeof key === 'string' && key in t) reads.push(key);
+          return Reflect.get(t, key, receiver);
+        },
+        ownKeys(t) {
+          enumerations.push(true);
+          return Reflect.ownKeys(t);
+        },
+      });
+    };
+
+    it('reads only the accessed command, not every registered command', () => {
+      const reads = [];
+      const enumerations = [];
+      editor.extensionService.commands = makeTrackedRawCommands(['alpha', 'beta', 'gamma'], reads, enumerations);
+
+      const service = new CommandService({ editor });
+      reads.length = 0;
+
+      const result = service.commands.alpha();
+
+      expect(result).toBe(true);
+      expect(reads).toEqual(['alpha']);
+      expect(enumerations).toEqual([]);
+    });
+
+    it('reuses a command method within the same commands object', () => {
+      const reads = [];
+      editor.extensionService.commands = makeTrackedRawCommands(['alpha'], reads);
+
+      const service = new CommandService({ editor });
+      reads.length = 0;
+      const commands = service.commands;
+
+      expect(commands.alpha).toBe(commands.alpha);
+      expect(reads).toEqual(['alpha']);
+    });
+
+    it('preserves ordinary Object prototype behavior', () => {
+      editor.extensionService.commands = { alpha: () => () => true };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+
+      expect(commands.hasOwnProperty('alpha')).toBe(true);
+      expect(String(commands)).toBe('[object Object]');
+    });
+
+    it('preserves command property descriptors', () => {
+      editor.extensionService.commands = { alpha: () => () => true };
+
+      const service = new CommandService({ editor });
+
+      expect(Object.getOwnPropertyDescriptor(service.commands, 'alpha')).toMatchObject({
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    });
+
+    it('allows a command method to be replaced on the commands object', () => {
+      editor.extensionService.commands = { alpha: () => () => true };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+      const replacement = vi.fn(() => false);
+
+      commands.alpha = replacement;
+
+      expect(commands.alpha).toBe(replacement);
+    });
+
+    it('allows a command method to be deleted from the commands object', () => {
+      editor.extensionService.commands = { alpha: () => () => true };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+
+      delete commands.alpha;
+
+      expect(commands.alpha).toBeUndefined();
+      expect('alpha' in commands).toBe(false);
+      expect(Object.keys(commands)).toEqual([]);
+    });
+
+    it('allows a command method to be defined on the commands object', () => {
+      editor.extensionService.commands = { alpha: () => () => true };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+      const replacement = vi.fn(() => false);
+
+      Object.defineProperty(commands, 'alpha', {
+        value: replacement,
+      });
+
+      expect(commands.alpha).toBe(replacement);
+      expect(Object.getOwnPropertyDescriptor(commands, 'alpha')).toMatchObject({
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    });
+
+    it('supports freezing the commands object', () => {
+      editor.extensionService.commands = {
+        alpha: () => () => true,
+        beta: () => () => true,
+      };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+
+      expect(() => Object.freeze(commands)).not.toThrow();
+      expect(Object.isFrozen(commands)).toBe(true);
+      expect(Object.keys(commands)).toEqual(['alpha', 'beta']);
+    });
+
+    it('moves a deleted and reassigned command to the end of key order', () => {
+      editor.extensionService.commands = {
+        alpha: () => () => true,
+        beta: () => () => true,
+      };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+
+      delete commands.alpha;
+      commands.alpha = () => false;
+
+      expect(Object.keys(commands)).toEqual(['beta', 'alpha']);
+    });
+
+    it('keeps key order when deleting a non-configurable command fails', () => {
+      editor.extensionService.commands = {
+        alpha: () => () => true,
+        beta: () => () => true,
+      };
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+      Object.defineProperty(commands, 'alpha', { configurable: false });
+
+      expect(Reflect.deleteProperty(commands, 'alpha')).toBe(false);
+      expect(Object.keys(commands)).toEqual(['alpha', 'beta']);
+    });
+
+    it('exposes only own enumerable raw commands', () => {
+      const inheritedCommands = { inherited: () => () => true };
+      const rawCommands = Object.assign(Object.create(inheritedCommands), {
+        alpha: () => () => true,
+      });
+      Object.defineProperty(rawCommands, 'hidden', {
+        enumerable: false,
+        value: () => () => true,
+      });
+      editor.extensionService.commands = rawCommands;
+
+      const service = new CommandService({ editor });
+      const commands = service.commands;
+
+      expect(commands.inherited).toBeUndefined();
+      expect(commands.hidden).toBeUndefined();
+      expect('inherited' in commands).toBe(false);
+      expect('hidden' in commands).toBe(false);
+      expect(Object.keys(commands)).toEqual(['alpha']);
+    });
+
+    it('still exposes every command for enumeration/spread', () => {
+      editor.extensionService.commands = {
+        alpha: () => () => true,
+        beta: () => () => true,
+      };
+
+      const service = new CommandService({ editor });
+
+      expect(Object.keys(service.commands).sort()).toEqual(['alpha', 'beta']);
+      const spread = { ...service.commands };
+      expect(typeof spread.alpha).toBe('function');
+      expect(typeof spread.beta).toBe('function');
+    });
+  });
 });

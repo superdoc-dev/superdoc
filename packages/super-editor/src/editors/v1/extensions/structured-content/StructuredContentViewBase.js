@@ -191,6 +191,13 @@ export class StructuredContentViewBase {
     dragHandle.draggable = true;
     dragHandle.contentEditable = 'false';
     dragHandle.dataset.dragHandle = '';
+    // The handle shows the SDT alias as editor chrome, not document text. Mark
+    // it non-selectable inline (not only via CSS) so it can never join a text
+    // selection or the clipboard.
+    // Otherwise it would capture the alias and paste it as a literal prefix
+    // before the control's own text.
+    dragHandle.style.userSelect = 'none';
+    dragHandle.style.setProperty('-webkit-user-select', 'none');
     const textElement = document.createElement('span');
     textElement.textContent = this.node.attrs.alias || 'Structured content';
     dragHandle.append(textElement);

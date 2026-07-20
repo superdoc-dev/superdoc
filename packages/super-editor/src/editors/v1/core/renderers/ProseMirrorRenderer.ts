@@ -107,7 +107,15 @@ const HEADER_FOOTER_LINE_HEIGHT = 1;
  */
 type ListenerCleanup = () => void;
 
-const RUNTIME_COPY_STRIP_SELECTOR = ['.list-marker', '.sd-editor-tab', '.ProseMirror-trailingBreak'].join(', ');
+// Runtime-only chrome that node views inject for display but that is not part of
+// the document model. Copy builds its HTML from the rendered DOM, so these must be
+// stripped or they leak into the clipboard.
+const RUNTIME_COPY_STRIP_SELECTOR = [
+  '.list-marker',
+  '.sd-editor-tab',
+  '.ProseMirror-trailingBreak',
+  '.sd-structured-content-draggable', // anchored metadata
+].join(', ');
 const PARAGRAPH_CONTENT_SELECTOR = 'span.sd-paragraph-content';
 const BLOCK_COPY_CONTEXT_SELECTOR = 'p, div, h1, h2, h3, h4, h5, h6, blockquote, table';
 const WORD_HTML_META = '<meta name="Generator" content="Microsoft Word">';

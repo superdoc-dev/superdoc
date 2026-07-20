@@ -64,7 +64,7 @@ export const getAnchoredPosition = (
   const { placement = 'top', offset = 0, flip = true } = options;
   const triggerRect = triggerElem.getBoundingClientRect();
   const contentWidth = contentElem.offsetWidth;
-  const contentHeight = contentElem.offsetHeight;
+  const contentHeight = isElemScrollable(contentElem) ? contentElem.scrollHeight : contentElem.offsetHeight;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerElem, offset);
 
@@ -246,4 +246,10 @@ export const getAvailableSpaceForPlacement = (triggerElem: HTMLElement, placemen
   }
 
   return { maxWidth, maxHeight };
+};
+
+const isElemScrollable = (elem: HTMLElement) => {
+  const computedStyle = window.getComputedStyle(elem);
+  const isScrollable = ['auto', 'scroll'].includes(computedStyle.overflowY);
+  return isScrollable && elem.scrollHeight >= elem.clientHeight;
 };

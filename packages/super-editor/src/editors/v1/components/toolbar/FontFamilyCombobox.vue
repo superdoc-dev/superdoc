@@ -3,11 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 import { computeTypeahead, findPrefixMatchIndex, normalizeCustomFontFamily } from './font-typeahead.js';
-import {
-  getAnchoredPosition,
-  getAvailableSpace,
-  getAvailableSpaceForPlacement,
-} from '../../utils/anchored-position.js';
+import { getAnchoredPosition, getAvailableSpaceForPlacement } from '../../utils/anchored-position.js';
 
 const props = defineProps({
   item: {
@@ -105,7 +101,6 @@ const updatePosition = () => {
     placement: 'bottom-start',
     offset: gap,
   });
-  const { availableBelow, availableAbove } = getAvailableSpace(trigger, gap);
   const { maxHeight } = getAvailableSpaceForPlacement(trigger, computedPlacement, gap);
 
   menuPosition.value = {

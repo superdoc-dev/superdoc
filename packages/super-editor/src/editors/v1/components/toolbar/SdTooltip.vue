@@ -45,7 +45,11 @@ let closeTimeout = null;
 let openTimeout = null;
 let autoHideTimeout = null;
 
-const mergedContentClass = computed(() => ['sd-tooltip-content', attrs.class]);
+const mergedContentClass = computed(() => [
+  'sd-tooltip-content',
+  `fade-in-scale-up-transition-enter-active-${placement.value}`,
+  attrs.class,
+]);
 const contentStyle = computed(() => ({
   ...props.contentStyle,
   ...(attrs.style || {}),
@@ -264,6 +268,14 @@ onBeforeUnmount(() => {
 .fade-in-scale-up-transition-enter-active,
 .fade-in-scale-up-transition-leave-active {
   transform-origin: center;
+}
+
+.fade-in-scale-up-transition-enter-active-top {
+  transform-origin: bottom center;
+}
+
+.fade-in-scale-up-transition-enter-active-bottom {
+  transform-origin: top center;
 }
 
 .fade-in-scale-up-transition-enter-active {

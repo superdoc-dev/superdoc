@@ -49,33 +49,31 @@ function queueMutation(event) {
   if (event.source === Word.EventSource.remote || event.source === 'Remote') return;
 
   eventQueue = eventQueue
-    .then(() => inspectLocalMutation(event))
+    .then(async () => {
+      const mode = await readTrackingMode();
+      const isUntracked = mode === Word.ChangeTrackingMode.off || mode === 'Off';
+
+      if (isUntracked) {
+        state.hasUntrackedChanges = true;
+        state.untrackedEvents += 1;
+      } else {
+        state.trackedEvents += 1;
+      }
+
+      state.events.unshift({
+        type: event.type,
+        mode,
+        isUntracked,
+        paragraphCount: event.uniqueLocalIds?.length ?? 0,
+        occurredAt: new Date(),
+      });
+      state.events = state.events.slice(0, 20);
+      render();
+    })
     .catch((error) => {
       console.error('Failed to inspect Word mutation.', error);
       setListenerStatus('Inspection error', true);
     });
-}
-
-async function inspectLocalMutation(event) {
-  const mode = await readTrackingMode();
-  const isUntracked = mode === Word.ChangeTrackingMode.off || mode === 'Off';
-
-  if (isUntracked) {
-    state.hasUntrackedChanges = true;
-    state.untrackedEvents += 1;
-  } else {
-    state.trackedEvents += 1;
-  }
-
-  state.events.unshift({
-    type: event.type,
-    mode,
-    isUntracked,
-    paragraphCount: event.uniqueLocalIds?.length ?? 0,
-    occurredAt: new Date(),
-  });
-  state.events = state.events.slice(0, 20);
-  render();
 }
 
 async function readTrackingMode() {

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+  <Id>fd36ce7c-1a4c-4bb1-9d35-b7f92b9a540e</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>SuperDoc</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Tracked Edit Detector"/>
+  <Description DefaultValue="Tests live tracked and untracked edit detection in Word."/>
+  <IconUrl DefaultValue="https://localhost:3015/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:3015/assets/icon-80.png"/>
+  <SupportUrl DefaultValue="https://docs.superdoc.dev"/>
+  <Hosts><Host Name="Document"/></Hosts>
+  <Requirements><Sets><Set Name="WordApi" MinVersion="1.6"/></Sets></Requirements>
+  <DefaultSettings><SourceLocation DefaultValue="https://localhost:3015/taskpane.html"/></DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements><bt:Sets DefaultMinVersion="1.6"><bt:Set Name="WordApi"/></bt:Sets></Requirements>
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Detector.Group">
+                <Label resid="Detector.GroupLabel"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Detector.ShowTaskpane">
+                  <Label resid="Detector.ButtonLabel"/>
+                  <Supertip>
+                    <Title resid="Detector.ButtonLabel"/>
+                    <Description resid="Detector.ButtonTooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>TrackedEditDetector</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://localhost:3015/assets/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://localhost:3015/assets/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://localhost:3015/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://learn.microsoft.com/office/dev/add-ins/word/"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3015/taskpane.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="Tracked Edit Detector"/>
+        <bt:String id="Detector.GroupLabel" DefaultValue="Edit Detection"/>
+        <bt:String id="Detector.ButtonLabel" DefaultValue="Edit Detector"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Open the task pane and test tracked versus untracked edits."/>
+        <bt:String id="Detector.ButtonTooltip" DefaultValue="Open the tracked and untracked edit detector."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

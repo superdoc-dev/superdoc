@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tracked Edit Detector</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  </head>
+  <body>
+    <main class="pane">
+      <header>
+        <p class="eyebrow">Live session</p>
+        <h1>Tracked edit detector</h1>
+      </header>
+
+      <section id="verdict" class="verdict verdict--idle" aria-live="polite">
+        <span id="verdict-dot" class="verdict__dot"></span>
+        <div>
+          <strong id="verdict-title">Waiting for edits</strong>
+          <p id="verdict-detail">Local Word mutations will appear here.</p>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="Detected event counts">
+        <div><strong id="tracked-count">0</strong><span>Tracked events</span></div>
+        <div><strong id="untracked-count">0</strong><span>Untracked events</span></div>
+      </section>
+
+      <section class="mode-card">
+        <span>Current Word mode</span>
+        <strong id="tracking-mode">Loading…</strong>
+      </section>
+
+      <button id="reset-button" type="button">Reset session flag</button>
+
+      <section class="log-section">
+        <div class="log-heading">
+          <h2>Recent mutations</h2>
+          <span id="listener-status">Connecting…</span>
+        </div>
+        <ol id="event-log" class="event-log">
+          <li class="event-log__empty">No mutations detected.</li>
+        </ol>
+      </section>
+
+      <p class="footnote">
+        The flag is session-local and stays set after the first local mutation observed while tracking is off.
+      </p>
+    </main>
+  </body>
+</html>

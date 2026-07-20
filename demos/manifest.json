@@ -1,5 +1,23 @@
 [
   {
+    "id": "word-tracking-detector-addin",
+    "section": "solutions",
+    "subsection": "document-review",
+    "kind": "workflow-demo",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Word tracked-edit detector",
+    "description": "Office.js task-pane add-in that flags local document mutations observed while Word change tracking is off.",
+    "category": "Solutions",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/word-tracking-detector-addin",
+    "docs": "https://learn.microsoft.com/office/dev/add-ins/word/word-add-ins-events",
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": false
+  },
+  {
     "id": "contract-templates",
     "section": "solutions",
     "subsection": "template-builder",

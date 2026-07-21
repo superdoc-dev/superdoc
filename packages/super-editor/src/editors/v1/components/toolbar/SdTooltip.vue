@@ -38,12 +38,17 @@ const isOpen = ref(false);
 const triggerRef = ref(null);
 const contentRef = ref(null);
 const position = ref({ top: '0px', left: '0px' });
+const placement = ref('top');
 
 let closeTimeout = null;
 let openTimeout = null;
 let autoHideTimeout = null;
 
-const mergedContentClass = computed(() => ['sd-tooltip-content', attrs.class]);
+const mergedContentClass = computed(() => [
+  'sd-tooltip-content',
+  `sd-tooltip-content--${placement.value}`,
+  attrs.class,
+]);
 const contentStyle = computed(() => ({
   ...props.contentStyle,
   ...(attrs.style || {}),
@@ -91,12 +96,23 @@ const updatePosition = () => {
   const contentHeight = contentRef.value.offsetHeight;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const gutter = 8;
+  const offset = 10;
 
   let left = triggerRect.left + triggerRect.width / 2 - contentWidth / 2;
   left = Math.max(gutter, Math.min(left, viewportWidth - contentWidth - gutter));
 
+  // Flip below the trigger when placing above would clip the viewport top.
+  const topAbove = triggerRect.top - contentHeight - offset;
+  let top = topAbove;
+  if (topAbove < gutter) {
+    placement.value = 'bottom';
+    top = triggerRect.bottom + offset;
+  } else {
+    placement.value = 'top';
+  }
+
   position.value = {
-    top: `${triggerRect.top - contentHeight - 10}px`,
+    top: `${top}px`,
     left: `${left}px`,
   };
 };
@@ -253,6 +269,16 @@ onBeforeUnmount(() => {
   height: 10px;
   background-color: var(--sd-ui-tooltip-bg, #262626);
   transform: translateX(-50%) rotate(45deg);
+}
+
+.sd-tooltip-content--bottom .sd-tooltip-arrow {
+  bottom: auto;
+  top: -5px;
+}
+
+.sd-tooltip-content--bottom.fade-in-scale-up-transition-enter-active,
+.sd-tooltip-content--bottom.fade-in-scale-up-transition-leave-active {
+  transform-origin: top center;
 }
 
 .fade-in-scale-up-transition-enter-active,

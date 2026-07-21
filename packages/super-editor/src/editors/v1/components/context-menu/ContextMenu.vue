@@ -9,6 +9,7 @@ import { moveCursorToMouseEvent } from '../cursor-helpers.js';
 import { getEditorSurfaceElement } from '../../core/helpers/editorSurface.js';
 import { getItems } from './menuItems.js';
 import { getEditorContext } from './utils.js';
+import { clampMenuPositionToBounds, resolveMenuBounds } from './menu-position.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from './event-flags.js';
 import { isMacOS } from '../../core/utilities/isMacOS.js';
 
@@ -583,6 +584,13 @@ onMounted(() => {
     searchQuery.value = '';
     selectedId.value = flattenedItems.value[0]?.id || null;
     isOpen.value = true;
+
+    await nextTick();
+    const menuRect = menuRef.value?.getBoundingClientRect();
+    if (menuRect?.width > 0 && menuRect.height > 0) {
+      const bounds = resolveMenuBounds(getEditorSurfaceElement(props.editor) ?? menuRef.value, window);
+      menuPosition.value = clampMenuPositionToBounds(menuPosition.value, menuRect, bounds);
+    }
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 

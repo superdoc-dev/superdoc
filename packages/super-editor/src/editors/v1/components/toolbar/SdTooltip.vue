@@ -94,7 +94,8 @@ const updatePosition = () => {
   const triggerRect = triggerRef.value.getBoundingClientRect();
   const contentWidth = contentRef.value.offsetWidth;
   const contentHeight = contentRef.value.offsetHeight;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  // clientWidth excludes a window scrollbar, so the tooltip never clamps under it.
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
   const gutter = 8;
   const offset = 10;
 

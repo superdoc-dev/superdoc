@@ -225,6 +225,21 @@
     "ci": true
   },
   {
+    "id": "document-api-table-column-swap",
+    "section": "document-engine",
+    "subsection": "document-api",
+    "kind": "minimal-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Table column reorder",
+    "category": "Document API",
+    "surface": "Tables",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/table-column-swap",
+    "docs": "https://docs.superdoc.dev/document-api/reference/tables",
+    "ci": true
+  },
+  {
     "id": "document-api-content-controls-tagged-inline-text",
     "section": "document-engine",
     "subsection": "document-api",

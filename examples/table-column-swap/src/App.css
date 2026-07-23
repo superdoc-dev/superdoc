@@ -1,0 +1,13 @@
+.app { height: 100vh; display: flex; flex-direction: column; background: #eef1f5; }
+.header { padding: 16px 24px; background: #111827; color: white; display: grid; gap: 14px; }
+.title-group h1 { margin: 0; font-size: 22px; }
+.title-group p { margin: 4px 0 0; color: #aeb8c7; font-size: 13px; }
+.controls { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.controls label { display: grid; gap: 4px; color: #cbd5e1; font-size: 12px; }
+.controls input, .controls select { min-width: 120px; padding: 8px; border: 1px solid #475569; border-radius: 6px; background: #1f2937; color: white; }
+.btn { padding: 9px 14px; border: 1px solid #64748b; border-radius: 6px; background: transparent; color: white; cursor: pointer; }
+.btn.primary { background: #2563eb; border-color: #2563eb; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.status { min-height: 18px; color: #bfdbfe; font-size: 13px; }
+.editor-area { flex: 1; min-height: 0; background: white; }
+.loading-state { height: 100%; display: grid; place-items: center; color: #475569; }

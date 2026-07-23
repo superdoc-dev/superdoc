@@ -985,6 +985,55 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].colSpan).toBe(3);
     });
 
+    it('preserves content-less rows covered by a full-width rowspan', () => {
+      const cell = (text: string): PMNode => ({
+        type: 'tableCell',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+      });
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          grid: [{ col: 1000 }, { col: 1000 }, { col: 1000 }],
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                ...cell('Merged'),
+                attrs: { rowspan: 2, colspan: 3 },
+              },
+            ],
+          },
+          // ProseMirror's mergeCells command leaves the covered tableRow in
+          // place but removes all of its cells. Node.toJSON() then omits the
+          // empty content property entirely.
+          { type: 'tableRow' },
+          {
+            type: 'tableRow',
+            content: [cell('A'), cell('B'), cell('C')],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows).toHaveLength(3);
+      expect(result.rows[1].cells).toEqual([]);
+      expect(result.rows[2].cells).toHaveLength(3);
+    });
+
     it('extracts cell borders when present', () => {
       const node: PMNode = {
         type: 'table',

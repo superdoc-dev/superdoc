@@ -13,30 +13,37 @@ type TableMutationResult =
   | { success: true; table?: { nodeId: string } }
   | { success: false; failure: { code: string; message: string } };
 type UnknownRecord = Record<string, unknown>;
+type TextExtractor = (payload: UnknownRecord) => string;
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === 'object' ? (value as UnknownRecord) : null;
 }
 
-function list(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
+function childrenText(payload: UnknownRecord, ...keys: string[]): string {
+  return keys
+    .flatMap((key) => (Array.isArray(payload[key]) ? payload[key] : []))
+    .map(textFromSdNode)
+    .join('');
+}
+
+const TEXT_EXTRACTORS: Record<string, TextExtractor> = {
+  run: (run) => String(run.text ?? ''),
+  paragraph: (paragraph) => childrenText(paragraph, 'inlines'),
+  heading: (heading) => childrenText(heading, 'inlines'),
+  hyperlink: (hyperlink) => childrenText(hyperlink, 'inlines'),
+  field: (field) => String(field.resultText ?? ''),
+  sdt: (sdt) => childrenText(sdt, 'inlines', 'content'),
+  customXml: (customXml) => childrenText(customXml, 'inlines', 'content'),
+};
 
 function textFromSdNode(value: unknown): string {
   const node = asRecord(value);
   if (!node) return '';
-  if (node.kind === 'run') return String(asRecord(node.run)?.text ?? '');
-  if (node.kind === 'paragraph') return list(asRecord(node.paragraph)?.inlines).map(textFromSdNode).join('');
-  if (node.kind === 'heading') return list(asRecord(node.heading)?.inlines).map(textFromSdNode).join('');
-  if (node.kind === 'hyperlink') return list(asRecord(node.hyperlink)?.inlines).map(textFromSdNode).join('');
-  if (node.kind === 'field') return String(asRecord(node.field)?.resultText ?? '');
-  if (node.kind === 'sdt') {
-    const sdt = asRecord(node.sdt);
-    return [...list(sdt?.inlines), ...list(sdt?.content)].map(textFromSdNode).join('');
-  }
-  if (node.kind === 'customXml') {
-    const customXml = asRecord(node.customXml);
-    return [...list(customXml?.inlines), ...list(customXml?.content)].map(textFromSdNode).join('');
-  }
-  return list(node.content).map(textFromSdNode).join('');
+  const kind = typeof node.kind === 'string' ? node.kind : '';
+  const payload = asRecord(node[kind]);
+  return payload && TEXT_EXTRACTORS[kind]
+    ? TEXT_EXTRACTORS[kind](payload)
+    : childrenText(node, 'content');
 }
 
 function requireSuccess(result: TableMutationResult, operation: string): Extract<TableMutationResult, { success: true }> {
@@ -44,9 +51,19 @@ function requireSuccess(result: TableMutationResult, operation: string): Extract
   throw new Error(`${operation}: ${result.failure.message}`);
 }
 
-function allowNoOp(result: TableMutationResult, operation: string): TableMutationResult {
-  if (result.success || result.failure.code === 'NO_OP') return result;
+function nextTableId(result: TableMutationResult, operation: string, currentTableId: string): string {
+  if (result.success) return result.table?.nodeId ?? currentTableId;
+  if (result.failure.code === 'NO_OP') return currentTableId;
   throw new Error(`${operation}: ${result.failure.message}`);
+}
+
+function validateColumnIndexes(source: number, destination: number, columnCount: number): void {
+  if (![source, destination].every(Number.isInteger)) throw new Error('Column indexes must be integers.');
+  if (source < 0 || destination < 0) throw new Error('Column indexes cannot be negative.');
+  if (source === destination) throw new Error('Source and destination columns must differ.');
+  if (source >= columnCount || destination >= columnCount) {
+    throw new Error(`Column index must be between 0 and ${columnCount - 1}.`);
+  }
 }
 
 /** Best-effort public-API column reorder. Rich cell content is flattened to plain text. */
@@ -61,15 +78,11 @@ export class TableColumnReorder {
   }
 
   moveColumn({ tableId, sourceColumn, destinationColumn, placement = 'after' }: MoveColumnInput): MoveColumnResult {
-    if (!Number.isInteger(sourceColumn) || !Number.isInteger(destinationColumn)) throw new Error('Column indexes must be integers.');
-    if (sourceColumn < 0 || destinationColumn < 0) throw new Error('Column indexes cannot be negative.');
-    if (sourceColumn === destinationColumn) throw new Error('Source and destination columns must differ.');
-
     const tableResult = this.editor.doc.getNodeById({ nodeId: tableId, nodeType: 'table' });
     if (tableResult.node.kind !== 'table') throw new Error('The selected node is not a table.');
     const table = tableResult.node.table;
     const columnCount = Math.max(table.columns?.length ?? 0, ...table.rows.map((row) => row.cells.length));
-    if (sourceColumn >= columnCount || destinationColumn >= columnCount) throw new Error(`Column index must be between 0 and ${columnCount - 1}.`);
+    validateColumnIndexes(sourceColumn, destinationColumn, columnCount);
 
     const sourceTextByRow = table.rows.map((row) => textFromSdNode(row.cells[sourceColumn]));
     const position = placement === 'after' ? 'right' : 'left';
@@ -81,11 +94,11 @@ export class TableColumnReorder {
     let currentTableId = inserted.table?.nodeId ?? tableId;
 
     sourceTextByRow.forEach((text, rowIndex) => {
-      const updated = allowNoOp(
+      currentTableId = nextTableId(
         this.editor.doc.tables.setCellText({ nodeId: currentTableId, rowIndex, columnIndex: insertedIndex, text }),
         `tables.setCellText(row ${rowIndex})`,
+        currentTableId,
       );
-      if (updated.success) currentTableId = updated.table?.nodeId ?? currentTableId;
     });
 
     const shiftedSourceIndex = sourceColumn >= insertedIndex ? sourceColumn + 1 : sourceColumn;

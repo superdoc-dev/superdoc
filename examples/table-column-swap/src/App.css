@@ -10,4 +10,5 @@
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .status { min-height: 18px; color: #bfdbfe; font-size: 13px; }
 .editor-area { flex: 1; min-height: 0; background: white; }
+.editor-area .superdoc-editor-container { display: flex; justify-content: center; width: 100%; }
 .loading-state { height: 100%; display: grid; place-items: center; color: #475569; }

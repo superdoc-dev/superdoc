@@ -423,7 +423,7 @@ function ActionBar() {
   return (
     <div className="action-bar">
       <div className="regulation-menu">
-        <button disabled={!canAct} onClick={() => setMenuOpen((open) => !open)}>Map regulation</button>
+        <button disabled={!canAct} onClick={() => setMenuOpen((open) => !open)}>Tag selection with regulation</button>
         {menuOpen && (
           <div className="menu-popover">
             {REGULATIONS.map((regulation) => (
@@ -434,7 +434,6 @@ function ActionBar() {
           </div>
         )}
       </div>
-      <span className="hint">Select text to use SuperDoc comments or map a regulation</span>
     </div>
   );
 }

@@ -28,6 +28,9 @@ type RegulationPayload = { regulations: typeof REGULATIONS; mappedBy: User; mapp
 type RegulationEntry = { id: string; payload: RegulationPayload };
 
 const COLORS = ['#2563eb', '#7c3aed', '#059669', '#dc2626'];
+
+// Creates a lightweight demo identity so each browser session is distinguishable
+// in collaboration presence, comments, and tracked changes.
 const randomUser = (): User => {
   const number = Math.floor(Math.random() * 900 + 100);
   return {
@@ -37,12 +40,14 @@ const randomUser = (): User => {
   };
 };
 
+// Starts an isolated collaboration session by navigating to a newly generated room URL.
 const createNewRoom = () => {
   const url = new URL(window.location.href);
   url.searchParams.set('room', `policy-${crypto.randomUUID().slice(0, 8)}`);
   window.location.assign(url);
 };
 
+// Encodes a Yjs binary snapshot as base64 so it can be sent in a JSON request body.
 const toBase64 = (bytes: Uint8Array) => {
   let binary = '';
   for (let i = 0; i < bytes.length; i += 8192) {
@@ -51,11 +56,14 @@ const toBase64 = (bytes: Uint8Array) => {
   return btoa(binary);
 };
 
+// Restores the binary Yjs snapshot returned by the version-history API.
 const fromBase64 = (value: string) => {
   const binary = atob(value);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 };
 
+// Imports a DOCX into a temporary viewing editor and reads its content through
+// the SuperDoc Document API as a structured SDDocument.
 async function readDocxAsSDDocument(file: File): Promise<any> {
   const mount = document.createElement('div');
   mount.hidden = true;
@@ -63,6 +71,7 @@ async function readDocxAsSDDocument(file: File): Promise<any> {
 
   return new Promise((resolve, reject) => {
     let temporary: any = null;
+    // Tears down the temporary import editor and its hidden DOM mount.
     const dispose = () => {
       temporary?.destroy?.();
       mount.remove();
@@ -93,6 +102,8 @@ async function readDocxAsSDDocument(file: File): Promise<any> {
   });
 }
 
+// Replaces the shared working draft with imported content using Document API writes,
+// allowing the replacement to flow through the active Yjs collaboration session.
 async function replaceCollaborativeDocument(editor: any, file: File): Promise<void> {
   const imported = await readDocxAsSDDocument(file);
   const cleared = editor.doc.clearContent({});
@@ -130,6 +141,7 @@ const EMPTY_DOCUMENT = {
   ],
 };
 
+// Owns the collaborative editor, publishing workflow, version viewer, and page layout.
 export function App() {
   const setSuperDoc = useSetSuperDoc();
   const ui = useSuperDocUI();
@@ -146,6 +158,7 @@ export function App() {
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState('Draft autosaves through collaboration. Publishing creates a version.');
 
+  // Reloads the lightweight version summaries for the current collaboration room.
   const refreshVersions = useCallback(async () => {
     const response = await fetch(`${API_URL}/versions?roomId=${encodeURIComponent(ROOM_ID)}`);
     if (!response.ok) throw new Error('Could not load versions');
@@ -159,6 +172,7 @@ export function App() {
     ydoc.current = sharedDoc;
     provider.current = collabProvider;
 
+    // Creates SuperDoc only after the provider has synchronized the room's Yjs state.
     const initialize = () => {
       if (disposed || editorInstance.current) return;
       const isEmpty = sharedDoc.share.size === 0;
@@ -201,6 +215,8 @@ export function App() {
     };
   }, [refreshVersions, setSuperDoc, user]);
 
+  // Publishes the current Yjs state, then resolves comments and accepts tracked changes
+  // in the working draft to establish a clean baseline for the next version.
   const publish = async () => {
     if (!ydoc.current || !ui) return;
     setPublishing(true);
@@ -264,6 +280,7 @@ export function App() {
     }
   };
 
+  // Loads a published Yjs snapshot into a read-only SuperDoc with audit markup visible.
   const openVersion = async (version: Version) => {
     previewUi?.destroy?.();
     setPreviewUi(null);
@@ -295,6 +312,7 @@ export function App() {
     });
   };
 
+  // Destroys the snapshot viewer and returns focus to the collaborative working draft.
   const closeVersion = () => {
     previewUi?.destroy?.();
     setPreviewUi(null);
@@ -362,12 +380,14 @@ export function App() {
   );
 }
 
+// Renders the DOCX picker and imports the selected file into the active shared editor.
 function ImportButton({ disabled, onImported }: { disabled: boolean; onImported(name: string): void }) {
   const ui = useSuperDocUI();
   const host = useSuperDocHost();
   const input = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
 
+  // Validates the chosen file and delegates its content replacement to the Document API.
   const importFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -400,6 +420,7 @@ function ImportButton({ disabled, onImported }: { disabled: boolean; onImported(
   );
 }
 
+// Provides regulation-tagging actions for the editor's current text selection.
 function ActionBar() {
   const ui = useSuperDocUI();
   const host = useSuperDocHost();
@@ -408,6 +429,7 @@ function ActionBar() {
 
   useEffect(() => ui?.selection.observe((selection) => setCanAct(!selection.empty && !!selection.selectionTarget)), [ui]);
 
+  // Attaches the chosen regulation as namespaced metadata on the captured selection.
   const mapRegulation = (regulation: (typeof REGULATIONS)[number]) => {
     const capture = ui?.selection.capture();
     const editor = (host as any)?.activeEditor;
@@ -438,6 +460,7 @@ function ActionBar() {
   );
 }
 
+// Lists published versions and delegates snapshot opening to the parent workflow.
 function VersionHistory({ versions, onOpen }: { versions: Version[]; onOpen(version: Version): void }) {
   return (
     <div className="panel-list">
@@ -453,12 +476,14 @@ function VersionHistory({ versions, onOpen }: { versions: Version[]; onOpen(vers
   );
 }
 
+// Observes metadata-backed content controls and returns regulation mapping records.
 function useRegulations() {
   const ui = useSuperDocUI();
   const host = useSuperDocHost();
   const [entries, setEntries] = useState<RegulationEntry[]>([]);
   useEffect(() => {
     if (!ui) return;
+    // Re-reads regulation metadata whenever the underlying content controls change.
     const refresh = () => {
       const editor = (host as any)?.activeEditor;
       const api = editor?.doc?.metadata;
@@ -472,12 +497,14 @@ function useRegulations() {
   return entries;
 }
 
+// Measures mapped ranges and paints translucent highlights over the working editor.
 function RegulationHighlights() {
   const ui = useSuperDocUI();
   const regulations = useRegulations();
   const [rects, setRects] = useState<Array<{ id: string; rect: any }>>([]);
   useEffect(() => {
     if (!ui) return;
+    // Converts each metadata range into viewport rectangles for the overlay layer.
     const measure = () => setRects(regulations.flatMap((entry) => {
       const result = ui.metadata.getRect({ id: entry.id });
       return result.success ? result.rects.map((rect) => ({ id: entry.id, rect })) : [];
@@ -490,6 +517,7 @@ function RegulationHighlights() {
   ))}</div>;
 }
 
+// Shows regulation details when the pointer is over tagged content in the working draft.
 function RegulationPopover() {
   const ui = useSuperDocUI();
   const entries = useRegulations();
@@ -498,6 +526,7 @@ function RegulationPopover() {
   useEffect(() => {
     if (!ui) return;
     let frame = 0;
+    // Hit-tests the pointer against SuperDoc UI entities and updates the hover popover.
     const move = (event: MouseEvent) => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -523,6 +552,7 @@ function RegulationPopover() {
   );
 }
 
+// Recreates regulation highlights and hover details inside the published-version viewer.
 function PreviewRegulationOverlays({ ui, superdoc }: { ui: any; superdoc: any }) {
   const [entries, setEntries] = useState<RegulationEntry[]>([]);
   const [rects, setRects] = useState<Array<{ id: string; rect: any }>>([]);
@@ -541,6 +571,7 @@ function PreviewRegulationOverlays({ ui, superdoc }: { ui: any; superdoc: any })
 
   useEffect(() => {
     if (!ui) return;
+    // Measures stored regulation ranges against the snapshot viewer's current viewport.
     const measure = () => setRects(entries.flatMap((entry) => {
       const result = ui.metadata.getRect({ id: entry.id });
       return result.success ? result.rects.map((rect: any) => ({ id: entry.id, rect })) : [];
@@ -552,6 +583,7 @@ function PreviewRegulationOverlays({ ui, superdoc }: { ui: any; superdoc: any })
   useEffect(() => {
     if (!ui) return;
     let frame = 0;
+    // Hit-tests pointer movement against tagged entities in the snapshot viewer.
     const move = (event: MouseEvent) => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -592,11 +624,23 @@ function PreviewRegulationOverlays({ ui, superdoc }: { ui: any; superdoc: any })
   );
 }
 
+// Supplies the minimal collaboration-provider contract required to render a frozen
+// Yjs snapshot without connecting the version viewer to a live room.
 class NoOpProvider {
   awareness = { setLocalState: () => {}, setLocalStateField: () => {}, getLocalState: () => ({}), getStates: () => new Map(), on: () => {}, off: () => {}, destroy: () => {} };
+
+  // Immediately reports synchronization because the snapshot was already applied locally.
   on(event: string, callback: (synced: boolean) => void) { if (event === 'sync' || event === 'synced') setTimeout(() => callback(true)); }
+
+  // Ignores listener removal because this provider never retains listeners.
   off() {}
+
+  // Performs no cleanup because this provider owns no external resources.
   destroy() {}
+
+  // Avoids opening a connection because the snapshot is entirely local.
   connect() {}
+
+  // Avoids closing a connection because none was created.
   disconnect() {}
 }

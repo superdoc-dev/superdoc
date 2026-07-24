@@ -17,6 +17,8 @@ type RoomQuery = { roomId?: string };
 
 const PORT = Number(process.env.PORT ?? 3011);
 const versionsByRoom = new Map<string, PublishedVersion[]>();
+
+// Returns the in-memory version collection for a room, creating it on first access.
 const roomVersions = (roomId = 'policy-handbook') => {
   const existing = versionsByRoom.get(roomId);
   if (existing) return existing;
@@ -30,18 +32,22 @@ const roomVersions = (roomId = 'policy-handbook') => {
 const app = Fastify({ logger: true, bodyLimit: 50 * 1024 * 1024 });
 await app.register(cors, { origin: true });
 
+// Exposes a simple readiness endpoint for local checks and deployment probes.
 app.get('/health', async () => ({ status: 'ok' }));
 
+// Lists version metadata for a room without returning the larger Yjs snapshots.
 app.get<{ Querystring: RoomQuery }>('/api/versions', async (request) => ({
   versions: roomVersions(request.query.roomId).map(({ yjsState: _state, ...version }) => version),
 }));
 
+// Returns one complete published version, including its base64-encoded Yjs state.
 app.get<{ Params: { id: string }; Querystring: RoomQuery }>('/api/versions/:id', async (request, reply) => {
   const version = roomVersions(request.query.roomId).find((item) => item.id === request.params.id);
   if (!version) return reply.status(404).send({ error: 'Version not found' });
   return version;
 });
 
+// Stores a new immutable snapshot in memory and assigns its next room-scoped number.
 app.post<{
   Body: { roomId?: string; yjsState?: string; publishedBy?: { name?: string; email?: string } };
 }>('/api/versions', async (request, reply) => {
@@ -65,16 +71,20 @@ app.post<{
   return reply.status(201).send(summary);
 });
 
+// Hosts the Hocuspocus collaboration protocol and logs room connections.
 const hocuspocus = new Hocuspocus({
   quiet: true,
   onConnect: async ({ documentName }) => app.log.info({ documentName }, 'collaborator connected'),
   onDisconnect: async ({ documentName }) => app.log.info({ documentName }, 'collaborator disconnected'),
 });
 const websocketServer = new WebSocketServer({ noServer: true });
+
+// Passes accepted WebSocket connections to Hocuspocus for Yjs synchronization.
 websocketServer.on('connection', (socket, request) => {
   void hocuspocus.handleConnection(socket, request);
 });
 
+// Upgrades Fastify's underlying HTTP connection to the collaboration WebSocket server.
 app.server.on('upgrade', (request, socket, head) => {
   websocketServer.handleUpgrade(request, socket, head, (websocket) => {
     websocketServer.emit('connection', websocket, request);

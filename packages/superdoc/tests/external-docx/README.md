@@ -16,4 +16,6 @@ pnpm --filter superdoc test:external-docx -- \
   --evidence /tmp/superdoc-roundtrip.json
 ```
 
-The run fails when a comment disappears during sidebar projection or export. The evidence records input and output hashes, rendered comment HTML, and imported node types. Generated fixtures and artifacts stay outside the repository.
+The fixture must contain at least one comment. The run fails when comment import is empty or a comment disappears during sidebar projection or export. The evidence records input and output hashes, rendered comment HTML, and imported node types.
+
+The DOCX editor and comments store are real. User, selection, collaboration, and comment-model host plumbing are mocked so this test stays focused on document conversion and sidebar projection. Generated fixtures and artifacts stay outside the repository.

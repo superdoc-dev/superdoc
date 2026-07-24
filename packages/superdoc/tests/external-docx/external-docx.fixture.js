@@ -138,6 +138,7 @@ describe('external DOCX feedback loop', () => {
       documentId: 'external-docx-reimported',
     }));
     const reimportedComments = reimportEditor.converter.comments ?? [];
+    const commentsImported = importedComments.length > 0;
     const projectionPreserved = sameCommentIds(projectedComments, importedComments);
     const roundTripPreserved = sameCommentIds(reimportedComments, importedComments);
 
@@ -161,6 +162,7 @@ describe('external DOCX feedback loop', () => {
         })),
       },
       checks: {
+        commentsImported,
         projectionPreserved,
         roundTripPreserved,
       },
@@ -168,7 +170,8 @@ describe('external DOCX feedback loop', () => {
     await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
 
     expect(exportedBytes.byteLength).toBeGreaterThan(0);
-    expect(projectionPreserved).toBe(true);
-    expect(roundTripPreserved).toBe(true);
+    expect(commentsImported, 'No comments were imported from the fixture').toBe(true);
+    expect(projectionPreserved, 'Comment identities changed during sidebar projection').toBe(true);
+    expect(roundTripPreserved, 'Comment identities changed after export and re-import').toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { DocxZipper, SuperConverter, SuperDoc } from 'superdoc';
+import { SuperDoc } from 'superdoc';
 import { createSuperDocUI } from 'superdoc/ui';
 import { useSetSuperDoc, useSuperDocHost, useSuperDocUI } from 'superdoc/ui/react';
 import { Doc as YDoc, applyUpdate, encodeStateAsUpdate } from 'yjs';
@@ -56,17 +56,61 @@ const fromBase64 = (value: string) => {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 };
 
-async function replaceCollaborativeDocument(editor: any, file: File): Promise<void> {
-  const zipper = new DocxZipper();
-  const files = await zipper.getDocxData(await file.arrayBuffer());
-  const converter = new SuperConverter({ docx: files, media: zipper.media, fonts: zipper.fonts });
-  const documentJson = converter.getSchema(editor);
-  if (!documentJson) throw new Error('SuperDoc could not parse this DOCX.');
+async function readDocxAsSDDocument(file: File): Promise<any> {
+  const mount = document.createElement('div');
+  mount.hidden = true;
+  document.body.appendChild(mount);
 
-  // These commands dispatch through the collaboration-backed editor, so the
-  // wholesale replacement becomes a Yjs update visible to every collaborator.
-  editor.commands.selectAll();
-  editor.commands.insertContent(documentJson, { contentType: 'schema' });
+  return new Promise((resolve, reject) => {
+    let temporary: any = null;
+    const dispose = () => {
+      temporary?.destroy?.();
+      mount.remove();
+    };
+
+    temporary = new SuperDoc({
+      selector: mount,
+      document: file,
+      documentMode: 'viewing',
+      telemetry: { enabled: false },
+      modules: { comments: {} },
+      onReady: ({ superdoc }: any) => {
+        try {
+          const imported = superdoc.activeEditor?.doc?.get?.({});
+          if (!imported?.body?.length) throw new Error('The imported DOCX has no readable body content.');
+          resolve(imported);
+        } catch (error) {
+          reject(error);
+        } finally {
+          queueMicrotask(dispose);
+        }
+      },
+      onException: ({ error }: any) => {
+        dispose();
+        reject(error instanceof Error ? error : new Error('SuperDoc could not parse this DOCX.'));
+      },
+    });
+  });
+}
+
+async function replaceCollaborativeDocument(editor: any, file: File): Promise<void> {
+  const imported = await readDocxAsSDDocument(file);
+  const cleared = editor.doc.clearContent({});
+  if (!cleared.success && cleared.failure?.code !== 'NO_OP') {
+    throw new Error(cleared.failure?.message || 'Could not clear the collaborative draft.');
+  }
+
+  const emptyDocument = editor.doc.get({});
+  const placeholder = emptyDocument.body?.[0];
+  if (!placeholder?.id) throw new Error('Could not locate the draft placeholder after clearing it.');
+
+  const replaced = editor.doc.replace({
+    target: { kind: 'block', nodeId: placeholder.id, nodeType: placeholder.kind },
+    content: imported.body,
+  });
+  if (!replaced.success) {
+    throw new Error(replaced.failure?.message || 'Could not insert the imported document.');
+  }
 }
 
 const EMPTY_DOCUMENT = {

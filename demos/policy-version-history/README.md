@@ -7,7 +7,7 @@ version-scoped comments, tracked-change attribution, and regulation mappings.
 
 - A shared Hocuspocus/Yjs working draft with collaborator awareness.
 - A New room action that creates a fresh shareable room URL with isolated version history.
-- DOCX import parsed into the active schema and dispatched through the shared Yjs editor.
+- DOCX import projected through `editor.doc.get()` and applied to the shared draft with Document API structural writes.
 - Explicit publish actions that create `1.1`, `1.2`, … snapshots; editing does not create versions.
 - In-memory version history for the lifetime of the demo server.
 - SuperDoc's built-in comments UI, with comments retained in the published snapshot and cleared before the next version.
@@ -27,3 +27,5 @@ Open `http://localhost:5192` in two tabs to see collaboration. The backend and W
 server run on `http://localhost:3011`.
 
 All state is intentionally in memory and resets when the backend restarts.
+
+The demo consumes the repository's latest v1 `superdoc` workspace package (currently 1.45.0).

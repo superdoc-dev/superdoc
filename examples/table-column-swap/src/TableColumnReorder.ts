@@ -15,10 +15,12 @@ type TableMutationResult =
 type UnknownRecord = Record<string, unknown>;
 type TextExtractor = (payload: UnknownRecord) => string;
 
+// Converts an unknown value to a record when it is a non-null object.
 function asRecord(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === 'object' ? (value as UnknownRecord) : null;
 }
 
+// Extracts and combines text from the requested child-node arrays.
 function childrenText(payload: UnknownRecord, ...keys: string[]): string {
   return keys
     .flatMap((key) => (Array.isArray(payload[key]) ? payload[key] : []))
@@ -26,6 +28,7 @@ function childrenText(payload: UnknownRecord, ...keys: string[]): string {
     .join('');
 }
 
+// Maps supported SuperDoc node kinds to their plain-text extraction functions.
 const TEXT_EXTRACTORS: Record<string, TextExtractor> = {
   run: (run) => String(run.text ?? ''),
   paragraph: (paragraph) => childrenText(paragraph, 'inlines'),
@@ -36,6 +39,7 @@ const TEXT_EXTRACTORS: Record<string, TextExtractor> = {
   customXml: (customXml) => childrenText(customXml, 'inlines', 'content'),
 };
 
+// Extracts plain text from a SuperDoc node using its node-kind handler.
 function textFromSdNode(value: unknown): string {
   const node = asRecord(value);
   if (!node) return '';
@@ -46,17 +50,20 @@ function textFromSdNode(value: unknown): string {
     : childrenText(node, 'content');
 }
 
+// Returns a successful table mutation result or throws its failure message.
 function requireSuccess(result: TableMutationResult, operation: string): Extract<TableMutationResult, { success: true }> {
   if (result.success) return result;
   throw new Error(`${operation}: ${result.failure.message}`);
 }
 
+// Resolves the table ID after a mutation while treating a no-op as success.
 function nextTableId(result: TableMutationResult, operation: string, currentTableId: string): string {
   if (result.success) return result.table?.nodeId ?? currentTableId;
   if (result.failure.code === 'NO_OP') return currentTableId;
   throw new Error(`${operation}: ${result.failure.message}`);
 }
 
+// Validates that both column indexes identify different columns in the table.
 function validateColumnIndexes(source: number, destination: number, columnCount: number): void {
   if (![source, destination].every(Number.isInteger)) throw new Error('Column indexes must be integers.');
   if (source < 0 || destination < 0) throw new Error('Column indexes cannot be negative.');

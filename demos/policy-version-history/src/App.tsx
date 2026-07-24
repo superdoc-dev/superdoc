@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { SuperDoc } from 'superdoc';
-import { createSuperDocUI } from 'superdoc/ui';
 import { useSetSuperDoc, useSuperDocHost, useSuperDocUI } from 'superdoc/ui/react';
-import { Doc as YDoc, applyUpdate, encodeStateAsUpdate } from 'yjs';
+import { Doc as YDoc } from 'yjs';
+import { VersionHistoryController, type User, type Version } from './VersionHistoryController';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3011/api';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3011';
@@ -16,14 +16,6 @@ const REGULATIONS = [
   { id: 'HIPAA-164.308', framework: 'HIPAA', title: 'Administrative safeguards' },
 ];
 
-type User = { name: string; email: string; color: string };
-type Version = {
-  id: string;
-  number: string;
-  publishedAt: string;
-  publishedBy: { name: string; email: string };
-  sizeBytes: number;
-};
 type RegulationPayload = { regulations: typeof REGULATIONS; mappedBy: User; mappedAt: string };
 type RegulationEntry = { id: string; payload: RegulationPayload };
 
@@ -45,21 +37,6 @@ const createNewRoom = () => {
   const url = new URL(window.location.href);
   url.searchParams.set('room', `policy-${crypto.randomUUID().slice(0, 8)}`);
   window.location.assign(url);
-};
-
-// Encodes a Yjs binary snapshot as base64 so it can be sent in a JSON request body.
-const toBase64 = (bytes: Uint8Array) => {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
-  return btoa(binary);
-};
-
-// Restores the binary Yjs snapshot returned by the version-history API.
-const fromBase64 = (value: string) => {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 };
 
 // Imports a DOCX into a temporary viewing editor and reads its content through
@@ -146,7 +123,6 @@ export function App() {
   const setSuperDoc = useSetSuperDoc();
   const ui = useSuperDocUI();
   const editorInstance = useRef<any>(null);
-  const previewInstance = useRef<any>(null);
   const ydoc = useRef<YDoc | null>(null);
   const provider = useRef<HocuspocusProvider | null>(null);
   const [user] = useState(randomUser);
@@ -155,15 +131,15 @@ export function App() {
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
   const [previewUi, setPreviewUi] = useState<any>(null);
+  const [previewSuperDoc, setPreviewSuperDoc] = useState<any>(null);
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState('Draft autosaves through collaboration. Publishing creates a version.');
+  const versionController = useMemo(() => new VersionHistoryController(API_URL, ROOM_ID), []);
 
   // Reloads the lightweight version summaries for the current collaboration room.
   const refreshVersions = useCallback(async () => {
-    const response = await fetch(`${API_URL}/versions?roomId=${encodeURIComponent(ROOM_ID)}`);
-    if (!response.ok) throw new Error('Could not load versions');
-    setVersions((await response.json()).versions);
-  }, []);
+    setVersions(await versionController.listVersions());
+  }, [versionController]);
 
   useEffect(() => {
     let disposed = false;
@@ -208,33 +184,24 @@ export function App() {
     return () => {
       disposed = true;
       editorInstance.current?.destroy();
-      previewInstance.current?.destroy();
+      versionController.closeVersion();
       collabProvider.destroy();
       editorInstance.current = null;
-      previewInstance.current = null;
     };
-  }, [refreshVersions, setSuperDoc, user]);
+  }, [refreshVersions, setSuperDoc, user, versionController]);
 
   // Publishes the current Yjs state, then resolves comments and accepts tracked changes
   // in the working draft to establish a clean baseline for the next version.
   const publish = async () => {
     if (!ydoc.current || !ui) return;
     setPublishing(true);
-    const publishedCommentIds = ui.comments
-      .getSnapshot()
-      .items.filter((comment: any) => !comment.parentCommentId && !comment.trackedChange)
-      .map((comment: any) => comment.id);
     try {
-      const response = await fetch(`${API_URL}/versions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: ROOM_ID, yjsState: toBase64(encodeStateAsUpdate(ydoc.current)), publishedBy: user }),
+      const { version, cleanupError } = await versionController.publish({
+        document: ydoc.current,
+        user,
+        commentsUi: ui,
+        editor: editorInstance.current?.activeEditor,
       });
-      if (!response.ok) {
-        const failure = await response.json().catch(() => ({}));
-        throw new Error(failure.error || `Publish failed (${response.status})`);
-      }
-      const version = (await response.json()) as Version;
 
       // Publishing is complete once the server returns 201. Reflect that
       // immediately; cleanup of the next working draft must never make a
@@ -242,30 +209,7 @@ export function App() {
       setVersions((current) => [version, ...current.filter((item) => item.id !== version.id)]);
       setNotice(`Published version ${version.number}. A clean working draft is ready.`);
 
-      // The snapshot above retains the review state that was published. Only
-      // afterward close that review cycle in the working draft: resolve real
-      // comments, remove them so they do not carry forward, and accept every
-      // published tracked change to establish a fresh diff baseline.
-      try {
-        for (const commentId of publishedCommentIds) {
-          const resolved = ui.comments.resolve(commentId);
-          if (!resolved.success && resolved.failure?.code !== 'NO_OP') {
-            throw new Error(resolved.failure?.message || 'Could not resolve published comments.');
-          }
-          ui.comments.delete(commentId);
-        }
-
-        // The published snapshot retains its revisions for audit. Accept them
-        // only after publishing so the next working draft starts a fresh diff.
-        const editor = editorInstance.current?.activeEditor;
-        const accepted = editor?.doc?.trackChanges?.decide?.({
-          target: { kind: 'all' },
-          decision: 'accept',
-        });
-        if (accepted && !accepted.success && accepted.failure?.code !== 'NO_OP') {
-          throw new Error(accepted.failure?.message || 'Could not accept published tracked changes.');
-        }
-      } catch (cleanupError) {
+      if (cleanupError) {
         console.warn('[policy-version-history] Published, but draft cleanup was incomplete.', cleanupError);
         setNotice(`Published version ${version.number}. Draft cleanup needs attention.`);
       }
@@ -282,42 +226,25 @@ export function App() {
 
   // Loads a published Yjs snapshot into a read-only SuperDoc with audit markup visible.
   const openVersion = async (version: Version) => {
-    previewUi?.destroy?.();
+    versionController.closeVersion();
     setPreviewUi(null);
+    setPreviewSuperDoc(null);
     setSelectedVersion(version);
-    const response = await fetch(`${API_URL}/versions/${version.id}?roomId=${encodeURIComponent(ROOM_ID)}`);
-    if (!response.ok) return setNotice('Could not load that version.');
-    const stored = await response.json();
-    const previewDoc = new YDoc();
-    applyUpdate(previewDoc, fromBase64(stored.yjsState));
-    requestAnimationFrame(() => {
-      previewInstance.current?.destroy();
-      previewInstance.current = new SuperDoc({
-        selector: '#version-preview',
-        documentMode: 'viewing',
-        contained: true,
-        comments: { visible: true },
-        trackChanges: { visible: true },
-        telemetry: { enabled: false },
-        modules: {
-          collaboration: { ydoc: previewDoc, provider: new NoOpProvider() as any },
-          comments: {},
-          trackChanges: { visible: true, mode: 'review' },
-        },
-        onReady: ({ superdoc }: any) => {
-          superdoc.setTrackedChangesPreferences?.({ mode: 'review', enabled: true });
-          setPreviewUi(createSuperDocUI({ superdoc }));
-        },
-      });
-    });
+    try {
+      const preview = await versionController.openVersion(version.id, '#version-preview');
+      setPreviewUi(preview.ui);
+      setPreviewSuperDoc(preview.superdoc);
+    } catch (error) {
+      setSelectedVersion(null);
+      setNotice(error instanceof Error ? error.message : 'Could not load that version.');
+    }
   };
 
   // Destroys the snapshot viewer and returns focus to the collaborative working draft.
   const closeVersion = () => {
-    previewUi?.destroy?.();
+    versionController.closeVersion();
     setPreviewUi(null);
-    previewInstance.current?.destroy();
-    previewInstance.current = null;
+    setPreviewSuperDoc(null);
     setSelectedVersion(null);
   };
 
@@ -372,7 +299,7 @@ export function App() {
               <button onClick={closeVersion}>Close</button>
             </div>
             <div id="version-preview" className="preview-host" />
-            <PreviewRegulationOverlays ui={previewUi} superdoc={previewInstance.current} />
+            <PreviewRegulationOverlays ui={previewUi} superdoc={previewSuperDoc} />
           </div>
         </div>
       )}
@@ -622,25 +549,4 @@ function PreviewRegulationOverlays({ ui, superdoc }: { ui: any; superdoc: any })
       )}
     </>
   );
-}
-
-// Supplies the minimal collaboration-provider contract required to render a frozen
-// Yjs snapshot without connecting the version viewer to a live room.
-class NoOpProvider {
-  awareness = { setLocalState: () => {}, setLocalStateField: () => {}, getLocalState: () => ({}), getStates: () => new Map(), on: () => {}, off: () => {}, destroy: () => {} };
-
-  // Immediately reports synchronization because the snapshot was already applied locally.
-  on(event: string, callback: (synced: boolean) => void) { if (event === 'sync' || event === 'synced') setTimeout(() => callback(true)); }
-
-  // Ignores listener removal because this provider never retains listeners.
-  off() {}
-
-  // Performs no cleanup because this provider owns no external resources.
-  destroy() {}
-
-  // Avoids opening a connection because the snapshot is entirely local.
-  connect() {}
-
-  // Avoids closing a connection because none was created.
-  disconnect() {}
 }

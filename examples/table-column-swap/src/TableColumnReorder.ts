@@ -68,8 +68,10 @@ function validateColumnIndexes(source: number, destination: number, columnCount:
 
 /** Best-effort public-API column reorder. Rich cell content is flattened to plain text. */
 export class TableColumnReorder {
+  // Stores the SuperDoc editor instance used for Document API operations.
   constructor(private readonly editor: Editor) {}
 
+  // Finds and returns the node ID of the first table in the document.
   findFirstTableId(): string {
     const matches = this.editor.doc.query.match({ select: { type: 'node', nodeType: 'table' }, require: 'first' });
     const first = matches.items[0];
@@ -77,6 +79,7 @@ export class TableColumnReorder {
     return first.address.nodeId;
   }
 
+  // Moves a column beside another column by copying its text and deleting the original.
   moveColumn({ tableId, sourceColumn, destinationColumn, placement = 'after' }: MoveColumnInput): MoveColumnResult {
     const tableResult = this.editor.doc.getNodeById({ nodeId: tableId, nodeType: 'table' });
     if (tableResult.node.kind !== 'table') throw new Error('The selected node is not a table.');

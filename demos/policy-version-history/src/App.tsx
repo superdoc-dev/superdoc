@@ -161,7 +161,7 @@ export function App() {
 
     const initialize = () => {
       if (disposed || editorInstance.current) return;
-      const isEmpty = sharedDoc.getXmlFragment('prosemirror').length === 0;
+      const isEmpty = sharedDoc.share.size === 0;
       editorInstance.current = new SuperDoc({
         selector: '#policy-editor',
         documentMode: 'suggesting',

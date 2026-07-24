@@ -135,7 +135,8 @@
     "pack:local": "pnpm run pack:es",
     "pack": "node ./scripts/pack-output.cjs clean && pnpm run build:es && pnpm pack && node ./scripts/pack-output.cjs finalize",
     "pack:es": "node ./scripts/pack-output.cjs clean && pnpm run build:es && pnpm pack && node ./scripts/pack-output.cjs finalize",
-    "test": "vitest"
+    "test": "vitest",
+    "test:external-docx": "node scripts/run-external-docx.mjs"
   },
   "dependencies": {
     "@types/mdast": "catalog:",

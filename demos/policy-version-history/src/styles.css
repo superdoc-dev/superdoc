@@ -1,0 +1,68 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--sd-color-gray-900, #172033);
+  background: var(--sd-color-gray-100, #f4f6f9);
+}
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+button, input { font: inherit; }
+button { border: 1px solid #d6dce7; background: #fff; color: #29354a; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+button:hover:not(:disabled) { background: #f4f7fb; }
+button:disabled { cursor: default; opacity: .45; }
+button.primary { background: var(--sd-color-blue-600, #2563eb); border-color: var(--sd-color-blue-600, #2563eb); color: #fff; font-weight: 650; }
+button.primary:hover:not(:disabled) { background: #1d4ed8; }
+.app-shell { height: 100vh; display: flex; flex-direction: column; }
+.app-header { min-height: 74px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #dfe4ec; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.app-header h1 { margin: 1px 0 2px; font-size: 19px; }
+.eyebrow { color: #69758a; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.status-line { color: #69758a; font-size: 12px; }
+.header-actions, .presence { display: flex; align-items: center; }
+.header-actions { gap: 14px; }
+.avatar { width: 30px; height: 30px; margin-left: -6px; border: 2px solid white; border-radius: 50%; color: white; display: grid; place-items: center; font-size: 9px; font-weight: 700; }
+.workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 300px; overflow: hidden; }
+.document-column { min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; background: #edf0f5; }
+.action-bar { min-height: 47px; padding: 7px 14px; background: #fff; border-bottom: 1px solid #dfe4ec; display: flex; align-items: center; gap: 8px; position: relative; z-index: 20; }
+.action-bar .hint { color: #7b8799; font-size: 12px; margin-left: 5px; }
+.inline-composer { display: flex; gap: 6px; }
+.inline-composer input { width: 260px; border: 1px solid #bdc7d6; border-radius: 6px; padding: 7px 9px; }
+button.compact { padding: 6px 9px; }
+.regulation-menu { position: relative; }
+.menu-popover { position: absolute; top: calc(100% + 6px); left: 0; width: 290px; padding: 6px; background: #fff; border: 1px solid #d6dce7; border-radius: 8px; box-shadow: 0 12px 30px rgba(27, 39, 64, .16); }
+.menu-popover button { width: 100%; border: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.menu-popover button span { color: #69758a; font-size: 11px; }
+.editor-host { min-height: 0; height: 100%; flex: 1; overflow: hidden; }
+.editor-host > .superdoc,
+.editor-host .superdoc__layers,
+.editor-host .superdoc__document,
+.editor-host .superdoc__sub-document { height: 100%; min-height: 0; }
+
+/* SuperDoc's built-in review rail combines comments and synthetic tracked-
+   change cards. In the working editor we want comments only; historical
+   previews intentionally keep both. Pending/real comment dialogs do not
+   contain `.tracked-change`, so they remain fully interactive. */
+#policy-editor .comment-placeholder:has(.tracked-change) { display: none !important; }
+#policy-editor .superdoc__right-sidebar:not(:has(.comments-dialog:not(:has(.tracked-change)))) {
+  display: none;
+}
+.versions-sidebar { min-width: 0; min-height: 0; overflow: hidden; background: #fff; border-left: 1px solid #dfe4ec; display: flex; flex-direction: column; }
+.sidebar-heading { min-height: 48px; padding: 11px 14px; border-bottom: 1px solid #dfe4ec; display: flex; flex-direction: column; gap: 2px; }
+.sidebar-heading strong { font-size: 13px; }
+.sidebar-heading span { color: #69758a; font-size: 10px; }
+.panel-list { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: flex; flex-direction: column; gap: 9px; }
+.empty { padding: 22px 12px; color: #758196; font-size: 13px; line-height: 1.45; text-align: center; }
+.version-card { border: 1px solid #dfe4ec; border-radius: 7px; padding: 11px; background: #fff; text-align: left; }
+.version-card { display: flex; flex-direction: column; gap: 4px; }
+.version-card span { color: #69758a; font-size: 11px; }
+.regulation-highlights { position: fixed; inset: 0; pointer-events: none; z-index: 8; }
+.regulation-highlights span { background: rgba(245, 158, 11, .14); border-bottom: 2px solid #d97706; border-radius: 2px; }
+.regulation-popover { position: fixed; width: 310px; z-index: 40; pointer-events: none; padding: 11px; background: #fff; border: 1px solid #d6dce7; border-radius: 7px; box-shadow: 0 12px 30px rgba(27, 39, 64, .18); }
+.regulation-detail { display: flex; flex-direction: column; gap: 2px; padding-top: 7px; font-size: 12px; }
+.regulation-detail span { color: #69758a; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; padding: 4vh 5vw; background: rgba(16, 24, 40, .58); }
+.version-modal { width: 100%; height: 100%; background: #edf0f5; border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
+.modal-header { min-height: 70px; padding: 12px 18px; background: #fff; border-bottom: 1px solid #dfe4ec; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h2 { margin: 0 0 3px; font-size: 17px; }
+.modal-header p { margin: 0; color: #69758a; font-size: 11px; }
+.preview-host { min-height: 0; height: 100%; flex: 1; overflow: hidden; }
+.preview-host > .superdoc { height: 100%; }
+@media (max-width: 850px) { .workspace { grid-template-columns: 1fr; } .versions-sidebar { display: none; } }

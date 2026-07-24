@@ -555,7 +555,7 @@ importers:
         version: 14.0.3
       mintlify:
         specifier: 4.2.624
-        version: 4.2.624(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@25.6.0)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+        version: 4.2.624(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       remark-mdx:
         specifier: ^3.1.1
         version: 3.1.1
@@ -1065,7 +1065,7 @@ importers:
     dependencies:
       '@hocuspocus/provider':
         specifier: latest
-        version: 4.2.0(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)
+        version: 4.4.0(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.72.0(react@19.2.7))
@@ -1185,7 +1185,7 @@ importers:
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       pdfjs-dist:
         specifier: latest
-        version: 6.0.227
+        version: 6.1.200
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -1327,6 +1327,70 @@ importers:
       nodemon:
         specifier: ^3.1.9
         version: 3.1.14
+
+  demos/policy-version-history:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^11.0.1
+        version: 11.3.0
+      '@hocuspocus/provider':
+        specifier: 'catalog:'
+        version: 2.15.3(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
+      '@hocuspocus/server':
+        specifier: 'catalog:'
+        version: 2.15.3(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
+      '@superdoc-dev/react':
+        specifier: workspace:*
+        version: link:../../packages/react
+      fastify:
+        specifier: ^5.4.0
+        version: 5.8.4
+      nanoid:
+        specifier: ^5.1.5
+        version: 5.1.7
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.4(react@19.2.4)
+      superdoc:
+        specifier: workspace:*
+        version: link:../../packages/superdoc
+      ws:
+        specifier: 'catalog:'
+        version: 8.20.0
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.30
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.2
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 5.2.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      concurrently:
+        specifier: 'catalog:'
+        version: 9.2.1
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@22.19.2)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   demos/replace-content:
     dependencies:
@@ -2488,7 +2552,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue:
         specifier: 3.5.32
         version: 3.5.32(typescript@5.9.3)
@@ -2513,7 +2577,7 @@ importers:
         version: 8.57.2(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       concurrently:
         specifier: 'catalog:'
         version: 9.2.1
@@ -2537,7 +2601,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/document-api: {}
 
@@ -3754,6 +3818,7 @@ packages:
   '@angular/platform-browser-dynamic@21.2.6':
     resolution: {integrity: sha512-6a+zA9jM70b1kH3fSfAJIEVmkE3qB3oIXw7otWkv1nEhOJtNO0mM0dTUuO70C3GhnV9tmpLXa2him56C2LhVig==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+    deprecated: '@angular/platform-browser-dynamic is deprecated. Use `@angular/platform-browser` instead.'
     peerDependencies:
       '@angular/common': 21.2.6
       '@angular/compiler': 21.2.6
@@ -5657,6 +5722,9 @@ packages:
   '@fastify/cors@10.1.0':
     resolution: {integrity: sha512-MZyBCBJtII60CU9Xme/iE4aEy8G7QpzGR8zkdXZkDFt7ElEMachbE61tfhAG/bvSaULlqlf0huMT12T7iqEmdQ==}
 
+  '@fastify/cors@11.3.0':
+    resolution: {integrity: sha512-ggQGua+xHv1MvePbPr0v//xLYEsCXbWspquXCJS9Ot5YoRXq8J8ZWzHnxDBVnbtXosvistXo6LtNzOJswf64Fw==}
+
   '@fastify/deepmerge@3.2.1':
     resolution: {integrity: sha512-N5Oqvltoa2r9z1tbx4xjky0oRR60v+T47Ic4J1ukoVQcptLOrIdRnCSdTGmOmajZuHVKlTnfcmrjyqsGEW1ztA==}
 
@@ -5756,8 +5824,8 @@ packages:
   '@hocuspocus/common@2.15.3':
     resolution: {integrity: sha512-Rzh1HF0a2o/tf90A3w2XNdXd9Ym3aQzMDfD3lAUONCX9B9QOdqdyiORrj6M25QEaJrEIbXFy8LtAFcL0wRdWzA==}
 
-  '@hocuspocus/common@4.2.0':
-    resolution: {integrity: sha512-031clELz+rW7MpmpFUFN7+vE52Gtk1wkrSVHyqydZgKSLf5AtrorliCf38cH65mGGltLR2/JrydzqOk2bVQhjw==}
+  '@hocuspocus/common@4.4.0':
+    resolution: {integrity: sha512-cPSlPu/ws2JzBHW6OzctyaQMyDCq/YUS4nhXSbyMdkQwJzhjCkvfmmRnVtcmgLR3TBLaNwToNDwR/mNaJFOYsg==}
 
   '@hocuspocus/provider@2.15.3':
     resolution: {integrity: sha512-oadN05m+KL4ylNKVo5YspNG4MXkT2Y+FUFzrgigpQeTjQibkPUwCNmUnkUxMgrGRgxb+O0lJCfirFIJMxedctA==}
@@ -5765,8 +5833,8 @@ packages:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
 
-  '@hocuspocus/provider@4.2.0':
-    resolution: {integrity: sha512-w38vvgYBs4NDonMkxb4R//n+CgBJ+K/03RMXcr8yHx1I3TY8HYpTlRqOUWdIJpmgw2ZyuM9EdbJwwRPrZF7iEA==}
+  '@hocuspocus/provider@4.4.0':
+    resolution: {integrity: sha512-A83ROMFqU2bgjTTQ1YMteY9v2cIhDHj4S6XgzjPaqYEgOFr2XvBYGnK+NXzZ6DgldKTnlN7qqvWvZplPvltgyw==}
     peerDependencies:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
@@ -14607,6 +14675,9 @@ packages:
   fastify-plugin@5.1.0:
     resolution: {integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==}
 
+  fastify-plugin@6.0.0:
+    resolution: {integrity: sha512-fZOty7z3O7vOliF6d8bHE3wiEh1KcNnKEQensSgTk9C1DvN6nRLS++XVd86v33Hw/8u9Un8A1zDrQ8ujcQDHEg==}
+
   fastify@5.8.4:
     resolution: {integrity: sha512-sa42J1xylbBAYUWALSBoyXKPDUvM3OoNOibIefA+Oha57FryXKKCZarA1iDntOCWp3O35voZLuDg2mdODXtPzQ==}
 
@@ -18847,8 +18918,8 @@ packages:
     resolution: {integrity: sha512-WMqqw06w1vUt9ZfT0gOFhMf3wHsWhaCrxGrckGs5Cci6ybDW87IvPaOd2pnBwT6BJuP/CzXDZxjFgmSULLdsdw==}
     engines: {node: '>=20.19.0 || >=22.13.0 || >=24'}
 
-  pdfjs-dist@6.0.227:
-    resolution: {integrity: sha512-/P6M4SXw+70waMVLUM7rdRtvo+dEzqE1t6W/zQNvBETo2MaRa5rrvCcAYdfWGiUzadTgM0lJmRApUrW0d9zgKg==}
+  pdfjs-dist@6.1.200:
+    resolution: {integrity: sha512-o8MolyzirkkLrcdsae/HEOiIcXWI7DS5zGpvqW8xTC2YUsW30rltFw2bDGvw/fskUdEMrQm2br68jzDS5BH2vw==}
     engines: {node: '>=22.13.0 || >=24'}
 
   peek-stream@1.1.3:
@@ -19314,10 +19385,6 @@ packages:
 
   postcss@8.4.31:
     resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
-    engines: {node: ^10 || ^12 || >=14}
-
-  postcss@8.5.10:
-    resolution: {integrity: sha512-pMMHxBOZKFU6HgAZ4eyGnwXF/EvPGGqUr0MnZ5+99485wwW41kW91A4LOGxSHhgugZmSChL5AlElNdwlNgcnLQ==}
     engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.14:
@@ -20235,7 +20302,6 @@ packages:
   rolldown-vite@7.3.1:
     resolution: {integrity: sha512-LYzdNAjRHhF2yA4JUQm/QyARyi216N2rpJ0lJZb8E9FU2y5v6Vk+xq/U4XBOxMefpWixT5H3TslmAHm1rqIq2w==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    deprecated: Use this package to migrate from Vite 7 to Vite 8. For the most recent updates, migrate to Vite 8 once you're ready.
     hasBin: true
     peerDependencies:
       '@types/node': ^20.19.0 || >=22.12.0
@@ -22149,10 +22215,6 @@ packages:
   utils-merge@1.0.1:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
-
-  uuid@11.1.0:
-    resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
-    hasBin: true
 
   uuid@11.1.1:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
@@ -26037,6 +26099,11 @@ snapshots:
       fastify-plugin: 5.1.0
       mnemonist: 0.40.0
 
+  '@fastify/cors@11.3.0':
+    dependencies:
+      fastify-plugin: 6.0.0
+      toad-cache: 3.7.0
+
   '@fastify/deepmerge@3.2.1': {}
 
   '@fastify/error@4.2.0': {}
@@ -26178,7 +26245,7 @@ snapshots:
     dependencies:
       lib0: 0.2.117
 
-  '@hocuspocus/common@4.2.0':
+  '@hocuspocus/common@4.4.0':
     dependencies:
       lib0: 0.2.117
 
@@ -26206,9 +26273,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@hocuspocus/provider@4.2.0(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)':
+  '@hocuspocus/provider@4.4.0(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)':
     dependencies:
-      '@hocuspocus/common': 4.2.0
+      '@hocuspocus/common': 4.4.0
       '@lifeomic/attempt': 3.1.0
       lib0: 0.2.117
       y-protocols: 1.0.7(yjs@13.6.31)
@@ -26220,7 +26287,7 @@ snapshots:
       async-lock: 1.4.1
       kleur: 4.1.5
       lib0: 0.2.117
-      uuid: 11.1.0
+      uuid: 11.1.1
       ws: 8.20.0
       y-protocols: 1.0.7(yjs@13.6.19)
       yjs: 13.6.19
@@ -26234,7 +26301,7 @@ snapshots:
       async-lock: 1.4.1
       kleur: 4.1.5
       lib0: 0.2.117
-      uuid: 11.1.0
+      uuid: 11.1.1
       ws: 8.20.0
       y-protocols: 1.0.7(yjs@13.6.30)
       yjs: 13.6.30
@@ -26491,6 +26558,16 @@ snapshots:
       chalk: 4.1.2
       figures: 3.2.0
 
+  '@inquirer/checkbox@4.3.2(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/ansi': 1.0.2
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/checkbox@4.3.2(@types/node@25.6.0)':
     dependencies:
       '@inquirer/ansi': 1.0.2
@@ -26516,6 +26593,13 @@ snapshots:
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
 
+  '@inquirer/confirm@5.1.21(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/confirm@5.1.21(@types/node@25.6.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.6.0)
@@ -26529,6 +26613,19 @@ snapshots:
       '@inquirer/type': 4.0.4(@types/node@18.19.130)
     optionalDependencies:
       '@types/node': 18.19.130
+
+  '@inquirer/core@10.3.2(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/ansi': 1.0.2
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      cli-width: 4.1.0
+      mute-stream: 2.0.0
+      signal-exit: 4.1.0
+      wrap-ansi: 6.2.0
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/core@10.3.2(@types/node@25.6.0)':
     dependencies:
@@ -26596,6 +26693,14 @@ snapshots:
       chalk: 4.1.2
       external-editor: 3.1.0
 
+  '@inquirer/editor@4.2.23(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/external-editor': 1.0.3(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/editor@4.2.23(@types/node@25.6.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.6.0)
@@ -26619,6 +26724,14 @@ snapshots:
       chalk: 4.1.2
       figures: 3.2.0
 
+  '@inquirer/expand@4.0.23(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/expand@4.0.23(@types/node@25.6.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.6.0)
@@ -26626,6 +26739,13 @@ snapshots:
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 25.6.0
+
+  '@inquirer/external-editor@1.0.3(@types/node@22.19.2)':
+    dependencies:
+      chardet: 2.1.1
+      iconv-lite: 0.7.2
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/external-editor@1.0.3(@types/node@25.6.0)':
     dependencies:
@@ -26651,6 +26771,13 @@ snapshots:
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
 
+  '@inquirer/input@4.3.1(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/input@4.3.1(@types/node@25.6.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.6.0)
@@ -26665,6 +26792,13 @@ snapshots:
     optionalDependencies:
       '@types/node': 18.19.130
 
+  '@inquirer/number@3.0.23(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/number@3.0.23(@types/node@25.6.0)':
     dependencies:
       '@inquirer/core': 10.3.2(@types/node@25.6.0)
@@ -26678,6 +26812,14 @@ snapshots:
       '@inquirer/type': 1.5.5
       ansi-escapes: 4.3.2
       chalk: 4.1.2
+
+  '@inquirer/password@4.0.23(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/ansi': 1.0.2
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/password@4.0.23(@types/node@25.6.0)':
     dependencies:
@@ -26699,6 +26841,21 @@ snapshots:
       '@inquirer/rawlist': 1.2.16
       '@inquirer/select': 1.3.3
 
+  '@inquirer/prompts@7.10.1(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/checkbox': 4.3.2(@types/node@22.19.2)
+      '@inquirer/confirm': 5.1.21(@types/node@22.19.2)
+      '@inquirer/editor': 4.2.23(@types/node@22.19.2)
+      '@inquirer/expand': 4.0.23(@types/node@22.19.2)
+      '@inquirer/input': 4.3.1(@types/node@22.19.2)
+      '@inquirer/number': 3.0.23(@types/node@22.19.2)
+      '@inquirer/password': 4.0.23(@types/node@22.19.2)
+      '@inquirer/rawlist': 4.1.11(@types/node@22.19.2)
+      '@inquirer/search': 3.2.2(@types/node@22.19.2)
+      '@inquirer/select': 4.4.2(@types/node@22.19.2)
+    optionalDependencies:
+      '@types/node': 22.19.2
+
   '@inquirer/prompts@7.10.1(@types/node@25.6.0)':
     dependencies:
       '@inquirer/checkbox': 4.3.2(@types/node@25.6.0)
@@ -26714,26 +26871,34 @@ snapshots:
     optionalDependencies:
       '@types/node': 25.6.0
 
-  '@inquirer/prompts@7.9.0(@types/node@25.6.0)':
+  '@inquirer/prompts@7.9.0(@types/node@22.19.2)':
     dependencies:
-      '@inquirer/checkbox': 4.3.2(@types/node@25.6.0)
-      '@inquirer/confirm': 5.1.21(@types/node@25.6.0)
-      '@inquirer/editor': 4.2.23(@types/node@25.6.0)
-      '@inquirer/expand': 4.0.23(@types/node@25.6.0)
-      '@inquirer/input': 4.3.1(@types/node@25.6.0)
-      '@inquirer/number': 3.0.23(@types/node@25.6.0)
-      '@inquirer/password': 4.0.23(@types/node@25.6.0)
-      '@inquirer/rawlist': 4.1.11(@types/node@25.6.0)
-      '@inquirer/search': 3.2.2(@types/node@25.6.0)
-      '@inquirer/select': 4.4.2(@types/node@25.6.0)
+      '@inquirer/checkbox': 4.3.2(@types/node@22.19.2)
+      '@inquirer/confirm': 5.1.21(@types/node@22.19.2)
+      '@inquirer/editor': 4.2.23(@types/node@22.19.2)
+      '@inquirer/expand': 4.0.23(@types/node@22.19.2)
+      '@inquirer/input': 4.3.1(@types/node@22.19.2)
+      '@inquirer/number': 3.0.23(@types/node@22.19.2)
+      '@inquirer/password': 4.0.23(@types/node@22.19.2)
+      '@inquirer/rawlist': 4.1.11(@types/node@22.19.2)
+      '@inquirer/search': 3.2.2(@types/node@22.19.2)
+      '@inquirer/select': 4.4.2(@types/node@22.19.2)
     optionalDependencies:
-      '@types/node': 25.6.0
+      '@types/node': 22.19.2
 
   '@inquirer/rawlist@1.2.16':
     dependencies:
       '@inquirer/core': 6.0.0
       '@inquirer/type': 1.5.5
       chalk: 4.1.2
+
+  '@inquirer/rawlist@4.1.11(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/rawlist@4.1.11(@types/node@25.6.0)':
     dependencies:
@@ -26742,6 +26907,15 @@ snapshots:
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
       '@types/node': 25.6.0
+
+  '@inquirer/search@3.2.2(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/search@3.2.2(@types/node@25.6.0)':
     dependencies:
@@ -26759,6 +26933,16 @@ snapshots:
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       figures: 3.2.0
+
+  '@inquirer/select@4.4.2(@types/node@22.19.2)':
+    dependencies:
+      '@inquirer/ansi': 1.0.2
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/select@4.4.2(@types/node@25.6.0)':
     dependencies:
@@ -26782,6 +26966,10 @@ snapshots:
   '@inquirer/type@1.5.5':
     dependencies:
       mute-stream: 1.0.0
+
+  '@inquirer/type@3.0.10(@types/node@22.19.2)':
+    optionalDependencies:
+      '@types/node': 22.19.2
 
   '@inquirer/type@3.0.10(@types/node@25.6.0)':
     optionalDependencies:
@@ -27347,14 +27535,14 @@ snapshots:
 
   '@microsoft/tsdoc@0.16.0': {}
 
-  '@mintlify/cli@4.0.1227(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@25.6.0)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/cli@4.0.1227(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@inquirer/prompts': 7.9.0(@types/node@25.6.0)
-      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
-      '@mintlify/link-rot': 3.0.1132(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@inquirer/prompts': 7.9.0(@types/node@22.19.2)
+      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/link-rot': 3.0.1132(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/models': 0.0.323
-      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
-      '@mintlify/previewing': 4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/previewing': 4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/validation': 0.1.741(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       adm-zip: 0.5.16
       chalk: 5.2.0
@@ -27363,7 +27551,7 @@ snapshots:
       front-matter: 4.0.2
       fs-extra: 11.2.0
       ink: 6.3.0(@types/react@19.2.14)(react@19.2.3)
-      inquirer: 12.3.0(@types/node@25.6.0)
+      inquirer: 12.3.0(@types/node@22.19.2)
       js-yaml: 4.1.1
       mdast-util-mdx-jsx: 3.2.0
       open: 8.4.2
@@ -27393,7 +27581,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@mintlify/common@1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/common@1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@asyncapi/parser': 3.4.0
       '@asyncapi/specs': 6.8.1
@@ -27435,7 +27623,7 @@ snapshots:
       remark-rehype: 11.1.1
       remark-stringify: 11.0.0
       sucrase: 3.34.0
-      tailwindcss: 3.4.17(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))
+      tailwindcss: 3.4.17(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))
       unified: 11.0.5
       unist-builder: 4.0.0
       unist-util-map: 4.0.0
@@ -27456,13 +27644,13 @@ snapshots:
       - ts-node
       - typescript
 
-  '@mintlify/link-rot@3.0.1132(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/link-rot@3.0.1132(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/models': 0.0.323
-      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
-      '@mintlify/previewing': 4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
-      '@mintlify/scraping': 4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/previewing': 4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/scraping': 4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/validation': 0.1.741(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       fs-extra: 11.1.0
       unist-util-visit: 4.1.2
@@ -27526,11 +27714,11 @@ snapshots:
       leven: 4.1.0
       yaml: 2.8.3
 
-  '@mintlify/prebuild@1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/prebuild@1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/openapi-parser': 0.0.8
-      '@mintlify/scraping': 4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/scraping': 4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/validation': 0.1.741(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       chalk: 5.3.0
       favicons: 7.2.0
@@ -27558,10 +27746,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@mintlify/previewing@4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/previewing@4.0.1157(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
-      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/prebuild': 1.0.1093(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/validation': 0.1.741(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       adm-zip: 0.5.16
       better-opn: 3.0.2
@@ -27597,9 +27785,9 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@mintlify/scraping@4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)':
+  '@mintlify/scraping@4.0.811(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
-      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/common': 1.0.947(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
       '@mintlify/openapi-parser': 0.0.8
       fs-extra: 11.1.1
       hast-util-to-mdast: 10.1.0
@@ -28440,9 +28628,9 @@ snapshots:
       '@rollup/plugin-replace': 6.0.3(rollup@4.60.2)
       '@vitejs/plugin-vue': 6.0.5(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
       '@vitejs/plugin-vue-jsx': 5.1.5(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
-      autoprefixer: 10.4.27(postcss@8.5.10)
+      autoprefixer: 10.4.27(postcss@8.5.14)
       consola: 3.4.2
-      cssnano: 7.1.3(postcss@8.5.10)
+      cssnano: 7.1.3(postcss@8.5.14)
       defu: 6.1.4
       escape-string-regexp: 5.0.0
       exsolve: 1.0.8
@@ -28456,7 +28644,7 @@ snapshots:
       nypm: 0.6.5
       pathe: 2.0.3
       pkg-types: 2.3.0
-      postcss: 8.5.10
+      postcss: 8.5.14
       seroval: 1.5.1
       std-env: 4.0.0
       ufo: 1.6.3
@@ -32632,7 +32820,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.15
 
   '@types/yauzl@2.10.3':
     dependencies:
@@ -32867,7 +33055,7 @@ snapshots:
       debug: 4.4.3(supports-color@5.5.0)
       minimatch: 10.2.4
       semver: 7.7.4
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -33284,6 +33472,25 @@ snapshots:
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue: 3.5.32(typescript@5.9.3)
 
+  '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
+    dependencies:
+      '@ampproject/remapping': 2.3.0
+      '@bcoe/v8-coverage': 1.0.2
+      ast-v8-to-istanbul: 0.3.12
+      debug: 4.4.3(supports-color@5.5.0)
+      istanbul-lib-coverage: 3.2.2
+      istanbul-lib-report: 3.0.1
+      istanbul-lib-source-maps: 5.0.6
+      istanbul-reports: 3.2.0
+      magic-string: 0.30.21
+      magicast: 0.3.5
+      std-env: 3.10.0
+      test-exclude: 7.0.2
+      tinyrainbow: 2.0.0
+      vitest: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+    transitivePeerDependencies:
+      - supports-color
+
   '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@ampproject/remapping': 2.3.0
@@ -33553,7 +33760,7 @@ snapshots:
       '@vue/shared': 3.5.32
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.10
+      postcss: 8.5.14
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.32':
@@ -34329,13 +34536,13 @@ snapshots:
 
   auto-bind@5.0.1: {}
 
-  autoprefixer@10.4.27(postcss@8.5.10):
+  autoprefixer@10.4.27(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
       caniuse-lite: 1.0.30001781
       fraction.js: 5.3.4
       picocolors: 1.1.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
   autoprefixer@10.4.27(postcss@8.5.6):
@@ -34526,9 +34733,9 @@ snapshots:
       domhandler: 5.0.3
       htmlparser2: 10.1.0
       picocolors: 1.1.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-media-query-parser: 0.2.3
-      postcss-safe-parser: 7.0.1(postcss@8.5.10)
+      postcss-safe-parser: 7.0.1(postcss@8.5.14)
 
   before-after-hook@4.0.0: {}
 
@@ -35557,18 +35764,18 @@ snapshots:
 
   cryptr@6.4.0: {}
 
-  css-declaration-sorter@7.3.1(postcss@8.5.10):
+  css-declaration-sorter@7.3.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
   css-loader@7.1.3(webpack@5.105.2(esbuild@0.27.3)):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.10)
-      postcss: 8.5.10
-      postcss-modules-extract-imports: 3.1.0(postcss@8.5.10)
-      postcss-modules-local-by-default: 4.2.0(postcss@8.5.10)
-      postcss-modules-scope: 3.2.1(postcss@8.5.10)
-      postcss-modules-values: 4.0.0(postcss@8.5.10)
+      icss-utils: 5.1.0(postcss@8.5.14)
+      postcss: 8.5.14
+      postcss-modules-extract-imports: 3.1.0(postcss@8.5.14)
+      postcss-modules-local-by-default: 4.2.0(postcss@8.5.14)
+      postcss-modules-scope: 3.2.1(postcss@8.5.14)
+      postcss-modules-values: 4.0.0(postcss@8.5.14)
       postcss-value-parser: 4.2.0
       semver: 7.7.4
     optionalDependencies:
@@ -35618,49 +35825,49 @@ snapshots:
 
   cssfilter@0.0.10: {}
 
-  cssnano-preset-default@7.0.11(postcss@8.5.10):
+  cssnano-preset-default@7.0.11(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
-      css-declaration-sorter: 7.3.1(postcss@8.5.10)
-      cssnano-utils: 5.0.1(postcss@8.5.10)
-      postcss: 8.5.10
-      postcss-calc: 10.1.1(postcss@8.5.10)
-      postcss-colormin: 7.0.6(postcss@8.5.10)
-      postcss-convert-values: 7.0.9(postcss@8.5.10)
-      postcss-discard-comments: 7.0.6(postcss@8.5.10)
-      postcss-discard-duplicates: 7.0.2(postcss@8.5.10)
-      postcss-discard-empty: 7.0.1(postcss@8.5.10)
-      postcss-discard-overridden: 7.0.1(postcss@8.5.10)
-      postcss-merge-longhand: 7.0.5(postcss@8.5.10)
-      postcss-merge-rules: 7.0.8(postcss@8.5.10)
-      postcss-minify-font-values: 7.0.1(postcss@8.5.10)
-      postcss-minify-gradients: 7.0.1(postcss@8.5.10)
-      postcss-minify-params: 7.0.6(postcss@8.5.10)
-      postcss-minify-selectors: 7.0.6(postcss@8.5.10)
-      postcss-normalize-charset: 7.0.1(postcss@8.5.10)
-      postcss-normalize-display-values: 7.0.1(postcss@8.5.10)
-      postcss-normalize-positions: 7.0.1(postcss@8.5.10)
-      postcss-normalize-repeat-style: 7.0.1(postcss@8.5.10)
-      postcss-normalize-string: 7.0.1(postcss@8.5.10)
-      postcss-normalize-timing-functions: 7.0.1(postcss@8.5.10)
-      postcss-normalize-unicode: 7.0.6(postcss@8.5.10)
-      postcss-normalize-url: 7.0.1(postcss@8.5.10)
-      postcss-normalize-whitespace: 7.0.1(postcss@8.5.10)
-      postcss-ordered-values: 7.0.2(postcss@8.5.10)
-      postcss-reduce-initial: 7.0.6(postcss@8.5.10)
-      postcss-reduce-transforms: 7.0.1(postcss@8.5.10)
-      postcss-svgo: 7.1.1(postcss@8.5.10)
-      postcss-unique-selectors: 7.0.5(postcss@8.5.10)
+      css-declaration-sorter: 7.3.1(postcss@8.5.14)
+      cssnano-utils: 5.0.1(postcss@8.5.14)
+      postcss: 8.5.14
+      postcss-calc: 10.1.1(postcss@8.5.14)
+      postcss-colormin: 7.0.6(postcss@8.5.14)
+      postcss-convert-values: 7.0.9(postcss@8.5.14)
+      postcss-discard-comments: 7.0.6(postcss@8.5.14)
+      postcss-discard-duplicates: 7.0.2(postcss@8.5.14)
+      postcss-discard-empty: 7.0.1(postcss@8.5.14)
+      postcss-discard-overridden: 7.0.1(postcss@8.5.14)
+      postcss-merge-longhand: 7.0.5(postcss@8.5.14)
+      postcss-merge-rules: 7.0.8(postcss@8.5.14)
+      postcss-minify-font-values: 7.0.1(postcss@8.5.14)
+      postcss-minify-gradients: 7.0.1(postcss@8.5.14)
+      postcss-minify-params: 7.0.6(postcss@8.5.14)
+      postcss-minify-selectors: 7.0.6(postcss@8.5.14)
+      postcss-normalize-charset: 7.0.1(postcss@8.5.14)
+      postcss-normalize-display-values: 7.0.1(postcss@8.5.14)
+      postcss-normalize-positions: 7.0.1(postcss@8.5.14)
+      postcss-normalize-repeat-style: 7.0.1(postcss@8.5.14)
+      postcss-normalize-string: 7.0.1(postcss@8.5.14)
+      postcss-normalize-timing-functions: 7.0.1(postcss@8.5.14)
+      postcss-normalize-unicode: 7.0.6(postcss@8.5.14)
+      postcss-normalize-url: 7.0.1(postcss@8.5.14)
+      postcss-normalize-whitespace: 7.0.1(postcss@8.5.14)
+      postcss-ordered-values: 7.0.2(postcss@8.5.14)
+      postcss-reduce-initial: 7.0.6(postcss@8.5.14)
+      postcss-reduce-transforms: 7.0.1(postcss@8.5.14)
+      postcss-svgo: 7.1.1(postcss@8.5.14)
+      postcss-unique-selectors: 7.0.5(postcss@8.5.14)
 
-  cssnano-utils@5.0.1(postcss@8.5.10):
+  cssnano-utils@5.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  cssnano@7.1.3(postcss@8.5.10):
+  cssnano@7.1.3(postcss@8.5.14):
     dependencies:
-      cssnano-preset-default: 7.0.11(postcss@8.5.10)
+      cssnano-preset-default: 7.0.11(postcss@8.5.14)
       lilconfig: 3.1.3
-      postcss: 8.5.10
+      postcss: 8.5.14
 
   csso@5.0.5:
     dependencies:
@@ -37565,6 +37772,8 @@ snapshots:
 
   fastify-plugin@5.1.0: {}
 
+  fastify-plugin@6.0.0: {}
+
   fastify@5.8.4:
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
@@ -38349,7 +38558,7 @@ snapshots:
 
   happy-dom@20.4.0:
     dependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.15
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       entities: 4.5.0
@@ -38958,7 +39167,7 @@ snapshots:
       jsonwebtoken: 9.0.3
       load-esm: 1.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.18.0)
+      retry-axios: 2.6.0(axios@1.18.0(debug@4.4.3))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -38978,9 +39187,9 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
-  icss-utils@5.1.0(postcss@8.5.10):
+  icss-utils@5.1.0(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
   idtoken-verifier@2.2.4:
     dependencies:
@@ -39150,12 +39359,12 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  inquirer@12.3.0(@types/node@25.6.0):
+  inquirer@12.3.0(@types/node@22.19.2):
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@25.6.0)
-      '@inquirer/prompts': 7.10.1(@types/node@25.6.0)
-      '@inquirer/type': 3.0.10(@types/node@25.6.0)
-      '@types/node': 25.6.0
+      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/prompts': 7.10.1(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@types/node': 22.19.2
       ansi-escapes: 4.3.2
       mute-stream: 2.0.0
       run-async: 3.0.0
@@ -41518,9 +41727,9 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
-  mintlify@4.2.624(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@25.6.0)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3):
+  mintlify@4.2.624(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
-      '@mintlify/cli': 4.0.1227(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@25.6.0)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))(typescript@5.9.3)
+      '@mintlify/cli': 4.0.1227(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.3))(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))(typescript@5.9.3)
     transitivePeerDependencies:
       - '@radix-ui/react-popover'
       - '@types/node'
@@ -43152,7 +43361,7 @@ snapshots:
       '@napi-rs/canvas': 0.1.97
       node-readable-to-web-readable-stream: 0.4.2
 
-  pdfjs-dist@6.0.227:
+  pdfjs-dist@6.1.200:
     optionalDependencies:
       '@napi-rs/canvas': 1.0.0
 
@@ -43362,42 +43571,42 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  postcss-calc@10.1.1(postcss@8.5.10):
+  postcss-calc@10.1.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
       postcss-value-parser: 4.2.0
 
-  postcss-colormin@7.0.6(postcss@8.5.10):
+  postcss-colormin@7.0.6(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
       caniuse-api: 3.0.0
       colord: 2.9.3
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-convert-values@7.0.9(postcss@8.5.10):
+  postcss-convert-values@7.0.9(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-discard-comments@7.0.6(postcss@8.5.10):
+  postcss-discard-comments@7.0.6(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
-  postcss-discard-duplicates@7.0.2(postcss@8.5.10):
+  postcss-discard-duplicates@7.0.2(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  postcss-discard-empty@7.0.1(postcss@8.5.10):
+  postcss-discard-empty@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  postcss-discard-overridden@7.0.1(postcss@8.5.10):
+  postcss-discard-overridden@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
   postcss-import@15.1.0(postcss@8.5.14):
     dependencies:
@@ -43423,13 +43632,13 @@ snapshots:
       camelcase-css: 2.0.1
       postcss: 8.5.8
 
-  postcss-load-config@4.0.2(postcss@8.5.14)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3)):
+  postcss-load-config@4.0.2(postcss@8.5.14)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3)):
     dependencies:
       lilconfig: 3.1.3
       yaml: 2.8.3
     optionalDependencies:
       postcss: 8.5.14
-      ts-node: 10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3)
+      ts-node: 10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3)
 
   postcss-load-config@6.0.1(jiti@1.21.7)(postcss@8.5.8)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
@@ -43462,65 +43671,65 @@ snapshots:
 
   postcss-media-query-parser@0.2.3: {}
 
-  postcss-merge-longhand@7.0.5(postcss@8.5.10):
+  postcss-merge-longhand@7.0.5(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
-      stylehacks: 7.0.8(postcss@8.5.10)
+      stylehacks: 7.0.8(postcss@8.5.14)
 
-  postcss-merge-rules@7.0.8(postcss@8.5.10):
+  postcss-merge-rules@7.0.8(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
       caniuse-api: 3.0.0
-      cssnano-utils: 5.0.1(postcss@8.5.10)
-      postcss: 8.5.10
+      cssnano-utils: 5.0.1(postcss@8.5.14)
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
-  postcss-minify-font-values@7.0.1(postcss@8.5.10):
+  postcss-minify-font-values@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-minify-gradients@7.0.1(postcss@8.5.10):
+  postcss-minify-gradients@7.0.1(postcss@8.5.14):
     dependencies:
       colord: 2.9.3
-      cssnano-utils: 5.0.1(postcss@8.5.10)
-      postcss: 8.5.10
+      cssnano-utils: 5.0.1(postcss@8.5.14)
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-minify-params@7.0.6(postcss@8.5.10):
+  postcss-minify-params@7.0.6(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
-      cssnano-utils: 5.0.1(postcss@8.5.10)
-      postcss: 8.5.10
+      cssnano-utils: 5.0.1(postcss@8.5.14)
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-minify-selectors@7.0.6(postcss@8.5.10):
+  postcss-minify-selectors@7.0.6(postcss@8.5.14):
     dependencies:
       cssesc: 3.0.0
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
-  postcss-modules-extract-imports@3.1.0(postcss@8.5.10):
+  postcss-modules-extract-imports@3.1.0(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  postcss-modules-local-by-default@4.2.0(postcss@8.5.10):
+  postcss-modules-local-by-default@4.2.0(postcss@8.5.14):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.10)
-      postcss: 8.5.10
+      icss-utils: 5.1.0(postcss@8.5.14)
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
       postcss-value-parser: 4.2.0
 
-  postcss-modules-scope@3.2.1(postcss@8.5.10):
+  postcss-modules-scope@3.2.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
-  postcss-modules-values@4.0.0(postcss@8.5.10):
+  postcss-modules-values@4.0.0(postcss@8.5.14):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.10)
-      postcss: 8.5.10
+      icss-utils: 5.1.0(postcss@8.5.14)
+      postcss: 8.5.14
 
   postcss-nested-import@1.3.0(postcss@8.5.14):
     dependencies:
@@ -43537,75 +43746,75 @@ snapshots:
       postcss: 8.5.8
       postcss-selector-parser: 6.1.2
 
-  postcss-normalize-charset@7.0.1(postcss@8.5.10):
+  postcss-normalize-charset@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  postcss-normalize-display-values@7.0.1(postcss@8.5.10):
+  postcss-normalize-display-values@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-positions@7.0.1(postcss@8.5.10):
+  postcss-normalize-positions@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-repeat-style@7.0.1(postcss@8.5.10):
+  postcss-normalize-repeat-style@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-string@7.0.1(postcss@8.5.10):
+  postcss-normalize-string@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-timing-functions@7.0.1(postcss@8.5.10):
+  postcss-normalize-timing-functions@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-unicode@7.0.6(postcss@8.5.10):
+  postcss-normalize-unicode@7.0.6(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-url@7.0.1(postcss@8.5.10):
+  postcss-normalize-url@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-normalize-whitespace@7.0.1(postcss@8.5.10):
+  postcss-normalize-whitespace@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-ordered-values@7.0.2(postcss@8.5.10):
+  postcss-ordered-values@7.0.2(postcss@8.5.14):
     dependencies:
-      cssnano-utils: 5.0.1(postcss@8.5.10)
-      postcss: 8.5.10
+      cssnano-utils: 5.0.1(postcss@8.5.14)
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
   postcss-prefixwrap@1.57.2(postcss@8.5.14):
     dependencies:
       postcss: 8.5.14
 
-  postcss-reduce-initial@7.0.6(postcss@8.5.10):
+  postcss-reduce-initial@7.0.6(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
       caniuse-api: 3.0.0
-      postcss: 8.5.10
+      postcss: 8.5.14
 
-  postcss-reduce-transforms@7.0.1(postcss@8.5.10):
+  postcss-reduce-transforms@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
-  postcss-safe-parser@7.0.1(postcss@8.5.10):
+  postcss-safe-parser@7.0.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
 
   postcss-selector-parser@6.1.2:
     dependencies:
@@ -43617,26 +43826,20 @@ snapshots:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
 
-  postcss-svgo@7.1.1(postcss@8.5.10):
+  postcss-svgo@7.1.1(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
       svgo: 4.0.1
 
-  postcss-unique-selectors@7.0.5(postcss@8.5.10):
+  postcss-unique-selectors@7.0.5(postcss@8.5.14):
     dependencies:
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
   postcss-value-parser@4.2.0: {}
 
   postcss@8.4.31:
-    dependencies:
-      nanoid: 3.3.11
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.10:
     dependencies:
       nanoid: 3.3.11
       picocolors: 1.1.1
@@ -44997,7 +45200,7 @@ snapshots:
       adjust-sourcemap-loader: 4.0.0
       convert-source-map: 1.9.0
       loader-utils: 2.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       source-map: 0.6.1
 
   resolve@1.22.11:
@@ -45065,7 +45268,7 @@ snapshots:
       retext-stringify: 4.0.0
       unified: 11.0.5
 
-  retry-axios@2.6.0(axios@1.18.0):
+  retry-axios@2.6.0(axios@1.18.0(debug@4.4.3)):
     dependencies:
       axios: 1.18.0(debug@4.4.3)
     optional: true
@@ -45115,7 +45318,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rolldown: 1.0.0-beta.53(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
       tinyglobby: 0.2.16
     optionalDependencies:
@@ -45138,7 +45341,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rolldown: 1.0.0-beta.53(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
       tinyglobby: 0.2.16
     optionalDependencies:
@@ -45161,7 +45364,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rolldown: 1.0.0-beta.53(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
       tinyglobby: 0.2.16
     optionalDependencies:
@@ -45184,7 +45387,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rolldown: 1.0.0-beta.53(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
       tinyglobby: 0.2.16
     optionalDependencies:
@@ -45207,7 +45410,7 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rolldown: 1.0.0-beta.53(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
       tinyglobby: 0.2.16
     optionalDependencies:
@@ -46409,10 +46612,10 @@ snapshots:
       client-only: 0.0.1
       react: 19.2.4
 
-  stylehacks@7.0.8(postcss@8.5.10):
+  stylehacks@7.0.8(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-selector-parser: 7.1.1
 
   stylis@4.2.0: {}
@@ -46552,7 +46755,7 @@ snapshots:
     dependencies:
       tailwindcss: 3.4.19(tsx@4.21.0)(yaml@2.8.3)
 
-  tailwindcss@3.4.17(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3)):
+  tailwindcss@3.4.17(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3)):
     dependencies:
       '@alloc/quick-lru': 5.2.0
       arg: 5.0.2
@@ -46571,7 +46774,7 @@ snapshots:
       postcss: 8.5.14
       postcss-import: 15.1.0(postcss@8.5.14)
       postcss-js: 4.1.0(postcss@8.5.14)
-      postcss-load-config: 4.0.2(postcss@8.5.14)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3))
+      postcss-load-config: 4.0.2(postcss@8.5.14)(ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3))
       postcss-nested: 6.2.0(postcss@8.5.14)
       postcss-selector-parser: 6.1.2
       resolve: 1.22.11
@@ -46964,14 +47167,14 @@ snapshots:
       '@swc/core': 1.15.21
     optional: true
 
-  ts-node@10.9.2(@swc/core@1.15.21)(@types/node@25.6.0)(typescript@5.9.3):
+  ts-node@10.9.2(@swc/core@1.15.21)(@types/node@22.19.2)(typescript@5.9.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 25.6.0
+      '@types/node': 22.19.2
       acorn: 8.16.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -47694,8 +47897,6 @@ snapshots:
   utility-types@3.11.0: {}
 
   utils-merge@1.0.1: {}
-
-  uuid@11.1.0: {}
 
   uuid@11.1.1: {}
 

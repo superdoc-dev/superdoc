@@ -1,0 +1,37 @@
+{
+  "name": "policy-version-history-demo",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "tsc -b && vite build && tsc -p server/tsconfig.json",
+    "start": "tsx server/index.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@hocuspocus/provider": "catalog:",
+    "@hocuspocus/server": "catalog:",
+    "@superdoc-dev/react": "workspace:*",
+    "fastify": "^5.4.0",
+    "nanoid": "^5.1.5",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "superdoc": "workspace:*",
+    "ws": "catalog:",
+    "yjs": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/ws": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "concurrently": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

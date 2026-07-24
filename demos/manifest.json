@@ -1,5 +1,23 @@
 [
   {
+    "id": "policy-version-history",
+    "section": "solutions",
+    "subsection": "document-review",
+    "kind": "workflow-demo",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Collaborative policy version history",
+    "description": "Collaboratively edit a policy draft, publish numbered versions, scope comments to a version, and map regulations to text with metadata-driven hover popovers.",
+    "category": "Solutions",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/policy-version-history",
+    "docs": "https://docs.superdoc.dev/editor/custom-ui/overview",
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": false
+  },
+  {
     "id": "contract-templates",
     "section": "solutions",
     "subsection": "template-builder",

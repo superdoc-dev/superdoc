@@ -159,7 +159,6 @@ export function App() {
         jsonOverride: isEmpty ? EMPTY_DOCUMENT : undefined,
         user,
         comments: { visible: true },
-        trackChanges: { visible: false },
         telemetry: { enabled: false },
         modules: {
           comments: {},
@@ -353,20 +352,38 @@ function ActionBar() {
   const host = useSuperDocHost();
   const [canAct, setCanAct] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
 
-  useEffect(() => ui?.selection.observe((selection) => setCanAct(!selection.empty && !!selection.selectionTarget)), [ui]);
+  useEffect(() => ui?.selection.observe((selection) => {
+    setCanAct(!selection.empty && !!selection.selectionTarget);
+    setTagError(null);
+  }), [ui]);
 
   // Attaches the chosen regulation as namespaced metadata on the captured selection.
   const mapRegulation = (regulation: (typeof REGULATIONS)[number]) => {
     const capture = ui?.selection.capture();
     const editor = (host as any)?.activeEditor;
     if (!capture?.selectionTarget || !editor?.doc?.metadata) return;
-    editor.doc.metadata.attach({
-      target: capture.selectionTarget,
-      namespace: REGULATION_NAMESPACE,
-      payload: { regulations: [regulation], mappedBy: editor.options?.user ?? {}, mappedAt: new Date().toISOString() },
-    });
-    setMenuOpen(false);
+    const { start, end } = capture.selectionTarget;
+    if (start.kind !== 'text' || end.kind !== 'text' || start.blockId !== end.blockId) {
+      setTagError('Select text within a single paragraph to tag it.');
+      setMenuOpen(false);
+      return;
+    }
+
+    try {
+      const attached = editor.doc.metadata.attach({
+        target: capture.selectionTarget,
+        namespace: REGULATION_NAMESPACE,
+        payload: { regulations: [regulation], mappedBy: editor.options?.user ?? {}, mappedAt: new Date().toISOString() },
+      });
+      if (!attached.success) throw new Error(attached.failure?.message || 'Could not tag that selection.');
+      setTagError(null);
+      setMenuOpen(false);
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : 'Could not tag that selection.');
+      setMenuOpen(false);
+    }
   };
 
   return (
@@ -383,6 +400,7 @@ function ActionBar() {
           </div>
         )}
       </div>
+      {tagError && <span className="hint" role="alert">{tagError}</span>}
     </div>
   );
 }

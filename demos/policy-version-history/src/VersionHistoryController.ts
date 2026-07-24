@@ -128,7 +128,6 @@ export class VersionHistoryController {
         documentMode: 'viewing',
         contained: true,
         comments: { visible: true },
-        trackChanges: { visible: true },
         telemetry: { enabled: false },
         modules: {
           collaboration: { ydoc: previewDocument, provider: new NoOpProvider() as any },

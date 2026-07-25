@@ -39,6 +39,7 @@ Framework starters. Pick one, run `pnpm install && pnpm dev`.
 | [nextjs](./getting-started/nextjs) | Next.js (SSR-safe) |
 | [nuxt](./getting-started/nuxt) | Nuxt setup |
 | [laravel](./getting-started/laravel) | Laravel + Inertia |
+| [astro](./getting-started/astro) | Astro setup |
 
 ## Editor
 

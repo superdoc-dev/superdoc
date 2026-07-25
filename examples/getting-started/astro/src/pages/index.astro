@@ -1,0 +1,44 @@
+---
+import 'superdoc/style.css';
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>SuperDoc — Astro</title>
+	</head>
+	<body>
+		<div style="padding: 1rem; background: #f5f5f5">
+			<input type="file" id="file-input" accept=".docx" />
+		</div>
+		<div id="editor" style="height: calc(100vh - 60px)"></div>
+
+		<script>
+			import { SuperDoc } from 'superdoc';
+			import { superdocFonts } from '@superdoc-dev/fonts';
+
+			let superdoc: SuperDoc | null = null;
+
+			const initEditor = (file: File) => {
+				superdoc?.destroy();
+				superdoc = new SuperDoc({
+					selector: '#editor',
+					document: file,
+					fonts: superdocFonts,
+				});
+			};
+
+			const handleFile = (e: Event) => {
+				const file = (e.target as HTMLInputElement).files?.[0];
+				if (!file) return;
+
+				initEditor(file);
+			};
+
+			const fileInput = document.querySelector<HTMLInputElement>('#file-input');
+			fileInput?.addEventListener('change', handleFile);
+		</script>
+	</body>
+</html>

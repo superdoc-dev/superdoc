@@ -1,0 +1,13 @@
+{
+  "name": "superdoc-astro-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev"
+  },
+  "dependencies": {
+    "astro": "^7.1.3",
+    "@superdoc-dev/fonts": "workspace:*",
+    "superdoc": "latest"
+  }
+}

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), '..');
 
-const GETTING_STARTED_EXAMPLES = ['react', 'vue', 'vanilla', 'cdn', 'angular', 'nuxt', 'laravel', 'solid'];
+const GETTING_STARTED_EXAMPLES = ['react', 'vue', 'vanilla', 'cdn', 'angular', 'nuxt', 'laravel', 'solid', 'astro'];
 const COLLABORATION_EXAMPLES = ['superdoc-yjs', 'hocuspocus', 'liveblocks'];
 const BUILT_IN_UI_EXAMPLES = ['track-changes', 'comments', 'toolbar'];
 const CUSTOM_UI_EXAMPLES = ['selection-capture', 'configurable-toolbar'];

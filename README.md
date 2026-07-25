@@ -118,7 +118,7 @@ Starter projects to get you running quickly:
 | [Vanilla JS](examples/getting-started/vanilla) | [CDN](examples/getting-started/cdn) |
 | [Comments](examples/editor/built-in-ui/comments) | [Track changes](examples/editor/built-in-ui/track-changes) |
 | [Toolbar](examples/editor/built-in-ui/toolbar) | [AI redlining](examples/ai/redlining) |
-| [AI redlining (server-side)](examples/document-engine/ai-redlining) | |
+| [AI redlining (server-side)](examples/document-engine/ai-redlining) | [Astro](examples/getting-started/astro) |
 
 [Browse all examples](examples/)
 

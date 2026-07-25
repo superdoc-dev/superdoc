@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // EXAMPLE can be:
-//   "react", "vue", "vanilla", "cdn", "angular"  (getting-started)
+//   "react", "vue", "vanilla", "cdn", "angular", "astro"  (getting-started)
 //   "editor/collaboration/providers/superdoc-yjs", etc.
 const example = process.env.EXAMPLE || 'react';
 
@@ -29,6 +29,7 @@ const portMap: Record<string, number> = {
   cdn: 3000,
   nuxt: 3000,
   laravel: 8000,
+  astro: 4321,
   'editor/collaboration/providers/hocuspocus': 3000,
   'advanced/headless-toolbar/svelte-shadcn': 5190,
   'ai/streaming': 5180,
@@ -41,19 +42,26 @@ const exampleAbsPath = resolve(__dirname, examplePath);
 const hasLocalNodeModules = existsSync(resolve(exampleAbsPath, 'node_modules', '.bin'));
 const run = hasLocalNodeModules ? `npm run --prefix ${examplePath}` : `pnpm --dir ${examplePath} run`;
 
-// Laravel: build Vite assets first, then serve with PHP only (via `start` script).
-// The concurrently approach (php + vite dev) is unreliable in CI.
-const isLaravel = example === 'laravel';
-
-// Start command
-const isCdn = example === 'cdn';
-const command = isCdn
-  ? `node ${examplePath}/setup.mjs && npx serve ${examplePath} -l ${port}`
-  : isLaravel
-    ? `${run} start`
-    : useConcurrently.includes(example)
-      ? `${run} dev`
-      : `${run} dev -- --port ${port}`;
+// Start command — Laravel builds Vite assets first, then serves with PHP only
+// (the concurrently approach is unreliable in CI).
+let command: string;
+switch (example) {
+  case 'cdn':
+    command = `node ${examplePath}/setup.mjs && npx serve ${examplePath} -l ${port}`;
+    break;
+  case 'laravel':
+    command = `${run} start`;
+    break;
+  case 'astro':
+    command = `${run} dev`;
+    break;
+  default:
+    if (useConcurrently.includes(example)) {
+      command = `${run} dev`;
+    } else {
+      command = `${run} dev -- --port ${port}`;
+    }
+}
 
 export default defineConfig({
   testDir: '.',

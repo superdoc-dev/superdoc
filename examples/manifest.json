@@ -32,6 +32,21 @@
     "slug": "vue"
   },
   {
+    "id": "getting-started-astro",
+    "section": "getting-started",
+    "subsection": "frameworks",
+    "kind": "integration-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "Astro starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/astro",
+    "docs": "https://docs.superdoc.dev/getting-started/quickstart",
+    "ci": true
+  },
+  {
     "id": "getting-started-vanilla",
     "section": "getting-started",
     "subsection": "frameworks",

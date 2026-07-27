@@ -56,7 +56,7 @@ describe('getWordChanges', () => {
     expect(applyOps('a b c', ops)).toBe('x a y b c');
   });
 
-  it('SD-3044: regression with the exact suffix-trim shape from the Lighthouse fixture', () => {
+  it('SD-3044: regression with the exact suffix-trim shape from the reported fixture', () => {
     // After prefix/suffix trim, the parties-investor block reduces to these
     // strings. The trailing `]` of the second `[insert]` is in the suffix, so
     // `[insert` (without the `]`) becomes a token that matches between old and

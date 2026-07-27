@@ -247,7 +247,7 @@ evals/
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace "Amazing Corp" with "Irys Inc." everywhere.'
+    task: 'Replace "Amazing Corp" with "Northwind Ltd." everywhere.'
   assert:
     - type: javascript
       value: |
@@ -255,7 +255,7 @@ evals/
         const t = d.documentText || '';
         if (t.includes('Amazing'))
           return { pass: false, score: 0, reason: 'Old name still present' };
-        if (!t.includes('Irys Inc.'))
+        if (!t.includes('Northwind Ltd.'))
           return { pass: false, score: 0, reason: 'New name missing' };
         return { pass: true, score: 1, reason: 'Entity names replaced' };
     - type: javascript

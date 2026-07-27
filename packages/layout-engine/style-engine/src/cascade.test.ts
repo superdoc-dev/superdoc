@@ -222,8 +222,8 @@ describe('cascade - combineRunProperties', () => {
       expect(result.fontFamily).toEqual({ cs: 'Arial' });
     });
 
-    it('Athenaintelligence customer shape: all 4 concretes from defaults dropped by inline themes', () => {
-      // Mirrors the customer fixture: docDefaults supply concrete fonts (Arial),
+    it('theme-override shape: all 4 concretes from defaults dropped by inline themes', () => {
+      // Mirrors a real-world document: docDefaults supply concrete fonts (Arial),
       // inline rPr supplies theme refs on ascii/hAnsi/cs (no eastAsiaTheme). The
       // cascade must keep only the theme refs on those three slots; eastAsia
       // concrete from defaults is independent.
@@ -239,7 +239,7 @@ describe('cascade - combineRunProperties', () => {
       });
     });
 
-    it('exports FONT_SLOT_THEME_PAIRS so callers (super-editor plugin) can stay in sync', async () => {
+    it('exports FONT_SLOT_THEME_PAIRS so runtime adapters can stay in sync', async () => {
       const { FONT_SLOT_THEME_PAIRS } = await import('./cascade.js');
       expect(FONT_SLOT_THEME_PAIRS).toEqual([
         ['ascii', 'asciiTheme'],

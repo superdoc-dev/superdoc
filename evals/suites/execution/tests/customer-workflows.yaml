@@ -1,15 +1,14 @@
-# Customer workflow tests — validates real-world AI use cases from production customers.
+# Workflow tests — validates real-world AI use cases drawn from production usage.
 #
-# Mapped from: Clauze (contract review), AcuityMD (medical devices), Irys (SaaS terms),
-# Athena (investment memos), Torke (citations), Lighthouse (corporate docs),
-# Orbital (leases), Tryal (clinical trials), Reavant (SDK mutations).
+# Each group covers a document-editing workflow we see in practice: contract
+# review, document Q&A, drafting, commenting, redlining, table operations,
+# multi-step compound edits, and formatting.
 #
-# Each test exercises a documented customer workflow against a domain-specific DOCX fixture.
+# Each test exercises one workflow against a domain-specific DOCX fixture.
 # Assertions validate document content + tool execution trace.
 
 # =============================================================================
-# A. NDA / CONTRACT REVIEW & MODIFICATION (Clauze, Irys)
-# Customers: Clauze (clause modification, risk ID), Irys (entity rename, rewrite)
+# A. NDA / CONTRACT REVIEW & MODIFICATION
 # =============================================================================
 
 - description: 'NDA: modify indemnification from mutual to one-way'
@@ -32,19 +31,19 @@
     - type: javascript
       value: file://../shared/checks.cjs:traceLog
 
-- description: 'NDA: global entity name replacement (Amazing → Irys)'
+- description: 'NDA: global entity name replacement (Amazing → Northwind)'
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace "Amazing Corp" with "Irys Inc." and "legal@iqidis.com" with "legal@irys.com" everywhere in the document.'
+    task: 'Replace "Amazing Corp" with "Northwind Ltd." and "legal@amazing.com" with "legal@northwind.example" everywhere in the document.'
   assert:
     - type: javascript
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
-        if (t.includes('Amazing') || t.includes('iqidis'))
+        if (t.includes('Amazing') || t.includes('amazing.com'))
           return { pass: false, score: 0, reason: 'Old entity name still present' };
-        if (!t.includes('Irys Inc.') || !t.includes('legal@irys.com'))
+        if (!t.includes('Northwind Ltd.') || !t.includes('legal@northwind.example'))
           return { pass: false, score: 0, reason: 'New names not found' };
         if (!t.includes('TechCraft'))
           return { pass: false, score: 0, reason: 'Collateral: other party name removed' };
@@ -126,8 +125,7 @@
       value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
-# B. DOCUMENT Q&A / COMPREHENSION (AcuityMD, Orbital)
-# Customers: Orbital (lease Q&A), AcuityMD (doc Q&A), Tryal (study Q&A)
+# B. DOCUMENT Q&A / COMPREHENSION
 # =============================================================================
 
 - description: 'Lease: Q&A about assignment rights'
@@ -224,8 +222,7 @@
       metric: tool_usage
 
 # =============================================================================
-# C. DRAFTING / CONTENT GENERATION (Athena, Lighthouse, Tryal)
-# Customers: Athena (memos), Lighthouse (disclaimers), Tryal (summaries)
+# C. DRAFTING / CONTENT GENERATION
 # =============================================================================
 
 - description: 'NDA: generate glossary of defined terms'
@@ -301,8 +298,7 @@
       value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
-# D. COMMENTS & ANNOTATIONS (Torke)
-# Customers: Torke (insert comment, review), Lighthouse (review comments)
+# D. COMMENTS & ANNOTATIONS
 # =============================================================================
 
 - description: 'NDA: add review comment on indemnification'
@@ -384,8 +380,7 @@
       metric: tool_usage
 
 # =============================================================================
-# E. TRACK CHANGES / REDLINING (Clauze, AcuityMD, Lighthouse, Tryal)
-# Customers: Clauze (redlining), AcuityMD (tracked edits), Lighthouse (AI redline)
+# E. TRACK CHANGES / REDLINING
 # =============================================================================
 
 - description: 'NDA: tracked change on term duration'
@@ -443,8 +438,7 @@
       value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
-# F. TABLE OPERATIONS (AcuityMD, Reavant, Tryal)
-# Customers: AcuityMD (table generation), Reavant (table mutation), Tryal (data tables)
+# F. TABLE OPERATIONS
 # =============================================================================
 
 - description: 'Report: read enrollment table data'
@@ -504,8 +498,7 @@
       value: file://../shared/checks.cjs:traceAllOk
 
 # =============================================================================
-# G. MULTI-STEP COMPOUND OPERATIONS (Lighthouse, Athena, Irys)
-# Customers: Lighthouse (review + edit), Athena (search + insert), Irys (rename + modify)
+# G. MULTI-STEP COMPOUND OPERATIONS
 # =============================================================================
 
 - description: 'Offer: fill multiple placeholders'
@@ -546,7 +539,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Replace "Amazing Corp" with "Irys Inc." everywhere in the document, then add a heading "CONFIDENTIALITY NOTICE" at the end followed by a paragraph "This document contains proprietary information."'
+    task: 'Replace "Amazing Corp" with "Northwind Ltd." everywhere in the document, then add a heading "CONFIDENTIALITY NOTICE" at the end followed by a paragraph "This document contains proprietary information."'
   assert:
     - type: javascript
       value: |
@@ -554,7 +547,7 @@
         const t = d.documentText || '';
         if (t.includes('Amazing'))
           return { pass: false, score: 0, reason: 'Old name still present' };
-        if (!t.includes('Irys Inc.'))
+        if (!t.includes('Northwind Ltd.'))
           return { pass: false, score: 0, reason: 'New name missing' };
         if (!t.includes('CONFIDENTIALITY NOTICE'))
           return { pass: false, score: 0, reason: 'Notice heading missing' };
@@ -615,8 +608,7 @@
       value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
-# H. FORMATTING (Tryal)
-# Customers: Tryal (simplify, improve writing, style changes)
+# H. FORMATTING
 # =============================================================================
 
 - description: 'Report: replace terminology in specific section'
@@ -735,7 +727,7 @@
   vars:
     fixture: nda.docx
     keepFile: true
-    task: 'Prepare this NDA for execution: (1) Replace "Amazing Corp" with "Irys Inc." everywhere, (2) Replace "[Party A Signature]" with "Jane Smith, CEO", (3) Replace "[Date]" with "March 20, 2025", (4) Add a heading "EXHIBIT A" at the end followed by "List of authorized recipients to be provided separately."'
+    task: 'Prepare this NDA for execution: (1) Replace "Amazing Corp" with "Northwind Ltd." everywhere, (2) Replace "[Party A Signature]" with "Jane Smith, CEO", (3) Replace "[Date]" with "March 20, 2025", (4) Add a heading "EXHIBIT A" at the end followed by "List of authorized recipients to be provided separately."'
   assert:
     - type: javascript
       value: |
@@ -743,7 +735,7 @@
         const t = d.documentText || '';
         if (t.includes('Amazing'))
           return { pass: false, score: 0, reason: 'Entity name not replaced' };
-        if (!t.includes('Irys Inc.'))
+        if (!t.includes('Northwind Ltd.'))
           return { pass: false, score: 0, reason: 'New entity name missing' };
         if (t.includes('[Party A Signature]'))
           return { pass: false, score: 0, reason: 'Signature placeholder not filled' };

@@ -34,6 +34,21 @@ const makeContent = (width: number, height: number): HTMLElement => {
   return el;
 };
 
+const makeRect = (rect: {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  width: number;
+  height: number;
+}): DOMRect =>
+  ({
+    ...rect,
+    x: rect.left,
+    y: rect.top,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
 const setViewport = (width: number, height: number) => {
   Object.defineProperty(window, 'innerWidth', { value: width, configurable: true, writable: true });
   Object.defineProperty(window, 'innerHeight', { value: height, configurable: true, writable: true });
@@ -76,6 +91,27 @@ describe('getAvailableSpace', () => {
     expect(withOffset.availableBelow).toBe(withoutOffset.availableBelow - 20);
     expect(withOffset.availableLeft).toBe(withoutOffset.availableLeft - 20);
     expect(withOffset.availableRight).toBe(withoutOffset.availableRight - 20);
+  });
+
+  it('uses the supplied boundary for space below and to the right', () => {
+    const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
+    const boundary = makeTrigger({ top: 0, bottom: 600, left: 0, right: 700, width: 700, height: 600 });
+
+    const space = getAvailableSpace(trigger, { boundary });
+
+    expect(space.availableBelow).toBe(292);
+    expect(space.availableRight).toBe(192);
+  });
+
+  it('accepts a DOMRect trigger', () => {
+    const trigger = makeRect({ top: 350, bottom: 450, left: 400, right: 600, width: 200, height: 100 });
+
+    expect(getAvailableSpace(trigger)).toEqual({
+      availableAbove: 342,
+      availableBelow: 342,
+      availableLeft: 392,
+      availableRight: 392,
+    });
   });
 });
 
@@ -233,6 +269,16 @@ describe('getAnchoredPosition', () => {
       // Without clamping: left = 900 + (90 - 200)/2 = 845. Max: 1000 - 200 - 8 = 792
       expect(left).toBe(1000 - 200 - GUTTER);
     });
+
+    it('clamps left to keep content inside the supplied boundary', () => {
+      const trigger = makeTrigger({ top: 100, bottom: 150, left: 580, right: 680, width: 100, height: 50 });
+      const boundary = makeTrigger({ top: 0, bottom: 800, left: 0, right: 700, width: 700, height: 800 });
+      const content = makeContent(200, 40);
+
+      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom', boundary });
+
+      expect(left).toBe(700 - 200 - GUTTER);
+    });
   });
 
   describe('flip behavior', () => {
@@ -358,5 +404,15 @@ describe('getAvailableSpaceForPlacement', () => {
     const withOffset = getAvailableSpaceForPlacement(trigger, 'top', { offset: 20 });
     // offset reduces availableAbove, so maxHeight decreases
     expect(withOffset.maxHeight).toBe(withoutOffset.maxHeight - 20);
+  });
+
+  it('uses the supplied boundary for maximum dimensions', () => {
+    const trigger = makeTrigger({ top: 100, bottom: 150, left: 200, right: 500, width: 300, height: 50 });
+    const boundary = makeTrigger({ top: 0, bottom: 600, left: 0, right: 700, width: 700, height: 600 });
+
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'bottom', { boundary });
+
+    expect(maxWidth).toBe(700 - GUTTER * 2);
+    expect(maxHeight).toBe(600 - 150 - GUTTER);
   });
 });

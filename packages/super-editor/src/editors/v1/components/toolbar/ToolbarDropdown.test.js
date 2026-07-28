@@ -8,6 +8,7 @@ let wrapper;
 const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
 const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+const nativeGetComputedStyle = window.getComputedStyle.bind(window);
 
 const restoreDescriptor = (target, property, descriptor) => {
   if (descriptor) {
@@ -18,6 +19,7 @@ const restoreDescriptor = (target, property, descriptor) => {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   wrapper?.unmount();
   wrapper = null;
   document.body.innerHTML = '';
@@ -126,6 +128,12 @@ describe('ToolbarDropdown keyboard focus', () => {
       get() {
         return this.classList?.contains('toolbar-dropdown-menu') ? 500 : 0;
       },
+    });
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+      if (element.classList?.contains('toolbar-dropdown-menu')) {
+        return { overflowY: 'auto' };
+      }
+      return nativeGetComputedStyle(element);
     });
 
     const Harness = defineComponent({

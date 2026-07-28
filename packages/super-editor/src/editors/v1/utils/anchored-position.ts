@@ -182,11 +182,18 @@ export const getAvailableSpace = (
 ) => {
   const { offset = 0, boundary = null } = options;
   const rect = trigger instanceof HTMLElement ? trigger.getBoundingClientRect() : trigger;
+
+  if (!isRectWithinBoundary(rect, boundary)) {
+    console.warn(
+      'Trigger element is outside the specified boundary. Available positioning space calculations will be inaccurate.',
+    );
+  }
+
   const belowTop = rect.bottom + offset;
   const aboveBottom = rect.top - offset;
   const availableBelow = Math.max(0, getBoundaryBottom(boundary) - belowTop - GUTTER);
-  const availableAbove = Math.max(0, aboveBottom - GUTTER);
-  const availableLeft = Math.max(0, rect.left - offset - GUTTER);
+  const availableAbove = Math.max(0, aboveBottom - getBoundaryTop(boundary) - GUTTER);
+  const availableLeft = Math.max(0, rect.left - getBoundaryLeft(boundary) - offset - GUTTER);
   const availableRight = Math.max(0, getBoundaryRight(boundary) - rect.right - offset - GUTTER);
   return { availableBelow, availableAbove, availableLeft, availableRight };
 };
@@ -274,6 +281,14 @@ const isElemScrollable = (elem: HTMLElement) => {
   return isScrollable && elem.scrollHeight >= elem.clientHeight;
 };
 
+const getBoundaryTop = (boundary: HTMLElement | null) => {
+  if (!boundary) {
+    return 0;
+  }
+  const boundaryRect = boundary.getBoundingClientRect();
+  return boundaryRect.top;
+};
+
 const getBoundaryRight = (boundary: HTMLElement | null) => {
   if (!boundary) {
     return window.innerWidth || document.documentElement.clientWidth || 0;
@@ -288,4 +303,26 @@ const getBoundaryBottom = (boundary: HTMLElement | null) => {
   }
   const boundaryRect = boundary.getBoundingClientRect();
   return boundaryRect.bottom;
+};
+
+const getBoundaryLeft = (boundary: HTMLElement | null) => {
+  if (!boundary) {
+    return 0;
+  }
+  const boundaryRect = boundary.getBoundingClientRect();
+  return boundaryRect.left;
+};
+
+const isRectWithinBoundary = (rect: DOMRect, boundary: HTMLElement | null) => {
+  if (!boundary) {
+    return true;
+  }
+  const boundaryRect = boundary.getBoundingClientRect();
+
+  return (
+    rect.top >= boundaryRect.top &&
+    rect.left >= boundaryRect.left &&
+    rect.bottom <= boundaryRect.bottom &&
+    rect.right <= boundaryRect.right
+  );
 };

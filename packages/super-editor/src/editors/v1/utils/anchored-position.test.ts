@@ -103,6 +103,19 @@ describe('getAvailableSpace', () => {
     expect(space.availableRight).toBe(192);
   });
 
+  it('uses the supplied boundary for space above and to the left', () => {
+    const trigger = makeTrigger({ top: 250, bottom: 350, left: 350, right: 450, width: 100, height: 100 });
+    // The boundary clips 100px from above and 200px from the left of the viewport.
+    const boundary = makeTrigger({ top: 100, bottom: 600, left: 200, right: 700, width: 500, height: 500 });
+
+    const space = getAvailableSpace(trigger, { boundary });
+
+    // triggerTop - boundaryTop - GUTTER = 250 - 100 - 8 = 142
+    expect(space.availableAbove).toBe(142);
+    // triggerLeft - boundaryLeft - GUTTER = 350 - 200 - 8 = 142
+    expect(space.availableLeft).toBe(142);
+  });
+
   it('accepts a DOMRect trigger', () => {
     const trigger = makeRect({ top: 350, bottom: 450, left: 400, right: 600, width: 200, height: 100 });
 

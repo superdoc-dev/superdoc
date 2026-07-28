@@ -97,7 +97,7 @@ const updateMenuPosition = () => {
     offset: gap,
   });
 
-  const { maxHeight } = getAvailableSpaceForPlacement(triggerRef.value, computedPlacement, gap);
+  const { maxHeight } = getAvailableSpaceForPlacement(triggerRef.value, computedPlacement, { offset: gap });
 
   menuPosition.value = {
     top: `${top}px`,

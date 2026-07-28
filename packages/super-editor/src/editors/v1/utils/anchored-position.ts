@@ -35,15 +35,22 @@ const FLIP_MAP: Record<Placement, Placement> = {
   'right-end': 'left-end',
 };
 
+type AnchoredPositionOptions = {
+  placement?: Placement;
+  offset?: number;
+  flip?: boolean;
+  boundary?: HTMLElement | null;
+};
+
 /**
  * Calculates the position in pixels of a content element relative to a trigger element based on the specified position and offset.
  * This is useful for positioning tooltips, popovers, or other floating elements in relation to a reference element.
- * @param triggerElem - The element that triggers the positioning of the content element.
+ * @param trigger - The element that triggers the positioning of the content element. A DOMRect can also be provided for more precise control.
  * @param contentElem - The content element to be positioned.
- * @param options - An object containing placement, offset, and flip options.
  * @param options.placement - The desired position of the content element relative to the trigger element 'top', 'bottom', 'left', or 'right' (defaults to 'top').
  * @param options.offset - An optional offset value to adjust the position of the content element (default is 0).
  * @param options.flip - An optional boolean to determine if the position should flip to the opposite side if there isn't enough space (default is true).
+ * @param options.boundary - An optional HTMLElement that defines the boundary within which the content element should be positioned. If not provided, the viewport is used as the boundary.
  * @returns An object containing the calculated top and left positions for the content element in pixels and the final computed placement after considering available space.
  * @example
  * ```javascript
@@ -57,16 +64,19 @@ const FLIP_MAP: Record<Placement, Placement> = {
  * ```
  */
 export const getAnchoredPosition = (
-  triggerElem: HTMLElement,
+  trigger: HTMLElement | DOMRect,
   contentElem: HTMLElement,
-  options: { placement?: Placement; offset?: number; flip?: boolean } = { placement: 'top', offset: 0, flip: true },
+  options: AnchoredPositionOptions = {},
 ): { top: number; left: number; computedPlacement: Placement } => {
-  const { placement = 'top', offset = 0, flip = true } = options;
-  const triggerRect = triggerElem.getBoundingClientRect();
+  const { placement = 'top', offset = 0, flip = true, boundary = null } = options;
+  const triggerRect = trigger instanceof HTMLElement ? trigger.getBoundingClientRect() : trigger;
   const contentWidth = contentElem.offsetWidth;
   const contentHeight = isElemScrollable(contentElem) ? contentElem.scrollHeight : contentElem.offsetHeight;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerElem, offset);
+  const maxLeftPos = getBoundaryRight(boundary) - contentWidth - GUTTER;
+  const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerRect, {
+    offset,
+    boundary,
+  });
 
   let computedPlacement = placement;
 
@@ -103,32 +113,32 @@ export const getAnchoredPosition = (
     case 'top':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left + (triggerRect.width - contentWidth) / 2;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'top-start':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'top-end':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.right - contentWidth;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'bottom':
       top = triggerRect.bottom + offset;
       left = triggerRect.left + (triggerRect.width - contentWidth) / 2;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'bottom-start':
       top = triggerRect.bottom + offset;
       left = triggerRect.left;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'bottom-end':
       top = triggerRect.bottom + offset;
       left = triggerRect.right - contentWidth;
-      left = Math.max(GUTTER, Math.min(left, viewportWidth - contentWidth - GUTTER));
+      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
       break;
     case 'left':
       top = triggerRect.top + (triggerRect.height - contentHeight) / 2;
@@ -161,87 +171,97 @@ export const getAnchoredPosition = (
 
 /**
  * Calculates the available space around a trigger element in the viewport, considering an optional offset.
- * @param triggerElem - The element for which to calculate the available space.
- * @param offset - An optional offset value to adjust the available space calculation (default is 0).
+ * @param trigger - The element for which to calculate the available space. A DOMRect can also be provided for more precise control.
+ * @param options.offset - An optional offset value to adjust the available space calculation (default is 0).
+ * @param options.boundary - An optional HTMLElement that defines the boundary within which the available space should be calculated. If not provided, the viewport is used as the boundary.
  * @returns An object containing the available space in pixels above, below, to the left, and to the right of the trigger element.
  */
-export const getAvailableSpace = (triggerElem: HTMLElement, offset: number = 0) => {
-  const rect = triggerElem.getBoundingClientRect();
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+export const getAvailableSpace = (
+  trigger: HTMLElement | DOMRect,
+  options: { offset?: number; boundary?: HTMLElement | null } = {},
+) => {
+  const { offset = 0, boundary = null } = options;
+  const rect = trigger instanceof HTMLElement ? trigger.getBoundingClientRect() : trigger;
   const belowTop = rect.bottom + offset;
   const aboveBottom = rect.top - offset;
-  const availableBelow = Math.max(0, viewportHeight - belowTop - GUTTER);
+  const availableBelow = Math.max(0, getBoundaryBottom(boundary) - belowTop - GUTTER);
   const availableAbove = Math.max(0, aboveBottom - GUTTER);
   const availableLeft = Math.max(0, rect.left - offset - GUTTER);
-  const availableRight = Math.max(0, viewportWidth - rect.right - offset - GUTTER);
+  const availableRight = Math.max(0, getBoundaryRight(boundary) - rect.right - offset - GUTTER);
   return { availableBelow, availableAbove, availableLeft, availableRight };
 };
 
 /**
  * Calculates the maximum available width and height for a content element based on the specified placement relative to a trigger element.
- * @param triggerElem - The element that triggers the positioning of the content element.
+ * @param trigger - The element that triggers the positioning of the content element. A DOMRect can also be provided for more precise control.
  * @param placement - The desired placement of the content element relative to the trigger element ('top', 'bottom', 'left', 'right', etc.).
- * @param offset - An optional offset value to adjust the available space calculation (default is 0).
+ * @param options.offset - An optional offset value to adjust the available space calculation (default is 0).
+ * @param options.boundary - An optional HTMLElement that defines the boundary within which the available space should be calculated. If not provided, the viewport is used as the boundary.
  * @returns An object containing the maximum available width and height for the content element.
  */
-export const getAvailableSpaceForPlacement = (triggerElem: HTMLElement, placement: Placement, offset: number = 0) => {
-  const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerElem, offset);
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const rect = triggerElem.getBoundingClientRect();
+export const getAvailableSpaceForPlacement = (
+  trigger: HTMLElement | DOMRect,
+  placement: Placement,
+  options: { offset?: number; boundary?: HTMLElement | null } = {},
+) => {
+  const { offset = 0, boundary = null } = options;
+  const triggerRect = trigger instanceof HTMLElement ? trigger.getBoundingClientRect() : trigger;
+  const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerRect, {
+    offset,
+    boundary,
+  });
 
   let maxHeight = 0;
   let maxWidth = 0;
 
   switch (placement) {
     case 'top':
-      maxWidth = viewportWidth - GUTTER * 2;
+      maxWidth = getBoundaryRight(boundary) - GUTTER * 2;
       maxHeight = availableAbove;
       break;
     case 'bottom':
-      maxWidth = viewportWidth - GUTTER * 2;
+      maxWidth = getBoundaryRight(boundary) - GUTTER * 2;
       maxHeight = availableBelow;
       break;
     case 'left':
       maxWidth = availableLeft;
-      maxHeight = viewportHeight - GUTTER * 2;
+      maxHeight = getBoundaryBottom(boundary) - GUTTER * 2;
       break;
     case 'right':
       maxWidth = availableRight;
-      maxHeight = viewportHeight - GUTTER * 2;
+      maxHeight = getBoundaryBottom(boundary) - GUTTER * 2;
       break;
     case 'top-start':
-      maxWidth = availableRight + rect.width;
+      maxWidth = availableRight + triggerRect.width;
       maxHeight = availableAbove;
       break;
     case 'top-end':
-      maxWidth = availableLeft + rect.width;
+      maxWidth = availableLeft + triggerRect.width;
       maxHeight = availableAbove;
       break;
     case 'bottom-start':
-      maxWidth = availableRight + rect.width;
+      maxWidth = availableRight + triggerRect.width;
       maxHeight = availableBelow;
       break;
     case 'bottom-end':
-      maxWidth = availableLeft + rect.width;
+      maxWidth = availableLeft + triggerRect.width;
       maxHeight = availableBelow;
       break;
     case 'left-start':
       maxWidth = availableLeft;
-      maxHeight = availableBelow + rect.height;
+      maxHeight = availableBelow + triggerRect.height;
       break;
     case 'left-end':
       maxWidth = availableLeft;
-      maxHeight = availableAbove + rect.height;
+      maxHeight = availableAbove + triggerRect.height;
       break;
     case 'right-start':
       maxWidth = availableRight;
-      maxHeight = availableBelow + rect.height;
+      maxHeight = availableBelow + triggerRect.height;
       break;
     case 'right-end':
       maxWidth = availableRight;
-      maxHeight = availableAbove + rect.height;
+      maxHeight = availableAbove + triggerRect.height;
       break;
   }
 
@@ -252,4 +272,20 @@ const isElemScrollable = (elem: HTMLElement) => {
   const computedStyle = window.getComputedStyle(elem);
   const isScrollable = ['auto', 'scroll'].includes(computedStyle.overflowY);
   return isScrollable && elem.scrollHeight >= elem.clientHeight;
+};
+
+const getBoundaryRight = (boundary: HTMLElement | null) => {
+  if (!boundary) {
+    return window.innerWidth || document.documentElement.clientWidth || 0;
+  }
+  const boundaryRect = boundary.getBoundingClientRect();
+  return boundaryRect.right;
+};
+
+const getBoundaryBottom = (boundary: HTMLElement | null) => {
+  if (!boundary) {
+    return window.innerHeight || document.documentElement.clientHeight || 0;
+  }
+  const boundaryRect = boundary.getBoundingClientRect();
+  return boundaryRect.bottom;
 };

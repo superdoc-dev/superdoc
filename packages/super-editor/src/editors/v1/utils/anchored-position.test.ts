@@ -69,8 +69,8 @@ describe('getAvailableSpace', () => {
 
   it('incorporates offset into available space', () => {
     const trigger = makeTrigger({ top: 200, bottom: 300, left: 100, right: 200, width: 100, height: 100 });
-    const withoutOffset = getAvailableSpace(trigger, 0);
-    const withOffset = getAvailableSpace(trigger, 20);
+    const withoutOffset = getAvailableSpace(trigger, { offset: 0 });
+    const withOffset = getAvailableSpace(trigger, { offset: 20 });
     // Adding offset shrinks available space in each direction
     expect(withOffset.availableAbove).toBe(withoutOffset.availableAbove - 20);
     expect(withOffset.availableBelow).toBe(withoutOffset.availableBelow - 20);
@@ -354,8 +354,8 @@ describe('getAvailableSpaceForPlacement', () => {
 
   it('incorporates offset into calculations', () => {
     const trigger = makeTrigger({ top: 300, bottom: 350, left: 200, right: 500, width: 300, height: 50 });
-    const withoutOffset = getAvailableSpaceForPlacement(trigger, 'top', 0);
-    const withOffset = getAvailableSpaceForPlacement(trigger, 'top', 20);
+    const withoutOffset = getAvailableSpaceForPlacement(trigger, 'top', { offset: 0 });
+    const withOffset = getAvailableSpaceForPlacement(trigger, 'top', { offset: 20 });
     // offset reduces availableAbove, so maxHeight decreases
     expect(withOffset.maxHeight).toBe(withoutOffset.maxHeight - 20);
   });

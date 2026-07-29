@@ -131,15 +131,15 @@ test('release-local helper honors explicit preview-branch overrides', () => {
 test('release-local helper rewrites both ssh and https repository urls for previews', () => {
   const candidates = getRepositoryUrlCandidates('packages/superdoc');
   assert.ok(
-    candidates.includes('git+https://github.com/superdoc-dev/superdoc.git'),
+    candidates.includes('git+https://github.com/superdoc/docx-editor.git'),
     'packages/superdoc/package.json repository url must be included',
   );
   assert.ok(
-    candidates.includes('https://github.com/superdoc-dev/superdoc.git'),
+    candidates.includes('https://github.com/superdoc/docx-editor.git'),
     'git+https package repository urls must normalize to https for git rewrites',
   );
   assert.ok(
-    candidates.includes('git@github.com:superdoc-dev/superdoc.git'),
+    candidates.includes('git@github.com:superdoc/docx-editor.git'),
     'origin ssh urls must also be rewritten for preview remotes',
   );
 });

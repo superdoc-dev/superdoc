@@ -38,9 +38,9 @@ npm install @superdoc-dev/sdk
 - API reference (backend): https://docs.superdoc.dev/api-reference/introduction
 - SDK docs: https://docs.superdoc.dev/document-engine/sdks
 - CLI: https://docs.superdoc.dev/document-engine/cli
-- GitHub: https://github.com/superdoc-dev/superdoc
+- GitHub: https://github.com/superdoc/docx-editor
 - npm: https://www.npmjs.com/package/superdoc
-- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Examples: https://github.com/superdoc/docx-editor/tree/main/examples
 - Full context: https://docs.superdoc.dev/llms-full.txt
 
 ## Layer model (use the right surface)

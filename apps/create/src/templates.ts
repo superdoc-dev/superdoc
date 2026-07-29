@@ -257,6 +257,6 @@ superdoc save && superdoc close
 - React guide: https://docs.superdoc.dev/getting-started/frameworks/react
 - Document Engine: https://docs.superdoc.dev/document-engine/overview
 - MCP server: https://docs.superdoc.dev/ai/mcp/overview
-- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Examples: https://github.com/superdoc/docx-editor/tree/main/examples
 `;
 }

@@ -1,4 +1,4 @@
-# Fires repository_dispatch to superdoc-dev/homepage when a stable SuperDoc
+# Fires repository_dispatch to superdoc/homepage when a stable SuperDoc
 # release ships, so the homepage can auto-bump its superdoc dependency.
 #
 # Trigger matches promote-stable-docs.yml: stable superdoc releases now run
@@ -30,7 +30,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: superdoc-dev
+          owner: superdoc
           repositories: homepage
 
       - name: Detect release and dispatch
@@ -68,8 +68,8 @@ jobs:
             exit 0
           fi
 
-          echo "Dispatching superdoc@$version to superdoc-dev/homepage"
-          gh api -X POST repos/superdoc-dev/homepage/dispatches \
+          echo "Dispatching superdoc@$version to superdoc/homepage"
+          gh api -X POST repos/superdoc/homepage/dispatches \
             -f event_type=superdoc-stable-release \
             -f "client_payload[version]=$version" \
             -f "client_payload[source_run_id]=$SOURCE_RUN_ID"

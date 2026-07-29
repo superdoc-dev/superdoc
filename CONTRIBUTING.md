@@ -5,6 +5,7 @@ Thank you for your interest in contributing to SuperDoc! Whether you're fixing a
 ## Table of Contents
 
 - [Ways to Contribute](#ways-to-contribute)
+- [Contributor License Agreement](#contributor-license-agreement)
 - [Architecture Overview](#architecture-overview)
 - [Contribution Areas](#contribution-areas)
 - [Your First PR](#your-first-pr)
@@ -19,7 +20,7 @@ Thank you for your interest in contributing to SuperDoc! Whether you're fixing a
 Contributing isn't just about writing code. Here are several ways you can help:
 
 **Report bugs with reproduction files**
-Open a .docx in SuperDoc and compare it with Microsoft Word. If something looks different, [open an issue](https://github.com/superdoc-dev/superdoc/issues/new?template=bug-report.yml) with the file attached. Good bug reports with reproduction files are incredibly valuable.
+Open a .docx in SuperDoc and compare it with Microsoft Word. If something looks different, [open an issue](https://github.com/superdoc/docx-editor/issues/new?template=bug-report.yml) with the file attached. Good bug reports with reproduction files are incredibly valuable.
 
 **Improve documentation**
 Our docs live in `apps/docs/` ([docs.superdoc.dev](https://docs.superdoc.dev)) and are built with Mintlify. Fix typos, add code examples, improve explanations, or write guides. Run `pnpm run dev:docs` to preview locally. Documentation PRs are always welcome and a great way to get started.
@@ -31,10 +32,18 @@ Create example projects showing SuperDoc with different frameworks (Next.js, Nux
 Write unit tests or behavior tests for existing features. Better test coverage helps everyone.
 
 **Fix bugs and implement features**
-Check our [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
+Check our [good first issues](https://github.com/superdoc/docx-editor/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for approachable tasks, or [help wanted](https://github.com/superdoc/docx-editor/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) for meatier items.
 
 **Help the community**
 Answer questions on [Discord](https://discord.gg/wjMccuygvy).
+
+## Contributor License Agreement
+
+Before we can merge your first pull request, you'll need to agree to the SuperDoc [Contributor License Agreement](CLA.md) (CLA). It applies to any contribution to a SuperDoc repository, including code, documentation, and examples. You keep ownership of your work; the CLA gives SuperDoc the rights it needs to include, maintain, and distribute your contribution under the project's open source and commercial licenses. You only sign once, and it then covers every future contribution from the same GitHub account.
+
+**How to sign.** We're rolling out an automated GitHub CLA assistant that will post instructions on your first pull request. Review the agreement, then reply to the pull request with the acceptance phrase shown by the assistant. Until it's available, email [legal@superdoc.dev](mailto:legal@superdoc.dev) and we'll arrange a way for you to sign.
+
+**Contributing for your employer.** If your employer may own work you create, make sure you have permission to contribute, or ask your employer to sign a Corporate CLA with us. Contact [legal@superdoc.dev](mailto:legal@superdoc.dev) to arrange it. See Section 4 of the [CLA](CLA.md).
 
 ## Architecture Overview
 
@@ -102,7 +111,7 @@ The converter (`super-converter/`) parses and stores only what is explicitly in 
 
 ## Contribution Areas
 
-These are areas where community contributions are especially welcome. Check [issues labeled `good first issue`](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for specific tasks.
+These are areas where community contributions are especially welcome. Check [issues labeled `good first issue`](https://github.com/superdoc/docx-editor/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for specific tasks.
 
 | Area | Difficulty | Where to Look | What to Do |
 |------|-----------|---------------|------------|
@@ -120,7 +129,7 @@ Here's a step-by-step walkthrough to make your first contribution:
 
 ### 1. Find something to work on
 
-- Browse [good first issues](https://github.com/superdoc-dev/superdoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- Browse [good first issues](https://github.com/superdoc/docx-editor/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 - Or pick from the [contribution areas](#contribution-areas) above
 - Comment on the issue to let others know you're working on it
 
@@ -199,7 +208,7 @@ Open a PR against the `main` branch. In the description:
 - Include screenshots for visual changes
 - Add a test plan if applicable
 
-CI will run automatically. A maintainer will review your PR and provide feedback.
+CI will run automatically. A maintainer will review your PR and provide feedback. On your first pull request you'll also need to sign the [Contributor License Agreement](#contributor-license-agreement) before it can be merged.
 
 ## Development Setup
 
@@ -360,7 +369,7 @@ This project and everyone participating in it are governed by our [Code of Condu
 
 ### Recognition
 
-We value every contribution. Community contributors are featured in our [README](https://github.com/superdoc-dev/superdoc#community-contributors) and recognized on Discord.
+We value every contribution. Community contributors are featured in our [README](https://github.com/superdoc/docx-editor#community-contributors) and recognized on Discord.
 
 ---
 

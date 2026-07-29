@@ -291,7 +291,7 @@
     "links": [
       {
         "type": "github",
-        "href": "https://github.com/superdoc-dev/superdoc"
+        "href": "https://github.com/superdoc/docx-editor"
       },
       {
         "type": "discord",
@@ -301,7 +301,7 @@
     ]
   },
   "banner": {
-    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement \u2192](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
+    "content": "**SuperDoc 2 is available.** You're viewing the SuperDoc 1 documentation. [Open the SuperDoc 2 docs \u2192](https://docs.superdoc.dev/)",
     "dismissible": true
   },
   "redirects": [

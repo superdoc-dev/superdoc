@@ -230,7 +230,7 @@ function BoldButton() {
 
 Reach for the controller when building custom UI. Reach for the Document API (`editor.doc.*`) for programmatic mutations from outside the UI (AI agents, server flows, scripts). The two layers compose: `editor` is reachable from inside command `execute` callbacks via `({ editor })`.
 
-Full reference: https://docs.superdoc.dev/editor/custom-ui/overview. Worked example: https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui.
+Full reference: https://docs.superdoc.dev/editor/custom-ui/overview. Worked example: https://github.com/superdoc/docx-editor/tree/main/demos/custom-ui.
 
 ### Programmatic access (Document API)
 
@@ -293,4 +293,4 @@ If your training data mentions SuperDoc, note these updates:
 - SDK: https://docs.superdoc.dev/document-engine/sdks
 - CLI: https://docs.superdoc.dev/document-engine/cli
 - LLM tools: https://docs.superdoc.dev/document-engine/ai-agents/llm-tools
-- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Examples: https://github.com/superdoc/docx-editor/tree/main/examples

@@ -97,9 +97,9 @@ test('formatComment links prerelease comments to the Git tag', () => {
       'next',
       'superdoc',
       'v1.2.3',
-      'https://github.com/superdoc-dev/superdoc.git',
+      'https://github.com/superdoc/docx-editor.git',
     ),
-    'shipped in **superdoc** [1.2.3](https://github.com/superdoc-dev/superdoc/tree/v1.2.3) (next channel)',
+    'shipped in **superdoc** [1.2.3](https://github.com/superdoc/docx-editor/tree/v1.2.3) (next channel)',
   );
 });
 
@@ -111,9 +111,9 @@ test('formatComment links stable comments to the GitHub release', () => {
       'latest',
       'superdoc',
       'v1.2.3',
-      'https://github.com/superdoc-dev/superdoc.git',
+      'https://github.com/superdoc/docx-editor.git',
     ),
-    'shipped in **superdoc** [1.2.3](https://github.com/superdoc-dev/superdoc/releases/tag/v1.2.3) (latest channel)',
+    'shipped in **superdoc** [1.2.3](https://github.com/superdoc/docx-editor/releases/tag/v1.2.3) (latest channel)',
   );
 });
 
@@ -173,7 +173,7 @@ test('success does not call issueUpdate with an empty label set when issue label
         cwd: process.cwd(),
         logger,
         nextRelease: { version: '1.2.3', type: 'patch', gitTag: 'v1.2.3' },
-        options: { repositoryUrl: 'https://github.com/superdoc-dev/superdoc.git' },
+        options: { repositoryUrl: 'https://github.com/superdoc/docx-editor.git' },
       },
     );
   } finally {
@@ -232,7 +232,7 @@ test('success retries label lookup when concurrent label creation wins the race'
         cwd: process.cwd(),
         logger,
         nextRelease: { version: '1.2.3', type: 'patch', gitTag: 'v1.2.3' },
-        options: { repositoryUrl: 'https://github.com/superdoc-dev/superdoc.git' },
+        options: { repositoryUrl: 'https://github.com/superdoc/docx-editor.git' },
       },
     );
   } finally {

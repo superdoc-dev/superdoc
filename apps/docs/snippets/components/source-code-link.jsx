@@ -1,7 +1,7 @@
 export const SourceCodeLink = ({ extension, path }) => {
   // Default to standard extension path if no custom path provided
   const githubPath = path || `packages/super-editor/src/editors/v1/extensions/${extension.toLowerCase()}`;
-  const githubUrl = `https://github.com/superdoc-dev/superdoc/tree/main/${githubPath}`;
+  const githubUrl = `https://github.com/superdoc/docx-editor/tree/main/${githubPath}`;
 
   return (
     <div>

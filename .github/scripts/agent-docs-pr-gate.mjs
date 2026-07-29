@@ -26,7 +26,7 @@ import { runL1Scan } from './agent-docs-l1.mjs';
 const REPO_ROOT = resolve(process.env.REPO_ROOT ?? process.cwd());
 const BASE_REF = process.env.BASE_REF || 'main';
 const PR = process.env.PR_NUMBER;
-const REPO = process.env.REPO ?? 'superdoc-dev/superdoc';
+const REPO = process.env.REPO ?? 'superdoc/docx-editor';
 const RESULT_PATH = process.env.GATE_RESULT_PATH || '/tmp/agent-docs-gate.json';
 const DRY_RUN = process.argv.includes('--dry-run');
 

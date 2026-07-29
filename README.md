@@ -11,9 +11,9 @@
 <div align="center">
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/v/superdoc.svg?color=1355ff" height="22px"></a>
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/dm/superdoc.svg?color=1355ff" height="22px"></a>
-  <a href="https://codecov.io/gh/superdoc-dev/superdoc" target="_blank"><img src="https://codecov.io/gh/superdoc-dev/superdoc/branch/main/graph/badge.svg" height="22px"></a>
+  <a href="https://codecov.io/gh/superdoc/docx-editor" target="_blank"><img src="https://codecov.io/gh/superdoc/docx-editor/branch/main/graph/badge.svg" height="22px"></a>
   <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg?color=1355ff" height="22px"></a>
-  <a href="https://github.com/superdoc-dev/superdoc" target="_blank"><img src="https://img.shields.io/github/stars/superdoc-dev/superdoc?style=flat&color=1355ff" height="22px"></a>
+  <a href="https://github.com/superdoc/docx-editor" target="_blank"><img src="https://img.shields.io/github/stars/superdoc/docx-editor?style=flat&color=1355ff" height="22px"></a>
   <a href="https://discord.com/invite/b9UuaZRyaB" target="_blank"><img src="https://img.shields.io/badge/discord-join-1355ff" height="22px"></a>
 </div>
 
@@ -128,11 +128,11 @@ Starter projects to get you running quickly:
 
 ## Roadmap
 
-See the [SuperDoc roadmap](https://github.com/superdoc-dev/superdoc/issues/1982) for what's coming next. DOCX import/export fidelity is always a top priority.
+See the [SuperDoc roadmap](https://github.com/superdoc/docx-editor/issues/1982) for what's coming next. DOCX import/export fidelity is always a top priority.
 
 ## Contributing
 
-Check the [issue tracker](https://github.com/superdoc-dev/superdoc/issues) for open issues, or read the [Contributing Guide](CONTRIBUTING.md) to get started. Bug reports with reproduction .docx files are especially valuable.
+Check the [issue tracker](https://github.com/superdoc/docx-editor/issues) for open issues, or read the [Contributing Guide](CONTRIBUTING.md) to get started. Bug reports with reproduction .docx files are especially valuable.
 
 ## Community
 

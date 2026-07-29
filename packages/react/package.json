@@ -70,11 +70,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "url": "git+https://github.com/superdoc/docx-editor.git",
     "directory": "packages/react"
   },
   "bugs": {
-    "url": "https://github.com/superdoc-dev/superdoc/issues"
+    "url": "https://github.com/superdoc/docx-editor/issues"
   },
-  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/react#readme"
+  "homepage": "https://github.com/superdoc/docx-editor/tree/main/packages/react#readme"
 }

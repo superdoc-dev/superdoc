@@ -12,7 +12,8 @@ We actively support and patch the latest minor version of SuperDoc.
 
 If you believe you’ve found a security issue in SuperDoc, please **do not open a public GitHub issue**.
 
-Instead, report it privately through [GitHub’s Security Advisories](https://github.com/superdoc-dev/superdoc/security/advisories/new).  
+Instead, report it privately through [GitHub’s Security Advisories](https://github.com/superdoc/docx-editor/security/advisories/new).
+
 This ensures the report is only visible to maintainers.
 
 If you prefer email, you can also contact us at: **q@superdoc.dev**

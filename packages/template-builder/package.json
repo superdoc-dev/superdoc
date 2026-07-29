@@ -31,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "url": "git+https://github.com/superdoc/docx-editor.git",
     "directory": "packages/template-builder"
   },
   "keywords": [
@@ -50,9 +50,9 @@
     "superdoc": "^1.33.1"
   },
   "bugs": {
-    "url": "https://github.com/superdoc-dev/superdoc/issues"
+    "url": "https://github.com/superdoc/docx-editor/issues"
   },
-  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/template-builder#readme",
+  "homepage": "https://github.com/superdoc/docx-editor/tree/main/packages/template-builder#readme",
   "peerDependencies": {
     "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
     "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",

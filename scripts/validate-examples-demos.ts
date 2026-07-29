@@ -148,7 +148,7 @@ function validateManifest(manifestPath: string, relPath: string): void {
     // sourceKind must agree with sourceRepo: monorepo entries are local,
     // anything else is external. Cheap drift check.
     if (typeof e.sourceRepo === 'string' && typeof e.sourceKind === 'string') {
-      const expectedKind = e.sourceRepo === 'superdoc-dev/superdoc' ? 'local' : 'external';
+      const expectedKind = e.sourceRepo === 'superdoc/docx-editor' ? 'local' : 'external';
       if (e.sourceKind !== expectedKind) {
         issues.push({
           file: relPath,

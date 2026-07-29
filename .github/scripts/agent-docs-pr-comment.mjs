@@ -14,7 +14,7 @@ import { computeFlags, pairFlaggedForReview, runL1Scan } from './agent-docs-l1.m
 
 const MARKER = '<!-- agent-docs-audit -->';
 const PR = process.env.PR_NUMBER;
-const REPO = process.env.REPO ?? 'superdoc-dev/superdoc';
+const REPO = process.env.REPO ?? 'superdoc/docx-editor';
 const REPO_ROOT = resolve(process.env.REPO_ROOT ?? process.cwd());
 const SHA = process.env.GITHUB_SHA ?? 'unknown-sha';
 const GATE_RESULT_PATH = process.env.GATE_RESULT_PATH || '/tmp/agent-docs-gate.json';

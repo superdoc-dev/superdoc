@@ -21,7 +21,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Array<{
   sourceRepo?: string;
 }>;
 const entry = manifest.find((e) => e.id === demo);
-const sourcePath = entry?.sourceRepo === 'superdoc-dev/superdoc' ? entry?.sourcePath : null;
+const sourcePath = entry?.sourceRepo === 'superdoc/docx-editor' ? entry?.sourcePath : null;
 if (!sourcePath) {
   throw new Error(`DEMO="${demo}" not found in demos/manifest.json or is not a local demo`);
 }

@@ -281,7 +281,7 @@ export function App() {
           </div>
           <div className='header-nav'>
             <a
-              href='https://github.com/superdoc-dev/superdoc/tree/main/packages/template-builder'
+              href='https://github.com/superdoc/docx-editor/tree/main/packages/template-builder'
               target='_blank'
               rel='noopener'
             >

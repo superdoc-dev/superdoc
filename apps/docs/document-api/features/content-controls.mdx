@@ -33,7 +33,7 @@ for (const { target } of items) {
 }
 ```
 
-Smallest copy-pasteable form: [`examples/document-api/content-controls/tagged-inline-text`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text).
+Smallest copy-pasteable form: [`examples/document-api/content-controls/tagged-inline-text`](https://github.com/superdoc/docx-editor/tree/main/examples/document-api/content-controls/tagged-inline-text).
 
 ### Reusable sections: tagged blocks that know their version
 
@@ -68,7 +68,7 @@ for (const control of items) {
 
 Or keep clauses **single-use and governed**: a clause is either in the contract or available to add from a library, and it appears once. Track inclusion by querying `contentControls.list` for the `sectionId` instead of comparing versions, and lock each placed clause (`contentLocked`) so its prose is fixed. A clause can also carry nested smart fields - inline controls inside the block - that fill from one place.
 
-The [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates) runtime composes the single-use approach: a clause library that inserts locked block clauses (some with nested fields), each filled by tag from a form.
+The [`demos/contract-templates`](https://github.com/superdoc/docx-editor/tree/main/demos/contract-templates) runtime composes the single-use approach: a clause library that inserts locked block clauses (some with nested fields), each filled by tag from a form.
 
 ## Why `tag`, not `nodeId`
 
@@ -156,10 +156,10 @@ For runtime synchronization with backing data, drive the control directly with `
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Tagged inline text example" icon="text-cursor-input" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text">
+  <Card title="Tagged inline text example" icon="text-cursor-input" href="https://github.com/superdoc/docx-editor/tree/main/examples/document-api/content-controls/tagged-inline-text">
     The smallest content-control workflow. `create.contentControl` + `selectByTag` + `text.setValue`.
   </Card>
-  <Card title="Contract templates demo" icon="file-text" href="https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates">
+  <Card title="Contract templates demo" icon="file-text" href="https://github.com/superdoc/docx-editor/tree/main/demos/contract-templates">
     Smart fields and versioned sections composed into one runtime app.
   </Card>
   <Card title="Template Builder" icon="layout-template" href="/solutions/template-builder/introduction">

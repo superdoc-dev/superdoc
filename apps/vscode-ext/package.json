@@ -8,11 +8,11 @@
   "homepage": "https://superdoc.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/superdoc-dev/superdoc",
+    "url": "https://github.com/superdoc/docx-editor",
     "directory": "apps/vscode-ext"
   },
   "bugs": {
-    "url": "https://github.com/superdoc-dev/superdoc/issues"
+    "url": "https://github.com/superdoc/docx-editor/issues"
   },
   "galleryBanner": {
     "color": "#0f172a",

@@ -144,6 +144,22 @@
     "slug": "solid"
   },
   {
+    "id": "getting-started-sveltekit",
+    "section": "getting-started",
+    "subsection": "frameworks",
+    "kind": "integration-example",
+    "status": "active",
+    "sourceKind": "local",
+    "title": "SvelteKit starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc/docx-editor",
+    "sourcePath": "examples/getting-started/sveltekit",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/sveltekit",
+    "ci": true,
+    "slug": "sveltekit"
+  },
+  {
     "id": "editor-built-in-comments",
     "section": "editor",
     "subsection": "built-in-ui",

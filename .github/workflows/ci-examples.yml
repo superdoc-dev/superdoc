@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        example: [react, vue, vanilla, cdn, angular, nuxt, laravel, solid]
+        example: [react, vue, vanilla, cdn, angular, nuxt, laravel, solid, sveltekit]
     steps:
       - uses: actions/checkout@v6
 

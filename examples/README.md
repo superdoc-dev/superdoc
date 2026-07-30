@@ -38,6 +38,7 @@ Framework starters. Pick one, run `pnpm install && pnpm dev`.
 | [angular](./getting-started/angular) | Angular setup |
 | [nextjs](./getting-started/nextjs) | Next.js (SSR-safe) |
 | [nuxt](./getting-started/nuxt) | Nuxt setup |
+| [sveltekit](./getting-started/sveltekit) | SvelteKit (SSR-safe) |
 | [laravel](./getting-started/laravel) | Laravel + Inertia |
 
 ## Editor

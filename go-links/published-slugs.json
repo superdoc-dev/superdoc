@@ -18,6 +18,7 @@
   "nuxt",
   "react",
   "solid",
+  "sveltekit",
   "template-builder",
   "theming",
   "toolbar",

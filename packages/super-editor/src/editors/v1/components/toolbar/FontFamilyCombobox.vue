@@ -97,11 +97,11 @@ const updatePosition = () => {
   const rect = trigger.getBoundingClientRect();
   const menuEl = popupRef.value;
   const gap = 4;
-  const { top, left, computedPlacement } = getAnchoredPosition(trigger, menuEl, {
+  const { top, left, computedPlacement } = getAnchoredPosition(rect, menuEl, {
     placement: 'bottom-start',
     offset: gap,
   });
-  const { maxHeight } = getAvailableSpaceForPlacement(trigger, computedPlacement, { offset: gap });
+  const { maxHeight } = getAvailableSpaceForPlacement(rect, computedPlacement, { offset: gap });
 
   menuPosition.value = {
     top: `${top}px`,

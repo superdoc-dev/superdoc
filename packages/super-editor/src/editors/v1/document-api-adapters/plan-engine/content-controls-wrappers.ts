@@ -470,7 +470,10 @@ function getParentWrapper(editor: Editor, input: ContentControlsGetParentInput):
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const $pos = editor.state.doc.resolve(sdt.pos);
 
-  for (let depth = $pos.depth - 1; depth >= 0; depth--) {
+  // `sdt.pos` points immediately before the target node. At that boundary,
+  // `$pos.depth` is already the depth of the containing node, so skipping it
+  // misses the direct parent for nested SDTs.
+  for (let depth = $pos.depth; depth >= 0; depth--) {
     const ancestor = $pos.node(depth);
     if (isSdtNode(ancestor)) {
       return buildContentControlInfoFromNode({

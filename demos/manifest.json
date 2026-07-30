@@ -15,7 +15,8 @@
     "thumbnail": null,
     "liveUrl": null,
     "homepage": false,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "contract-templates"
   },
   {
     "id": "custom-ui",
@@ -51,7 +52,8 @@
     "thumbnail": "demos/grading-papers/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "grading-papers"
   },
   {
     "id": "slack-redlining",
@@ -87,7 +89,8 @@
     "thumbnail": "demos/chrome-extension/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "chrome-extension"
   },
   {
     "id": "word-addin",
@@ -105,7 +108,8 @@
     "thumbnail": "demos/word-addin/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "word-addin"
   },
   {
     "id": "rag",
@@ -123,7 +127,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/rag",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "doc-rag"
   },
   {
     "id": "esign",
@@ -141,7 +146,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/esign",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "esign"
   },
   {
     "id": "template-builder",
@@ -159,7 +165,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/template-builder",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "template-builder"
   },
   {
     "id": "pdf-sign",
@@ -214,7 +221,8 @@
     "liveUrl": null,
     "homepage": false,
     "stackblitz": true,
-    "review": "Candidate for an import/export or Document Engine example."
+    "review": "Candidate for an import/export or Document Engine example.",
+    "slug": "docx-from-html"
   },
   {
     "id": "fields-source",
@@ -252,7 +260,8 @@
     "liveUrl": null,
     "homepage": false,
     "stackblitz": true,
-    "review": "Move to Advanced unless document sections become a primary docs surface."
+    "review": "Move to Advanced unless document sections become a primary docs surface.",
+    "slug": "linked-sections"
   },
   {
     "id": "html-editor",
@@ -290,7 +299,8 @@
     "liveUrl": null,
     "homepage": false,
     "stackblitz": false,
-    "review": "Compare with examples/getting-started/nextjs before keeping."
+    "review": "Compare with examples/getting-started/nextjs before keeping.",
+    "slug": "nextjs-ssr"
   },
   {
     "id": "shim-react",
@@ -441,6 +451,7 @@
     "thumbnail": null,
     "liveUrl": null,
     "homepage": false,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "collaborative-agent"
   }
 ]

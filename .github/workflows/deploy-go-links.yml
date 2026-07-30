@@ -1,0 +1,79 @@
+name: Deploy Go Links
+
+# Publishes go.superdoc.dev, the permanent URL for every demo and example
+# carrying a `slug` in the manifests.
+#
+# The redirect table is built by linkkeeper, pinned to an exact version, from
+# the two manifests in this repository. Everything it needs is here, so there is
+# no second repository to keep in sync and no cross-repository dispatch that
+# could silently fail to fire.
+#
+# This lives here rather than in Orbit's export workflow on purpose: the export
+# pushes directly to this repository's `main`, so by the time this runs the
+# manifests are already public and `github.sha` is the exported commit. Orbit's
+# export is proof-gated and fail-closed; it should not also own deployments
+# downstream of it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-go-links.yml'
+      - 'demos/manifest.json'
+      - 'examples/manifest.json'
+      - 'go-links/**'
+  schedule:
+    # 06:17 UTC. Off the hour on purpose: scheduled jobs at :00 queue behind
+    # everyone else's.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+# Read-only. Deploy credentials reach this job through secrets, which are not
+# available to pull_request_target and must never be exposed to one.
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-go-links
+  cancel-in-progress: false
+
+env:
+  # Pinned deliberately. An unpinned tool could change the published redirect
+  # table without anything in this repository changing, which is a strange
+  # property for a service whose promise is that URLs do not move.
+  LINKKEEPER_VERSION: 0.1.0
+
+jobs:
+  deploy:
+    # Fail-closed on the ref. `workflow_dispatch` lets a caller pick any branch,
+    # and this job holds the credentials that publish go.superdoc.dev, so an
+    # unmerged branch must not be able to deploy redirects.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: go-links
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # A published link that 404s reads as a deleted example, which is worse
+      # than never having published it. Manifests drift, so every destination is
+      # resolved for real before anything goes live.
+      - name: Check every destination resolves
+        run: npx --yes "linkkeeper@${LINKKEEPER_VERSION}" check --commit "${GITHUB_SHA}"
+
+      - name: Build the redirect table
+        run: npx --yes "linkkeeper@${LINKKEEPER_VERSION}" build --commit "${GITHUB_SHA}"
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: go-links
+          command: pages deploy ./dist --project-name=linkkeeper --branch=main

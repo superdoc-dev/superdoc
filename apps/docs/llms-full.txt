@@ -41,8 +41,8 @@ SuperDoc has four integration surfaces:
 Embed a DOCX editor in any web application. React, Vue, Angular, Svelte, or vanilla JS.
 
 ```bash
-npm install superdoc           # vanilla JS
-npm install @superdoc-dev/react  # React
+npm install superdoc@1             # vanilla JS
+npm install superdoc@1 @superdoc-dev/react@1  # React
 ```
 
 ```javascript

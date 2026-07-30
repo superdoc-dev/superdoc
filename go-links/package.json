@@ -1,0 +1,7 @@
+{
+  "name": "superdoc-go-links",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deploy boundary for go.superdoc.dev. Stops npm from walking up into the pnpm workspace root, whose catalog: protocol it cannot parse.",
+  "type": "module"
+}

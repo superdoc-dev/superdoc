@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "mintlify dev --port 3001",
-    "validate": "mintlify validate",
+    "validate": "node --test scripts/validate-v1-package-pins.test.mjs && mintlify validate",
     "gen:api": "node scripts/sync-api-docs.js",
     "gen:docs": "node scripts/sync-sdk-docs.js",
     "gen:all": "pnpm run gen:api && pnpm run gen:docs",

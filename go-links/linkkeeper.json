@@ -1,0 +1,11 @@
+{
+  "catalog": {
+    "repo": "superdoc/docx-editor",
+    "files": ["examples/manifest.json", "demos/manifest.json"],
+    "repos": {
+      "superdoc-dev/superdoc": { "repo": "superdoc/docx-editor", "ref": "main" },
+      "superdoc/docx-editor": { "repo": "superdoc/docx-editor", "ref": "main" },
+      "superdoc-dev/demos": { "repo": "superdoc-dev/demos", "ref": "main" }
+    }
+  }
+}

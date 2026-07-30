@@ -12,7 +12,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/react",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/react",
-    "ci": true
+    "ci": true,
+    "slug": "react"
   },
   {
     "id": "getting-started-vue",
@@ -27,7 +28,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/vue",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/vue",
-    "ci": true
+    "ci": true,
+    "slug": "vue"
   },
   {
     "id": "getting-started-vanilla",
@@ -42,7 +44,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/vanilla",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/vanilla-js",
-    "ci": true
+    "ci": true,
+    "slug": "vanilla"
   },
   {
     "id": "getting-started-cdn",
@@ -57,7 +60,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/cdn",
     "docs": "https://docs.superdoc.dev/getting-started/quickstart",
-    "ci": true
+    "ci": true,
+    "slug": "cdn"
   },
   {
     "id": "getting-started-angular",
@@ -72,7 +76,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/angular",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/angular",
-    "ci": true
+    "ci": true,
+    "slug": "angular"
   },
   {
     "id": "getting-started-nextjs",
@@ -87,7 +92,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/nextjs",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/nextjs",
-    "ci": false
+    "ci": false,
+    "slug": "nextjs"
   },
   {
     "id": "getting-started-nuxt",
@@ -102,7 +108,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/nuxt",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/nuxt",
-    "ci": true
+    "ci": true,
+    "slug": "nuxt"
   },
   {
     "id": "getting-started-laravel",
@@ -117,7 +124,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/laravel",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/laravel",
-    "ci": true
+    "ci": true,
+    "slug": "laravel"
   },
   {
     "id": "getting-started-solid",
@@ -132,7 +140,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/getting-started/solid",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/solid",
-    "ci": true
+    "ci": true,
+    "slug": "solid"
   },
   {
     "id": "editor-built-in-comments",
@@ -147,7 +156,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/editor/built-in-ui/comments",
     "docs": "https://docs.superdoc.dev/editor/built-in-ui/comments",
-    "ci": true
+    "ci": true,
+    "slug": "comments"
   },
   {
     "id": "editor-built-in-track-changes",
@@ -162,7 +172,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/editor/built-in-ui/track-changes",
     "docs": "https://docs.superdoc.dev/editor/built-in-ui/track-changes",
-    "ci": true
+    "ci": true,
+    "slug": "track-changes"
   },
   {
     "id": "editor-built-in-toolbar",
@@ -177,7 +188,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/editor/built-in-ui/toolbar",
     "docs": "https://docs.superdoc.dev/editor/built-in-ui/toolbar",
-    "ci": true
+    "ci": true,
+    "slug": "toolbar"
   },
   {
     "id": "editor-built-in-responsive-zoom",
@@ -267,7 +279,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/editor/theming",
     "docs": "https://docs.superdoc.dev/editor/theming/overview",
-    "ci": false
+    "ci": false,
+    "slug": "theming"
   },
   {
     "id": "editor-spell-check-typo-js",
@@ -327,7 +340,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/editor/collaboration/providers/hocuspocus",
     "docs": "https://docs.superdoc.dev/guides/collaboration/hocuspocus",
-    "ci": true
+    "ci": true,
+    "slug": "hocuspocus"
   },
   {
     "id": "editor-collaboration-liveblocks",
@@ -447,7 +461,8 @@
     "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "examples/ai/redlining",
     "docs": "https://docs.superdoc.dev/ai/overview",
-    "ci": true
+    "ci": true,
+    "slug": "ai-redlining"
   },
   {
     "id": "ai-core-actions-agent",

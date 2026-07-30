@@ -10,6 +10,9 @@ If the work only teaches one primitive or one integration pattern, put it in `ex
 - Product-shaped UI, fake backend state, library data, or scenario copy when it helps the workflow make sense.
 - A README that explains the scenario, the features being composed, how to run it, and related examples or docs.
 - An entry in `demos/manifest.json`.
+- A `slug` in that entry when the demo should get a permanent
+  `go.superdoc.dev` link. See `../docs/go-links.md`; a published
+  slug can never be renamed.
 
 Set `homepage: true` only when the demo is gallery-ready: verified locally, clear enough for users, and backed by the metadata or assets the homepage expects. Use `homepage: false` for source demos that are useful but not ready for the gallery.
 

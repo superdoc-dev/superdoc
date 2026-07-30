@@ -11,6 +11,9 @@ If the work becomes a product workflow, a fake backend, a polished sidebar, or a
 - UI only large enough to exercise the concept.
 - A README that explains what the example teaches, how to run it, and related demos or docs.
 - An entry in `examples/manifest.json` and `examples/README.md`.
+- A `slug` in that entry when the example should get a permanent
+  `go.superdoc.dev` link. See `../docs/go-links.md`; a published
+  slug can never be renamed.
 
 Examples may overlap with demos when the example is the smallest readable form of a primitive that a demo composes into a larger workflow.
 

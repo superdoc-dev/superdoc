@@ -1,0 +1,111 @@
+name: CI Catalog
+
+# Metadata-only gate for the demo and example catalog. Fast by design: it
+# validates manifests and the published-slug baseline without building or
+# browser-testing anything, so a naming mistake fails in under a minute.
+#
+# AIDEV-NOTE: this runs on every pull request rather than filtering with
+# `on.paths`, because it is a required check. A path-filtered workflow never
+# reports on an unrelated change, and a required check that never reports
+# blocks the pull request forever. `detect` decides whether the real work is
+# needed and `validate` reports either way, matching ci-examples.
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-catalog-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      catalog: ${{ steps.set.outputs.catalog }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            catalog:
+              - '.github/workflows/ci-catalog.yml'
+              - 'demos/manifest.json'
+              - 'examples/manifest.json'
+              # The published-slug baseline is half of the permanence check.
+              # Without it here, a pull request editing only the baseline runs
+              # no validation, and a later one could drop the matching manifest
+              # slug against an already weakened baseline.
+              - 'go-links/published-slugs.json'
+              - 'scripts/validate-examples-demos.ts'
+              - 'scripts/__tests__/validate-examples-demos-slug.test.mjs'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "catalog=${{ steps.filter.outputs.catalog }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalog=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  catalog:
+    needs: detect
+    if: needs.detect.outputs.catalog == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      # No dependency install. Both commands below import only node: builtins,
+      # verified by running them with node_modules absent. Installing would add
+      # the only network step in this job for no gain, and the local lane skips
+      # it too, so the two cannot drift.
+
+      - name: Validate demo and example metadata
+        run: pnpm run check:examples-demos
+
+      - name: Test the metadata validator
+        run: pnpm run check:examples-demos:tests
+
+  validate:
+    name: CI Catalog / validate
+    if: always()
+    needs: [detect, catalog]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.catalog }}" != "true" ]]; then
+            echo "Catalog CI skipped: no relevant paths changed."
+            exit 0
+          fi
+          if [[ "${{ needs.catalog.result }}" != "success" ]]; then
+            echo "Catalog validation did not succeed (result: ${{ needs.catalog.result }})."
+            exit 1
+          fi

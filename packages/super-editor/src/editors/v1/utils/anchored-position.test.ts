@@ -292,6 +292,17 @@ describe('getAnchoredPosition', () => {
 
       expect(left).toBe(700 - 200 - GUTTER);
     });
+
+    it('clamps left to the supplied boundary minimum', () => {
+      const trigger = makeTrigger({ top: 100, bottom: 150, left: 210, right: 310, width: 100, height: 50 });
+      const boundary = makeTrigger({ top: 0, bottom: 800, left: 200, right: 700, width: 500, height: 800 });
+      const content = makeContent(200, 40);
+
+      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom', boundary });
+
+      // Without clamping: 210 + (100 - 200) / 2 = 160. Minimum: boundaryLeft + GUTTER = 208.
+      expect(left).toBe(200 + GUTTER);
+    });
   });
 
   describe('flip behavior', () => {
@@ -427,5 +438,17 @@ describe('getAvailableSpaceForPlacement', () => {
 
     expect(maxWidth).toBe(700 - GUTTER * 2);
     expect(maxHeight).toBe(600 - 150 - GUTTER);
+  });
+
+  it('uses the supplied boundary for both dimensions of a side placement', () => {
+    const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
+    const boundary = makeTrigger({ top: 100, bottom: 600, left: 200, right: 700, width: 500, height: 500 });
+
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'right', { boundary });
+
+    // availableRight = boundaryRight - triggerRight - GUTTER = 700 - 500 - 8 = 192
+    expect(maxWidth).toBe(192);
+    // boundaryHeight - 2 * GUTTER = (600 - 100) - 16 = 484
+    expect(maxHeight).toBe(484);
   });
 });

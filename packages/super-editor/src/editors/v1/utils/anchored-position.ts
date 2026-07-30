@@ -73,6 +73,7 @@ export const getAnchoredPosition = (
   const contentWidth = contentElem.offsetWidth;
   const contentHeight = isElemScrollable(contentElem) ? contentElem.scrollHeight : contentElem.offsetHeight;
   const maxLeftPos = getBoundaryRight(boundary) - contentWidth - GUTTER;
+  const minLeftPos = getBoundaryLeft(boundary) + GUTTER;
   const { availableAbove, availableBelow, availableLeft, availableRight } = getAvailableSpace(triggerRect, {
     offset,
     boundary,
@@ -113,32 +114,32 @@ export const getAnchoredPosition = (
     case 'top':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left + (triggerRect.width - contentWidth) / 2;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'top-start':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.left;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'top-end':
       top = Math.max(GUTTER, triggerRect.top - contentHeight - offset);
       left = triggerRect.right - contentWidth;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'bottom':
       top = triggerRect.bottom + offset;
       left = triggerRect.left + (triggerRect.width - contentWidth) / 2;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'bottom-start':
       top = triggerRect.bottom + offset;
       left = triggerRect.left;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'bottom-end':
       top = triggerRect.bottom + offset;
       left = triggerRect.right - contentWidth;
-      left = Math.max(GUTTER, Math.min(left, maxLeftPos));
+      left = Math.max(minLeftPos, Math.min(left, maxLeftPos));
       break;
     case 'left':
       top = triggerRect.top + (triggerRect.height - contentHeight) / 2;
@@ -223,20 +224,20 @@ export const getAvailableSpaceForPlacement = (
 
   switch (placement) {
     case 'top':
-      maxWidth = getBoundaryRight(boundary) - GUTTER * 2;
+      maxWidth = getBoundaryRight(boundary) - getBoundaryLeft(boundary) - GUTTER * 2;
       maxHeight = availableAbove;
       break;
     case 'bottom':
-      maxWidth = getBoundaryRight(boundary) - GUTTER * 2;
+      maxWidth = getBoundaryRight(boundary) - getBoundaryLeft(boundary) - GUTTER * 2;
       maxHeight = availableBelow;
       break;
     case 'left':
       maxWidth = availableLeft;
-      maxHeight = getBoundaryBottom(boundary) - GUTTER * 2;
+      maxHeight = getBoundaryBottom(boundary) - getBoundaryTop(boundary) - GUTTER * 2;
       break;
     case 'right':
       maxWidth = availableRight;
-      maxHeight = getBoundaryBottom(boundary) - GUTTER * 2;
+      maxHeight = getBoundaryBottom(boundary) - getBoundaryTop(boundary) - GUTTER * 2;
       break;
     case 'top-start':
       maxWidth = availableRight + triggerRect.width;

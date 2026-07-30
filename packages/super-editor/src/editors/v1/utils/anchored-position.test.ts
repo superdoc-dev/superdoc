@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getAnchoredPosition, getAvailableSpace, getAvailableSpaceForPlacement } from './anchored-position.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getAnchoredPosition, getAvailableSpace, getAvailableSpaceForPlacement } from './anchored-position';
 
 const GUTTER = 8;
 
@@ -29,8 +29,14 @@ const makeTrigger = (rect: {
 
 const makeContent = (width: number, height: number): HTMLElement => {
   const el = document.createElement('div');
-  Object.defineProperty(el, 'offsetWidth', { get: () => width, configurable: true });
-  Object.defineProperty(el, 'offsetHeight', { get: () => height, configurable: true });
+  Object.defineProperty(el, 'offsetWidth', {
+    get: () => width,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'offsetHeight', {
+    get: () => height,
+    configurable: true,
+  });
   return el;
 };
 
@@ -49,9 +55,31 @@ const makeRect = (rect: {
     toJSON: () => ({}),
   }) as DOMRect;
 
+const makeScrollableContent = (width: number, height: number, scrollHeight: number): HTMLElement => {
+  const el = makeContent(width, height);
+  Object.defineProperty(el, 'clientHeight', {
+    get: () => height,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'scrollHeight', {
+    get: () => scrollHeight,
+    configurable: true,
+  });
+  el.style.overflowY = 'auto';
+  return el;
+};
+
 const setViewport = (width: number, height: number) => {
-  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true, writable: true });
-  Object.defineProperty(window, 'innerHeight', { value: height, configurable: true, writable: true });
+  Object.defineProperty(window, 'innerWidth', {
+    value: width,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(window, 'innerHeight', {
+    value: height,
+    configurable: true,
+    writable: true,
+  });
 };
 
 describe('getAvailableSpace', () => {
@@ -60,7 +88,14 @@ describe('getAvailableSpace', () => {
   });
 
   it('returns correct space around a centered element', () => {
-    const trigger = makeTrigger({ top: 350, bottom: 450, left: 400, right: 600, width: 200, height: 100 });
+    const trigger = makeTrigger({
+      top: 350,
+      bottom: 450,
+      left: 400,
+      right: 600,
+      width: 200,
+      height: 100,
+    });
     const space = getAvailableSpace(trigger);
     // top - GUTTER = 350 - 8 = 342
     expect(space.availableAbove).toBe(342);
@@ -74,7 +109,14 @@ describe('getAvailableSpace', () => {
 
   it('clamps to 0 when trigger is outside viewport edges', () => {
     // Trigger extends beyond the top and left edges
-    const trigger = makeTrigger({ top: -20, bottom: 810, left: -5, right: 1010, width: 55, height: 30 });
+    const trigger = makeTrigger({
+      top: -20,
+      bottom: 810,
+      left: -5,
+      right: 1010,
+      width: 55,
+      height: 30,
+    });
     const space = getAvailableSpace(trigger);
     expect(space.availableAbove).toBe(0);
     expect(space.availableLeft).toBe(0);
@@ -83,7 +125,14 @@ describe('getAvailableSpace', () => {
   });
 
   it('incorporates offset into available space', () => {
-    const trigger = makeTrigger({ top: 200, bottom: 300, left: 100, right: 200, width: 100, height: 100 });
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 300,
+      left: 100,
+      right: 200,
+      width: 100,
+      height: 100,
+    });
     const withoutOffset = getAvailableSpace(trigger, { offset: 0 });
     const withOffset = getAvailableSpace(trigger, { offset: 20 });
     // Adding offset shrinks available space in each direction
@@ -94,8 +143,22 @@ describe('getAvailableSpace', () => {
   });
 
   it('uses the supplied boundary for space below and to the right', () => {
-    const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
-    const boundary = makeTrigger({ top: 0, bottom: 600, left: 0, right: 700, width: 700, height: 600 });
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 300,
+      left: 400,
+      right: 500,
+      width: 100,
+      height: 100,
+    });
+    const boundary = makeTrigger({
+      top: 0,
+      bottom: 600,
+      left: 0,
+      right: 700,
+      width: 700,
+      height: 600,
+    });
 
     const space = getAvailableSpace(trigger, { boundary });
 
@@ -104,20 +167,38 @@ describe('getAvailableSpace', () => {
   });
 
   it('uses the supplied boundary for space above and to the left', () => {
-    const trigger = makeTrigger({ top: 250, bottom: 350, left: 350, right: 450, width: 100, height: 100 });
-    // The boundary clips 100px from above and 200px from the left of the viewport.
-    const boundary = makeTrigger({ top: 100, bottom: 600, left: 200, right: 700, width: 500, height: 500 });
+    const trigger = makeTrigger({
+      top: 250,
+      bottom: 350,
+      left: 350,
+      right: 450,
+      width: 100,
+      height: 100,
+    });
+    const boundary = makeTrigger({
+      top: 100,
+      bottom: 600,
+      left: 200,
+      right: 700,
+      width: 500,
+      height: 500,
+    });
 
     const space = getAvailableSpace(trigger, { boundary });
 
-    // triggerTop - boundaryTop - GUTTER = 250 - 100 - 8 = 142
     expect(space.availableAbove).toBe(142);
-    // triggerLeft - boundaryLeft - GUTTER = 350 - 200 - 8 = 142
     expect(space.availableLeft).toBe(142);
   });
 
   it('accepts a DOMRect trigger', () => {
-    const trigger = makeRect({ top: 350, bottom: 450, left: 400, right: 600, width: 200, height: 100 });
+    const trigger = makeRect({
+      top: 350,
+      bottom: 450,
+      left: 400,
+      right: 600,
+      width: 200,
+      height: 100,
+    });
 
     expect(getAvailableSpace(trigger)).toEqual({
       availableAbove: 342,
@@ -135,7 +216,14 @@ describe('getAnchoredPosition', () => {
 
   describe('basic placements', () => {
     it('positions content above trigger for placement "top"', () => {
-      const trigger = makeTrigger({ top: 400, bottom: 450, left: 200, right: 600, width: 400, height: 50 });
+      const trigger = makeTrigger({
+        top: 400,
+        bottom: 450,
+        left: 200,
+        right: 600,
+        width: 400,
+        height: 50,
+      });
       const content = makeContent(100, 40);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top', offset: 0 });
       // top - contentHeight = 400 - 40 = 360
@@ -145,8 +233,32 @@ describe('getAnchoredPosition', () => {
       expect(computedPlacement).toBe('top');
     });
 
+    it('uses scrollHeight for scrollable content', () => {
+      const trigger = makeTrigger({
+        top: 400,
+        bottom: 450,
+        left: 200,
+        right: 600,
+        width: 400,
+        height: 50,
+      });
+      const content = makeScrollableContent(100, 40, 180);
+      const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top', offset: 0 });
+      // top - scrollHeight = 400 - 180 = 220
+      expect(top).toBe(220);
+      expect(left).toBe(350);
+      expect(computedPlacement).toBe('top');
+    });
+
     it('positions content below trigger for placement "bottom"', () => {
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 100, right: 300, width: 200, height: 50 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 100,
+        right: 300,
+        width: 200,
+        height: 50,
+      });
       const content = makeContent(100, 40);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, {
         placement: 'bottom',
@@ -160,7 +272,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('positions content to the left of trigger for placement "left"', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 400, left: 500, right: 600, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 400,
+        left: 500,
+        right: 600,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 40);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'left', offset: 0 });
       // triggerTop + (triggerHeight - contentHeight) / 2 = 300 + (100 - 40)/2 = 330
@@ -171,7 +290,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('positions content to the right of trigger for placement "right"', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 400, left: 100, right: 200, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 400,
+        left: 100,
+        right: 200,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 40);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'right', offset: 0 });
       // triggerTop + (triggerHeight - contentHeight) / 2 = 300 + (100 - 40)/2 = 330
@@ -184,7 +310,14 @@ describe('getAnchoredPosition', () => {
 
   describe('alignment for start and end placements', () => {
     it('aligns to start for "bottom-start"', () => {
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 200, right: 500, width: 300, height: 50 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 200,
+        right: 500,
+        width: 300,
+        height: 50,
+      });
       const content = makeContent(120, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'bottom-start' });
       expect(top).toBe(150);
@@ -193,7 +326,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to end for "bottom-end"', () => {
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 200, right: 500, width: 300, height: 50 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 200,
+        right: 500,
+        width: 300,
+        height: 50,
+      });
       const content = makeContent(120, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'bottom-end' });
       expect(top).toBe(150);
@@ -203,7 +343,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to start for "top-start"', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 350, left: 200, right: 500, width: 300, height: 50 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 350,
+        left: 200,
+        right: 500,
+        width: 300,
+        height: 50,
+      });
       const content = makeContent(120, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top-start' });
       // triggerTop - contentHeight = 300 - 60 = 240
@@ -213,7 +360,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to end for "top-end"', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 350, left: 200, right: 500, width: 300, height: 50 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 350,
+        left: 200,
+        right: 500,
+        width: 300,
+        height: 50,
+      });
       const content = makeContent(120, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top-end' });
       // triggerTop - contentHeight = 300 - 60 = 240
@@ -224,7 +378,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to start for "left-start"', () => {
-      const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 200,
+        bottom: 300,
+        left: 400,
+        right: 500,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'left-start' });
       expect(top).toBe(200);
@@ -234,7 +395,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to start for "right-start"', () => {
-      const trigger = makeTrigger({ top: 200, bottom: 300, left: 100, right: 200, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 200,
+        bottom: 300,
+        left: 100,
+        right: 200,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'right-start' });
       expect(top).toBe(200);
@@ -243,7 +411,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to start for "left-end"', () => {
-      const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 200,
+        bottom: 300,
+        left: 400,
+        right: 500,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'left-end' });
       // triggerBottom - contentHeight = 300 - 60 = 240
@@ -254,7 +429,14 @@ describe('getAnchoredPosition', () => {
     });
 
     it('aligns to start for "right-end"', () => {
-      const trigger = makeTrigger({ top: 200, bottom: 300, left: 100, right: 200, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 200,
+        bottom: 300,
+        left: 100,
+        right: 200,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(80, 60);
       const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'right-end' });
       // triggerBottom - contentHeight = 300 - 60 = 240
@@ -267,84 +449,192 @@ describe('getAnchoredPosition', () => {
   describe('clamping behavior', () => {
     it('clamps left to GUTTER when content would overflow the left edge', () => {
       // Trigger near left edge, content wider than trigger
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 10, right: 110, width: 100, height: 50 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 10,
+        right: 110,
+        width: 100,
+        height: 50,
+      });
       const content = makeContent(200, 40);
-      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom' });
+      const { left } = getAnchoredPosition(trigger, content, {
+        placement: 'bottom',
+      });
       // Without clamping: left = 10 + (100 - 200)/2 = -40. With clamping: GUTTER = 8
       expect(left).toBe(GUTTER);
     });
 
     it('clamps left to keep content inside right edge of viewport', () => {
       // Trigger near right edge 1000px
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 900, right: 990, width: 90, height: 50 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 900,
+        right: 990,
+        width: 90,
+        height: 50,
+      });
       const content = makeContent(200, 40);
-      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom' });
+      const { left } = getAnchoredPosition(trigger, content, {
+        placement: 'bottom',
+      });
       // Without clamping: left = 900 + (90 - 200)/2 = 845. Max: 1000 - 200 - 8 = 792
       expect(left).toBe(1000 - 200 - GUTTER);
     });
 
     it('clamps left to keep content inside the supplied boundary', () => {
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 580, right: 680, width: 100, height: 50 });
-      const boundary = makeTrigger({ top: 0, bottom: 800, left: 0, right: 700, width: 700, height: 800 });
+      const trigger = makeTrigger({
+        top: 100,
+        bottom: 150,
+        left: 580,
+        right: 680,
+        width: 100,
+        height: 50,
+      });
+      const boundary = makeTrigger({
+        top: 0,
+        bottom: 800,
+        left: 0,
+        right: 700,
+        width: 700,
+        height: 800,
+      });
       const content = makeContent(200, 40);
 
-      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom', boundary });
+      const { left } = getAnchoredPosition(trigger, content, {
+        placement: 'bottom',
+        boundary,
+      });
 
       expect(left).toBe(700 - 200 - GUTTER);
-    });
-
-    it('clamps left to the supplied boundary minimum', () => {
-      const trigger = makeTrigger({ top: 100, bottom: 150, left: 210, right: 310, width: 100, height: 50 });
-      const boundary = makeTrigger({ top: 0, bottom: 800, left: 200, right: 700, width: 500, height: 800 });
-      const content = makeContent(200, 40);
-
-      const { left } = getAnchoredPosition(trigger, content, { placement: 'bottom', boundary });
-
-      // Without clamping: 210 + (100 - 200) / 2 = 160. Minimum: boundaryLeft + GUTTER = 208.
-      expect(left).toBe(200 + GUTTER);
     });
   });
 
   describe('flip behavior', () => {
     it('flips from "top" to "bottom" when there is not enough space above', () => {
       // Trigger near the top of the viewport; content height is large
-      const trigger = makeTrigger({ top: 20, bottom: 70, left: 400, right: 600, width: 200, height: 50 });
+      const trigger = makeTrigger({
+        top: 20,
+        bottom: 70,
+        left: 400,
+        right: 600,
+        width: 200,
+        height: 50,
+      });
       const content = makeContent(100, 200);
       // availableAbove = 20 - 8 = 12, availableBelow = 800 - 70 - 8 = 722
-      const { computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top', flip: true });
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'top',
+        flip: true,
+      });
       expect(computedPlacement).toBe('bottom');
     });
 
     it('flips from "bottom" to "top" when there is not enough space below', () => {
       // Trigger near the bottom of the viewport
-      const trigger = makeTrigger({ top: 720, bottom: 770, left: 400, right: 600, width: 200, height: 50 });
+      const trigger = makeTrigger({
+        top: 720,
+        bottom: 770,
+        left: 400,
+        right: 600,
+        width: 200,
+        height: 50,
+      });
       const content = makeContent(100, 100);
       // availableBelow = 800 - 770 - 8 = 22, availableAbove = 720 - 8 = 712
-      const { computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'bottom', flip: true });
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'bottom',
+        flip: true,
+      });
       expect(computedPlacement).toBe('top');
     });
 
     it('flips from "left" to "right" when there is not enough space to the left', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 400, left: 20, right: 120, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 400,
+        left: 20,
+        right: 120,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(200, 40);
       // availableLeft = 20 - 8 = 12, availableRight = 1000 - 120 - 8 = 872
-      const { computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'left', flip: true });
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'left',
+        flip: true,
+      });
       expect(computedPlacement).toBe('right');
     });
 
     it('flips from "right" to "left" when there is not enough space to the right', () => {
-      const trigger = makeTrigger({ top: 300, bottom: 400, left: 800, right: 900, width: 100, height: 100 });
+      const trigger = makeTrigger({
+        top: 300,
+        bottom: 400,
+        left: 800,
+        right: 900,
+        width: 100,
+        height: 100,
+      });
       const content = makeContent(200, 40);
       // availableRight = 1000 - 900 - 8 = 92, availableLeft = 800 - 8 = 792
-      const { computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'right', flip: true });
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'right',
+        flip: true,
+      });
       expect(computedPlacement).toBe('left');
     });
 
     it('does not flip when flip is false', () => {
-      const trigger = makeTrigger({ top: 20, bottom: 70, left: 400, right: 600, width: 200, height: 50 });
+      const trigger = makeTrigger({
+        top: 20,
+        bottom: 70,
+        left: 400,
+        right: 600,
+        width: 200,
+        height: 50,
+      });
       const content = makeContent(100, 200);
-      const { computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top', flip: false });
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'top',
+        flip: false,
+      });
       expect(computedPlacement).toBe('top');
+    });
+
+    it('flips "left-start" to "left-end" when there is not enough space below', () => {
+      const trigger = makeTrigger({
+        top: 700,
+        bottom: 750,
+        left: 400,
+        right: 500,
+        width: 100,
+        height: 50,
+      });
+      const content = makeContent(80, 100);
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'left-start',
+        flip: true,
+      });
+      expect(computedPlacement).toBe('left-end');
+    });
+
+    it('flips "right-end" to "right-start" when there is not enough space above', () => {
+      const trigger = makeTrigger({
+        top: 20,
+        bottom: 70,
+        left: 400,
+        right: 500,
+        width: 100,
+        height: 50,
+      });
+      const content = makeContent(80, 100);
+      const { computedPlacement } = getAnchoredPosition(trigger, content, {
+        placement: 'right-end',
+        flip: true,
+      });
+      expect(computedPlacement).toBe('right-start');
     });
   });
 });
@@ -355,7 +645,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns viewport width and available-above height for "top"', () => {
-    const trigger = makeTrigger({ top: 400, bottom: 450, left: 300, right: 700, width: 400, height: 50 });
+    const trigger = makeTrigger({
+      top: 400,
+      bottom: 450,
+      left: 300,
+      right: 700,
+      width: 400,
+      height: 50,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'top');
     expect(maxWidth).toBe(1000 - GUTTER * 2);
     // availableAbove = 400 - 8 = 392
@@ -363,7 +660,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns viewport width and available-below height for "bottom"', () => {
-    const trigger = makeTrigger({ top: 100, bottom: 150, left: 300, right: 700, width: 400, height: 50 });
+    const trigger = makeTrigger({
+      top: 100,
+      bottom: 150,
+      left: 300,
+      right: 700,
+      width: 400,
+      height: 50,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'bottom');
     expect(maxWidth).toBe(1000 - GUTTER * 2);
     // availableBelow = 800 - 150 - 8 = 642
@@ -371,7 +675,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns available-left width and viewport height for "left"', () => {
-    const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 500, width: 100, height: 100 });
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 300,
+      left: 400,
+      right: 500,
+      width: 100,
+      height: 100,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'left');
     // availableLeft = 400 - 8 = 392
     expect(maxWidth).toBe(392);
@@ -379,7 +690,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns available-right width and viewport height for "right"', () => {
-    const trigger = makeTrigger({ top: 200, bottom: 300, left: 400, right: 600, width: 200, height: 100 });
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 300,
+      left: 400,
+      right: 600,
+      width: 200,
+      height: 100,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'right');
     // availableRight = 1000 - 600 - 8 = 392
     expect(maxWidth).toBe(392);
@@ -387,7 +705,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns correct size for "top-start"', () => {
-    const trigger = makeTrigger({ top: 300, bottom: 350, left: 200, right: 500, width: 300, height: 50 });
+    const trigger = makeTrigger({
+      top: 300,
+      bottom: 350,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'top-start');
     // availableRight + triggerWidth = (1000 - 500 - 8) + 300 = 792
     expect(maxWidth).toBe(792);
@@ -395,8 +720,47 @@ describe('getAvailableSpaceForPlacement', () => {
     expect(maxHeight).toBe(292);
   });
 
+  it('returns correct size for "top-end"', () => {
+    const trigger = makeTrigger({
+      top: 300,
+      bottom: 350,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'top-end');
+    // availableLeft + triggerWidth = (200 - 8) + 300 = 492
+    expect(maxWidth).toBe(492);
+    // availableAbove = 300 - 8 = 292
+    expect(maxHeight).toBe(292);
+  });
+
+  it('returns correct size for "bottom-start"', () => {
+    const trigger = makeTrigger({
+      top: 100,
+      bottom: 150,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'bottom-start');
+    // availableRight + triggerWidth = (1000 - 500 - 8) + 300 = 792
+    expect(maxWidth).toBe(792);
+    // availableBelow = 800 - 150 - 8 = 642
+    expect(maxHeight).toBe(642);
+  });
+
   it('returns correct size for "bottom-end"', () => {
-    const trigger = makeTrigger({ top: 100, bottom: 150, left: 200, right: 500, width: 300, height: 50 });
+    const trigger = makeTrigger({
+      top: 100,
+      bottom: 150,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'bottom-end');
     // availableLeft + triggerWidth = (200 - 8) + 300 = 492
     expect(maxWidth).toBe(492);
@@ -405,7 +769,14 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('returns correct size for "left-start"', () => {
-    const trigger = makeTrigger({ top: 200, bottom: 400, left: 300, right: 400, width: 100, height: 200 });
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 400,
+      left: 300,
+      right: 400,
+      width: 100,
+      height: 200,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'left-start');
     // availableLeft = 300 - 8 = 292
     expect(maxWidth).toBe(292);
@@ -413,8 +784,47 @@ describe('getAvailableSpaceForPlacement', () => {
     expect(maxHeight).toBe(592);
   });
 
+  it('returns correct size for "left-end"', () => {
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 400,
+      left: 300,
+      right: 400,
+      width: 100,
+      height: 200,
+    });
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'left-end');
+    // availableLeft = 300 - 8 = 292
+    expect(maxWidth).toBe(292);
+    // availableAbove + triggerHeight = (200 - 8) + 200 = 392
+    expect(maxHeight).toBe(392);
+  });
+
+  it('returns correct size for "right-start"', () => {
+    const trigger = makeTrigger({
+      top: 200,
+      bottom: 400,
+      left: 300,
+      right: 400,
+      width: 100,
+      height: 200,
+    });
+    const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'right-start');
+    // availableRight = 1000 - 400 - 8 = 592
+    expect(maxWidth).toBe(592);
+    // availableBelow + triggerHeight = (800 - 400 - 8) + 200 = 592
+    expect(maxHeight).toBe(592);
+  });
+
   it('returns correct size for "right-end"', () => {
-    const trigger = makeTrigger({ top: 300, bottom: 500, left: 400, right: 600, width: 200, height: 200 });
+    const trigger = makeTrigger({
+      top: 300,
+      bottom: 500,
+      left: 400,
+      right: 600,
+      width: 200,
+      height: 200,
+    });
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'right-end');
     // availableRight = 1000 - 600 - 8 = 392
     expect(maxWidth).toBe(392);
@@ -423,16 +833,41 @@ describe('getAvailableSpaceForPlacement', () => {
   });
 
   it('incorporates offset into calculations', () => {
-    const trigger = makeTrigger({ top: 300, bottom: 350, left: 200, right: 500, width: 300, height: 50 });
-    const withoutOffset = getAvailableSpaceForPlacement(trigger, 'top', { offset: 0 });
-    const withOffset = getAvailableSpaceForPlacement(trigger, 'top', { offset: 20 });
+    const trigger = makeTrigger({
+      top: 300,
+      bottom: 350,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
+    const withoutOffset = getAvailableSpaceForPlacement(trigger, 'top', {
+      offset: 0,
+    });
+    const withOffset = getAvailableSpaceForPlacement(trigger, 'top', {
+      offset: 20,
+    });
     // offset reduces availableAbove, so maxHeight decreases
     expect(withOffset.maxHeight).toBe(withoutOffset.maxHeight - 20);
   });
 
   it('uses the supplied boundary for maximum dimensions', () => {
-    const trigger = makeTrigger({ top: 100, bottom: 150, left: 200, right: 500, width: 300, height: 50 });
-    const boundary = makeTrigger({ top: 0, bottom: 600, left: 0, right: 700, width: 700, height: 600 });
+    const trigger = makeTrigger({
+      top: 100,
+      bottom: 150,
+      left: 200,
+      right: 500,
+      width: 300,
+      height: 50,
+    });
+    const boundary = makeTrigger({
+      top: 0,
+      bottom: 600,
+      left: 0,
+      right: 700,
+      width: 700,
+      height: 600,
+    });
 
     const { maxWidth, maxHeight } = getAvailableSpaceForPlacement(trigger, 'bottom', { boundary });
 

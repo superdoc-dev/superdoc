@@ -42,6 +42,68 @@ type AnchoredPositionOptions = {
   boundary?: HTMLElement | null;
 };
 
+const computeFirstAxisFlip = (
+  placement: Placement,
+  spaceAvailable: { above: number; left: number; right: number; bellow: number },
+  contentSize: { width: number; height: number },
+): Placement => {
+  if (
+    (placement.startsWith('top') &&
+      spaceAvailable.above < contentSize.height &&
+      spaceAvailable.bellow > spaceAvailable.above) ||
+    (placement.startsWith('bottom') &&
+      spaceAvailable.bellow < contentSize.height &&
+      spaceAvailable.above > spaceAvailable.bellow) ||
+    (placement.startsWith('left') &&
+      spaceAvailable.left < contentSize.width &&
+      spaceAvailable.right > spaceAvailable.left) ||
+    (placement.startsWith('right') &&
+      spaceAvailable.right < contentSize.width &&
+      spaceAvailable.left > spaceAvailable.right)
+  ) {
+    return FLIP_MAP[placement];
+  }
+  return placement;
+};
+
+const computeSecondAxisFlip = (
+  placement: Placement,
+  spaceAvailable: { above: number; left: number; right: number; bellow: number },
+  contentSize: { width: number; height: number },
+): Placement => {
+  if (placement === 'top' || placement === 'bottom') {
+    if (spaceAvailable.left < contentSize.width / 2 && spaceAvailable.right > spaceAvailable.left) {
+      return `${placement}-end`;
+    }
+    if (spaceAvailable.right < contentSize.width / 2 && spaceAvailable.left > spaceAvailable.right) {
+      return `${placement}-start`;
+    }
+  }
+  if (placement === 'left' || placement === 'right') {
+    if (spaceAvailable.above < contentSize.height / 2 && spaceAvailable.bellow > spaceAvailable.above) {
+      return `${placement}-end`;
+    }
+    if (spaceAvailable.bellow < contentSize.height / 2 && spaceAvailable.above > spaceAvailable.bellow) {
+      return `${placement}-start`;
+    }
+  }
+  if (
+    (placement === 'left-start' || placement === 'right-start') &&
+    spaceAvailable.bellow < contentSize.height &&
+    spaceAvailable.above > spaceAvailable.bellow
+  ) {
+    return placement.replace('start', 'end') as Placement;
+  }
+  if (
+    (placement === 'left-end' || placement === 'right-end') &&
+    spaceAvailable.above < contentSize.height &&
+    spaceAvailable.bellow > spaceAvailable.above
+  ) {
+    return placement.replace('end', 'start') as Placement;
+  }
+  return placement;
+};
+
 /**
  * Calculates the position in pixels of a content element relative to a trigger element based on the specified position and offset.
  * This is useful for positioning tooltips, popovers, or other floating elements in relation to a reference element.
@@ -82,29 +144,15 @@ export const getAnchoredPosition = (
   let computedPlacement = placement;
 
   if (flip) {
-    if (
-      (placement.startsWith('top') && availableAbove < contentHeight && availableBelow > availableAbove) ||
-      (placement.startsWith('bottom') && availableBelow < contentHeight && availableAbove > availableBelow) ||
-      (placement.startsWith('left') && availableLeft < contentWidth && availableRight > availableLeft) ||
-      (placement.startsWith('right') && availableRight < contentWidth && availableLeft > availableRight)
-    ) {
-      computedPlacement = FLIP_MAP[placement];
-    }
-
-    if (
-      (placement === 'left-start' || placement === 'right-start') &&
-      availableBelow < contentHeight &&
-      availableAbove > availableBelow
-    ) {
-      computedPlacement = placement.replace('start', 'end') as Placement;
-    }
-    if (
-      (placement === 'left-end' || placement === 'right-end') &&
-      availableAbove < contentHeight &&
-      availableBelow > availableAbove
-    ) {
-      computedPlacement = placement.replace('end', 'start') as Placement;
-    }
+    const availableSpace = {
+      above: availableAbove,
+      left: availableLeft,
+      right: availableRight,
+      bellow: availableBelow,
+    };
+    const contentSize = { width: contentWidth, height: contentHeight };
+    computedPlacement = computeFirstAxisFlip(placement, availableSpace, contentSize);
+    computedPlacement = computeSecondAxisFlip(computedPlacement, availableSpace, contentSize);
   }
 
   let top = 0;

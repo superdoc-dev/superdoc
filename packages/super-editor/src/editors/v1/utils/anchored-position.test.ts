@@ -586,6 +586,32 @@ describe('getAnchoredPosition', () => {
       expect(computedPlacement).toBe('left');
     });
 
+    it('aligns "top" placement to end when there is not enough space to the left', () => {
+      const trigger = makeTrigger({ top: 300, bottom: 350, left: 20, right: 300, width: 280, height: 50 });
+      const content = makeContent(200, 100);
+
+      // availableLeft = 20 - 8 = 12, which is less than contentWidth / 2 = 100.
+      // The second-axis flip changes "top" to "top-end".
+      const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'top', flip: true });
+
+      expect(computedPlacement).toBe('top-end');
+      expect(top).toBe(200);
+      expect(left).toBe(100);
+    });
+
+    it('aligns "left" placement to end when there is not enough space above', () => {
+      const trigger = makeTrigger({ top: 20, bottom: 300, left: 500, right: 600, width: 100, height: 280 });
+      const content = makeContent(100, 200);
+
+      // availableAbove = 20 - 8 = 12, which is less than contentHeight / 2 = 100.
+      // The second-axis flip changes "left" to "left-end".
+      const { top, left, computedPlacement } = getAnchoredPosition(trigger, content, { placement: 'left', flip: true });
+
+      expect(computedPlacement).toBe('left-end');
+      expect(top).toBe(100);
+      expect(left).toBe(400);
+    });
+
     it('does not flip when flip is false', () => {
       const trigger = makeTrigger({
         top: 20,

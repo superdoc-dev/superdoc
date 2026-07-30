@@ -42,16 +42,6 @@ vi.mock('../../cursor-helpers.js', async () => {
   };
 });
 
-// DOM test environments do not calculate element layout. ContextMenu delegates
-// collision-aware placement to this utility, which has its own unit tests.
-vi.mock('../../../utils/anchored-position.js', () => ({
-  getAnchoredPosition: vi.fn(() => ({
-    left: 100,
-    top: 200,
-    computedPlacement: 'bottom-start',
-  })),
-}));
-
 let surfaceElementMock;
 vi.mock('../../core/helpers/editorSurface.js', async () => {
   const actual = await vi.importActual('../../core/helpers/editorSurface.js');

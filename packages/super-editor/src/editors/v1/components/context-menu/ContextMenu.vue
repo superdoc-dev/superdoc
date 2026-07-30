@@ -11,7 +11,6 @@ import { getItems } from './menuItems.js';
 import { getEditorContext } from './utils.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from './event-flags.js';
 import { isMacOS } from '../../core/utilities/isMacOS.js';
-import { getAnchoredPosition } from '../../utils/anchored-position.js';
 
 const props = defineProps({
   editor: {
@@ -535,24 +534,6 @@ const closeMenu = (options = { restoreCursor: true }) => {
   sections.value = [];
 };
 
-const updateMenuPosition = ({ x, y }) => {
-  const parsedX = typeof x === 'string' ? parseInt(x.replace('px', ''), 10) : x;
-  const parsedY = typeof y === 'string' ? parseInt(y.replace('px', ''), 10) : y;
-
-  if (!menuRef.value) {
-    menuPosition.value = { left: `${parsedX}px`, top: `${parsedY}px` };
-    return;
-  }
-
-  const menuPosRect = new DOMRect(parsedX, parsedY, 0, 0);
-  const { left, top } = getAnchoredPosition(menuPosRect, menuRef.value, {
-    placement: 'bottom-start',
-    offset: 0,
-    boundary: getEditorSurfaceElement(props.editor),
-  });
-  menuPosition.value = { left: `${left}px`, top: `${top}px` };
-};
-
 /**
  * Lifecycle hooks on mount and onBeforeUnmount
  */
@@ -598,12 +579,10 @@ onMounted(() => {
     }
 
     sections.value = nextSections;
+    menuPosition.value = event.menuPosition;
     searchQuery.value = '';
     selectedId.value = flattenedItems.value[0]?.id || null;
     isOpen.value = true;
-
-    await nextTick();
-    updateMenuPosition({ x: event.menuPosition.left, y: event.menuPosition.top });
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 

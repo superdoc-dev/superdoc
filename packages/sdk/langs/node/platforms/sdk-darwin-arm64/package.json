@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/sdk-darwin-arm64",
-  "version": "1.21.2",
+  "version": "1.21.3",
   "os": [
     "darwin"
   ],

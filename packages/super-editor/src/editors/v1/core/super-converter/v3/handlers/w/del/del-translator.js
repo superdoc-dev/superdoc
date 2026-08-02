@@ -7,6 +7,7 @@ import {
   stampImportTrackingAttrs,
   withParentFrame,
 } from '../../../../v2/importer/importTrackingContext.js';
+import { applyTrackedMarkToRunContent } from '../r/helpers/track-change-helpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:del';
@@ -64,17 +65,7 @@ const encode = (params, encodedAttrs = {}) => {
     encodedAttrs.origin = converter.documentOrigin;
   }
 
-  subs.forEach((subElement) => {
-    subElement.marks = [];
-    if (subElement?.content?.[0]) {
-      if (subElement.content[0].marks === undefined) {
-        subElement.content[0].marks = [];
-      }
-      if (subElement.content[0].type === 'text') {
-        subElement.content[0].marks.push({ type: 'trackDelete', attrs: encodedAttrs });
-      }
-    }
-  });
+  applyTrackedMarkToRunContent(subs, 'trackDelete', encodedAttrs);
 
   return subs;
 };

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '@extensions/track-changes/constants.js';
-import { ensureTrackedWrapper, prepareRunTrackingContext } from './track-change-helpers.js';
+import {
+  ensureTrackedWrapper,
+  prepareRunTrackingContext,
+  applyTrackedMarkToRunContent,
+  TRACKABLE_RUN_CONTENT_TYPES,
+} from './track-change-helpers.js';
 
 describe('track-change-helpers', () => {
   describe('prepareRunTrackingContext', () => {
@@ -140,6 +145,59 @@ describe('track-change-helpers', () => {
       const result = ensureTrackedWrapper(runs, trackingMap, { isFinalDoc: true });
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('applyTrackedMarkToRunContent', () => {
+    const attrs = { id: '123', author: 'Test' };
+
+    it('marks every trackable content child, not just the first', () => {
+      const subs = [
+        {
+          content: [{ type: 'noBreakHyphen' }, { type: 'text', text: 'added text' }],
+        },
+      ];
+
+      applyTrackedMarkToRunContent(subs, 'trackInsert', attrs);
+
+      expect(subs[0].marks).toEqual([]);
+      expect(subs[0].content[0].marks).toEqual([{ type: 'trackInsert', attrs }]);
+      expect(subs[0].content[1].marks).toEqual([{ type: 'trackInsert', attrs }]);
+    });
+
+    it('skips content children whose type is not in the trackable whitelist', () => {
+      const subs = [
+        {
+          content: [{ type: 'tab' }, { type: 'text', text: 'added text' }],
+        },
+      ];
+
+      applyTrackedMarkToRunContent(subs, 'trackInsert', attrs);
+
+      expect(subs[0].content[0].marks).toBeUndefined();
+      expect(subs[0].content[1].marks).toEqual([{ type: 'trackInsert', attrs }]);
+    });
+
+    it('preserves existing marks on a content child and appends the tracked mark', () => {
+      const subs = [
+        {
+          content: [{ type: 'text', text: 'added text', marks: [{ type: 'bold' }] }],
+        },
+      ];
+
+      applyTrackedMarkToRunContent(subs, 'trackDelete', attrs);
+
+      expect(subs[0].content[0].marks).toEqual([{ type: 'bold' }, { type: 'trackDelete', attrs }]);
+    });
+
+    it('handles an empty or missing content array without throwing', () => {
+      expect(() => applyTrackedMarkToRunContent([{ content: [] }, {}], 'trackInsert', attrs)).not.toThrow();
+    });
+
+    it('exposes the whitelist as text and noBreakHyphen only', () => {
+      expect(TRACKABLE_RUN_CONTENT_TYPES.has('text')).toBe(true);
+      expect(TRACKABLE_RUN_CONTENT_TYPES.has('noBreakHyphen')).toBe(true);
+      expect(TRACKABLE_RUN_CONTENT_TYPES.has('tab')).toBe(false);
     });
   });
 });

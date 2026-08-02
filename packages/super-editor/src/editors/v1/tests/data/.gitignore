@@ -7,3 +7,5 @@
 !diffing/
 !diffing/word/
 !diffing/word/**
+!behavior-fixtures/
+!behavior-fixtures/**

@@ -1,51 +1,36 @@
-# Auto-releases on push to main (@next).
-# Stable releases are orchestrated centrally by release-stable.yml so that
-# every stable release shares one concurrency slot and one git push lane.
-# docs-stable is advanced by promote-stable-docs.yml when release-stable.yml
-# produces a real superdoc v* tag (no-op runs do not advance docs-stable).
-# Manual PR preview: dispatch with pr_number to publish @pr-<number>
-name: 📦 Release superdoc
+# Publishes a PR preview of superdoc as `superdoc@pr-<number>`.
+#
+# This workflow does NOT cut releases. `superdoc` on npm is published by two
+# release lines that share one package name: V2 owns `latest` and `next`, and
+# V1 is maintenance-only under `legacy`. V1 stable releases are orchestrated
+# centrally by release-stable.yml, which publishes `superdoc` to `legacy`.
+#
+# It previously auto-released on every push to main and claimed `next`, which
+# took that tag over from V2 whenever a V1 commit landed. There is no automatic
+# trigger and no semantic-release path here for that reason — the only way to
+# publish from this workflow is an explicit dispatch with a PR number, which
+# can only ever produce a `pr-<number>` tag.
+name: 📦 Publish superdoc PR preview
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'packages/superdoc/**'
-      - 'packages/layout-engine/**'
-      - 'packages/super-editor/**'
-      - 'packages/word-layout/**'
-      - 'packages/preset-geometry/**'
-      - 'shared/**'
-      - 'pnpm-workspace.yaml'
-      - '!**/*.md'
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number to publish a preview package for (leave empty for normal release)'
-        required: false
+        description: 'PR number to publish a preview package for'
+        required: true
         type: number
 
 permissions:
-  contents: write
+  contents: read
   packages: write
   pull-requests: write
 
 concurrency:
-  # Stable releases share the `release-stable` group so @semantic-release/git
-  # pushes to `stable` serialize across workflows; per-workflow groups would
-  # let releases race on `git push origin stable`. queue: max keeps GitHub
-  # from dropping older pending stable releases when a stable push touches
-  # multiple wrapper packages; default queue: single only allows one pending.
-  # queue: max requires cancel-in-progress: false (cannot be combined with true).
-  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ format('{0}-{1}', github.workflow, inputs.pr_number) }}
   cancel-in-progress: false
-  queue: max
 
 jobs:
-  release:
-    # Stable publishes must go through release-stable.yml; PR previews are still allowed.
-    if: ${{ github.event_name != 'workflow_dispatch' || github.ref_name != 'stable' || inputs.pr_number }}
+  preview:
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token
@@ -55,9 +40,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # PR preview: check out the PR branch
       - name: Get PR head ref
-        if: inputs.pr_number
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,18 +52,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ steps.pr.outputs.sha || '' }}
+          ref: ${{ steps.pr.outputs.sha }}
           token: ${{ steps.generate_token.outputs.token }}
-
-      - name: Refresh branch head
-        # Queued release runs may start against a stale checkout (queue: max
-        # plus cancel-in-progress: false). Refresh to the current branch head
-        # so @semantic-release/git pushes fast-forward; semantic-release no-ops
-        # if no new commits were added since the previous queued run released.
-        if: ${{ !inputs.pr_number }}
-        run: |
-          git fetch origin "${{ github.ref_name }}" --tags
-          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
 
       - uses: pnpm/action-setup@v4
 
@@ -106,9 +79,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      # PR preview: set version before build so it's baked into the package
+      # Set the version before build so it is baked into the package.
       - name: Set preview version
-        if: inputs.pr_number
         id: version
         run: |
           BASE_VERSION=$(node -p "require('./packages/superdoc/package.json').version")
@@ -121,8 +93,8 @@ jobs:
         run: pnpm run build
 
       # Public-type contract gate: same coverage as PR CI (ci-superdoc.yml).
-      # Runs before publishing so a release cannot ship a regression that
-      # bypassed PR CI (manual republish, hotfix branch, recovery flow).
+      # Runs before publishing so a preview cannot ship a regression that
+      # bypassed PR CI.
       - name: SuperDoc public interface check
         # Wraps the nine wrapper stages: contract-tiers-test,
         # contract-tiers, jsdoc-ratchet, build (skipped here),
@@ -132,9 +104,8 @@ jobs:
         # `pnpm run build` (which includes build:superdoc).
         run: pnpm check:public:superdoc --skip-build
 
-      # PR preview: publish with pr-<number> dist-tag
+      # `--dist-tag pr-<number>` is the only tag this workflow can publish.
       - name: Publish PR preview
-        if: inputs.pr_number
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -144,7 +115,6 @@ jobs:
             --skip-build
 
       - name: Comment on PR
-        if: inputs.pr_number
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -156,15 +126,3 @@ jobs:
           ```
           EOF
           )"
-
-      # Normal release: semantic-release (only when NOT a PR preview)
-      - name: Release
-        if: ${{ !inputs.pr_number }}
-        env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        working-directory: packages/superdoc
-        run: pnpx semantic-release

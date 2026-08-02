@@ -80,6 +80,64 @@ describe('w:del translator', () => {
       expect(getMarkAttrs(result)).toEqual(expect.objectContaining({ id: '123', sourceId: '123' }));
     });
 
+    it('marks a leading non-text atom (e.g. noBreakHyphen) and the text that follows it', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'noBreakHyphen' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
+    it('does not mark a non-whitelisted content child but still marks trailing text', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'tab' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toBeUndefined();
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
     it('remaps id via trackedChangeIdMap and preserves sourceId', () => {
       const converter = {
         trackedChangeIdMap: new Map([['123', 'shared-uuid-abc']]),

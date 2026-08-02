@@ -5,7 +5,7 @@ import test from 'node:test';
 
 const docsRoot = new URL('../', import.meta.url);
 const scannedExtensions = new Set(['.jsx', '.mdx', '.txt']);
-const installCommand = /(?:npm (?:install|i)|pnpm add|bun add|yarn add)\s+([^\n]+)/gu;
+const installCommand = /(?:npm (?:install|i|add)|pnpm add|bun add|yarn add)\s+([^\n]+)/gu;
 const staleNextTag = /(?:superdoc|@superdoc-dev\/react)@next\b/u;
 const wrongV1AssetPath = /superdoc@1\/dist-cdn\b/u;
 const browserPackageUrl =
@@ -40,6 +40,7 @@ test('the guard rejects unpinned installs from supported package managers', () =
   const unsafeExamples = [
     'npm install superdoc',
     'npm i superdoc',
+    'npm add superdoc',
     'pnpm add superdoc',
     'bun add superdoc',
     'yarn add superdoc',

@@ -28,9 +28,22 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')(RELEASE_PATHS)
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
+// Tag ownership: `@superdoc-dev/cli` on npm is published by two release lines. V2 owns
+// the default channels — `latest` for stable, `next` for previews — and V1 is
+// maintenance-only under `legacy`. V1 must never claim `latest` or `next`: both
+// lines publish the same package name, so a V1 release that claimed a V2 channel
+// would silently take it over (last write wins). That is what happened here —
+// V1 kept moving `next` while V2's releases were left untagged.
+//
+// `main` is deliberately absent. It was the only branch that could produce a
+// `next` release, so removing it is what stops V1 claiming the channel.
+//
+// Matches packages/superdoc, which established this split.
 const branches = [
-  { name: 'stable', channel: 'latest' },
-  { name: 'main', prerelease: 'next', channel: 'next' },
+  {
+    name: 'stable',
+    channel: 'legacy', // V1 maintenance line; V2 owns `latest`
+  },
 ];
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);

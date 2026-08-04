@@ -70,6 +70,35 @@ describe('crossReference export routing', () => {
     expect(exportedRuns.some((node) => hasFieldCharType(node, 'end'))).toBe(true);
   });
 
+  it('wraps a deleted crossReference field in one w:del with delInstrText/delText (regression for plans/TASK.md)', () => {
+    const trackDeleteAttrs = { id: '901', author: 'Orbital Copilot', date: '2026-07-30T12:30:01Z' };
+    const node = buildCrossReferenceNode({
+      content: [{ type: 'run', attrs: {}, content: [{ type: 'text', text: '10.6' }] }],
+    });
+    node.marks = [{ type: 'trackDelete', attrs: trackDeleteAttrs }];
+
+    const exported = exportSchemaToJson({ node });
+
+    expect(exported.name).toBe('w:del');
+    expect(exported.elements).toHaveLength(5);
+    expect(exported.elements.some((n) => hasFieldCharType(n, 'begin'))).toBe(true);
+    expect(exported.elements.some((n) => hasFieldCharType(n, 'separate'))).toBe(true);
+    expect(exported.elements.some((n) => hasFieldCharType(n, 'end'))).toBe(true);
+
+    const delInstrRun = exported.elements.find(
+      (n) => n?.name === 'w:r' && n?.elements?.some((el) => el?.name === 'w:delInstrText'),
+    );
+    expect(delInstrRun).toBeTruthy();
+    expect(
+      exported.elements.some((n) => n?.name === 'w:r' && n?.elements?.some((el) => el?.name === 'w:instrText')),
+    ).toBe(false);
+
+    const delTextRun = exported.elements.find(
+      (n) => n?.name === 'w:r' && n?.elements?.some((el) => el?.name === 'w:delText'),
+    );
+    expect(delTextRun?.elements?.find((el) => el?.name === 'w:delText')?.elements?.[0]?.text).toBe('10.6');
+  });
+
   it('exports resolvedText when collaborative hydration stripped cached content', () => {
     const exported = exportSchemaToJson({
       node: buildCrossReferenceNode({

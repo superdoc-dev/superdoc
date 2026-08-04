@@ -63,10 +63,13 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
     firstLine = twipsToPixels(indent.attributes['w:firstLine']);
   }
 
-  // ECMA-376 marks w:val and w:pos required on w:tab (CT_TabStop). A record missing
-  // either cannot place a stop, so it is dropped rather than emitted half-formed.
+  // ECMA-376 marks w:val and w:pos required on w:tab (CT_TabStop). w:pos is
+  // ST_SignedTwipsMeasure, a union of xsd:integer and ST_UniversalMeasure (§17.18.81),
+  // so it is judged by whether it converts to a finite position rather than by matching
+  // the raw string, which would reject legal values like "1.5in". A record that cannot
+  // place a stop is dropped rather than emitted half-formed: an empty w:pos otherwise
+  // converts to a plausible-looking 0.
   const tabStops = findChildren(tabs, 'w:tab')
-    .filter((tab) => attrValue(tab, 'w:val') != null && attrValue(tab, 'w:pos') != null)
     .map((tab) => {
       let val = attrValue(tab, 'w:val');
       if (val == 'left') {
@@ -74,20 +77,25 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
       } else if (val == 'right') {
         val = 'end';
       }
+      const rawPos = attrValue(tab, 'w:pos')?.trim();
       return {
         val,
-        pos: twipsToPixels(attrValue(tab, 'w:pos')),
+        pos: rawPos ? twipsToPixels(rawPos) : undefined,
         leader: attrValue(tab, 'w:leader'),
       };
-    });
+    })
+    .filter((stop) => stop.val != null && Number.isFinite(stop.pos));
 
   const keepNext = findChild(pPr, 'w:keepNext');
   const keepLines = findChild(pPr, 'w:keepLines');
 
-  // w:val is required on w:outlineLvl (CT_DecimalNumber). Without a usable number
-  // there is no level to report, so it stays null rather than becoming NaN.
+  // w:val is required on w:outlineLvl and is ST_DecimalNumber (xsd:int). parseInt reads
+  // a numeric prefix, so "2abc" and "3.9" would import as levels 2 and 3 and silently
+  // reshape headings and the TOC. The whole value must be an integer or there is no
+  // level to report.
   const outlineLevel = findChild(pPr, 'w:outlineLvl');
-  const outlineLvlValue = Number.parseInt(attrValue(outlineLevel, 'w:val') ?? '', 10);
+  const outlineLvlRaw = attrValue(outlineLevel, 'w:val')?.trim();
+  const outlineLvlValue = /^[+-]?\d+$/.test(outlineLvlRaw ?? '') ? Number(outlineLvlRaw) : NaN;
 
   const pageBreakBefore = findChild(pPr, 'w:pageBreakBefore');
   let pageBreakBeforeVal = 0;

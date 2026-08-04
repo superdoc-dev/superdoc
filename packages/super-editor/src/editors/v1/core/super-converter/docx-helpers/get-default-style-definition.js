@@ -1,6 +1,20 @@
 import { parseMarks } from '@converter/v2/importer/index.js';
 import { twipsToLines, twipsToPixels } from '@converter/helpers.js';
 import { kebabCase } from '@superdoc/common';
+import { attrValue, childElements, findChild, findChildren } from './xml-node-access.js';
+
+/**
+ * First child with the given name across every record sharing a styleId.
+ *
+ * Applies only to the identity children read below (w:name, w:basedOn,
+ * w:qFormat). Paragraph and run properties still come from the first matching
+ * record alone; this does not merge duplicate style records.
+ *
+ * @param {import('./xml-node-access.js').XmlNode[]} records Style elements sharing one w:styleId.
+ * @param {string} name Qualified child name, e.g. `w:basedOn`.
+ * @returns {import('./xml-node-access.js').XmlNode | undefined}
+ */
+const findInAnyRecord = (records, name) => records.map((record) => findChild(record, name)).find(Boolean);
 
 /**
  * Gets the default style definition.
@@ -15,32 +29,24 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
   const styles = docx['word/styles.xml'];
   if (!styles) return result;
 
-  const { elements } = styles.elements[0];
-  const elementsWithId = elements.filter((el) => {
-    const { attributes } = el;
-    return attributes && attributes['w:styleId'] === defaultStyleId;
-  });
+  const elementsWithId = childElements(childElements(styles)[0]).filter(
+    (el) => attrValue(el, 'w:styleId') === defaultStyleId,
+  );
 
   const firstMatch = elementsWithId[0];
   if (!firstMatch) return result;
 
   if (!firstMatch.elements) return result;
 
-  const qFormat = elementsWithId.find((el) => {
-    const qFormat = el.elements.find((innerEl) => innerEl.name === 'w:qFormat');
-    return qFormat;
-  });
-
-  const name = elementsWithId
-    .find((el) => el.elements.some((inner) => inner.name === 'w:name'))
-    ?.elements.find((inner) => inner.name === 'w:name')?.attributes['w:val'];
+  const qFormat = findInAnyRecord(elementsWithId, 'w:qFormat');
+  const name = attrValue(findInAnyRecord(elementsWithId, 'w:name'), 'w:val');
 
   // pPr
-  const pPr = firstMatch.elements.find((el) => el.name === 'w:pPr');
-  const spacing = pPr?.elements?.find((el) => el.name === 'w:spacing');
-  const justify = pPr?.elements?.find((el) => el.name === 'w:jc');
-  const indent = pPr?.elements?.find((el) => el.name === 'w:ind');
-  const tabs = pPr?.elements?.find((el) => el.name === 'w:tabs');
+  const pPr = findChild(firstMatch, 'w:pPr');
+  const spacing = findChild(pPr, 'w:spacing');
+  const justify = findChild(pPr, 'w:jc');
+  const indent = findChild(pPr, 'w:ind');
+  const tabs = findChild(pPr, 'w:tabs');
 
   let lineSpaceBefore, lineSpaceAfter, line;
   if (spacing?.attributes) {
@@ -57,56 +63,55 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
     firstLine = twipsToPixels(indent.attributes['w:firstLine']);
   }
 
-  let tabStops = [];
-  if (tabs) {
-    tabStops = (tabs.elements || [])
-      .filter((el) => el.name === 'w:tab')
-      .map((tab) => {
-        let val = tab.attributes['w:val'];
-        if (val == 'left') {
-          val = 'start';
-        } else if (val == 'right') {
-          val = 'end';
-        }
-        return {
-          val,
-          pos: twipsToPixels(tab.attributes['w:pos']),
-          leader: tab.attributes['w:leader'],
-        };
-      });
-  }
+  // ECMA-376 marks w:val and w:pos required on w:tab (CT_TabStop). A record missing
+  // either cannot place a stop, so it is dropped rather than emitted half-formed.
+  const tabStops = findChildren(tabs, 'w:tab')
+    .filter((tab) => attrValue(tab, 'w:val') != null && attrValue(tab, 'w:pos') != null)
+    .map((tab) => {
+      let val = attrValue(tab, 'w:val');
+      if (val == 'left') {
+        val = 'start';
+      } else if (val == 'right') {
+        val = 'end';
+      }
+      return {
+        val,
+        pos: twipsToPixels(attrValue(tab, 'w:pos')),
+        leader: attrValue(tab, 'w:leader'),
+      };
+    });
 
-  const keepNext = pPr?.elements?.find((el) => el.name === 'w:keepNext');
-  const keepLines = pPr?.elements?.find((el) => el.name === 'w:keepLines');
+  const keepNext = findChild(pPr, 'w:keepNext');
+  const keepLines = findChild(pPr, 'w:keepLines');
 
-  const outlineLevel = pPr?.elements?.find((el) => el.name === 'w:outlineLvl');
-  const outlineLvlValue = outlineLevel?.attributes['w:val'];
+  // w:val is required on w:outlineLvl (CT_DecimalNumber). Without a usable number
+  // there is no level to report, so it stays null rather than becoming NaN.
+  const outlineLevel = findChild(pPr, 'w:outlineLvl');
+  const outlineLvlValue = Number.parseInt(attrValue(outlineLevel, 'w:val') ?? '', 10);
 
-  const pageBreakBefore = pPr?.elements?.find((el) => el.name === 'w:pageBreakBefore');
+  const pageBreakBefore = findChild(pPr, 'w:pageBreakBefore');
   let pageBreakBeforeVal = 0;
   if (pageBreakBefore) {
     if (!pageBreakBefore.attributes?.['w:val']) pageBreakBeforeVal = 1;
     else pageBreakBeforeVal = Number(pageBreakBefore?.attributes?.['w:val']);
   }
-  const pageBreakAfter = pPr?.elements?.find((el) => el.name === 'w:pageBreakAfter');
+  const pageBreakAfter = findChild(pPr, 'w:pageBreakAfter');
   let pageBreakAfterVal;
   if (pageBreakAfter) {
     if (!pageBreakAfter.attributes?.['w:val']) pageBreakAfterVal = 1;
     else pageBreakAfterVal = Number(pageBreakAfter?.attributes?.['w:val']);
   }
 
-  const basedOn = elementsWithId
-    .find((el) => el.elements.some((inner) => inner.name === 'w:basedOn'))
-    ?.elements.find((inner) => inner.name === 'w:basedOn')?.attributes['w:val'];
+  const basedOn = attrValue(findInAnyRecord(elementsWithId, 'w:basedOn'), 'w:val');
 
-  const linkToCharacterStyle = firstMatch.elements.find((el) => el.name === 'w:link')?.attributes?.['w:val'] ?? null;
+  const linkToCharacterStyle = attrValue(findChild(firstMatch, 'w:link'), 'w:val') ?? null;
 
   const parsedAttrs = {
     name,
     qFormat: qFormat ? true : false,
     keepNext: keepNext ? true : false,
     keepLines: keepLines ? true : false,
-    outlineLevel: outlineLevel ? parseInt(outlineLvlValue) : null,
+    outlineLevel: Number.isInteger(outlineLvlValue) ? outlineLvlValue : null,
     pageBreakBefore: pageBreakBeforeVal ? true : false,
     pageBreakAfter: pageBreakAfterVal ? true : false,
     basedOn: basedOn ?? null,
@@ -115,7 +120,7 @@ export const getDefaultStyleDefinition = (defaultStyleId, docx) => {
   };
 
   // rPr
-  const rPr = firstMatch.elements.find((el) => el.name === 'w:rPr');
+  const rPr = findChild(firstMatch, 'w:rPr');
   const parsedMarks = parseMarks(rPr, [], docx) || [];
   const parsedStyles = {
     spacing: { lineSpaceAfter, lineSpaceBefore, line },

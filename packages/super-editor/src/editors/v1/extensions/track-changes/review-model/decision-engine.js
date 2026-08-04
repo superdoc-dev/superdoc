@@ -686,7 +686,7 @@ const buildMutationPlan = ({ state, graph, selections, decision }) => {
     // A pPr change flips a node attr and changes no text content, so its
     // whole-block segment must NOT enter resolvedRanges — otherwise
     // planCommentEffects would detach unrelated comments anchored in that block.
-    if (isFull && !change.pprChange) {
+    if (isFull && !change.pprChange && !change.paragraphMarkChange) {
       for (const segment of change.segments) {
         resolvedRanges.push({
           from: segment.from,
@@ -702,6 +702,12 @@ const buildMutationPlan = ({ state, graph, selections, decision }) => {
       // formatting planner cannot resolve it.
       const pprResult = planPprDecision({ ops, change, decision, retired });
       if (!pprResult.ok) return { ok: false, failure: pprResult.failure };
+    } else if (change.paragraphMarkChange) {
+      // A paragraph mark deleted on an EMPTY block. Typed Deletion but with no
+      // inline mark and no content to remove, so the mark-based deletion
+      // planner has nothing to walk — only the mark half has to be resolved.
+      const markResult = planParagraphMarkDecision({ ops, change, decision, retired });
+      if (!markResult.ok) return { ok: false, failure: markResult.failure };
     } else if (change.type === CanonicalChangeType.Structural) {
       const structuralResult = planStructuralDecision({ ops, change, decision, removedRanges, retired });
       if (!structuralResult.ok) return { ok: false, failure: structuralResult.failure };
@@ -903,7 +909,13 @@ const planDeletionDecision = ({ ops, change, selection, decision, removedRanges,
       });
       removedRanges.push({ from: range.from, to: range.to, cause: `accept-deletion:${change.id}` });
     }
-    if (isFull) retired.add(change.id);
+    // A whole-block deletion also deleted the paragraph MARK. Only a
+    // full accept may collapse the paragraph — a partial accept leaves live
+    // text behind, and the mark stays deleted until the rest is decided.
+    if (isFull) {
+      pushParagraphMarkOps({ ops, change, decision: 'accept', ranges });
+      retired.add(change.id);
+    }
     return;
   }
   // Reject deletion: remove the trackDelete mark; content stays as live.
@@ -917,7 +929,36 @@ const planDeletionDecision = ({ ops, change, selection, decision, removedRanges,
       side: SegmentSide.Deleted,
     });
   }
-  if (isFull) retired.add(change.id);
+  if (isFull) {
+    pushParagraphMarkOps({ ops, change, decision: 'reject', ranges });
+    retired.add(change.id);
+  }
+};
+
+/**
+ * Queue the paragraph-mark half of a whole-block tracked deletion.
+ *
+ * The mark lives on paragraph node attrs (`markTrackChange`) rather than as an
+ * inline mark, so it is not part of `deletedSegments`. We cannot resolve which
+ * paragraph carries it from positions alone here — `applyPlan` does that against
+ * the live doc, matching on the change id, and no-ops when the change was an
+ * ordinary inline deletion that never touched a paragraph mark.
+ *
+ *   accept → content removed, then the emptied paragraph collapses into the
+ *            next one (Word semantics: the successor keeps its own pPr, which
+ *            is why the surviving items renumber and nothing empty is left).
+ *   reject → clear the attr; the paragraph and its numbering stay put.
+ */
+const pushParagraphMarkOps = ({ ops, change, decision, ranges }) => {
+  const anchor = ranges[0];
+  if (!anchor) return;
+  ops.push({
+    kind: decision === 'accept' ? 'collapseParagraphMark' : 'clearParagraphMark',
+    from: anchor.from,
+    to: anchor.to,
+    changeId: change.id,
+    side: SegmentSide.Deleted,
+  });
 };
 
 /**
@@ -1012,6 +1053,31 @@ const planPprDecision = ({ ops, change, decision, retired }) => {
     changeId: change.id,
     decision,
     formerProperties: ppr.formerProperties,
+  });
+  retired.add(change.id);
+  return { ok: true };
+};
+
+/**
+ * Resolve a standalone paragraph-mark deletion — the whole-block deletion of a
+ * block that had no runs to strike. There is no content to remove, so accept
+ * only has to collapse the emptied block into its successor and reject only
+ * has to clear the record.
+ */
+const planParagraphMarkDecision = ({ ops, change, decision, retired }) => {
+  const mark = change.paragraphMarkChange;
+  if (!mark) {
+    return {
+      ok: false,
+      failure: failure('CAPABILITY_UNAVAILABLE', `change "${change.id}" is not a paragraph-mark deletion.`),
+    };
+  }
+  ops.push({
+    kind: decision === 'accept' ? 'collapseParagraphMark' : 'clearParagraphMark',
+    from: mark.from,
+    to: mark.to,
+    changeId: change.id,
+    side: SegmentSide.Deleted,
   });
   retired.add(change.id);
   return { ok: true };
@@ -1410,6 +1476,33 @@ const findTextblockAt = (doc, pos) => {
   return null;
 };
 
+/**
+ * Locate the paragraph carrying a `markTrackChange` for `changeId` at or around
+ * `pos`. Checks the textblock containing `pos` first; when an accepted
+ * deletion emptied the paragraph, `pos` can land on its boundary, so the
+ * immediate neighbours are checked too. Matching on the change id keeps this
+ * from touching an unrelated paragraph that happens to sit nearby.
+ *
+ * @returns {{ pos: number, node: import('prosemirror-model').Node } | null}
+ */
+const findParagraphMarkChangeAt = (tr, pos, changeId) => {
+  const carries = (node) => node?.attrs?.markTrackChange?.id === changeId;
+  const clamped = Math.max(0, Math.min(pos, tr.doc.content.size));
+  const block = findTextblockAt(tr.doc, clamped);
+  if (block && carries(block.node)) return block;
+
+  let found = null;
+  tr.doc.descendants((node, nodePos) => {
+    if (found) return false;
+    if (node.isTextblock && carries(node)) {
+      found = { pos: nodePos, node };
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
 const rejectParagraphSplitAt = (tr, from, anchor = 'inserted') => {
   const block = findTextblockAt(tr.doc, from);
   if (!block) return false;
@@ -1442,6 +1535,9 @@ const applyPlan = ({ state, plan }) => {
   // We therefore remove the track-format mark in the position-stable mark pass and
   // defer the join to a mapped structural phase below.
   const splitJoinOps = sortedOps.filter((op) => op.kind === 'rejectParagraphSplit').reverse();
+  // Collapsing an accepted paragraph-mark deletion is a join too, so it
+  // shares the deferred structural phase for the same reason.
+  const paragraphMarkOps = sortedOps.filter((op) => op.kind === 'collapseParagraphMark').reverse();
 
   try {
     for (const op of markOps) {
@@ -1493,6 +1589,15 @@ const applyPlan = ({ state, plan }) => {
         }
         continue;
       }
+      if (op.kind === 'clearParagraphMark') {
+        // Rejected whole-block deletion: the paragraph mark survives. Clearing
+        // the attr is position-stable, so it belongs in the mark pass.
+        const target = findParagraphMarkChangeAt(tr, tr.mapping.map(op.from, 1), op.changeId);
+        if (target) {
+          tr.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, markTrackChange: null });
+        }
+        continue;
+      }
       if (op.kind === 'resolvePprChange') {
         // Paragraph-property accept/reject. setNodeMarkup is position-stable, so
         // it is safe in the mark pass; map through the accumulated mapping in
@@ -1541,6 +1646,25 @@ const applyPlan = ({ state, plan }) => {
       if (!rejectParagraphSplitAt(tr, mappedFrom, op.anchor)) {
         throw new Error(`could not join paragraph split for tracked change "${op.changeId ?? ''}".`);
       }
+    }
+    // Accepted paragraph-mark deletions. The content is already gone;
+    // collapsing the emptied paragraph into its successor is what removes the
+    // list item itself and lets the rest of the list renumber.
+    for (const op of paragraphMarkOps) {
+      const mappedFrom = tr.mapping.map(op.from, 1);
+      const target = findParagraphMarkChangeAt(tr, mappedFrom, op.changeId);
+      // No target means the change was an ordinary inline deletion with no
+      // paragraph mark of its own — nothing structural to do.
+      if (!target) continue;
+      tr.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, markTrackChange: null });
+      const joinPos = target.pos + tr.doc.nodeAt(target.pos).nodeSize;
+      if (joinPos <= 0 || joinPos >= tr.doc.content.size || !canJoin(tr.doc, joinPos)) {
+        // Last block in its parent, or an unjoinable successor. The mark is
+        // resolved and the content is gone; leaving the empty paragraph beats
+        // failing the whole decision.
+        continue;
+      }
+      tr.join(joinPos);
     }
   } catch (error) {
     return {

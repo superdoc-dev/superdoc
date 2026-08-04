@@ -23,8 +23,10 @@ const NODES = {
     group: 'block',
     // paragraphProperties carries a tracked w:pPrChange record on the node attr
     // (numbering/alignment revisions) — mirrors the production paragraph node so
-    // the pPrChange enumerator can find one in tests.
-    attrs: { paragraphProperties: { default: null } },
+    // the pPrChange enumerator can find one in tests. markTrackChange carries
+    // the paragraph MARK's own tracked deletion (w:pPr/w:rPr/w:del) so
+    // whole-block deletion decisions can be exercised here too.
+    attrs: { paragraphProperties: { default: null }, markTrackChange: { default: null } },
     parseDOM: [{ tag: 'p' }],
     toDOM: () => ['p', 0],
   },

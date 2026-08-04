@@ -88,6 +88,8 @@ function createMockDoc(
     headingCreateOptions: Array<Record<string, unknown> | undefined>;
     /** Second (MutationOptions) arg captured from blocks.deleteRange. */
     deleteRangeOptions: Array<Record<string, unknown> | undefined>;
+    /** blocks.delete calls with target, InvokeOptions and the params-level changeMode. */
+    blockDeleteCalls: Array<{ target: Record<string, any>; options?: Record<string, unknown>; changeMode?: string }>;
     /** Second (MutationOptions) arg captured from lists.create. */
     listCreateOptions: Array<Record<string, unknown> | undefined>;
     /** lists.attach calls with both dialect channels captured. */
@@ -124,6 +126,11 @@ function createMockDoc(
     paragraphCreateOptions: [] as Array<Record<string, unknown> | undefined>,
     headingCreateOptions: [] as Array<Record<string, unknown> | undefined>,
     deleteRangeOptions: [] as Array<Record<string, unknown> | undefined>,
+    blockDeleteCalls: [] as Array<{
+      target: Record<string, any>;
+      options?: Record<string, unknown>;
+      changeMode?: string;
+    }>,
     listCreateOptions: [] as Array<Record<string, unknown> | undefined>,
     listAttachCalls: [] as Array<{ args: Record<string, any>; options?: Record<string, unknown> }>,
   };
@@ -238,6 +245,37 @@ function createMockDoc(
             numbering: b.numbering ?? null,
           })),
           revision: state.revision,
+        };
+      },
+      // Single-block delete by nodeId (delete_blocks, delete_table). Direct
+      // mode removes the block; tracked mode leaves it in place and records one
+      // structural revision, mirroring the engine — that asymmetry is exactly
+      // what delete_blocks' verification has to account for.
+      delete: async (
+        args: { target?: { nodeId?: string; nodeType?: string }; changeMode?: string },
+        options?: Record<string, unknown>,
+      ) => {
+        // changeMode rides INSIDE params on this runtime — the second argument
+        // is InvokeOptions (timeouts), not MutationOptions. The mock reads it
+        // the same way the transport does, so a regression that passes it in
+        // the wrong position shows up here as an untracked hard delete instead
+        // of passing silently.
+        calls.blockDeleteCalls.push({ target: args.target ?? {}, options, changeMode: args.changeMode });
+        const nodeId = args.target?.nodeId;
+        const idx = state.blocks.findIndex((b) => b.nodeId === nodeId);
+        if (idx < 0) throw new Error(`no block ${String(nodeId)}`);
+        const block = state.blocks[idx]!;
+        if (args.changeMode === 'tracked') {
+          state.trackedChanges.push({ id: `tc-del-${nodeId}`, type: 'delete' });
+        } else {
+          state.blocks.splice(idx, 1);
+          renumberBlocks();
+        }
+        bump();
+        return {
+          success: true as const,
+          deleted: { kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId },
+          revision: { before: 'prev', after: state.revision },
         };
       },
       // Inclusive block-range delete by nodeId, used by the structure move
@@ -1137,6 +1175,129 @@ describe('superdoc_perform_action', () => {
     expect(receipt.status).toBe('failed');
     expect(JSON.stringify(receipt.errors)).toContain('whitespace-only');
     expect(state.blocks[0]?.text).toBe('a b c d.'); // no mutation
+  });
+
+  // "delete the first list item" used to route through delete_text,
+  // which strikes the runs and leaves the numbered paragraph — so accepting the
+  // tracked change left an empty `1.` behind. delete_blocks removes the block.
+  test('delete_blocks removes a whole list item, bullet included', async () => {
+    const { doc, state, calls } = createMockDoc([
+      { ordinal: 1, nodeId: 'li1', nodeType: 'listItem', text: 'First obligation.' },
+      { ordinal: 2, nodeId: 'li2', nodeType: 'listItem', text: 'Second obligation.' },
+      { ordinal: 3, nodeId: 'li3', nodeType: 'listItem', text: 'Third obligation.' },
+    ]);
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selectors: [{ kind: 'nodeId', nodeId: 'li1' }],
+    });
+    expect(receipt.status).toBe('ok');
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['li2', 'li3']);
+    expect(calls.blockDeleteCalls).toHaveLength(1);
+    expect(calls.blockDeleteCalls[0]?.target).toEqual({ kind: 'block', nodeType: 'listItem', nodeId: 'li1' });
+  });
+
+  test('delete_blocks deletes several blocks in one call', async () => {
+    const { doc, state } = createMockDoc([
+      { ordinal: 1, nodeId: 'li1', nodeType: 'listItem', text: 'One.' },
+      { ordinal: 2, nodeId: 'li2', nodeType: 'listItem', text: 'Two.' },
+      { ordinal: 3, nodeId: 'li3', nodeType: 'listItem', text: 'Three.' },
+    ]);
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selectors: [
+        { kind: 'nodeId', nodeId: 'li1' },
+        { kind: 'nodeId', nodeId: 'li3' },
+      ],
+    });
+    expect(receipt.status).toBe('ok');
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['li2']);
+  });
+
+  test('delete_blocks in tracked mode records a revision and leaves the block pending', async () => {
+    const { doc, state, calls } = createMockDoc([
+      { ordinal: 1, nodeId: 'li1', nodeType: 'listItem', text: 'First obligation.' },
+      { ordinal: 2, nodeId: 'li2', nodeType: 'listItem', text: 'Second obligation.' },
+    ]);
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selectors: [{ kind: 'nodeId', nodeId: 'li1' }],
+      changeMode: 'tracked',
+    });
+    expect(receipt.status).toBe('ok');
+    expect(calls.blockDeleteCalls[0]?.changeMode, 'changeMode must ride inside params on this runtime').toBe('tracked');
+    // Block survives until the revision is decided — the verification must key
+    // on the tracked-change count, not the block count.
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['li1', 'li2']);
+    expect(state.trackedChanges).toHaveLength(1);
+    expect(receipt.verification?.[0]?.check.kind).toBe('tracked-change-count-delta');
+    expect(receipt.verification?.every((v) => v.passed)).toBe(true);
+  });
+
+  test('delete_blocks accepts the singular selector form', async () => {
+    const { doc, state } = createMockDoc([
+      { ordinal: 1, nodeId: 'p1', nodeType: 'paragraph', text: 'Doomed.' },
+      { ordinal: 2, nodeId: 'p2', nodeType: 'paragraph', text: 'Survivor.' },
+    ]);
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selector: { kind: 'nodeId', nodeId: 'p1' },
+    });
+    expect(receipt.status).toBe('ok');
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['p2']);
+  });
+
+  test('delete_blocks reports partial when only some selectors resolve', async () => {
+    const { doc, state } = createMockDoc([
+      { ordinal: 1, nodeId: 'li1', nodeType: 'listItem', text: 'One.' },
+      { ordinal: 2, nodeId: 'li2', nodeType: 'listItem', text: 'Two.' },
+    ]);
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selectors: [
+        { kind: 'nodeId', nodeId: 'li1' },
+        { kind: 'nodeId', nodeId: 'nope' },
+      ],
+    });
+    expect(receipt.status).toBe('partial');
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['li2']);
+    expect(JSON.stringify(receipt.errors)).toContain('did not resolve');
+  });
+
+  // A selector that does not even parse is a caller bug, not a miss: silently
+  // dropping it would delete the rest and report success, hiding half the
+  // request — the false-success shape this action exists to end.
+  test('delete_blocks rejects the whole call when any selector is malformed', async () => {
+    const { doc, state } = createMockDoc([
+      { ordinal: 1, nodeId: 'li1', nodeType: 'listItem', text: 'One.' },
+      { ordinal: 2, nodeId: 'li2', nodeType: 'listItem', text: 'Two.' },
+    ]);
+    await expect(
+      superdocPerformAction(doc, {
+        action: 'delete_blocks',
+        selectors: [{ kind: 'nodeId', nodeId: 'li1' }, { kind: 'bogus' }],
+      } as never),
+    ).rejects.toThrow(/selectors\[1\]/);
+    expect(state.blocks.map((b) => b.nodeId)).toEqual(['li1', 'li2']);
+  });
+
+  test('delete_blocks refuses a table target and points at delete_table', async () => {
+    const { doc } = createMockDoc();
+    const receipt = await superdocPerformAction(doc, {
+      action: 'delete_blocks',
+      selectors: [{ kind: 'ordinal', ordinalKind: 'tableOrdinal', value: 1 }],
+    });
+    expect(receipt.status).toBe('failed');
+    expect(receipt.executedOperations).toEqual([]);
+  });
+
+  test('delete_blocks without selectors is a teaching argument error', async () => {
+    // Same shape as delete_text's empty-finds guard: a missing required arg
+    // throws INVALID_ARGUMENT rather than burning a mutation on nothing.
+    const { doc, state } = createMockDoc();
+    await expect(superdocPerformAction(doc, { action: 'delete_blocks', selectors: [] })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    });
+    expect(state.blocks).toHaveLength(2); // no mutation
   });
 
   test('redo_changes reports nothing to redo when no undo preceded it', async () => {

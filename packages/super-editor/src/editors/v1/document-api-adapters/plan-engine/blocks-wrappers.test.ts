@@ -347,13 +347,24 @@ describe('blocksDeleteWrapper', () => {
       }
     });
 
-    it('uses tracked transaction metadata when tracked mode is requested', () => {
-      const { editor, dispatch, tr } = makeBlockDeleteEditor();
+    it('uses tracked transaction metadata for non-paragraph-shaped tracked deletes', () => {
+      // Whole-block deletion split this path in two. A table has no paragraph mark, so it
+      // still goes through tr.delete + forceTrackChanges and lets the inline
+      // compiler do the work. Paragraph-shaped blocks now author the run marks
+      // AND the paragraph mark themselves — covered against a real schema in
+      // blocks-wrappers.tracked-delete.test.ts, since that path needs a live
+      // doc rather than this stub transaction.
+      const table = createNode('table', [], {
+        attrs: { blockId: 't1', sdBlockId: 't1' },
+        isBlock: true,
+        inlineContent: false,
+      });
+      const { editor, dispatch, tr } = makeBlockDeleteEditor({ children: [table] });
 
-      const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'tracked' });
+      const result = blocksDeleteWrapper(editor, makeInput('table', 't1'), { changeMode: 'tracked' });
 
       expect(result.success).toBe(true);
-      expect(tr.delete).toHaveBeenCalledWith(0, 7);
+      expect(tr.delete).toHaveBeenCalled();
       expect(tr.setMeta).toHaveBeenCalledWith('inputType', 'programmatic');
       expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
       expect(dispatch).toHaveBeenCalledWith(tr);

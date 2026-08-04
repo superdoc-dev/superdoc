@@ -37,6 +37,7 @@ export type ActionName =
   | 'insert_heading'
   | 'replace_text'
   | 'delete_text'
+  | 'delete_blocks'
   | 'append_list'
   | 'create_table'
   | 'comment_paragraphs'
@@ -85,6 +86,7 @@ export type ActionArgs =
   | InsertHeadingArgs
   | ReplaceTextArgs
   | DeleteTextArgs
+  | DeleteBlocksArgs
   | AppendListArgs
   | AddListItemsArgs
   | ConvertListArgs
@@ -155,6 +157,13 @@ export type DeleteTextArgs = {
   /** Scope deletions to one inspected block (like replace_text). Without it, finds match document-wide. */
   selector?: AgentSelector;
   caseSensitive?: boolean;
+  changeMode?: AgentChangeMode;
+};
+
+export type DeleteBlocksArgs = {
+  action: 'delete_blocks';
+  /** One or more selectors, each resolving to exactly ONE body block. */
+  selectors: readonly AgentSelector[];
   changeMode?: AgentChangeMode;
 };
 
@@ -444,6 +453,7 @@ const ACTION_NAMES: readonly ActionName[] = [
   'insert_heading',
   'replace_text',
   'delete_text',
+  'delete_blocks',
   'append_list',
   'create_table',
   'comment_paragraphs',
@@ -496,7 +506,9 @@ export const ACTION_HINTS: Record<ActionName, string> = {
   replace_text:
     'edits[{find,replace}], optional selector to scope replacements to one inspected block, caseSensitive?, changeMode?',
   delete_text:
-    'finds[], optional selector to scope deletions to ONE inspected block (required to delete stray whitespace — an unscoped whitespace find matches document-wide), caseSensitive?, changeMode?',
+    "finds[], optional selector to scope deletions to ONE inspected block (required to delete stray whitespace — an unscoped whitespace find matches document-wide), caseSensitive?, changeMode? — deletes TEXT ONLY, leaving the block (and a list item's bullet/number) in place. To remove a whole list item, paragraph or heading use delete_blocks",
+  delete_blocks:
+    'selectors[] (each resolving to ONE inspected block: list item, paragraph or heading), changeMode? — THE way to DELETE a whole LIST ITEM, paragraph or heading, bullet/number included. Use for "remove the first item under Article II" / "delete that clause". delete_text only strikes the text and leaves an empty numbered item behind. Deletes several blocks in ONE call; use delete_table for a whole table',
   append_list:
     'items[], kind?: ordered|bullet, headingText?, headingLevel?, placement? {at:"after"|"before",selector} builds the list at that block instead of document end',
   create_table:
@@ -568,6 +580,7 @@ export const ACTION_GROUPS: ReadonlyArray<{ label: string; actions: readonly Act
       'insert_heading',
       'replace_text',
       'delete_text',
+      'delete_blocks',
       'append_list',
       'create_table',
       'rewrite_block',
@@ -630,6 +643,7 @@ export const ACTION_ARGS: Record<ActionName, readonly string[]> = {
   insert_heading: ['text', 'level', 'placement', 'changeMode'],
   replace_text: ['edits', 'selector', 'caseSensitive', 'changeMode'],
   delete_text: ['finds', 'selector', 'caseSensitive', 'changeMode'],
+  delete_blocks: ['selectors', 'selector', 'changeMode'],
   append_list: ['items', 'kind', 'headingText', 'headingLevel', 'placement', 'changeMode'],
   create_table: ['rows', 'columns', 'cellTexts', 'placement', 'changeMode'],
   comment_paragraphs: ['commentText', 'scope', 'excludeBlockQuotes'],
@@ -1835,6 +1849,154 @@ async function runDeleteText(doc: BoundDocApi, args: DeleteTextArgs): Promise<Ag
     };
   } catch (err) {
     return failedReceipt('delete_text', err, pre);
+  }
+}
+
+/** Block node types `doc.blocks.delete` removes as a whole paragraph-shaped block. */
+const DELETABLE_BLOCK_NODE_TYPES = new Set(['paragraph', 'heading', 'listItem']);
+
+/**
+ * delete_blocks — remove ENTIRE blocks (list items, paragraphs, headings) in
+ * ONE call. Wraps doc.blocks.delete, which removes the block NODE, its
+ * paragraph properties (`w:pPr`, including a list item's `w:numPr`) included.
+ *
+ * delete_text only strikes the RUNS. Routing "delete this list item"
+ * through it leaves the numbered paragraph behind, so accepting the tracked
+ * change yields an empty `1.` and the following items never renumber. Whole-
+ * block removal has to go through blocks.delete, and in tracked mode that
+ * records ONE structural revision whose acceptance removes the paragraph and
+ * whose rejection restores it intact.
+ */
+async function runDeleteBlocks(doc: BoundDocApi, args: DeleteBlocksArgs): Promise<AgentReceipt> {
+  const domains = new Set<SnapshotDomain>(['blocks', 'trackedChanges']);
+  for (const selector of args.selectors) {
+    for (const domain of snapshotDomainsForSelector(selector)) domains.add(domain);
+  }
+  const pre = await buildDocumentSnapshot(doc, { includeDomains: [...domains] });
+  try {
+    if (args.selectors.length === 0) {
+      return failedReceipt('delete_blocks', new Error('selectors must be non-empty'), pre);
+    }
+    const deleteFn = maybeMethod(doc, ['blocks', 'delete']);
+    if (!deleteFn) {
+      throw new SuperDocCliError('doc.blocks.delete is not available on the document handle.', {
+        code: 'TOOL_DISPATCH_NOT_FOUND',
+      });
+    }
+
+    // Resolve EVERY selector against the same pre-snapshot before deleting
+    // anything. nodeIds are stable paragraph ids, so a target resolved up front
+    // stays addressable after a sibling is removed — whereas an ordinal or
+    // text-search selector re-resolved mid-run would drift onto the wrong block.
+    const targets: Array<{ selector: AgentSelector; nodeId: string; nodeType: string }> = [];
+    const unresolved: AgentSelector[] = [];
+    const wrongShape: Array<{ selector: AgentSelector; nodeType: string }> = [];
+    const seen = new Set<string>();
+    for (const selector of args.selectors) {
+      const target = selectorToBlockTarget(selector, pre);
+      if (!target) {
+        unresolved.push(selector);
+        continue;
+      }
+      if (!DELETABLE_BLOCK_NODE_TYPES.has(target.nodeType)) {
+        wrongShape.push({ selector, nodeType: target.nodeType });
+        continue;
+      }
+      if (seen.has(target.nodeId)) continue;
+      seen.add(target.nodeId);
+      targets.push({ selector, nodeId: target.nodeId, nodeType: target.nodeType });
+    }
+
+    const errors: Array<{ code: string; message: string; recovery?: ReceiptRecovery }> = [];
+    for (const selector of unresolved) {
+      errors.push({
+        code: 'ACTION_FAILED',
+        message: `selector did not resolve to a unique body block: ${JSON.stringify(selector)}`,
+        recovery: { kind: 'reinspect' },
+      });
+    }
+    for (const entry of wrongShape) {
+      errors.push({
+        code: 'INVALID_ARGUMENT',
+        message:
+          `delete_blocks removes paragraph-shaped blocks (list items, paragraphs, headings); ` +
+          `${JSON.stringify(entry.selector)} resolved to a "${entry.nodeType}"` +
+          (entry.nodeType === 'table' ? ' — use delete_table for a whole table.' : '.'),
+        recovery: { kind: 'reinspect' },
+      });
+    }
+    if (targets.length === 0) {
+      return {
+        status: 'failed',
+        intent: 'delete_blocks',
+        preSnapshot: { revision: pre.revision, counts: pre.counts },
+        selectedTargets: [],
+        executedOperations: [],
+        verification: [],
+        errors,
+      };
+    }
+
+    const changeMode = parseChangeMode(args.changeMode);
+    const executedOperations: Array<{ operationId: string; result?: unknown }> = [];
+    const deleted: Array<{ nodeId: string; nodeType: string }> = [];
+    for (const target of targets) {
+      try {
+        // changeMode travels INSIDE the params object on this runtime: the
+        // transport injects it from `params.changeMode` when the operation spec
+        // declares that param, and treats the second argument as InvokeOptions
+        // (timeouts), not MutationOptions. Passing it second — the shape
+        // `delete_table` uses — silently drops tracking and hard-deletes the
+        // block, which is worse than the bug this action exists to fix.
+        const result = await deleteFn({
+          target: { kind: 'block', nodeType: target.nodeType, nodeId: target.nodeId },
+          ...(changeMode ? { changeMode } : {}),
+        });
+        executedOperations.push({ operationId: 'doc.blocks.delete', result: compactOpResult(result) });
+        deleted.push({ nodeId: target.nodeId, nodeType: target.nodeType });
+      } catch (err) {
+        errors.push({
+          code: 'ACTION_FAILED',
+          message: `blocks.delete failed for ${target.nodeType} ${target.nodeId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          recovery: { kind: 'reinspect' },
+        });
+      }
+    }
+
+    const post = await buildDocumentSnapshot(doc, { includeDomains: [...domains] });
+    // Tracked deletions leave the block in place until the revision is decided,
+    // so the block count cannot move — count the structural revisions instead.
+    // Direct deletions must show one fewer block of each deleted node type.
+    const checks: AgentVerificationCheck[] =
+      changeMode === 'tracked'
+        ? [{ kind: 'tracked-change-count-delta', delta: deleted.length }]
+        : [...new Set(deleted.map((entry) => entry.nodeType))].map((nodeType) => ({
+            kind: 'block-count-delta' as const,
+            nodeType,
+            delta: -deleted.filter((entry) => entry.nodeType === nodeType).length,
+          }));
+    const verification = evaluateChecks(pre, post, checks);
+
+    const allApplied = deleted.length === args.selectors.length && errors.length === 0;
+    const verified = verification.every((v) => v.passed);
+    return {
+      status: !verified || deleted.length === 0 ? 'failed' : allApplied ? 'ok' : 'partial',
+      intent: `delete_blocks: ${deleted.length} block(s)`,
+      preSnapshot: { revision: pre.revision, counts: pre.counts },
+      postSnapshot: { revision: post.revision, counts: post.counts },
+      selectedTargets: targets.map((target) => ({ selector: target.selector, matched: [target.nodeId] })),
+      executedOperations,
+      verification,
+      deletedBlocks: deleted,
+      ...(errors.length ? { errors } : {}),
+      ...(errors.length
+        ? { nextStep: 'Re-inspect the document and retry the selectors that did not resolve to one block.' }
+        : {}),
+    };
+  } catch (err) {
+    return failedReceipt('delete_blocks', err, pre);
   }
 }
 
@@ -5745,6 +5907,39 @@ export async function superdocPerformAction(doc: BoundDocApi, args: unknown): Pr
         caseSensitive: args.caseSensitive === true,
         changeMode: parseChangeMode(args.changeMode),
       });
+    }
+    case 'delete_blocks': {
+      // Accept a single `selector` too: the model reaches for the singular form
+      // by analogy with delete_text/rewrite_block, and rejecting it would cost a
+      // turn for no reason.
+      const rawSelectors = Array.isArray(args.selectors)
+        ? args.selectors
+        : args.selectors != null
+          ? [args.selectors]
+          : args.selector != null
+            ? [args.selector]
+            : [];
+      if (rawSelectors.length === 0) {
+        throw new SuperDocCliError(
+          'delete_blocks requires a non-empty "selectors" array, each entry resolving to one block (e.g. {kind:"nodeId",nodeId:"…"})',
+          { code: 'INVALID_ARGUMENT' },
+        );
+      }
+      // EVERY entry has to parse. Dropping the unparseable ones would delete the
+      // rest and report success, so the model would never learn that part of its
+      // request went nowhere — the same false-success loop this action ends.
+      const selectors: AgentSelector[] = [];
+      for (const [index, raw] of rawSelectors.entries()) {
+        const parsed = parseSelector(raw);
+        if (!parsed) {
+          throw new SuperDocCliError(
+            `delete_blocks selectors[${index}] is not a valid selector (e.g. {kind:"nodeId",nodeId:"…"}); no blocks were deleted`,
+            { code: 'INVALID_ARGUMENT' },
+          );
+        }
+        selectors.push(parsed);
+      }
+      return runDeleteBlocks(doc, { action, selectors, changeMode: parseChangeMode(args.changeMode) });
     }
     case 'append_list': {
       const items = parseStringArray(args.items);

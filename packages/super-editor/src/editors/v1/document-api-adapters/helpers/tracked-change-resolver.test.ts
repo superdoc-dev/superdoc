@@ -410,6 +410,69 @@ describe('groupTrackedChanges', () => {
   });
 });
 
+describe('groupTrackedChanges: coalescing same-type imported chains', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('merges same-id, same-pure-type imported drafts that differ only by sourceId', () => {
+    // Mirrors the noBreakHyphen-split repro: the importer's same-type
+    // chaining already gives these three marks one shared `id`, but each
+    // still carries its own original `sourceId` (Word's per-run w:id).
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'shared-uuid', { sourceId: '1' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackInsertMarkName, 'shared-uuid', { sourceId: '2' }), from: 5, to: 10 },
+      { ...makeTrackMark(TrackInsertMarkName, 'shared-uuid', { sourceId: '3' }), from: 10, to: 15 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.from).toBe(1);
+    expect(grouped[0]?.to).toBe(15);
+    expect(grouped[0]?.hasInsert).toBe(true);
+    expect(grouped[0]?.hasDelete).toBe(false);
+  });
+
+  it('does not merge across unrelated ids even when both chains are pure inserts', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'chain-a', { sourceId: '1' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackInsertMarkName, 'chain-a', { sourceId: '2' }), from: 5, to: 10 },
+      { ...makeTrackMark(TrackInsertMarkName, 'chain-b', { sourceId: '9' }), from: 20, to: 25 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    expect(grouped).toHaveLength(2);
+  });
+
+  it('does not merge a replacement pair sharing an id (opposite pure types)', () => {
+    // Regression guard for the coalescing pass specifically: a Word
+    // replacement (one pure-insert + one pure-delete draft sharing an `id`)
+    // must keep rendering as two cards.
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'shared-uuid', { sourceId: '11' }), from: 1, to: 5 },
+      { ...makeTrackMark(TrackDeleteMarkName, 'shared-uuid', { sourceId: '10' }), from: 5, to: 10 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    expect(grouped).toHaveLength(2);
+  });
+
+  it('does not touch native marks (no sourceId) sharing an id', () => {
+    vi.mocked(getTrackChanges).mockReturnValue([
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
+      { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 5, to: 10 },
+    ] as never);
+
+    const grouped = groupTrackedChanges(makeEditor());
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.rawId).toBe('tc-1');
+  });
+});
+
 describe('resolveTrackedChange', () => {
   beforeEach(() => {
     vi.clearAllMocks();

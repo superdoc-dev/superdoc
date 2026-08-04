@@ -7,7 +7,8 @@ import {
   stampImportTrackingAttrs,
   withParentFrame,
 } from '../../../../v2/importer/importTrackingContext.js';
-import { applyTrackedMarkToRunContent } from '../r/helpers/track-change-helpers.js';
+import { applyTrackedMarkToRunContent, renameTextElementsForDeletion } from '../r/helpers/track-change-helpers.js';
+import { resolveExportWordId } from '@converter/v3/handlers/helpers/resolve-export-word-id.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:del';
@@ -89,24 +90,28 @@ function decode(params) {
 
   node.marks = marks.filter((m) => m.type !== 'trackDelete');
 
-  const translatedTextNode = exportSchemaToJson({ ...params, node });
+  const translatedResult = exportSchemaToJson({ ...params, node });
 
   if (params.isFinalDoc) {
     return null;
   }
 
-  // ECMA-376 (17.3.3.7) requires w:delText for ALL text runs inside <w:del>. A
+  // A decoded node's export can be a single XML node (e.g. a plain text run)
+  // or an array of sibling nodes (e.g. a field's begin/instr/separate/result/end
+  // runs from crossReference-translator.js). Normalize to an array so both
+  // shapes wrap correctly under one <w:del> instead of nesting an array inside
+  // `elements`.
+  const translatedNodes = Array.isArray(translatedResult) ? translatedResult : [translatedResult];
+
+  // ECMA-376 requires w:delText for ALL text runs inside <w:del> (17.3.3.7) and
+  // w:delInstrText for field instruction runs inside <w:del> (17.16.13). A
   // single run can now hold multiple <w:t> siblings, because the newline export
   // safety net splits text around <w:br/> (e.g. <w:t>Alpha</w:t><w:br/><w:t>Beta</w:t>),
-  // so rename every direct w:t, not just the first; a leftover <w:t> inside
-  // <w:del> would not be treated as deleted. Other inline content
-  // (w:noBreakHyphen, w:tab, w:br, etc.) stays as-is; the <w:del> wrapper alone
-  // conveys the deletion.
-  (translatedTextNode.elements || [])
-    .filter((n) => n.name === 'w:t')
-    .forEach((n) => {
-      n.name = 'w:delText';
-    });
+  // so rename every w:t/w:instrText found anywhere in the translated output, not
+  // just the first; a leftover <w:t>/<w:instrText> inside <w:del> would not be
+  // treated as deleted. Other inline content (w:noBreakHyphen, w:tab, w:br,
+  // w:fldChar, etc.) stays as-is; the <w:del> wrapper alone conveys the deletion.
+  translatedNodes.forEach(renameTextElementsForDeletion);
 
   return {
     name: 'w:del',
@@ -116,7 +121,7 @@ function decode(params) {
       'w:authorEmail': trackedMark.attrs.authorEmail,
       'w:date': trackedMark.attrs.date,
     },
-    elements: [translatedTextNode],
+    elements: translatedNodes,
   };
 }
 
@@ -129,35 +134,6 @@ function decode(params) {
  * @param {Record<string, unknown>} attrs
  * @returns {string}
  */
-function resolveExportWordId(params, attrs) {
-  const sourceId = attrs?.sourceId;
-  /** @type {string | number | null | undefined} */
-  let exportSourceId;
-  if (typeof sourceId === 'string' || typeof sourceId === 'number') {
-    exportSourceId = sourceId;
-  } else if (sourceId === null) {
-    exportSourceId = null;
-  } else if (sourceId === undefined) {
-    exportSourceId = undefined;
-  } else {
-    exportSourceId = String(sourceId);
-  }
-  const logicalId = typeof attrs?.id === 'string' ? attrs.id : '';
-  const exportParams =
-    /** @type {import('@translator').SCDecoderConfig & { converter?: { wordIdAllocator?: import('@extensions/track-changes/review-model/word-id-allocator.js').WordIdAllocator | null }, currentPartPath?: string, filename?: string }} */ (
-      params
-    );
-  const allocator = exportParams?.converter?.wordIdAllocator;
-  const partPath =
-    exportParams?.currentPartPath ||
-    (typeof exportParams?.filename === 'string' && exportParams.filename.length > 0
-      ? `word/${exportParams.filename}`
-      : 'word/document.xml');
-  if (allocator) {
-    return allocator.allocate({ partPath, sourceId: exportSourceId, logicalId });
-  }
-  return /** @type {string} */ (sourceId || logicalId);
-}
 
 /** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {

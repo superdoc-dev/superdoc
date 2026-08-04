@@ -8,6 +8,7 @@ import {
   withParentFrame,
 } from '../../../../v2/importer/importTrackingContext.js';
 import { applyTrackedMarkToRunContent } from '../r/helpers/track-change-helpers.js';
+import { resolveExportWordId } from '@converter/v3/handlers/helpers/resolve-export-word-id.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:ins';
@@ -115,35 +116,6 @@ function decode(params) {
  * @param {Record<string, unknown>} attrs
  * @returns {string}
  */
-function resolveExportWordId(params, attrs) {
-  const sourceId = attrs?.sourceId;
-  /** @type {string | number | null | undefined} */
-  let exportSourceId;
-  if (typeof sourceId === 'string' || typeof sourceId === 'number') {
-    exportSourceId = sourceId;
-  } else if (sourceId === null) {
-    exportSourceId = null;
-  } else if (sourceId === undefined) {
-    exportSourceId = undefined;
-  } else {
-    exportSourceId = String(sourceId);
-  }
-  const logicalId = typeof attrs?.id === 'string' ? attrs.id : '';
-  const exportParams =
-    /** @type {import('@translator').SCDecoderConfig & { converter?: { wordIdAllocator?: import('@extensions/track-changes/review-model/word-id-allocator.js').WordIdAllocator | null }, currentPartPath?: string, filename?: string }} */ (
-      params
-    );
-  const allocator = exportParams?.converter?.wordIdAllocator;
-  const partPath =
-    exportParams?.currentPartPath ||
-    (typeof exportParams?.filename === 'string' && exportParams.filename.length > 0
-      ? `word/${exportParams.filename}`
-      : 'word/document.xml');
-  if (allocator) {
-    return allocator.allocate({ partPath, sourceId: exportSourceId, logicalId });
-  }
-  return /** @type {string} */ (sourceId || logicalId);
-}
 
 /** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {

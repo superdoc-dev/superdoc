@@ -906,6 +906,10 @@ const packages = [
     tagPrefix: 'cli-v',
     tagPattern: 'cli-v*',
     npmPackages: CLI_NPM_PACKAGES,
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeCliPublish,
   },
   {
@@ -915,6 +919,10 @@ const packages = [
     tagPrefix: 'sdk-v',
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeSdkPublish,
     ...(SDK_PYPI_ENABLED
       ? {
@@ -961,6 +969,10 @@ const packages = [
     tagPrefix: 'react-v',
     tagPattern: 'react-v*',
     npmPackages: ['@superdoc-dev/react'],
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeReactPublish,
   },
   {

@@ -50,7 +50,7 @@ from . import ToolProvider, get_preset
 # Built-in core action names. MUST stay in sync with ACTION_NAMES_LIST in
 # node/src/agent/actions.ts (source of truth). Collision checks compare against
 # this set. (core's getCatalog lists the 3 tools, not the 35 action names, so a
-# shared constant is the safest cross-runtime source (40 names). A unit test
+# shared constant is the safest cross-runtime source (41 names). A unit test
 # asserts the exact set so any drift from Node fails loudly.
 # ---------------------------------------------------------------------------
 
@@ -60,6 +60,7 @@ BUILTIN_ACTION_NAMES: frozenset = frozenset(
         'insert_heading',
         'replace_text',
         'delete_text',
+        'delete_blocks',
         'append_list',
         'create_table',
         'comment_paragraphs',

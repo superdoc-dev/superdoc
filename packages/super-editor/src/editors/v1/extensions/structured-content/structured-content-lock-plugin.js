@@ -7,6 +7,7 @@ import {
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
+export const STRUCTURED_CONTENT_WRAPPER_PRESERVING_META = 'structuredContentWrapperPreserving';
 
 /**
  * Lock enforcement plugin for StructuredContent nodes.
@@ -41,11 +42,34 @@ function collectSDTNodes(doc) {
   return sdtNodes;
 }
 
+function collectPreservedSDTNodes(previousSdtNodes, nextDoc) {
+  const nextNodesById = new Map();
+  for (const nextSdt of collectSDTNodes(nextDoc)) {
+    const id = nextSdt.node.attrs.id;
+    if (id == null) continue;
+    const key = String(id);
+    const matches = nextNodesById.get(key) ?? [];
+    matches.push(nextSdt.node);
+    nextNodesById.set(key, matches);
+  }
+
+  const preserved = new Set();
+  for (const previousSdt of previousSdtNodes) {
+    const id = previousSdt.node.attrs.id;
+    if (id == null) continue;
+    const matches = nextNodesById.get(String(id));
+    if (matches?.length === 1 && matches[0].eq(previousSdt.node)) {
+      preserved.add(previousSdt);
+    }
+  }
+  return preserved;
+}
+
 /**
  * Check if a range [from, to] would violate any lock rules
  * Returns { blocked: boolean, reason?: string }
  */
-function checkLockViolation(sdtNodes, from, to) {
+function checkLockViolation(sdtNodes, from, to, preservedSdtNodes) {
   for (const sdt of sdtNodes) {
     const overlaps = from < sdt.end && to > sdt.pos;
     if (!overlaps) continue;
@@ -63,7 +87,7 @@ function checkLockViolation(sdtNodes, from, to) {
     const isSdtLocked = sdt.lockMode === 'sdtLocked' || sdt.lockMode === 'sdtContentLocked';
     const isContentLocked = sdt.lockMode === 'contentLocked' || sdt.lockMode === 'sdtContentLocked';
 
-    if (isSdtLocked && wouldDamageWrapper) {
+    if (isSdtLocked && wouldDamageWrapper && !preservedSdtNodes?.has(sdt)) {
       return { blocked: true, reason: `Cannot delete SDT wrapper (${sdt.lockMode})` };
     }
 
@@ -314,6 +338,10 @@ export function createStructuredContentLockPlugin() {
         return true;
       }
 
+      const preservedSdtNodes = tr.getMeta?.(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META)
+        ? collectPreservedSDTNodes(sdtNodes, tr.doc)
+        : undefined;
+
       for (const step of tr.steps) {
         // Skip steps without from/to (AttrStep, AddNodeMarkStep, RemoveNodeMarkStep) —
         // these change metadata, not content, so they can't violate lock rules.
@@ -321,7 +349,7 @@ export function createStructuredContentLockPlugin() {
           continue;
         }
 
-        const result = checkLockViolation(sdtNodes, step.from, step.to);
+        const result = checkLockViolation(sdtNodes, step.from, step.to, preservedSdtNodes);
 
         if (result.blocked) {
           return false;

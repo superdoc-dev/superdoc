@@ -44,8 +44,8 @@ catalog:
   '@types/ws': ^8.18.1
   '@typescript-eslint/eslint-plugin': ^8.49.0
   '@typescript-eslint/parser': ^8.49.0
-  '@vitejs/plugin-react': ^5.1.1
-  '@vitejs/plugin-vue': 6.0.2
+  '@vitejs/plugin-react': ^6.0.5
+  '@vitejs/plugin-vue': 6.0.8
   '@vitest/coverage-v8': ^3.2.4
   '@vue/test-utils': ^2.4.6
   buffer-crc32: ^1.0.0
@@ -119,9 +119,9 @@ catalog:
   utif2: ^4.1.0
   uuid: ^11.1.1
   verdaccio: ^6.1.6
-  vite: ^7.2.7
+  vite: ^8.0.0
   vite-plugin-dts: ~4.5.4
-  vite-plugin-node-polyfills: ^0.25.0
+  vite-plugin-node-polyfills: ^0.28.0
   vitest: ^3.2.4
   vue: 3.5.32
   xml-js: 1.6.11
@@ -146,7 +146,11 @@ overrides:
   '@vue/runtime-dom': 3.5.32
   '@vue/server-renderer': 3.5.32
   '@vue/shared': 3.5.32
-  vite: 'npm:rolldown-vite@7.3.1'
+  # AIDEV-NOTE: Keeps every workspace member on one Vite runtime. Examples and
+  # demos pin older Vite ranges on purpose (they are copy-pasteable consumer
+  # fixtures, see examples/README.md); this override stops those ranges from
+  # installing extra Vite copies here without rewriting what they advertise.
+  vite: ^8.0.0
   axios: 1.18.0
   protobufjs@7: 7.6.4
   protobufjs@8: 8.6.4

@@ -2668,4 +2668,87 @@ describe('HeaderFooterSessionManager', () => {
       expect(duringUpdate.storyLayouts.headers[0]!.resolvedLayout!.pages[0]!.items[0]!.blockId).toBe('old-block');
     });
   });
+
+  describe('computeCaretRect — text-less surface entries', () => {
+    // Page rect is the origin, so page-local coords equal client coords and the
+    // only interesting term is `pageIndex * bodyPageHeight` = 1 * 800.
+    const PAGE_RECT = createRect(0, 0, 816, 1056);
+    const LINE_RECT = createRect(100, 200, 600, 18);
+    // A painted tab is `vertical-align: bottom` inside a `font-size: 0` line, so its
+    // own box starts below the line top. That 6px is the caret offset users saw.
+    const TAB_RECT = createRect(140, 206, 20, 18);
+
+    async function setupSurface(entryEl: HTMLElement, { wrapInLine = true } = {}): Promise<void> {
+      await setupWithZoom(1);
+
+      const pageElement = painterHost.querySelector<HTMLElement>('[data-page-index="1"]')!;
+      vi.spyOn(pageElement, 'getBoundingClientRect').mockReturnValue(PAGE_RECT);
+
+      const surface = document.createElement('div');
+      surface.className = 'superdoc-page-header';
+      pageElement.appendChild(surface);
+
+      vi.spyOn(entryEl, 'getBoundingClientRect').mockReturnValue(TAB_RECT);
+
+      if (wrapInLine) {
+        const line = document.createElement('div');
+        line.className = 'superdoc-line';
+        vi.spyOn(line, 'getBoundingClientRect').mockReturnValue(LINE_RECT);
+        line.appendChild(entryEl);
+        surface.appendChild(line);
+      } else {
+        surface.appendChild(entryEl);
+      }
+    }
+
+    function createEntryEl(className: string): HTMLElement {
+      const el = document.createElement('span');
+      if (className) {
+        el.className = className;
+      }
+      el.dataset.pmStart = '7';
+      el.dataset.pmEnd = '8';
+      return el;
+    }
+
+    it('anchors the caret to the line box for a tab entry, not the bottom-aligned tab box', async () => {
+      await setupSurface(createEntryEl('superdoc-tab'));
+
+      expect(manager.computeCaretRect(9)).toEqual({
+        pageIndex: 1,
+        // x still comes from the tab box: pos is past pmStart, so the caret sits at its right edge.
+        x: TAB_RECT.right,
+        y: 800 + LINE_RECT.top,
+        width: 1,
+        height: LINE_RECT.height,
+      });
+    });
+
+    it('anchors the caret to the line box for an empty SDT placeholder', async () => {
+      await setupSurface(createEntryEl('superdoc-empty-inline-sdt-placeholder'));
+
+      expect(manager.computeCaretRect(9)).toMatchObject({
+        y: 800 + LINE_RECT.top,
+        height: LINE_RECT.height,
+      });
+    });
+
+    it('keeps the element box for text-less entries that are not line-anchored', async () => {
+      await setupSurface(createEntryEl('superdoc-inline-image'));
+
+      expect(manager.computeCaretRect(9)).toMatchObject({
+        y: 800 + TAB_RECT.top,
+        height: TAB_RECT.height,
+      });
+    });
+
+    it('falls back to the element box when a tab entry has no enclosing line', async () => {
+      await setupSurface(createEntryEl('superdoc-tab'), { wrapInLine: false });
+
+      expect(manager.computeCaretRect(9)).toMatchObject({
+        y: 800 + TAB_RECT.top,
+        height: TAB_RECT.height,
+      });
+    });
+  });
 });

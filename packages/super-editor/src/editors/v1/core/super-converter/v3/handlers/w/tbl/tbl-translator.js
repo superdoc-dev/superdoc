@@ -1,5 +1,11 @@
 // @ts-check
 import { translator as tblStylePrTranslator } from '@converter/v3/handlers/w/tblStylePr';
+import {
+  attrValue,
+  childElements,
+  findChild,
+  findChildren,
+} from '@core/super-converter/docx-helpers/xml-node-access.js';
 import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpers/pre-process-vertical-merge-cells.js';
 import { eighthPointsToPixels, halfPointToPoints, twipsToPixels } from '@core/super-converter/helpers.js';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
@@ -370,44 +376,40 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
 
   // Find the style tag in styles.xml
   const { docx } = params;
-  const styles = docx['word/styles.xml'];
-  const { elements } = styles.elements[0];
-  const styleElements = elements.filter((el) => el.name === 'w:style');
-  const styleTag = styleElements.find((el) => el.attributes['w:styleId'] === tableStyleReference);
+  const styles = docx?.['word/styles.xml'];
+  const styleElements = findChildren(childElements(styles)[0], 'w:style');
+  const styleTag = styleElements.find((el) => attrValue(el, 'w:styleId') === tableStyleReference);
   if (!styleTag) return null;
 
-  stylesToReturn.name = styleTag.elements.find((el) => el.name === 'w:name');
+  stylesToReturn.name = findChild(styleTag, 'w:name');
 
   // Find style it is based on, if any, to inherit table properties from
-  const basedOn = styleTag.elements.find((el) => el.name === 'w:basedOn');
+  const basedOn = findChild(styleTag, 'w:basedOn');
   let baseTblPr;
   if (basedOn?.attributes) {
-    const baseStyles = styleElements.find((el) => el.attributes['w:styleId'] === basedOn.attributes['w:val']);
-    baseTblPr = baseStyles ? baseStyles.elements.find((el) => el.name === 'w:tblPr') : {};
+    const baseStyles = styleElements.find((el) => attrValue(el, 'w:styleId') === attrValue(basedOn, 'w:val'));
+    baseTblPr = baseStyles ? findChild(baseStyles, 'w:tblPr') : {};
   }
 
   // Find paragraph properties to get justification
-  const pPr = styleTag.elements.find((el) => el.name === 'w:pPr');
-  if (pPr) {
-    const justification = pPr.elements.find((el) => el.name === 'w:jc');
-    if (justification?.attributes) stylesToReturn.justification = justification.attributes['w:val'];
-  }
+  const justification = findChild(findChild(styleTag, 'w:pPr'), 'w:jc');
+  if (justification?.attributes) stylesToReturn.justification = attrValue(justification, 'w:val');
 
   // Find run properties to get fonts and font size
-  const rPr = styleTag?.elements.find((el) => el.name === 'w:rPr');
+  const rPr = findChild(styleTag, 'w:rPr');
   if (rPr) {
-    const fonts = rPr.elements.find((el) => el.name === 'w:rFonts');
-    if (fonts) {
+    const fonts = findChild(rPr, 'w:rFonts');
+    if (fonts?.attributes) {
       const { 'w:ascii': ascii, 'w:hAnsi': hAnsi, 'w:cs': cs } = fonts.attributes;
       stylesToReturn.fonts = { ascii, hAnsi, cs };
     }
 
-    const fontSize = rPr.elements.find((el) => el.name === 'w:sz');
-    if (fontSize?.attributes) stylesToReturn.fontSize = halfPointToPoints(fontSize.attributes['w:val']) + 'pt';
+    const fontSize = findChild(rPr, 'w:sz');
+    if (fontSize?.attributes) stylesToReturn.fontSize = halfPointToPoints(attrValue(fontSize, 'w:val')) + 'pt';
   }
 
   // Find table properties to get borders and cell margins
-  const tblPr = styleTag.elements.find((el) => el.name === 'w:tblPr');
+  const tblPr = findChild(styleTag, 'w:tblPr');
   if (tblPr && tblPr.elements) {
     // Merge base + current for encoding only; do not mutate styles.xml (would duplicate w:tblCellMar etc. per table using this style)
     const mergedTblPr =
@@ -437,14 +439,12 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
     }
   }
 
-  const tblStylePr = styleTag.elements.filter((el) => el.name === 'w:tblStylePr');
-  let styleProps = {};
-  if (tblStylePr) {
-    styleProps = tblStylePr.reduce((acc, el) => {
-      acc[el.attributes['w:type']] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
-      return acc;
-    }, {});
-  }
+  // Conditional formatting is keyed by w:type; entries without one cannot be addressed by the cascade.
+  const styleProps = findChildren(styleTag, 'w:tblStylePr').reduce((acc, el) => {
+    const conditionalType = attrValue(el, 'w:type');
+    if (conditionalType) acc[conditionalType] = tblStylePrTranslator.encode({ ...params, nodes: [el] });
+    return acc;
+  }, {});
 
   return {
     ...stylesToReturn,

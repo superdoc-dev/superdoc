@@ -323,6 +323,8 @@ const createCommentsStoreWithFloatingGetter = () => {
   return { store, floatingCommentsState };
 };
 
+const mountedWrappers = [];
+
 const mountComponent = async (
   superdocStub,
   { surfaceManager = null, superdocStore = null, commentsStore = null, attachTo = null } = {},
@@ -334,7 +336,7 @@ const mountComponent = async (
 
   const component = (await import('./SuperDoc.vue')).default;
 
-  return mount(component, {
+  const wrapper = mount(component, {
     ...(attachTo ? { attachTo } : {}),
     global: {
       components: {
@@ -364,7 +366,19 @@ const mountComponent = async (
       },
     },
   });
+
+  mountedWrappers.push(wrapper);
+  return wrapper;
 };
+
+// AIDEV-NOTE: SuperDoc.vue registers document-level keydown listeners, so a
+// wrapper left mounted keeps handling events during later tests. Most callers
+// here never unmount, which let an earlier wrapper swallow the Escape key the
+// compact-comment-popover test dispatches. Unmounting centrally keeps each test
+// owning only its own listeners; do not rely on per-test unmount calls.
+afterEach(() => {
+  while (mountedWrappers.length) mountedWrappers.pop()?.unmount();
+});
 
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };

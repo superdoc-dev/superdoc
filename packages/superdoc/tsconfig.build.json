@@ -1,3 +1,12 @@
 {
+  // AIDEV-NOTE: The `exclude` list in ./tsconfig.json must keep its `tests/**`
+  // entries alongside the `*.test.*` ones. Test support files (fixtures, mock
+  // builders) sit beside the tests they serve and import from vitest, so
+  // compiling them leaks `@vitest/spy` into inferred return types (TS2742) and
+  // leaves stale declarations behind (TS6305). That project also includes
+  // ../super-editor/src, so super-editor's test directories are excluded there
+  // too, not only in that package's own config. This note lives here because
+  // scripts/check-tsconfig-type-surface.cjs reads tsconfig.json with strict
+  // JSON.parse, which rejects comments.
   "extends": "./tsconfig.json"
 }

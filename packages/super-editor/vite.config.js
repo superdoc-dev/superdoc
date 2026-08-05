@@ -42,40 +42,16 @@ export default defineConfig(({ mode }) => {
       globals: true,
       // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
       environment: process.env.VITEST_DOM || 'happy-dom',
-      // Override environment to 'node' for directories that don't need DOM.
-      // This avoids the cost of setting up happy-dom for pure logic tests.
-      // Override to 'node' for directories that don't need DOM, with
-      // explicit happy-dom exceptions for files that do (first match wins).
-      // AIDEV-NOTE: Vitest 4 removed `environmentMatchGlobs`, so every rule
-      // below is currently inert and these files run in the default
-      // environment. Two headless command tests assert node-only behavior and
-      // fail because of it. Replacing this with per-environment `projects` (or
-      // per-file `@vitest-environment` docblocks) is tracked as the remaining
-      // step of the Vitest 4 migration. Do not assume these globs take effect.
-      environmentMatchGlobs: [
-        // super-converter: all pure logic except tiff-converter (uses document.createElement)
-        ['src/editors/v1/core/super-converter/**/tiff-converter.test.*', 'happy-dom'],
-        ['src/editors/v1/core/super-converter/**', 'node'],
-        // commands: mostly pure, except deleteSelection (document.getSelection)
-        // and insertContent integration tests (Editor with DOM view)
-        ['src/editors/v1/core/commands/deleteSelection.test.*', 'happy-dom'],
-        ['src/editors/v1/core/commands/insertContent.test.*', 'happy-dom'],
-        ['src/editors/v1/core/commands/**', 'node'],
-        // helpers: several need DOM (HTML parsing, sanitizer, content processor)
-        ['src/editors/v1/core/helpers/updateDOMAttributes.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/catchAllSchema.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/contentProcessor.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/createNodeFromContent.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/getHTMLFromFragment.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/htmlSanitizer.test.*', 'happy-dom'],
-        ['src/editors/v1/core/helpers/**', 'node'],
-        ['src/editors/v1/core/parts/**', 'node'],
-        // document-api-adapters: insert-structured-wrapper needs DOM for HTML insert
-        ['src/editors/v1/document-api-adapters/**/insert-structured-wrapper.test.*', 'happy-dom'],
-        ['src/editors/v1/document-api-adapters/**', 'node'],
-        ['src/editors/v1/core/ooxml-encryption/**', 'node'],
-        ['src/editors/v1/utils/**', 'node'],
-      ],
+      // AIDEV-NOTE: `environmentMatchGlobs` used to route ~630 pure-logic tests
+      // in super-converter, commands, helpers, parts, document-api-adapters,
+      // ooxml-encryption and utils to the node environment, skipping happy-dom
+      // setup. Vitest 4 removed the option, so every test now runs in the
+      // environment above. Only the two headless command suites depended on
+      // node for correctness, and they declare it with a `@vitest-environment`
+      // docblock. What is left is the lost startup saving: restoring it needs
+      // node and DOM `projects`, which is a topology change (this package is
+      // itself a project of the root config) and is deliberately not bundled
+      // into the Vitest 4 upgrade.
       retry: 2,
       // Vitest 4 no longer clears mock history between retry attempts,
       // so any call-count assertion under `retry` accumulates calls

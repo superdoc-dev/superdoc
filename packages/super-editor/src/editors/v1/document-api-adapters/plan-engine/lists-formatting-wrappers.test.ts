@@ -224,11 +224,16 @@ function mockSetLevelTextChanged(editorRef: Editor): void {
 let editor: ReturnType<typeof makeEditor>;
 
 beforeEach(() => {
+  // AIDEV-NOTE: `restoreAllMocks` only restores `vi.spyOn` spies as of Vitest
+  // 4; it no longer resets implementations set on `vi.fn()` module mocks. Every
+  // default a test overrides must therefore be re-established here by hand.
   vi.restoreAllMocks();
   registerPartDescriptor(numberingPartDescriptor);
   editor = makeEditor();
   // Default: getPresetTemplate returns a valid template
   vi.mocked(LevelFormattingHelpers.getPresetTemplate).mockReturnValue(MOCK_TEMPLATE);
+  // Default: the abstract is owned by this sequence, so no clone-on-write
+  vi.mocked(LevelFormattingHelpers.isAbstractShared).mockReturnValue(false);
   // Default: no adjacent sequences
   vi.mocked(findAdjacentSequence).mockReturnValue(null);
   vi.mocked(getContiguousSequence).mockReturnValue([]);

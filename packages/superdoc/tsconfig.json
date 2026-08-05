@@ -44,15 +44,22 @@
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "**/__tests__/**",
+    "**/__mocks__/**",
+    "**/tests/**",
     "src/dev/**",
     "../document-api/src/**/*.test.*",
     "../document-api/src/**/*.spec.*",
     "../document-api/src/**/__tests__/**",
+    "../document-api/src/**/tests/**",
     "../layout-engine/**/*.test.*",
     "../layout-engine/**/*.spec.*",
     "../layout-engine/**/__tests__/**",
+    "../layout-engine/**/tests/**",
     "../super-editor/src/**/*.test.*",
     "../super-editor/src/**/*.spec.*",
-    "../super-editor/src/**/__tests__/**"
+    "../super-editor/src/**/__tests__/**",
+    "../super-editor/src/**/__mocks__/**",
+    "../super-editor/src/**/tests/**",
+    "../word-layout/src/**/tests/**"
   ]
 }

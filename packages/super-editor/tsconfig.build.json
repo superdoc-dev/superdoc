@@ -6,5 +6,18 @@
     "noImplicitAny": false,
     "strict": false
   },
-  "exclude": ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts"]
+  // AIDEV-NOTE: Test support files must stay out of declaration emit. They
+  // import from vitest, so emitting them leaks `@vitest/spy` into inferred
+  // return types (TS2742) and leaves stale outputs behind (TS6305). Excluding
+  // `*.test.*` alone is not enough: helpers live beside the tests they serve.
+  // No production module imports anything under these directories.
+  "exclude": [
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/__mocks__/**"
+  ]
 }

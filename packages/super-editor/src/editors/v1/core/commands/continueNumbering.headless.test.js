@@ -1,4 +1,8 @@
 // @ts-check
+// @vitest-environment node
+// AIDEV-NOTE: This suite asserts the no-view (headless) dispatch path, so it
+// must run without a DOM. It relied on the package's environmentMatchGlobs
+// node rule, which Vitest 4 removed; the docblock now states it locally.
 /**
  * Headless dispatch regression for `continueNumbering`.
  *

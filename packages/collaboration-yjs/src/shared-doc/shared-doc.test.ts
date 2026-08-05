@@ -269,9 +269,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unmock('../shared-doc/constants.js');
-  vi.unmock('../shared-doc/callback.js');
-  vi.unmock('../shared-doc/utils.js');
+  // AIDEV-NOTE: These modules are registered with `vi.doMock`, so they must be
+  // released with the runtime counterpart. `vi.unmock` is hoisted to the top of
+  // the module regardless of where it appears, so it ran before any test and
+  // never undid the `doMock` registrations. Vitest 4 warns about that hoisting
+  // and will make it an error.
+  vi.doUnmock('../shared-doc/constants.js');
+  vi.doUnmock('../shared-doc/callback.js');
+  vi.doUnmock('../shared-doc/utils.js');
 });
 
 describe('shared-doc constants and utils', () => {

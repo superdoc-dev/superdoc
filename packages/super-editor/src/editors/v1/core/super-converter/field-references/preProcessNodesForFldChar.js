@@ -139,7 +139,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
 
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
-    const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText');
+    const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText' || el.name === 'w:delInstrText');
 
     if (node.name === 'w:fldSimple') {
       const instr = node.attributes?.['w:instr'];
@@ -488,6 +488,9 @@ const extractFieldRunRPr = (node) => {
  *
  * This function parses a run node to identify instruction-related elements:
  * - w:instrText elements become 'text' tokens with their content
+ * - w:delInstrText elements (the ECMA-376 §17.16.13 form of an instruction run
+ *   when the field sits inside a tracked deletion) are treated identically, so a
+ *   field entirely inside w:del is still recognized and interpreted.
  * - w:tab elements become 'tab' tokens (important for INDEX fields with tab separators)
  *
  * @param {OpenXmlNode} node - The OOXML node to extract tokens from
@@ -512,7 +515,7 @@ const extractInstructionTokensFromNode = (node) => {
   /** @type {InstructionToken[]} */
   const tokens = [];
   elements.forEach((el) => {
-    if (el?.name === 'w:instrText') {
+    if (el?.name === 'w:instrText' || el?.name === 'w:delInstrText') {
       const text = (el.elements || []).map((child) => (typeof child?.text === 'string' ? child.text : '')).join('');
       tokens.push({ type: 'text', text });
     }
@@ -524,7 +527,7 @@ const extractInstructionTokensFromNode = (node) => {
 };
 
 const FIELD_CONTROL_ELEMENT_NAMES = new Set(['w:fldChar']);
-const INSTRUCTION_ELEMENT_NAMES = new Set(['w:instrText', 'w:tab']);
+const INSTRUCTION_ELEMENT_NAMES = new Set(['w:instrText', 'w:delInstrText', 'w:tab']);
 
 const cloneNodeWithElements = (node, elements) => ({
   ...node,

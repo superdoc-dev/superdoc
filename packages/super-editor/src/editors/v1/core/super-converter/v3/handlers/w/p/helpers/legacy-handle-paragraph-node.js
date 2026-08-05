@@ -3,6 +3,7 @@ import { mergeTextNodes } from '@converter/v2/importer/index.js';
 import { parseProperties } from '@converter/v2/importer/importerHelpers.js';
 import { resolveParagraphProperties } from '@converter/styles';
 import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
+import { resolveTrackedChangeImportIds } from '@converter/v2/importer/importTrackingContext.js';
 import { isInlineNode } from '../../../helpers/is-inline-node.js';
 
 function getTableStyleId(path) {
@@ -169,6 +170,33 @@ export const handleParagraphNode = (params) => {
   schemaNode.attrs.paragraphProperties = inlineParagraphProperties;
   schemaNode.attrs.rsidRDefault = node.attributes?.['w:rsidRDefault'];
   schemaNode.attrs.filename = filename;
+
+  // The paragraph MARK's own tracked deletion, `w:pPr/w:rPr/w:del`
+  // (ECMA-376 §17.13.5.14). Word writes this alongside the run-level `w:del`
+  // when a whole paragraph or list item is deleted in tracked mode. Without
+  // reading it back, a Word-authored list-item deletion imports as struck text
+  // only and accepting it strands an empty numbered item.
+  const markRunProperties = pPr?.elements?.find((el) => el.name === 'w:rPr');
+  const markDeletionElement = markRunProperties?.elements?.find((el) => el.name === 'w:del');
+  if (markDeletionElement) {
+    const markAttributes = markDeletionElement.attributes || {};
+    // Route the id through the SAME per-part map the run-level `w:del` uses
+    // (`del-translator.encode`). Word writes both halves of a whole-block
+    // deletion with one `w:id`, and the map folds them onto one logical id —
+    // keeping the raw source id here would split them into two revisions, so
+    // accepting the run deletion could not find the paragraph mark and the
+    // emptied block would survive.
+    const { sourceId, logicalId } = resolveTrackedChangeImportIds(params, markAttributes['w:id']);
+    schemaNode.attrs.markTrackChange = {
+      type: 'paragraphMarkDelete',
+      id: logicalId || (sourceId ? String(sourceId) : ''),
+      sourceId: sourceId ? String(sourceId) : undefined,
+      author: markAttributes['w:author'] || '',
+      authorEmail: markAttributes['w:authorEmail'] || '',
+      date: markAttributes['w:date'] || '',
+      importedAuthor: `${markAttributes['w:author'] || ''} (imported)`,
+    };
+  }
 
   // Pass through this paragraph's sectPr, if any
   const sectPr = pPr?.elements?.find((el) => el.name === 'w:sectPr');

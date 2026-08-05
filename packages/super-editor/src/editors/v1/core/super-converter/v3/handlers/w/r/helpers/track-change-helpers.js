@@ -73,18 +73,39 @@ export const prepareRunTrackingContext = (node = {}) => {
 export const TRACKABLE_RUN_CONTENT_TYPES = new Set(['text', 'noBreakHyphen']);
 
 /**
+ * Node types whose decode() path is confirmed to consult trackInsert/trackDelete
+ * marks on the node itself, rather than on a `content` child (see
+ * crossReference-translator.js). These are whole-field nodes (begin/instr/
+ * separate/result/end runs collapsed into one PM node during import) where the
+ * deletion applies to the field as a unit, not to a single trackable content
+ * child. Widening this set requires adding the matching decode-side branch to
+ * that node type's own translator first — otherwise export would silently drop
+ * the tracked-change metadata.
+ */
+export const TRACKABLE_WHOLE_NODE_TYPES = new Set(['crossReference']);
+
+/**
  * Stamp a tracked-change mark (trackInsert/trackDelete) onto every trackable
  * content child of each encoded run, not just the first. A run imported from
  * `<w:ins>`/`<w:del>` may begin with an inline atom (e.g. `<w:noBreakHyphen/>`)
  * before its text — marking only content[0] when it happens to be text drops
  * tracking for that atom and for any content after it.
  *
- * @param {Array<{ content?: Array<Record<string, any>> }>} subElements
+ * Field nodes (e.g. `crossReference`) are collapsed field structure, not plain
+ * runs — the mark belongs on the node itself so its own decode() can wrap the
+ * whole field (begin/instr/separate/result/end) in one `w:del`/`w:ins`.
+ *
+ * @param {Array<{ type?: string, content?: Array<Record<string, any>> }>} subElements
  * @param {string} markType
  * @param {Record<string, any>} attrs
  */
 export const applyTrackedMarkToRunContent = (subElements = [], markType, attrs) => {
   subElements.forEach((subElement) => {
+    if (subElement && TRACKABLE_WHOLE_NODE_TYPES.has(subElement.type)) {
+      const marks = Array.isArray(subElement.marks) ? subElement.marks : [];
+      subElement.marks = [...marks, { type: markType, attrs }];
+      return;
+    }
     subElement.marks = [];
     const content = Array.isArray(subElement?.content) ? subElement.content : [];
     content.forEach((child) => {
@@ -104,9 +125,20 @@ const mapTrackingAttrs = (mark, attrMap) => {
   return mapped;
 };
 
-const renameTextElementsForDeletion = (node) => {
+/**
+ * Recursively renames text-bearing OOXML elements to their tracked-deletion
+ * equivalents, per ECMA-376 §17.13.5.15 (`w:t` → `w:delText`) and §17.16.13
+ * (`w:instrText` → `w:delInstrText`), so content wrapped in `<w:del>` stays
+ * schema-valid. Exported so translators that assemble multi-run field
+ * structure (e.g. crossReference-translator.js) can reuse the same rename
+ * pass when wrapping their output in one `w:del`.
+ *
+ * @param {any} node
+ */
+export const renameTextElementsForDeletion = (node) => {
   if (!node || typeof node !== 'object') return;
   if (node.name === 'w:t') node.name = 'w:delText';
+  if (node.name === 'w:instrText') node.name = 'w:delInstrText';
   if (Array.isArray(node.elements)) node.elements.forEach(renameTextElementsForDeletion);
 };
 

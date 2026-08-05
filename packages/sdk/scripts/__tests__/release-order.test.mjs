@@ -182,15 +182,23 @@ test('sdk semantic-release prepareCmd builds Node SDK before validate', async ()
   );
 });
 
-test('sdk semantic-release matches CLI channel model (next/next on main, latest on stable)', async () => {
+// `@superdoc-dev/sdk` is published to one npm name by two release lines. V2 owns
+// `latest` and `next`; V1 is maintenance-only under `legacy`. This guard used to
+// assert the opposite - `latest` on stable and a `next` prerelease from `main` -
+// which is the configuration that let a V1 release silently take a V2 channel.
+test('sdk semantic-release leaves V2 channels alone (legacy on stable, no next)', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assert.ok(
-    content.includes("{ name: 'stable', channel: 'latest' }"),
-    'packages/sdk/.releaserc.cjs: stable release branch must remain configured',
+    /name: 'stable',\s*\n\s*channel: 'legacy'/u.test(content),
+    'packages/sdk/.releaserc.cjs: stable must release on legacy, never latest',
   );
   assert.ok(
-    content.includes("{ name: 'main', prerelease: 'next', channel: 'next' }"),
-    'packages/sdk/.releaserc.cjs: main branch must release next versions on next channel',
+    !content.includes("channel: 'next'") && !content.includes("prerelease: 'next'"),
+    'packages/sdk/.releaserc.cjs: V1 must not claim the next channel owned by V2',
+  );
+  assert.ok(
+    !/name: 'main'/u.test(content),
+    'packages/sdk/.releaserc.cjs: main was the only branch that could produce a next release',
   );
   assert.ok(
     content.includes('const isCiRelease = Boolean(process.env.CI);'),

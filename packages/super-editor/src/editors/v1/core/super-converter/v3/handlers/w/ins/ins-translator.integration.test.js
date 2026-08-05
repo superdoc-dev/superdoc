@@ -68,4 +68,25 @@ describe('w:ins importer-pipeline integration: run beginning with w:noBreakHyphe
       expect(hasTrackInsertMark(node)).toBe(true);
     });
   });
+
+  it('exports every original per-run w:id individually, even though they now share one internal id', async () => {
+    // trackedChangeIdMapper.js's same-type chaining (added to fix "7 bubbles
+    // instead of 1" — see tracked-change-resolver.repro-nobreakhyphen.integration.test.ts)
+    // merges the *internal* mark id shared across all runs in the chain, but
+    // must not affect the *exported* w:id — each run keeps writing back its
+    // own original Word id via `sourceId`, independently of that merge.
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(
+      'behavior-fixtures/tracked-insert-nobreakhyphen.docx',
+    );
+    ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+    const xml = await editor.exportDocx({ exportXmlOnly: true, isFinalDoc: false });
+    const ids = [...xml.matchAll(/<w:ins w:id="(\d+)"/g)].map((match) => match[1]);
+
+    // Every exported id is distinct — no accidental collapse onto a shared id.
+    expect(new Set(ids).size).toBe(ids.length);
+    // The runs that were split by w:noBreakHyphen/paragraph marks in the
+    // fixture (paragraphs 16, 16A, 16B) all still round-trip individually.
+    expect(ids).toEqual(expect.arrayContaining(['1', '2', '3', '5', '6', '7', '9']));
+  });
 });

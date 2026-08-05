@@ -1,6 +1,7 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { translator as wPPrNodeTranslator } from '../../pPr/pPr-translator.js';
 import { createParagraphSplitInsertionElement, isParagraphSplitTrackFormatMark } from '../../../helpers.js';
+import { resolveExportWordId } from '@converter/v3/handlers/helpers/resolve-export-word-id.js';
 
 function resolveExportPartPath(params = {}) {
   if (typeof params.currentPartPath === 'string' && params.currentPartPath.length > 0) return params.currentPartPath;
@@ -64,6 +65,36 @@ function insertRunPropertiesInOrder(pPr, runProperties) {
   } else {
     pPr.elements.splice(terminalIdx, 0, runProperties);
   }
+}
+
+/**
+ * Write the paragraph MARK's tracked deletion into `w:pPr/w:rPr` as `<w:del>`
+ * (ECMA-376 §17.13.5.14). A whole-block tracked deletion marks the runs
+ * AND the paragraph mark; without this half Word reopens the file seeing only
+ * struck text, and accepting leaves the empty numbered item behind.
+ *
+ * @param {object} pPr
+ * @param {{ id?: string, sourceId?: string, author?: string, authorEmail?: string, date?: string }} markTrackChange
+ * @param {string} [wordId] Allocated OOXML `w:id`; falls back to the source/internal id.
+ * @returns {object} the same pPr, with the mark deletion recorded
+ */
+function appendParagraphMarkDeletion(pPr, markTrackChange, wordId) {
+  if (!pPr || !markTrackChange) return pPr;
+  if (!Array.isArray(pPr.elements)) pPr.elements = [];
+  const existingRunProperties = pPr.elements.find((element) => element?.name === 'w:rPr');
+  const runProperties = existingRunProperties || { type: 'element', name: 'w:rPr', elements: [] };
+  if (!Array.isArray(runProperties.elements)) runProperties.elements = [];
+  if (runProperties.elements.some((element) => element?.name === 'w:del')) return pPr;
+
+  /** @type {Record<string, string>} */
+  const attributes = { 'w:id': String(wordId ?? markTrackChange.sourceId ?? markTrackChange.id ?? '') };
+  if (markTrackChange.author) attributes['w:author'] = markTrackChange.author;
+  if (markTrackChange.authorEmail) attributes['w:authorEmail'] = markTrackChange.authorEmail;
+  if (markTrackChange.date) attributes['w:date'] = markTrackChange.date;
+  runProperties.elements.push({ type: 'element', name: 'w:del', attributes });
+
+  if (!existingRunProperties) insertRunPropertiesInOrder(pPr, runProperties);
+  return pPr;
 }
 
 function prependParagraphSplitInsertion(pPr, insertionElement) {
@@ -147,6 +178,22 @@ export function generateParagraphProperties(params) {
       pPr = prependParagraphSplitInsertion(ensureParagraphPropertiesNode(pPr), insertionElement);
     }
   }
+  // The paragraph mark's own tracked deletion. `isFinalDoc` strips
+  // pending revisions for a clean export, so it is skipped there like the
+  // paragraph-split insertion above.
+  const markTrackChange = node.attrs?.markTrackChange;
+  if (!params?.isFinalDoc && markTrackChange?.type === 'paragraphMarkDelete') {
+    // Through the SAME allocator the run-level `w:del` uses. `w:id` is
+    // ST_DecimalNumber, and the internal id is a UUID; allocating on the shared
+    // logical id both keeps the value in schema and gives both halves of the
+    // deletion one id, so Word reads them as a single revision.
+    pPr = appendParagraphMarkDeletion(
+      ensureParagraphPropertiesNode(pPr),
+      markTrackChange,
+      resolveExportWordId(params, markTrackChange),
+    );
+  }
+
   const sectPr = node.attrs?.paragraphProperties?.sectPr;
   if (sectPr) {
     if (!pPr) {

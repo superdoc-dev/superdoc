@@ -117,7 +117,7 @@ def test_rejects_duplicate_names():
         extend_preset('core', id='dup', actions=[a, b])
 
 
-# The canonical 40 names from ACTION_NAMES_LIST in
+# The canonical 41 names from ACTION_NAMES_LIST in
 # node/src/agent/actions.ts (source of truth). Asserting the EXACT set — not
 # just the count — makes any drift from Node fail loudly.
 _CANONICAL_ACTION_NAMES = sorted([
@@ -132,6 +132,7 @@ _CANONICAL_ACTION_NAMES = sorted([
     'comment_paragraphs',
     'convert_list',
     'create_table',
+    'delete_blocks',
     'delete_table',
     'delete_table_column',
     'delete_table_row',

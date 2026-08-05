@@ -7,6 +7,7 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import {
   DELETABLE_BLOCK_NODE_TYPES,
@@ -25,6 +26,8 @@ import {
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { textContentInBlock } from '../helpers/text-offset-resolver.js';
 import { TrackDeleteMarkName } from '../../extensions/track-changes/constants.js';
+import { markDeletion } from '../../extensions/track-changes/trackChangesHelpers/markDeletion.js';
+import { v4 as uuidv4 } from 'uuid';
 import {
   findBlockByIdStrict,
   mapBlockNodeType,
@@ -480,13 +483,76 @@ export function blocksDeleteWrapper(
   checkRevision(editor, options?.expectedRevision);
 
   const tr = editor.state.tr;
-  tr.delete(candidate.pos, candidate.end);
-  if (mode === 'tracked') applyTrackedMutationMeta(tr);
-  else applyDirectMutationMeta(tr);
+  if (mode === 'tracked' && isParagraphShaped(candidate)) {
+    // A plain `tr.delete` with forceTrackChanges routes through the
+    // inline compiler, which marks the RUNS and leaves the paragraph node
+    // untouched — so accepting the change strands an empty numbered item and
+    // the rest of the list never renumbers. Word instead marks both the runs
+    // and the paragraph MARK, and acceptance collapses the emptied paragraph
+    // into its successor. Author both halves here under one revision id.
+    if (!authorTrackedBlockDeletion(editor, tr, candidate)) {
+      throw new DocumentApiAdapterError(
+        'CAPABILITY_UNAVAILABLE',
+        'blocks.delete could not record a tracked deletion for this block.',
+        { reason: 'tracked_authoring_failed' },
+      );
+    }
+    applyDirectMutationMeta(tr);
+  } else {
+    tr.delete(candidate.pos, candidate.end);
+    if (mode === 'tracked') applyTrackedMutationMeta(tr);
+    else applyDirectMutationMeta(tr);
+  }
   editor.dispatch(tr);
   clearIndexCache(editor);
 
   return { success: true, deleted: input.target, deletedBlock };
+}
+
+/** Paragraph-shaped blocks carry a paragraph mark; tables and their parts do not. */
+function isParagraphShaped(candidate: BlockCandidate): boolean {
+  return candidate.node?.type?.name === 'paragraph' || candidate.node?.type?.name === 'heading';
+}
+
+/**
+ * Record a whole-block tracked deletion the way Word encodes it: every run in
+ * the block gets a trackDelete mark, and the paragraph mark itself is stamped
+ * with a matching `markTrackChange`. Both halves share ONE revision id, so the
+ * review model surfaces a single decidable change and the decision engine can
+ * pair the content removal with the paragraph collapse.
+ *
+ * Returns false when the block is not addressable as a textblock, leaving `tr`
+ * untouched so the caller can fail closed rather than write an untracked edit.
+ */
+function authorTrackedBlockDeletion(editor: Editor, tr: Transaction, candidate: BlockCandidate): boolean {
+  const user = editor.options.user;
+  if (!user) return false;
+  const node = candidate.node;
+  if (!node || !node.isTextblock) return false;
+
+  const id = uuidv4();
+  const date = new Date().toISOString();
+  // Inner content range: skip the node's own open/close tokens.
+  const from = candidate.pos + 1;
+  const to = candidate.pos + node.nodeSize - 1;
+  if (to > from) {
+    markDeletion({ tr, from, to, user, date, id });
+  }
+
+  const markedPos = tr.mapping.map(candidate.pos, 1);
+  const markedNode = tr.doc.nodeAt(markedPos);
+  if (!markedNode || !markedNode.isTextblock) return false;
+  tr.setNodeMarkup(markedPos, undefined, {
+    ...markedNode.attrs,
+    markTrackChange: {
+      type: 'paragraphMarkDelete',
+      id,
+      author: user.name || '',
+      authorEmail: user.email || '',
+      date,
+    },
+  });
+  return true;
 }
 
 // ---------------------------------------------------------------------------

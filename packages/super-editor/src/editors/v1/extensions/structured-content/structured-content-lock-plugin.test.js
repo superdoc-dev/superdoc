@@ -8,7 +8,10 @@ import {
   findFirstContentCursorPosInNode,
   findLastContentCursorPosInNode,
 } from '@core/commands/helpers/textPositions.js';
-import { STRUCTURED_CONTENT_LOCK_KEY } from './structured-content-lock-plugin.js';
+import {
+  STRUCTURED_CONTENT_LOCK_KEY,
+  STRUCTURED_CONTENT_WRAPPER_PRESERVING_META,
+} from './structured-content-lock-plugin.js';
 
 /**
  * Test suite for StructuredContentLockPlugin
@@ -132,6 +135,70 @@ describe('StructuredContentLockPlugin', () => {
       // Assert
       const sdtStillExists = sdtNodeExists(newState.doc, nodeType);
       expect(sdtStillExists).toBe(shouldBlock);
+    });
+  });
+
+  describe('wrapper-preserving structural transactions', () => {
+    it.each(['sdtLocked', 'sdtContentLocked'])(
+      'allows a marked transaction that reparents an unchanged %s block SDT',
+      (lockMode) => {
+        const doc = createDocWithSDT(lockMode, 'structuredContentBlock');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContentBlock');
+        const parent = schema.nodes.structuredContentBlock.create(
+          { id: 'parent-456', lockMode: 'unlocked' },
+          sdtInfo.node,
+        );
+
+        const tr = state.tr
+          .replaceWith(sdtInfo.pos, sdtInfo.end, parent)
+          .setMeta(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META, true);
+        const nextState = state.apply(tr);
+
+        expect(nextState.doc.childCount).toBe(1);
+        expect(nextState.doc.firstChild?.attrs.id).toBe('parent-456');
+        expect(nextState.doc.firstChild?.firstChild?.attrs.id).toBe('test-123');
+        expect(nextState.doc.firstChild?.firstChild?.attrs.lockMode).toBe(lockMode);
+        expect(nextState.doc.firstChild?.firstChild?.textContent).toBe('Test content');
+      },
+    );
+
+    it('still blocks a marked transaction that changes the locked SDT', () => {
+      const doc = createDocWithSDT('sdtLocked', 'structuredContentBlock');
+      const state = applyDocToEditor(doc);
+      const sdtInfo = findSDTNode(state.doc, 'structuredContentBlock');
+      const changedParagraph = schema.nodes.paragraph.create(null, schema.text('Changed content'));
+      const changedSdt = sdtInfo.node.type.create(sdtInfo.node.attrs, changedParagraph);
+      const parent = schema.nodes.structuredContentBlock.create({ id: 'parent-456', lockMode: 'unlocked' }, changedSdt);
+
+      const tr = state.tr
+        .replaceWith(sdtInfo.pos, sdtInfo.end, parent)
+        .setMeta(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META, true);
+      const nextState = state.apply(tr);
+
+      expect(nextState.doc.eq(state.doc)).toBe(true);
+    });
+
+    it('allows wrapping an unlocked ancestor that preserves its locked descendant', () => {
+      const lockedChild = schema.nodes.structuredContentBlock.create(
+        { id: 'locked-child', lockMode: 'sdtLocked' },
+        schema.nodes.paragraph.create(null, schema.text('Locked child content')),
+      );
+      const target = schema.nodes.structuredContentBlock.create(
+        { id: 'unlocked-target', lockMode: 'unlocked' },
+        lockedChild,
+      );
+      const state = applyDocToEditor(schema.nodes.doc.create(null, target));
+      const parent = schema.nodes.structuredContentBlock.create({ id: 'parent-456', lockMode: 'unlocked' }, target);
+
+      const tr = state.tr
+        .replaceWith(0, target.nodeSize, parent)
+        .setMeta(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META, true);
+      const nextState = state.apply(tr);
+
+      expect(nextState.doc.firstChild?.attrs.id).toBe('parent-456');
+      expect(nextState.doc.firstChild?.firstChild?.attrs.id).toBe('unlocked-target');
+      expect(nextState.doc.firstChild?.firstChild?.firstChild?.attrs.id).toBe('locked-child');
     });
   });
 

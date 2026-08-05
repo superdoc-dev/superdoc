@@ -40,7 +40,7 @@ describe('useCommentSmallScreen', () => {
   const createMockResizeObserver = () => {
     const instances = [];
     const Original = window.ResizeObserver;
-    window.ResizeObserver = vi.fn((cb) => {
+    window.ResizeObserver = vi.fn(function (cb) {
       const instance = {
         observe: vi.fn(),
         disconnect: vi.fn(),
@@ -261,7 +261,9 @@ describe('useCommentSmallScreen', () => {
     const disconnect = vi.fn();
     const observe = vi.fn();
     const originalResizeObserver = window.ResizeObserver;
-    window.ResizeObserver = vi.fn(() => ({ observe, disconnect }));
+    window.ResizeObserver = vi.fn(function () {
+      return { observe, disconnect };
+    });
 
     const { api, wrapper } = mountComposable();
     api.ensureCompactMeasurementObserver();

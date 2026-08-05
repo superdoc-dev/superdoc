@@ -54,7 +54,9 @@ describe('image helper utilities', () => {
     };
     vi.stubGlobal(
       'FileReader',
-      vi.fn(() => mockReader),
+      vi.fn(function () {
+        return mockReader;
+      }),
     );
 
     const file = new File(['data'], 'image.png', { type: 'image/png' });

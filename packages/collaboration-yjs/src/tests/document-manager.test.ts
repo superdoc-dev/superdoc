@@ -14,7 +14,7 @@ vi.mock('../internal-logger/logger.js', () => ({
 }));
 
 vi.mock('../shared-doc/index.js', () => {
-  const SharedSuperDoc = vi.fn((documentId: string) => {
+  const SharedSuperDoc = vi.fn(function (documentId: string) {
     const doc = {
       name: documentId,
       conns: new Map<CollaborationWebSocket, Set<number>>(),

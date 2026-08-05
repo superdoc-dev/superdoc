@@ -22,7 +22,9 @@ const { MockEditor, getStarterExtensions, applyStyleIsolationClass } = vi.hoiste
   }
 
   return {
-    MockEditor: vi.fn((options) => new MockEditor(options)),
+    MockEditor: vi.fn(function (options) {
+      return new MockEditor(options);
+    }),
     getStarterExtensions: vi.fn(() => []),
     applyStyleIsolationClass: vi.fn(),
   };

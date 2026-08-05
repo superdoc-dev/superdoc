@@ -188,6 +188,11 @@ export default defineConfig(({ mode, command }) => {
       // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
       environment: process.env.VITEST_DOM || 'happy-dom',
       retry: 2,
+      // Vitest 4 no longer clears mock history between retry attempts,
+      // so any call-count assertion under `retry` accumulates calls
+      // across attempts. Clearing before each test keeps attempts
+      // independent.
+      clearMocks: true,
       testTimeout: 20000,
       hookTimeout: 10000,
       exclude: [

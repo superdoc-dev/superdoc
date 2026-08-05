@@ -81,26 +81,28 @@ const {
       setShowFormattingMarks: vi.fn(),
     })),
     mockEditorConverterStore: converterStore,
-    mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
-      showEditingOverlay: vi.fn(() => ({
-        success: true,
-        editorHost: document.createElement('div'),
-        reason: null,
-      })),
-      hideEditingOverlay: vi.fn(),
-      showSelectionOverlay: vi.fn(),
-      hideSelectionOverlay: vi.fn(),
-      setOnDimmingClick: vi.fn(),
-      getActiveEditorHost: vi.fn(() => null),
-      destroy: vi.fn(),
-    })),
+    mockEditorOverlayManager: vi.fn().mockImplementation(function () {
+      return {
+        showEditingOverlay: vi.fn(() => ({
+          success: true,
+          editorHost: document.createElement('div'),
+          reason: null,
+        })),
+        hideEditingOverlay: vi.fn(),
+        showSelectionOverlay: vi.fn(),
+        hideSelectionOverlay: vi.fn(),
+        setOnDimmingClick: vi.fn(),
+        getActiveEditorHost: vi.fn(() => null),
+        destroy: vi.fn(),
+      };
+    }),
   };
 });
 
 // Mock Editor class
 vi.mock('../../Editor.js', () => {
   return {
-    Editor: vi.fn().mockImplementation(() => {
+    Editor: vi.fn().mockImplementation(function () {
       const domElement = document.createElement('div');
 
       return {
@@ -185,14 +187,16 @@ vi.mock('@superdoc/layout-bridge', () => ({
   computeDisplayPageNumber: vi.fn((pages) =>
     pages.map((p: { number?: number }) => ({ displayText: String(p.number ?? 1) })),
   ),
-  PageGeometryHelper: vi.fn().mockImplementation(() => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => 0),
-    getLayout: vi.fn(() => ({ pages: [] })),
-  })),
+  PageGeometryHelper: vi.fn().mockImplementation(function () {
+    return {
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => 0),
+      getLayout: vi.fn(() => ({ pages: [] })),
+    };
+  }),
 }));
 
 // Mock painter-dom

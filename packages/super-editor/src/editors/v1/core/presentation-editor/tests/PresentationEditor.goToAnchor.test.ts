@@ -70,7 +70,7 @@ const {
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
-    mockCreateHeaderFooterEditor: vi.fn(() => {
+    mockCreateHeaderFooterEditor: vi.fn(function () {
       const createEmitter = () => {
         const listeners = new Map<string, Set<(payload?: unknown) => void>>();
         const on = (event: string, handler: (payload?: unknown) => void) => {
@@ -122,70 +122,74 @@ const {
     }),
     mockOnHeaderFooterDataUpdate: vi.fn(),
     mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
-    mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
-      showEditingOverlay: vi.fn(() => ({
-        success: true,
-        editorHost: document.createElement('div'),
-        reason: null,
-      })),
-      hideEditingOverlay: vi.fn(),
-      showSelectionOverlay: vi.fn(),
-      hideSelectionOverlay: vi.fn(),
-      setOnDimmingClick: vi.fn(),
-      getActiveEditorHost: vi.fn(() => null),
-      destroy: vi.fn(),
-    })),
+    mockEditorOverlayManager: vi.fn().mockImplementation(function () {
+      return {
+        showEditingOverlay: vi.fn(() => ({
+          success: true,
+          editorHost: document.createElement('div'),
+          reason: null,
+        })),
+        hideEditingOverlay: vi.fn(),
+        showSelectionOverlay: vi.fn(),
+        hideSelectionOverlay: vi.fn(),
+        setOnDimmingClick: vi.fn(),
+        getActiveEditorHost: vi.fn(() => null),
+        destroy: vi.fn(),
+      };
+    }),
   };
 });
 
 // Mock Editor class
 vi.mock('../../Editor', () => {
   return {
-    Editor: vi.fn().mockImplementation(() => ({
-      setDocumentMode: vi.fn(),
-      setOptions: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      destroy: vi.fn(),
-      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-      isEditable: true,
-      state: {
-        selection: { from: 0, to: 0 },
-        doc: {
-          nodeSize: 100,
-          content: {
-            size: 100,
+    Editor: vi.fn().mockImplementation(function () {
+      return {
+        setDocumentMode: vi.fn(),
+        setOptions: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        destroy: vi.fn(),
+        getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+        isEditable: true,
+        state: {
+          selection: { from: 0, to: 0 },
+          doc: {
+            nodeSize: 100,
+            content: {
+              size: 100,
+            },
+            // Mock ProseMirror document methods
+            descendants: vi.fn(),
+            resolve: vi.fn(() => ({
+              node: vi.fn(),
+              parent: null,
+              depth: 0,
+            })),
           },
-          // Mock ProseMirror document methods
-          descendants: vi.fn(),
-          resolve: vi.fn(() => ({
-            node: vi.fn(),
-            parent: null,
-            depth: 0,
-          })),
         },
-      },
-      view: {
-        // Real element so listener-based wiring (e.g. SD-2368 composition
-        // deferral) can attach; dispatchEvent/focus stay non-dispatching stubs.
-        dom: Object.assign(document.createElement('div'), {
-          dispatchEvent: vi.fn(() => true),
+        view: {
+          // Real element so listener-based wiring (e.g. SD-2368 composition
+          // deferral) can attach; dispatchEvent/focus stay non-dispatching stubs.
+          dom: Object.assign(document.createElement('div'), {
+            dispatchEvent: vi.fn(() => true),
+            focus: vi.fn(),
+          }),
           focus: vi.fn(),
-        }),
-        focus: vi.fn(),
-        dispatch: vi.fn(),
-      },
-      options: {
-        documentId: 'test-doc',
-        element: document.createElement('div'),
-      },
-      converter: mockEditorConverterStore.current,
-      storage: {
-        image: {
-          media: mockEditorConverterStore.mediaFiles,
+          dispatch: vi.fn(),
         },
-      },
-    })),
+        options: {
+          documentId: 'test-doc',
+          element: document.createElement('div'),
+        },
+        converter: mockEditorConverterStore.current,
+        storage: {
+          image: {
+            media: mockEditorConverterStore.mediaFiles,
+          },
+        },
+      };
+    }),
   };
 });
 
@@ -219,14 +223,16 @@ vi.mock('@superdoc/layout-bridge', () => ({
     },
   })),
   computeDisplayPageNumber: vi.fn((pages) => pages.map((p) => ({ displayText: String(p.number ?? 1) }))),
-  PageGeometryHelper: vi.fn().mockImplementation(({ layout, pageGap }) => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => pageGap ?? 0),
-    getLayout: vi.fn(() => layout),
-  })),
+  PageGeometryHelper: vi.fn().mockImplementation(function ({ layout, pageGap }) {
+    return {
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => pageGap ?? 0),
+      getLayout: vi.fn(() => layout),
+    };
+  }),
 }));
 
 // Mock painter-dom

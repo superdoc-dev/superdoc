@@ -23,7 +23,9 @@ const { mockDecoSet, mockPluginKeyInstance } = vi.hoisted(() => {
 // ── ProseMirror mocks ─────────────────────────────────────────────────
 vi.mock('prosemirror-state', () => ({
   Plugin: vi.fn(),
-  PluginKey: vi.fn(() => mockPluginKeyInstance),
+  PluginKey: vi.fn(function () {
+    return mockPluginKeyInstance;
+  }),
 }));
 
 vi.mock('prosemirror-view', () => ({

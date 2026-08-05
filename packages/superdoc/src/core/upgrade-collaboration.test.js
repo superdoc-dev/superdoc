@@ -82,7 +82,9 @@ vi.mock('./collaboration/permissions.js', () => ({
 }));
 
 vi.mock('./whiteboard/Whiteboard', () => ({
-  Whiteboard: vi.fn(() => ({})),
+  Whiteboard: vi.fn(function () {
+    return {};
+  }),
 }));
 vi.mock('./whiteboard/WhiteboardRenderer', () => ({
   WhiteboardRenderer: vi.fn(),

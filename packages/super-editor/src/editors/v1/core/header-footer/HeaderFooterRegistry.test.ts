@@ -71,23 +71,24 @@ const { mockCreateHeaderFooterEditor, mockOnHeaderFooterDataUpdate, mockToFlowBl
       return editorStub;
     };
 
-    const mockCreateHeaderFooterEditor = vi.fn(
-      (input?: { editorContainer?: HTMLElement; editorHost?: HTMLElement }) => {
-        const editor = createSectionEditor();
-        if (input?.editorContainer instanceof HTMLElement) {
-          if (input.editorHost instanceof HTMLElement) {
-            input.editorHost.appendChild(input.editorContainer);
-          } else {
-            document.body.appendChild(input.editorContainer);
-          }
+    const mockCreateHeaderFooterEditor = vi.fn(function (input?: {
+      editorContainer?: HTMLElement;
+      editorHost?: HTMLElement;
+    }) {
+      const editor = createSectionEditor();
+      if (input?.editorContainer instanceof HTMLElement) {
+        if (input.editorHost instanceof HTMLElement) {
+          input.editorHost.appendChild(input.editorContainer);
+        } else {
+          document.body.appendChild(input.editorContainer);
         }
-        editors.push({ editor, emit: editor.emit });
-        queueMicrotask(() => {
-          editor.emit('create');
-        });
-        return editor;
-      },
-    );
+      }
+      editors.push({ editor, emit: editor.emit });
+      queueMicrotask(() => {
+        editor.emit('create');
+      });
+      return editor;
+    });
 
     return {
       mockCreateHeaderFooterEditor,

@@ -165,7 +165,7 @@ const {
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
-    mockCreateHeaderFooterEditor: vi.fn(() => {
+    mockCreateHeaderFooterEditor: vi.fn(function () {
       const editor = createSectionEditor();
       editors.push({ editor });
       return editor;
@@ -180,19 +180,21 @@ const {
     createdStoryEditors: storyEditors,
     mockOnHeaderFooterDataUpdate: vi.fn(),
     mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
-    mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
-      showEditingOverlay: vi.fn(() => ({
-        success: true,
-        editorHost: document.createElement('div'),
-        reason: null,
-      })),
-      hideEditingOverlay: vi.fn(),
-      showSelectionOverlay: vi.fn(),
-      hideSelectionOverlay: vi.fn(),
-      setOnDimmingClick: vi.fn(),
-      getActiveEditorHost: vi.fn(() => null),
-      destroy: vi.fn(),
-    })),
+    mockEditorOverlayManager: vi.fn().mockImplementation(function () {
+      return {
+        showEditingOverlay: vi.fn(() => ({
+          success: true,
+          editorHost: document.createElement('div'),
+          reason: null,
+        })),
+        hideEditingOverlay: vi.fn(),
+        showSelectionOverlay: vi.fn(),
+        hideSelectionOverlay: vi.fn(),
+        setOnDimmingClick: vi.fn(),
+        getActiveEditorHost: vi.fn(() => null),
+        destroy: vi.fn(),
+      };
+    }),
     // SD-2836: rebuildRegions now iterates resolvedLayout.pages, so the mock
     // must synthesize a ResolvedPage per source Layout page to keep header/footer
     // region tests from going empty.
@@ -245,7 +247,7 @@ vi.mock('../input/PositionHitResolver.js', () => ({
 // Mock Editor class
 vi.mock('../../Editor', () => {
   return {
-    Editor: vi.fn().mockImplementation((options: { content?: unknown } = {}) => {
+    Editor: vi.fn().mockImplementation(function (options: { content?: unknown } = {}) {
       const contentAttrs =
         options.content && typeof options.content === 'object' && !Array.isArray(options.content)
           ? (((options.content as { attrs?: Record<string, unknown> }).attrs ?? {}) as Record<string, unknown>)
@@ -370,14 +372,16 @@ vi.mock('@superdoc/layout-bridge', () => ({
     },
   })),
   computeDisplayPageNumber: vi.fn((pages) => pages.map((p) => ({ displayText: String(p.number ?? 1) }))),
-  PageGeometryHelper: vi.fn().mockImplementation(({ layout, pageGap }) => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => pageGap ?? 0),
-    getLayout: vi.fn(() => layout),
-  })),
+  PageGeometryHelper: vi.fn().mockImplementation(function ({ layout, pageGap }) {
+    return {
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => pageGap ?? 0),
+      getLayout: vi.fn(() => layout),
+    };
+  }),
 }));
 
 // Mock painter-dom

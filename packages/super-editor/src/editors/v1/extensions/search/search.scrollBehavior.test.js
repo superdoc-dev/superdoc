@@ -40,9 +40,11 @@ vi.mock('prosemirror-state', async (importOriginal) => {
 });
 
 vi.mock('@core/PositionTracker.js', () => ({
-  PositionTracker: vi.fn(() => ({
-    resolve: vi.fn(() => null),
-  })),
+  PositionTracker: vi.fn(function () {
+    return {
+      resolve: vi.fn(() => null),
+    };
+  }),
 }));
 
 // We import the extension so we can extract the command factory

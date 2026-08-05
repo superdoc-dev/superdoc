@@ -50,11 +50,13 @@ describe('SuperDocCollaboration', () => {
       this.has = vi.fn();
     });
 
-    connectionHandlerCtor.mockImplementation(({ documentManager, hooks }) => ({
-      handle: handleSpy,
-      documentManager,
-      hooks,
-    }));
+    connectionHandlerCtor.mockImplementation(function ({ documentManager, hooks }) {
+      return {
+        handle: handleSpy,
+        documentManager,
+        hooks,
+      };
+    });
 
     generateParamsFn.mockImplementation(() => ({
       documentId: 'doc-123',

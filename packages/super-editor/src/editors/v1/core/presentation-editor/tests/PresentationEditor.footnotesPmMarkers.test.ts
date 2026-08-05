@@ -14,36 +14,38 @@ const { mockIncrementalLayout, mockResolveLayout } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../Editor', () => ({
-  Editor: vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
-    off: vi.fn(),
-    destroy: vi.fn(),
-    setDocumentMode: vi.fn(),
-    setOptions: vi.fn(),
-    getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-    isEditable: true,
-    schema: {},
-    state: {
-      selection: { from: 0, to: 0 },
-      doc: {
-        nodeSize: 100,
-        content: { size: 100 },
-        descendants: vi.fn((cb: (node: any, pos: number) => void) => {
-          cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' }, nodeSize: 1 }, 10);
-        }),
+  Editor: vi.fn().mockImplementation(function () {
+    return {
+      on: vi.fn(),
+      off: vi.fn(),
+      destroy: vi.fn(),
+      setDocumentMode: vi.fn(),
+      setOptions: vi.fn(),
+      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+      isEditable: true,
+      schema: {},
+      state: {
+        selection: { from: 0, to: 0 },
+        doc: {
+          nodeSize: 100,
+          content: { size: 100 },
+          descendants: vi.fn((cb: (node: any, pos: number) => void) => {
+            cb({ type: { name: 'footnoteReference' }, attrs: { id: '1' }, nodeSize: 1 }, 10);
+          }),
+        },
       },
-    },
-    view: { dom: document.createElement('div'), hasFocus: vi.fn(() => false) },
-    options: { documentId: 'test', element: document.createElement('div'), mediaFiles: {} },
-    converter: {
-      headers: {},
-      footers: {},
-      headerIds: { default: null, ids: [] },
-      footerIds: { default: null, ids: [] },
-      footnotes: [{ id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] }],
-    },
-    storage: { image: { media: {} } },
-  })),
+      view: { dom: document.createElement('div'), hasFocus: vi.fn(() => false) },
+      options: { documentId: 'test', element: document.createElement('div'), mediaFiles: {} },
+      converter: {
+        headers: {},
+        footers: {},
+        headerIds: { default: null, ids: [] },
+        footerIds: { default: null, ids: [] },
+        footnotes: [{ id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] }],
+      },
+      storage: { image: { media: {} } },
+    };
+  }),
 }));
 
 vi.mock('@core/layout-adapter', async (importOriginal) => {
@@ -89,14 +91,16 @@ vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
     findWordBoundaries: vi.fn(),
     findParagraphBoundaries: vi.fn(),
     createDragHandler: vi.fn(),
-    PageGeometryHelper: vi.fn(() => ({
-      updateLayout: vi.fn(),
-      getPageIndexAtY: vi.fn(() => 0),
-      getNearestPageIndex: vi.fn(() => 0),
-      getPageTop: vi.fn(() => 0),
-      getPageGap: vi.fn(() => 0),
-      getLayout: vi.fn(() => ({ pages: [] })),
-    })),
+    PageGeometryHelper: vi.fn(function () {
+      return {
+        updateLayout: vi.fn(),
+        getPageIndexAtY: vi.fn(() => 0),
+        getNearestPageIndex: vi.fn(() => 0),
+        getPageTop: vi.fn(() => 0),
+        getPageGap: vi.fn(() => 0),
+        getLayout: vi.fn(() => ({ pages: [] })),
+      };
+    }),
   };
 });
 
@@ -124,32 +128,38 @@ vi.mock('@superdoc/layout-resolved', () => ({
 }));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
-  HeaderFooterEditorManager: vi.fn(() => ({
-    createEditor: vi.fn(),
-    destroyEditor: vi.fn(),
-    getEditor: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    destroy: vi.fn(),
-  })),
-  HeaderFooterLayoutAdapter: vi.fn(() => ({
-    clear: vi.fn(),
-    getBatch: vi.fn(() => []),
-    getBlocksByRId: vi.fn(() => new Map()),
-    setTrackedChangesRenderConfig: vi.fn(),
-  })),
+  HeaderFooterEditorManager: vi.fn(function () {
+    return {
+      createEditor: vi.fn(),
+      destroyEditor: vi.fn(),
+      getEditor: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      destroy: vi.fn(),
+    };
+  }),
+  HeaderFooterLayoutAdapter: vi.fn(function () {
+    return {
+      clear: vi.fn(),
+      getBatch: vi.fn(() => []),
+      getBlocksByRId: vi.fn(() => new Map()),
+      setTrackedChangesRenderConfig: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
-  EditorOverlayManager: vi.fn(() => ({
-    showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div') })),
-    hideEditingOverlay: vi.fn(),
-    showSelectionOverlay: vi.fn(),
-    hideSelectionOverlay: vi.fn(),
-    setOnDimmingClick: vi.fn(),
-    getActiveEditorHost: vi.fn(() => null),
-    destroy: vi.fn(),
-  })),
+  EditorOverlayManager: vi.fn(function () {
+    return {
+      showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div') })),
+      hideEditingOverlay: vi.fn(),
+      showSelectionOverlay: vi.fn(),
+      hideSelectionOverlay: vi.fn(),
+      setOnDimmingClick: vi.fn(),
+      getActiveEditorHost: vi.fn(() => null),
+      destroy: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('y-prosemirror', () => ({

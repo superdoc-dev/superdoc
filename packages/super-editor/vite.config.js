@@ -46,6 +46,12 @@ export default defineConfig(({ mode }) => {
       // This avoids the cost of setting up happy-dom for pure logic tests.
       // Override to 'node' for directories that don't need DOM, with
       // explicit happy-dom exceptions for files that do (first match wins).
+      // AIDEV-NOTE: Vitest 4 removed `environmentMatchGlobs`, so every rule
+      // below is currently inert and these files run in the default
+      // environment. Two headless command tests assert node-only behavior and
+      // fail because of it. Replacing this with per-environment `projects` (or
+      // per-file `@vitest-environment` docblocks) is tracked as the remaining
+      // step of the Vitest 4 migration. Do not assume these globs take effect.
       environmentMatchGlobs: [
         // super-converter: all pure logic except tiff-converter (uses document.createElement)
         ['src/editors/v1/core/super-converter/**/tiff-converter.test.*', 'happy-dom'],
@@ -71,6 +77,11 @@ export default defineConfig(({ mode }) => {
         ['src/editors/v1/utils/**', 'node'],
       ],
       retry: 2,
+      // Vitest 4 no longer clears mock history between retry attempts,
+      // so any call-count assertion under `retry` accumulates calls
+      // across attempts. Clearing before each test keeps attempts
+      // independent.
+      clearMocks: true,
       testTimeout: 20000,
       hookTimeout: 10000,
       exclude: [

@@ -38,11 +38,13 @@ vi.mock('prosemirror-state', async (importOriginal) => {
 });
 
 vi.mock('@core/PositionTracker.js', () => ({
-  PositionTracker: vi.fn(() => ({
-    resolve: vi.fn(() => null),
-    trackMany: vi.fn((ranges) => ranges.map((_, i) => `tracker-${i}`)),
-    untrackByType: vi.fn(),
-  })),
+  PositionTracker: vi.fn(function () {
+    return {
+      resolve: vi.fn(() => null),
+      trackMany: vi.fn((ranges) => ranges.map((_, i) => `tracker-${i}`)),
+      untrackByType: vi.fn(),
+    };
+  }),
 }));
 
 const { Search } = await import('./search.js');

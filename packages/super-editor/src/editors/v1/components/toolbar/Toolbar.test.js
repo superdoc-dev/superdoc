@@ -149,7 +149,9 @@ describe('Toolbar', () => {
   it('does not attach ResizeObserver when responsiveToContainer is disabled', () => {
     const observe = vi.fn();
     const disconnect = vi.fn();
-    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    const ResizeObserverMock = vi.fn(function () {
+      return { observe, disconnect };
+    });
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 
     const mockToolbar = {
@@ -177,7 +179,9 @@ describe('Toolbar', () => {
   it('attaches ResizeObserver to the container when responsiveToContainer is enabled', () => {
     const observe = vi.fn();
     const disconnect = vi.fn();
-    const ResizeObserverMock = vi.fn(() => ({ observe, disconnect }));
+    const ResizeObserverMock = vi.fn(function () {
+      return { observe, disconnect };
+    });
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 
     const container = document.createElement('div');

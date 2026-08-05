@@ -3,9 +3,11 @@ import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 // Mock the Telemetry class to verify it's called correctly
 vi.mock('@superdoc/common', () => ({
-  Telemetry: vi.fn().mockImplementation(() => ({
-    trackDocumentOpen: vi.fn(),
-  })),
+  Telemetry: vi.fn().mockImplementation(function () {
+    return {
+      trackDocumentOpen: vi.fn(),
+    };
+  }),
   COMMUNITY_LICENSE_KEY: 'community-and-eval-agplv3',
 }));
 

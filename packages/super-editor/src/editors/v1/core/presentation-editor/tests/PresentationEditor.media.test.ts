@@ -15,25 +15,27 @@ const { mockStorage } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../Editor', () => ({
-  Editor: vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
-    off: vi.fn(),
-    destroy: vi.fn(),
-    setDocumentMode: vi.fn(),
-    setOptions: vi.fn(),
-    getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
-    isEditable: true,
-    state: { selection: { from: 0, to: 0 }, doc: { nodeSize: 100, content: { size: 100 }, descendants: vi.fn() } },
-    view: { dom: document.createElement('div'), hasFocus: vi.fn(() => false) },
-    options: { documentId: 'test', element: document.createElement('div'), mediaFiles: {} },
-    converter: {
-      headers: {},
-      footers: {},
-      headerIds: { default: null, ids: [] },
-      footerIds: { default: null, ids: [] },
-    },
-    storage: { image: mockStorage },
-  })),
+  Editor: vi.fn().mockImplementation(function () {
+    return {
+      on: vi.fn(),
+      off: vi.fn(),
+      destroy: vi.fn(),
+      setDocumentMode: vi.fn(),
+      setOptions: vi.fn(),
+      getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
+      isEditable: true,
+      state: { selection: { from: 0, to: 0 }, doc: { nodeSize: 100, content: { size: 100 }, descendants: vi.fn() } },
+      view: { dom: document.createElement('div'), hasFocus: vi.fn(() => false) },
+      options: { documentId: 'test', element: document.createElement('div'), mediaFiles: {} },
+      converter: {
+        headers: {},
+        footers: {},
+        headerIds: { default: null, ids: [] },
+        footerIds: { default: null, ids: [] },
+      },
+      storage: { image: mockStorage },
+    };
+  }),
 }));
 
 vi.mock('@core/layout-adapter', async (importOriginal) => {
@@ -64,14 +66,16 @@ vi.mock('@superdoc/layout-bridge', () => ({
   findWordBoundaries: vi.fn(),
   findParagraphBoundaries: vi.fn(),
   createDragHandler: vi.fn(),
-  PageGeometryHelper: vi.fn(() => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => 0),
-    getLayout: vi.fn(() => ({ pages: [] })),
-  })),
+  PageGeometryHelper: vi.fn(function () {
+    return {
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => 0),
+      getLayout: vi.fn(() => ({ pages: [] })),
+    };
+  }),
 }));
 
 vi.mock('@superdoc/painter-dom', () => ({
@@ -93,32 +97,38 @@ vi.mock('@superdoc/painter-dom', () => ({
 vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 100, height: 100 })) }));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
-  HeaderFooterEditorManager: vi.fn(() => ({
-    createEditor: vi.fn(),
-    destroyEditor: vi.fn(),
-    getEditor: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    destroy: vi.fn(),
-  })),
-  HeaderFooterLayoutAdapter: vi.fn(() => ({
-    clear: vi.fn(),
-    getBatch: vi.fn(() => []),
-    getBlocksByRId: vi.fn(() => new Map()),
-    setTrackedChangesRenderConfig: vi.fn(),
-  })),
+  HeaderFooterEditorManager: vi.fn(function () {
+    return {
+      createEditor: vi.fn(),
+      destroyEditor: vi.fn(),
+      getEditor: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      destroy: vi.fn(),
+    };
+  }),
+  HeaderFooterLayoutAdapter: vi.fn(function () {
+    return {
+      clear: vi.fn(),
+      getBatch: vi.fn(() => []),
+      getBlocksByRId: vi.fn(() => new Map()),
+      setTrackedChangesRenderConfig: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
-  EditorOverlayManager: vi.fn(() => ({
-    showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div') })),
-    hideEditingOverlay: vi.fn(),
-    showSelectionOverlay: vi.fn(),
-    hideSelectionOverlay: vi.fn(),
-    setOnDimmingClick: vi.fn(),
-    getActiveEditorHost: vi.fn(() => null),
-    destroy: vi.fn(),
-  })),
+  EditorOverlayManager: vi.fn(function () {
+    return {
+      showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div') })),
+      hideEditingOverlay: vi.fn(),
+      showSelectionOverlay: vi.fn(),
+      hideSelectionOverlay: vi.fn(),
+      setOnDimmingClick: vi.fn(),
+      getActiveEditorHost: vi.fn(() => null),
+      destroy: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('y-prosemirror', () => ({

@@ -20,7 +20,7 @@ const createActionInstance = () => ({
 });
 
 vi.mock('../../services/ai-actions-service', () => {
-  const factory = vi.fn(() => {
+  const factory = vi.fn(function () {
     const instance = createActionInstance();
     actionInstances.push(instance);
     return instance;

@@ -227,7 +227,9 @@ describe('readImageDimensionsFromDataUri', () => {
   });
 
   it('rejects non-base64 raster data URIs without encoding payload text as bytes', () => {
-    const textEncoderConstructor = vi.fn(() => ({ encode: vi.fn(() => new Uint8Array()) }));
+    const textEncoderConstructor = vi.fn(function () {
+      return { encode: vi.fn(() => new Uint8Array()) };
+    });
     vi.stubGlobal('TextEncoder', textEncoderConstructor);
 
     expect(readImageDimensionsFromDataUri('data:image/png,not-base64')).toBeNull();

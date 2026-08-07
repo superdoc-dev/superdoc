@@ -10,7 +10,7 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  inserMention: {
+  insertMention: {
     type: Function,
     required: true,
   },
@@ -33,7 +33,7 @@ const getFilteredUsers = computed(() => {
 });
 
 const handleClick = (user) => {
-  props.inserMention(user);
+  props.insertMention(user);
 };
 
 const handleKeydown = (event) => {
@@ -50,7 +50,7 @@ const handleKeydown = (event) => {
   } else if (event.key === 'Enter') {
     const user = getFilteredUsers.value[activeUserIndex.value];
     if (user) {
-      props.inserMention(user);
+      props.insertMention(user);
     }
   }
 };
@@ -70,6 +70,7 @@ const handleFocus = () => {
   >
     <div
       v-for="(user, index) in getFilteredUsers"
+      @mousedown.stop.prevent
       @click.stop.prevent="handleClick(user)"
       @mouseenter="activeUserIndex = index"
       @mouseleave="activeUserIndex = null"

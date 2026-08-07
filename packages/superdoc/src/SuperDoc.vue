@@ -914,6 +914,10 @@ const editorOptions = (doc) => {
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
+    // Presentation-only: decides whether the built-in loading placeholder
+    // paints. The element itself stays mounted until the editor is ready,
+    // because it also blocks interaction with a half-loaded document.
+    showLoadingOverlay: proxy.$superdoc.config.ui?.loading !== false,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
     contained: proxy.$superdoc.config.contained,

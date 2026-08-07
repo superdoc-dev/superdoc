@@ -2028,6 +2028,23 @@ export interface Config {
   jsonOverride?: object;
   /** Whether to disable slash / right-click custom context menu. */
   disableContextMenu?: boolean;
+  /**
+   * Options for SuperDoc's own built-in UI.
+   *
+   * Distinct from the `superdoc/ui` controller, which is for building a
+   * custom UI on top of SuperDoc.
+   */
+  ui?: {
+    /**
+     * Whether SuperDoc paints its built-in loading presentation. Defaults to
+     * `true`. Set to `false` to show your own loading UI instead.
+     *
+     * Presentation-only: it does not change load time or readiness. Editing
+     * stays blocked until the editor is ready, and host-provided loading UI
+     * (such as `renderLoading` in `@superdoc-dev/react`) is unaffected.
+     */
+    loading?: boolean;
+  };
   /** HTML content to initialize the editor with. */
   html?: string;
   /** Markdown content to initialize the editor with. */

@@ -1824,6 +1824,35 @@ describe('SuperDoc.vue', () => {
     expect(options.disableContextMenu).toBe(true);
   });
 
+  it('defaults the built-in loading presentation to on when config.ui is omitted', async () => {
+    const superdocStub = createSuperdocStub();
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    expect(wrapper.findComponent(SuperEditorStub).props('options').showLoadingOverlay).toBe(true);
+  });
+
+  it('defaults the built-in loading presentation to on when config.ui omits loading', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.ui = {};
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    expect(wrapper.findComponent(SuperEditorStub).props('options').showLoadingOverlay).toBe(true);
+  });
+
+  it('forwards ui.loading false to SuperEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.ui = { loading: false };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    expect(wrapper.findComponent(SuperEditorStub).props('options').showLoadingOverlay).toBe(false);
+  });
+
   it('handles editor-ready by storing presentation editor and syncing context menu disable state', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.disableContextMenu = true;

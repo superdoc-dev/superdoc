@@ -118,6 +118,22 @@ All props are passed directly to the `<SuperDocEditor>` component. Only `documen
   ```
 </ParamField>
 
+<ParamField path="ui" type="{ loading?: boolean }">
+  Options for SuperDoc's built-in UI. Set `loading` to `false` to stop SuperDoc painting its own loading presentation.
+
+  `renderLoading` and `ui.loading` are independent. `renderLoading` is your loading UI, shown until SuperDoc reports ready. `ui.loading` controls SuperDoc's. Turn `ui.loading` off when you want only your own, so the two do not appear one after the other.
+
+  ```jsx
+  <SuperDocEditor
+    document={file}
+    ui={{ loading: false }}
+    renderLoading={() => <div className="spinner">Loading...</div>}
+  />
+  ```
+
+  This controls presentation only. Editing stays blocked until the editor is ready.
+</ParamField>
+
 ## Event callbacks
 
 <ParamField path="onReady" type="({ superdoc }) => void">

@@ -696,6 +696,16 @@ new SuperDoc({
   Disable custom context menus
 </ParamField>
 
+<ParamField path="ui.loading" type="boolean" default="true">
+  Whether SuperDoc paints its built-in loading presentation. Set to `false` to show your own loading UI instead.
+
+  ```javascript
+  ui: { loading: false }
+  ```
+
+  This controls presentation only. It does not change how long a document takes to load or when the editor becomes ready, and editing stays blocked until the editor is ready.
+</ParamField>
+
 <ParamField path="onUnsupportedContent" type="function">
   Callback invoked with HTML elements that were dropped during import because they have no schema representation. Receives an array of `{ tagName, outerHTML, count }` items. When provided, `console.warn` is suppressed.
 

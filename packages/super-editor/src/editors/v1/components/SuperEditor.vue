@@ -73,20 +73,23 @@ const contextMenuDisabled = computed(() => {
 });
 
 /**
- * Whether the built-in loading skeleton may render.
+ * Whether the built-in loading placeholder is painted.
  *
- * This is deliberately visual-only: it gates <EditorSkeleton> and nothing else.
- * `editorReady` keeps its existing meaning and timing, so turning the overlay
- * off does not mount the interactive chrome (context menu, table/image/textbox
- * resize overlays) any earlier than it would otherwise.
+ * This is deliberately visual-only. Whether the skeleton is *mounted* stays
+ * tied to `editorReady`, because that element is also the interaction barrier
+ * over the editable surface underneath; this flag only decides whether it
+ * paints. So turning the overlay off changes pixels and nothing else:
+ * readiness, collaboration timing, and the chrome gated on `editorReady`
+ * (context menu, table/image/textbox resize overlays) are all untouched, and
+ * a half-loaded document still cannot be edited.
  *
  * That is the difference from the legacy internal `suppressSkeletonLoader`
- * option, which forces `editorReady` true and therefore also arms that chrome
- * before collaboration has synced.
+ * option, which forces `editorReady` true and therefore also drops the barrier
+ * and arms that chrome before collaboration has synced.
  *
- * @returns {boolean} True when the skeleton should be rendered.
+ * @returns {boolean} True when the placeholder should be painted.
  */
-const showLoadingOverlay = computed(() => props.options?.showLoadingOverlay !== false && !editorReady.value);
+const showLoadingOverlay = computed(() => props.options?.showLoadingOverlay !== false);
 
 /**
  * Computed property that determines if web layout mode is active (OOXML ST_View 'web').
@@ -1477,7 +1480,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <EditorSkeleton v-if="showLoadingOverlay" />
+    <EditorSkeleton v-if="!editorReady" :visible="showLoadingOverlay" />
 
     <GenericPopover
       v-if="activeEditor"

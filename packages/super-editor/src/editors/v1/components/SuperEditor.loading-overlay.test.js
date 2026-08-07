@@ -1,11 +1,16 @@
 /**
  * Built-in loading overlay (EditorSkeleton) visibility.
  *
- * The `showLoadingOverlay` option is visual-only. It must hide the skeleton
- * WITHOUT advancing `editorReady`, because `editorReady` also gates the
- * interactive chrome (context menu, table/image/textbox resize overlays).
- * The legacy internal `suppressSkeletonLoader` does advance `editorReady`;
- * these tests pin down that the two options stay distinct.
+ * `.placeholder-editor` is both the visible placeholder and the interaction
+ * barrier over the editable surface underneath, so the two concerns are tested
+ * separately:
+ *
+ *   - the barrier element is mounted whenever `editorReady` is false;
+ *   - `showLoadingOverlay` only decides whether that barrier paints.
+ *
+ * The legacy internal `suppressSkeletonLoader` is different in kind: it forces
+ * `editorReady` true, which removes the barrier and arms the chrome gated on
+ * readiness (context menu, table/image/textbox resize overlays).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -48,32 +53,38 @@ vi.mock('@superdoc/super-editor', () => ({ Editor: EditorConstructor }));
 import SuperEditor from './SuperEditor.vue';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const OVERLAY = '.placeholder-editor';
+/** Full-surface element: placeholder when painted, interaction barrier either way. */
+const BARRIER = '.placeholder-editor';
+/** Only present when the placeholder actually paints. */
+const PLACEHOLDER_LINE = '.placeholder-line';
 
-/** Fake y-doc + provider, mirroring the shape SuperEditor.vue probes on mount. */
-const makeCollabOptions = () => {
-  const metaMap = { has: vi.fn((key) => key === 'docx'), get: vi.fn(() => undefined) };
+const makeYdoc = () => {
+  const metaMap = { has: vi.fn(() => true), get: vi.fn(() => undefined) };
   return {
-    ydoc: {
-      getMap: vi.fn((name) => (name === 'parts' ? { size: 0 } : metaMap)),
-      getXmlFragment: vi.fn(() => ({ length: 0 })),
-    },
-    collaborationProvider: { on: vi.fn(), off: vi.fn() },
+    getMap: vi.fn((name) => (name === 'parts' ? { size: 0 } : metaMap)),
+    getXmlFragment: vi.fn(() => ({ length: 0 })),
   };
 };
 
-const mountEditor = async (options) => {
+const makeProvider = () => ({ on: vi.fn(), off: vi.fn() });
+
+/** Collaboration options alongside a file source (the file-source init path). */
+const makeCollabOptions = () => ({ ydoc: makeYdoc(), collaborationProvider: makeProvider() });
+
+const mountEditor = async (options, { withFileSource = true } = {}) => {
   EditorConstructor.loadXmlData.mockResolvedValue(['<docx />', {}, {}, {}]);
   const wrapper = mount(SuperEditor, {
     props: {
       documentId: 'doc-loading-overlay',
-      fileSource: new Blob([], { type: DOCX_MIME }),
+      ...(withFileSource ? { fileSource: new Blob([], { type: DOCX_MIME }) } : {}),
       options: { externalExtensions: [], ...options },
     },
   });
   await flushPromises();
   return wrapper;
 };
+
+const latestEditor = () => EditorConstructor.mock.results.at(-1)?.value;
 
 describe('SuperEditor built-in loading overlay', () => {
   beforeEach(() => {
@@ -87,70 +98,137 @@ describe('SuperEditor built-in loading overlay', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the overlay by default while collaboration is pending', async () => {
-    const wrapper = await mountEditor(makeCollabOptions());
+  describe('with a file source and a collaboration provider', () => {
+    it('paints the placeholder by default while the editor is not ready', async () => {
+      const wrapper = await mountEditor(makeCollabOptions());
 
-    expect(wrapper.find(OVERLAY).exists()).toBe(true);
+      expect(wrapper.find(BARRIER).exists()).toBe(true);
+      expect(wrapper.find(PLACEHOLDER_LINE).exists()).toBe(true);
 
-    wrapper.unmount();
+      wrapper.unmount();
+    });
+
+    it('paints the placeholder when showLoadingOverlay is explicitly true', async () => {
+      const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: true });
+
+      expect(wrapper.find(PLACEHOLDER_LINE).exists()).toBe(true);
+
+      wrapper.unmount();
+    });
+
+    it('stops painting the placeholder when showLoadingOverlay is false', async () => {
+      const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: false });
+
+      expect(wrapper.find(PLACEHOLDER_LINE).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('keeps the interaction barrier mounted when showLoadingOverlay is false', async () => {
+      const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: false });
+
+      // The barrier still covers the editable surface, it is just transparent.
+      const barrier = wrapper.find(BARRIER);
+      expect(barrier.exists()).toBe(true);
+      expect(barrier.classes()).toContain('placeholder-editor--transparent');
+
+      wrapper.unmount();
+    });
+
+    it('is visual-only: showLoadingOverlay false does not advance editorReady or arm interactive chrome', async () => {
+      const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: false });
+
+      expect(wrapper.vm.editorReady).toBe(false);
+      expect(wrapper.findComponent({ name: 'TableResizeOverlay' }).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('removes the barrier entirely once the editor becomes ready', async () => {
+      vi.useFakeTimers();
+      const wrapper = await mountEditor(makeCollabOptions());
+
+      expect(wrapper.find(BARRIER).exists()).toBe(true);
+
+      latestEditor().listeners.collaborationReady();
+      vi.advanceTimersByTime(150);
+      await flushPromises();
+
+      expect(wrapper.vm.editorReady).toBe(true);
+      expect(wrapper.find(BARRIER).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('keeps the legacy suppressSkeletonLoader behaviour of advancing editorReady', async () => {
+      const wrapper = await mountEditor({ ...makeCollabOptions(), suppressSkeletonLoader: true });
+
+      // Broader than showLoadingOverlay: readiness advances, so the barrier goes too.
+      expect(wrapper.vm.editorReady).toBe(true);
+      expect(wrapper.find(BARRIER).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
   });
 
-  it('renders the overlay when showLoadingOverlay is explicitly true', async () => {
-    const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: true });
+  describe('through the collaboration init path (no file source)', () => {
+    /** Drives provider `synced`, which is what creates the editor on this path. */
+    const syncProvider = async (provider) => {
+      const syncedHandler = provider.on.mock.calls.find(([event]) => event === 'synced')?.[1];
+      expect(syncedHandler).toBeTypeOf('function');
+      syncedHandler();
+      await flushPromises();
+    };
 
-    expect(wrapper.find(OVERLAY).exists()).toBe(true);
+    it('holds the barrier across provider sync until collaborationReady', async () => {
+      vi.useFakeTimers();
+      const provider = makeProvider();
+      const wrapper = await mountEditor(
+        { ydoc: makeYdoc(), collaborationProvider: provider },
+        { withFileSource: false },
+      );
 
-    wrapper.unmount();
+      expect(wrapper.find(BARRIER).exists()).toBe(true);
+      expect(wrapper.find(PLACEHOLDER_LINE).exists()).toBe(true);
+
+      await syncProvider(provider);
+
+      // Synced is not ready: the document still must not be editable.
+      expect(wrapper.vm.editorReady).toBe(false);
+      expect(wrapper.find(BARRIER).exists()).toBe(true);
+
+      latestEditor().listeners.collaborationReady();
+      vi.advanceTimersByTime(150);
+      await flushPromises();
+
+      expect(wrapper.vm.editorReady).toBe(true);
+      expect(wrapper.find(BARRIER).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('keeps the barrier unpainted but present when showLoadingOverlay is false', async () => {
+      const provider = makeProvider();
+      const wrapper = await mountEditor(
+        { ydoc: makeYdoc(), collaborationProvider: provider, showLoadingOverlay: false },
+        { withFileSource: false },
+      );
+
+      await syncProvider(provider);
+
+      expect(wrapper.vm.editorReady).toBe(false);
+      expect(wrapper.find(BARRIER).exists()).toBe(true);
+      expect(wrapper.find(PLACEHOLDER_LINE).exists()).toBe(false);
+
+      wrapper.unmount();
+    });
   });
 
-  it('hides the overlay when showLoadingOverlay is false', async () => {
-    const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: false });
-
-    expect(wrapper.find(OVERLAY).exists()).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('is visual-only: showLoadingOverlay false does not advance editorReady or arm interactive chrome', async () => {
-    const wrapper = await mountEditor({ ...makeCollabOptions(), showLoadingOverlay: false });
-
-    // Readiness is untouched, so collaboration timing is unchanged...
-    expect(wrapper.vm.editorReady).toBe(false);
-    // ...and the chrome gated on it stays unmounted.
-    expect(wrapper.findComponent({ name: 'TableResizeOverlay' }).exists()).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('keeps the legacy suppressSkeletonLoader behaviour of advancing editorReady', async () => {
-    const wrapper = await mountEditor({ ...makeCollabOptions(), suppressSkeletonLoader: true });
-
-    expect(wrapper.vm.editorReady).toBe(true);
-    expect(wrapper.find(OVERLAY).exists()).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('still hides the overlay once the editor becomes ready', async () => {
-    vi.useFakeTimers();
-    const wrapper = await mountEditor(makeCollabOptions());
-
-    expect(wrapper.find(OVERLAY).exists()).toBe(true);
-
-    EditorConstructor.mock.results.at(-1).value.listeners.collaborationReady();
-    vi.advanceTimersByTime(150);
-    await flushPromises();
-
-    expect(wrapper.vm.editorReady).toBe(true);
-    expect(wrapper.find(OVERLAY).exists()).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('does not render the overlay without a collaboration provider', async () => {
+  it('does not render the barrier without a collaboration provider', async () => {
     const wrapper = await mountEditor({});
 
-    expect(wrapper.find(OVERLAY).exists()).toBe(false);
+    expect(wrapper.vm.editorReady).toBe(true);
+    expect(wrapper.find(BARRIER).exists()).toBe(false);
 
     wrapper.unmount();
   });

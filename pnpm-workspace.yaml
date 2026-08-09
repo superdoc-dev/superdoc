@@ -1,0 +1,189 @@
+packages:
+  - apps/*
+  - apps/cli/platforms/*
+  - packages/**/*
+  - shared/*
+  - examples/*
+
+catalog:
+  '@commitlint/cli': ^19.8.1
+  '@commitlint/config-conventional': ^19.8.1
+  '@floating-ui/dom': ^1.7.0
+  '@fontsource/inter': ^5.2.8
+  '@hocuspocus/provider': ^2.13.6
+  '@hocuspocus/server': ^2.13.6
+  '@liveblocks/client': ^3.15.5
+  '@liveblocks/yjs': ^3.15.5
+  '@linear/sdk': ^53.0.0
+  '@playwright/test': ^1.57.0
+  '@semantic-release/changelog': ^6.0.3
+  '@semantic-release/exec': ^6.0.3
+  '@semantic-release/git': ^10.0.1
+  '@testing-library/jest-dom': ^6.9.1
+  '@testing-library/react': ^16.3.0
+  '@testing-library/user-event': ^14.6.1
+  '@types/bun': ^1.3.8
+  '@types/mdast': ^4.0.4
+  '@types/node': 22.19.2
+  '@types/react': ^19.2.6
+  '@types/react-dom': ^19.2.3
+  '@types/ws': ^8.18.1
+  '@vitejs/plugin-react': ^5.1.1
+  '@vitejs/plugin-vue': 6.0.8
+  '@vitest/coverage-v8': 4.1.10
+  '@vue/test-utils': ^2.4.6
+  vue-tsc: ^2.2.12
+  buffer-crc32: ^1.0.0
+  canvas: ^3.2.0
+  cfb: ^1.2.2
+  color2k: ^2.0.3
+  concurrently: ^9.1.2
+  dotenv: ^16.4.7
+  eventemitter3: ^5.0.1
+  fast-glob: ^3.3.3
+  fumadocs-core: ^16.11.5
+  fumadocs-mdx: ^15.2.0
+  fumadocs-ui: ^16.11.5
+  happy-dom: ^20.3.4
+  he: ^1.2.0
+  jimp: ^1.6.0
+  jsdom: ^27.3.0
+  json5: ^2.2.3
+  jszip: 3.10.1
+  konva: ^10.2.0
+  lib0: ^0.2.114
+  marked: ^16.2.0
+  nodemon: ^3.1.10
+  node-stdlib-browser: ^1.3.1
+  patch-package: ^8.0.1
+  pdfjs-dist: ^5.4.296
+  pinia: ^3.0.4
+  pixelmatch: ^7.1.0
+  playwright: ^1.56.0
+  postcss-nested: ^6.0.1
+  postcss-nested-import: ^1.3.0
+  postcss-prefixwrap: ^1.56.2
+  prosemirror-commands: ^1.5.2
+  prosemirror-dropcursor: ^1.8.1
+  prosemirror-gapcursor: ^1.3.2
+  prosemirror-history: ^1.4.0
+  prosemirror-inputrules: ^1.4.0
+  prosemirror-keymap: ^1.2.2
+  prosemirror-model: ^1.25.2
+  prosemirror-schema-basic: ^1.2.2
+  prosemirror-schema-list: ^1.3.0
+  prosemirror-state: ^1.4.3
+  prosemirror-tables: ^1.4.0
+  prosemirror-test-builder: ^1.1.1
+  prosemirror-transform: ^1.9.0
+  prosemirror-view: ^1.33.8
+  react: 19.2.4
+  react-dom: 19.2.4
+  rehype-parse: ^9.0.1
+  rehype-remark: ^10.0.1
+  remark-gfm: ^4.0.1
+  remark-parse: ^11.0.0
+  remark-stringify: ^11.0.0
+  rollup: ^4.31.0
+  rollup-plugin-copy: ^3.5.0
+  rollup-plugin-visualizer: ^5.12.0
+  semantic-release: ^24.2.7
+  semantic-release-ai-notes: ^0.2.3
+  semantic-release-commit-filter: ^1.0.2
+  sirv: ^3.0.2
+  tippy.js: ^6.3.7
+  tsup: ^8.5.1
+  tsx: ^4.20.6
+  typescript: ^5.9.2
+  unified: 11.0.5
+  utif2: ^4.1.0
+  uuid: ^11.1.1
+  verdaccio: ^6.1.6
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.8
+  vite-plugin-dts: ~4.5.4
+  vite-plugin-node-polyfills: ^0.28.0
+  vitest: 4.1.10
+  vue: 3.5.32
+  xml-js: 1.6.11
+  ws: ^8.18.0
+  y-prosemirror: ^1.3.7
+  y-protocols: ^1.0.6
+  y-websocket: ^3.0.0
+  yjs: ^13.6.19 # range allows consumers to use newer patch versions
+  vite-plus: 0.2.8
+
+onlyBuiltDependencies:
+  - '@vscode/vsce-sign'
+  - better-sqlite3
+  - canvas
+  - esbuild
+  - keytar
+  - puppeteer
+  - sharp
+  - unrs-resolver
+  - vue-demi
+
+ignoredBuiltDependencies:
+  - '@parcel/watcher'
+  - '@playwright/browser-chromium'
+  - '@swc/core'
+  - lmdb
+  - msgpackr-extract
+  - msw
+  - onnxruntime-node
+  - protobufjs
+
+overrides:
+  canvas: '3.2.3'
+  happy-dom: '20.4.0'
+  jsdom: '27.3.0'
+  vue: '3.5.32'
+  '@vue/compiler-core': '3.5.32'
+  '@vue/compiler-dom': '3.5.32'
+  '@vue/compiler-sfc': '3.5.32'
+  '@vue/runtime-core': '3.5.32'
+  '@vue/runtime-dom': '3.5.32'
+  '@vue/server-renderer': '3.5.32'
+  '@vue/shared': '3.5.32'
+  # NOT aliased to the Vite+ core. `@voidzero-dev/vite-plus-core` publishes no
+  # `bin`, so overriding every package to it removes the `vite` executable that
+  # Examples invoke from their `dev` and `build` scripts. Packages that build
+  # through Vite+ get it from `vite-plus` in their own devDependencies.
+  vite: '^7.2.7'
+  axios: '1.18.0'
+  protobufjs@7: '7.6.4'
+  protobufjs@8: '8.6.4'
+  superdoc: 'workspace:*'
+  '@superdoc-dev/react': 'workspace:*'
+  '@superdoc/sdk': '2.1.0'
+  '@superdoc/common': 'workspace:*'
+  '@superdoc/contracts': 'workspace:*'
+  '@superdoc/dom-contract': 'workspace:*'
+  '@superdoc/font-system': 'workspace:*'
+  '@superdoc/font-utils': 'workspace:*'
+  '@superdoc/geometry-utils': 'workspace:*'
+  '@superdoc/layout-bridge': 'workspace:*'
+  '@superdoc/layout-engine': 'workspace:*'
+  '@superdoc/layout-resolved': 'workspace:*'
+  '@superdoc/measuring-dom': 'workspace:*'
+  '@superdoc/painter-dom': 'workspace:*'
+  '@superdoc/preset-geometry': 'workspace:*'
+  '@superdoc/style-engine': 'workspace:*'
+  '@superdoc/url-validation': 'workspace:*'
+  '@superdoc/word-layout': 'workspace:*'
+  '@hocuspocus/provider': '^2.13.6'
+  '@liveblocks/client': '^3.15.5'
+  '@liveblocks/yjs': '^3.15.5'
+  '@types/minimatch': '5.1.2'
+  xml-js: '1.6.11'
+  y-websocket: '^3.0.0'
+  yjs: '^13.6.19'
+  vitest: 'catalog:'
+# Vite+ ships its Vite fork as vite-plus-core 0.2.x under the `vite` alias, so
+# no plugin's `^7 || ^8` peer range can match it. Pin the exact versions we
+# actually resolve instead of waiving the ranges wholesale, so every other peer
+# mismatch still surfaces at install time.
+peerDependencyRules:
+  allowedVersions:
+    vite: 0.2.8
+    vitest: 4.1.10

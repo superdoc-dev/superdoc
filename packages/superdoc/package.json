@@ -1,0 +1,179 @@
+{
+  "name": "superdoc",
+  "type": "module",
+  "version": "2.4.0-next.64",
+  "description": "The document engine for DOCX files. Open, edit, and render Word documents in the browser.",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc/docx-editor.git",
+    "directory": "packages/superdoc"
+  },
+  "homepage": "https://www.superdoc.dev/",
+  "bugs": {
+    "url": "https://github.com/superdoc/docx-editor/issues"
+  },
+  "files": [
+    "dist",
+    "dist-cdn",
+    "AGENTS.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/superdoc/src/public/index.d.ts",
+        "require": "./dist/superdoc/src/public/index.d.cts"
+      },
+      "import": "./dist/superdoc.es.js",
+      "require": "./dist/superdoc.cjs"
+    },
+    "./ui": {
+      "types": {
+        "import": "./dist/superdoc/src/public/ui.d.ts",
+        "require": "./dist/superdoc/src/public/ui.d.cts"
+      },
+      "import": "./dist/public/ui.es.js",
+      "require": "./dist/public/ui.cjs"
+    },
+    "./ui/react": {
+      "types": {
+        "import": "./dist/superdoc/src/public/ui-react.d.ts",
+        "require": "./dist/superdoc/src/public/ui-react.d.cts"
+      },
+      "import": "./dist/public/ui-react.es.js",
+      "require": "./dist/public/ui-react.cjs"
+    },
+    "./collaboration-upgrade-engine": {
+      "types": {
+        "import": "./dist/superdoc/src/public/collaboration-upgrade-engine.d.ts",
+        "require": "./dist/superdoc/src/public/collaboration-upgrade-engine.d.cts"
+      },
+      "node": {
+        "import": "./dist/collaboration-upgrade-engine.es.js",
+        "require": "./dist/collaboration-upgrade-engine.cjs"
+      }
+    },
+    "./style.css": "./dist/style.css",
+    "./style.layered.css": "./dist/style.layered.css"
+  },
+  "types": "./dist/superdoc/src/public/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "ui": [
+        "./dist/superdoc/src/public/ui.d.ts"
+      ],
+      "ui/react": [
+        "./dist/superdoc/src/public/ui-react.d.ts"
+      ],
+      "collaboration-upgrade-engine": [
+        "./dist/superdoc/src/public/collaboration-upgrade-engine.d.ts"
+      ]
+    }
+  },
+  "main": "./dist/superdoc.cjs",
+  "module": "./dist/superdoc.es.js",
+  "scripts": {
+    "dev": "vp dev",
+    "dev:orbit": "SUPERDOC_V2_RUNTIME_MODE=source vp dev",
+    "devapp:build": "SUPERDOC_V2_RUNTIME_MODE=source vp build --config vite.config.devapp.js",
+    "devapp:preview": "vp preview --config vite.config.devapp.js --port 9096 --strictPort",
+    "watch:orbit": "SUPERDOC_V2_RUNTIME_MODE=source vp build --watch",
+    "smoke:v2-resolver": "node ./scripts/smoke-v2-runtime-mode.mjs",
+    "build": "pnpm run build:npm && pnpm run build:cdn",
+    "build:npm": "node ../../scripts/build-private-v2-if-present.mjs && vp build && pnpm run build:collaboration-upgrade-engine && pnpm run verify:npm",
+    "build:dev": "SUPERDOC_SKIP_DTS=1 vp build",
+    "build:collaboration-upgrade-engine": "vp build --config vite.config.collaboration-upgrade-engine.js",
+    "verify:npm": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-npm-bundle.cjs && node ./scripts/audit-collaboration-upgrade-engine.cjs && node ./scripts/audit-declarations.cjs && node ./scripts/check-export-coverage.cjs && node ./scripts/verify-public-facade-emit.cjs && node ./scripts/check-private-core.cjs && node ./scripts/report-declaration-reachability.cjs && node ./scripts/link-engine-styles.cjs && pnpm run audit:publish",
+    "audit:publish": "node ../../scripts/audit-publish-artifact.mjs dist --label superdoc-dist --superdoc",
+    "audit:declarations": "node ./scripts/audit-declarations.cjs",
+    "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
+    "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
+    "check:v2-only": "node ./scripts/check-private-core.cjs",
+    "build:es": "pnpm run build",
+    "watch:es": "vp build --watch",
+    "build:cdn": "node ../../scripts/build-private-v2-if-present.mjs && vp build --config vite.config.cdn.js && pnpm run verify:cdn",
+    "verify:cdn": "node ../../scripts/audit-publish-artifact.mjs dist-cdn --label superdoc-cdn && node ./scripts/audit-cdn-separation.cjs",
+    "watch:cdn": "vp build --watch --config vite.config.cdn.js",
+    "clean": "rm -rf dist dist-cdn",
+    "prepack": "node ./scripts/sanitize-pack-manifest.cjs prepare",
+    "postpack": "node ./scripts/sanitize-pack-manifest.cjs restore",
+    "pack:local": "pnpm run pack:es",
+    "pack:dist": "node ./scripts/pack-output.cjs clean && pnpm run build:es && node ./scripts/pack-with-restore.cjs && node ./scripts/pack-output.cjs finalize",
+    "pack:es": "node ./scripts/pack-output.cjs clean && pnpm run build:es && node ./scripts/pack-with-restore.cjs && node ./scripts/pack-output.cjs finalize && node ../../scripts/audit-publish-artifact.mjs superdoc.tgz --label superdoc-tarball --superdoc",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@superdoc/docx-engine": "0.3.0-next.60",
+    "@types/mdast": "catalog:",
+    "@types/ws": "catalog:",
+    "buffer-crc32": "catalog:",
+    "eventemitter3": "catalog:",
+    "jsdom": "catalog:",
+    "konva": "catalog:",
+    "pinia": "catalog:",
+    "rollup-plugin-copy": "catalog:",
+    "uuid": "catalog:",
+    "vue": "^3.5.11",
+    "y-websocket": "catalog:"
+  },
+  "peerDependencies": {
+    "@hocuspocus/provider": "^2.13.6",
+    "@liveblocks/client": "^3.15.5",
+    "@liveblocks/yjs": "^3.15.5",
+    "pdfjs-dist": "^5.4.296",
+    "react": ">=16.8.0",
+    "yjs": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@liveblocks/client": {
+      "optional": true
+    },
+    "@liveblocks/yjs": {
+      "optional": true
+    },
+    "pdfjs-dist": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@hocuspocus/provider": "catalog:",
+    "@liveblocks/client": "catalog:",
+    "@liveblocks/yjs": "catalog:",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
+    "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
+    "@superdoc/fonts": "workspace:*",
+    "@superdoc/layout-bridge": "workspace:*",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
+    "@superdoc/style-engine": "workspace:*",
+    "@types/react": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "jszip": "catalog:",
+    "node-stdlib-browser": "catalog:",
+    "nodemon": "catalog:",
+    "pdfjs-dist": "catalog:",
+    "postcss-nested": "catalog:",
+    "postcss-prefixwrap": "catalog:",
+    "rollup-plugin-visualizer": "catalog:",
+    "sirv": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "vite-plugin-node-polyfills": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "xml-js": "catalog:"
+  }
+}

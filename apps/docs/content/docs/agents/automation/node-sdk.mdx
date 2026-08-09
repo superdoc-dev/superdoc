@@ -1,0 +1,59 @@
+---
+title: Automate a DOCX with Node.js
+navTitle: Node.js SDK
+description: Query a DOCX, accept its tracked changes, and save the result from Node.js.
+---
+
+Use the SDK when application code knows the operation it needs. No model is involved: the script queries, mutates, and saves deterministically.
+
+## 1. Install the Node.js SDK
+
+```bash
+pnpm add @superdoc/sdk@latest
+```
+
+The SDK embeds the SuperDoc runtime. You do not need a separate CLI installation to use `SuperDocClient`.
+
+## 2. Prepare a document
+
+Download the [tracked-changes fixture](/fixtures/tracked-changes.docx). Save it as `contract.docx` in your working directory. It contains the word `termination` and one tracked change. Any document meeting those two conditions also works.
+
+<FileDownload
+  href='/fixtures/tracked-changes.docx'
+  label='Download the tracked-changes fixture'
+  description='Synthetic NDA with one tracked change'
+  fileType='DOCX'
+/>
+
+![A DOCX file enters a headless SuperDoc workflow, the SDK queries and accepts its tracked changes, and a separate DOCX file is saved.](./_media/node-sdk/headless-lifecycle.svg)
+
+<Callout variant='warning' title='Keep the source file'>
+  Write the first result to a separate path so you can compare the output with the original document.
+</Callout>
+
+## 3. Query, mutate, and save
+
+Create `accept-changes.mjs`:
+
+<include>../../../../snippets/headless/accept-changes.mjs</include>
+
+Run it with Node.js:
+
+```bash
+node accept-changes.mjs
+```
+
+## 4. Verify the output
+
+Open `contract.accepted.docx` in Word or the SuperDoc editor. The tracked changes should be accepted. The original `contract.docx` remains unchanged.
+
+Saving to a separate path leaves the source session dirty by design. After the output succeeds, `close({ discard: true })` closes that in-memory session without overwriting the source file.
+
+<Callout variant='success' title='Verification target'>
+  The output should contain the same document content and formatting, with every tracked change accepted. The source
+  file should remain unchanged.
+</Callout>
+
+For the contract behind each step, read the [Document API mental model](/document-api/mental-model).
+
+Prefer Python? Follow the [Python SDK guide](/agents/automation/python-sdk) for the same deterministic workflow.

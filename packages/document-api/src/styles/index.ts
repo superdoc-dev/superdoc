@@ -1,0 +1,82 @@
+/**
+ * Barrel re-export for styles/ submodules.
+ *
+ * Public surface only: internal validation/schema helpers are not exposed.
+ */
+
+// Registry: types, constants, and property definitions
+export type { ValueSchema, StylesChannel, MergeStrategy, PropertyDefinition } from './registry.js';
+export {
+  PROPERTY_REGISTRY,
+  ALLOWED_KEYS_BY_CHANNEL,
+  EXCLUDED_KEYS,
+  XML_PATH_BY_CHANNEL,
+  getPropertyDefinition,
+  ST_VERTICAL_ALIGN_RUN,
+  ST_EM,
+  ST_TEXT_ALIGNMENT,
+  ST_TEXT_DIRECTION,
+  ST_TEXTBOX_TIGHT_WRAP,
+  ST_TEXT_TRANSFORM,
+  ST_JUSTIFICATION,
+} from './registry.js';
+
+// Schema: JSON Schema builders (consumed by contract/schemas.ts)
+export { toJsonSchema, buildPatchSchema, buildStateSchema } from './schema.js';
+
+// Apply: types, interfaces, and execution
+export type {
+  StylesBooleanState,
+  StylesNumberState,
+  StylesEnumState,
+  StylesObjectState,
+  StylesArrayState,
+  StylesRunPatch,
+  StylesParagraphPatch,
+  StylesTargetResolution,
+  StylesApplyRunInput,
+  StylesApplyParagraphInput,
+  StylesApplyInput,
+  StylesApplyOptions,
+  StylesStateMap,
+  StylesApplyReceiptSuccess,
+  StylesApplyReceiptFailure,
+  StylesApplyReceipt,
+  StylesAdapter,
+  NormalizedStylesApplyOptions,
+  StylesApi,
+} from './apply.js';
+export { executeStylesApply } from './apply.js';
+
+// Catalog: read-only style catalogue projection (`styles.getCatalog`)
+export type {
+  StyleCatalogView,
+  StyleCatalogItemType,
+  StyleCatalogFilterType,
+  StyleProvenance,
+  StyleCatalogDiagnosticSeverity,
+  StyleSourcePartStatus,
+  StyleCatalogUsageStatus,
+  StyleCatalogPreviewStatus,
+  StyleCatalogViewStatus,
+  StyleCatalogItemVisibility,
+  StyleCatalogItemUsage,
+  StyleCatalogItemPreview,
+  StyleCatalogItem,
+  StyleCatalogDefaults,
+  StyleCatalogDiagnostic,
+  StyleCatalogSourceStatus,
+  StylesGetCatalogInput,
+  StylesGetCatalogResult,
+  StylesGetCatalogAdapter,
+} from './catalog.js';
+export {
+  STYLE_CATALOG_VIEWS,
+  STYLE_CATALOG_FILTER_TYPES,
+  executeStylesGetCatalog,
+  validateStylesGetCatalogInput,
+} from './catalog.js';
+
+// Validation: exported for adapter use (excluded-key checking, patch key classification)
+export type { PatchKeyClassification } from './validation.js';
+export { validateValue, classifyPatchKey } from './validation.js';

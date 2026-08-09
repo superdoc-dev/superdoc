@@ -1,0 +1,26 @@
+# gitleaks configuration for the public SuperDoc tree.
+#
+# Run it the way the export path does:
+#   gitleaks detect --source . --no-git
+#
+# The previous version allowlisted every path matching `test/.*` or `tests/.*`.
+# That is not a narrower rule, it is a hole: a real credential committed under a
+# test directory was found by default gitleaks and hidden here. Verified by
+# seeding an AWS key pair and a Slack bot token under `tests/` — gitleaks
+# reported the Slack token with no config present and reported nothing with the
+# allowlist in place. The exemption was also suppressing no real findings: the
+# scan returned the same three results with and without it.
+#
+# Exceptions belong below, one per known-safe value, each saying why it is safe.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholders in public docs and demos"
+
+# Truncated example JWTs in the Word add-in walkthrough
+# (demos/editor/integrations/word-addin/README.md). They end in an ellipsis
+# instead of a signature, so they are illustrative rather than decodable.
+# Matched by value rather than by line, so the exception survives edits above it.
+regexes = ['''eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6Ik\.\.\.''']

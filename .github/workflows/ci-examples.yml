@@ -1,0 +1,102 @@
+name: CI Examples
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-examples-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      examples: ${{ github.event_name != 'pull_request' || steps.filter.outputs.examples == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            examples:
+              - '.github/workflows/ci-examples.yml'
+              - '.nvmrc'
+              - 'examples/**'
+              - 'go-links/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'packages/document-api/**'
+              - 'packages/superdoc/**'
+              - 'scripts/check-examples.mjs'
+              - 'scripts/__tests__/check-examples.test.mjs'
+              - 'scripts/check-go-links.mjs'
+              - 'scripts/__tests__/check-go-links.test.mjs'
+
+  validate:
+    name: CI Examples / validate
+    if: always()
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check detection
+        run: test '${{ needs.detect.result }}' = success
+
+      - uses: pnpm/action-setup@v4
+        if: needs.detect.outputs.examples == 'true'
+        with:
+          package_json_file: package.json
+
+      - name: Setup Node.js
+        if: needs.detect.outputs.examples == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Check permanent example links
+        if: needs.detect.outputs.examples == 'true'
+        env:
+          GO_LINKS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: pnpm run check:go-links
+
+      - name: Check pnpm configuration
+        if: needs.detect.outputs.examples == 'true'
+        run: pnpm run check:pnpm-config
+
+      - name: Install dependencies
+        if: needs.detect.outputs.examples == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SuperDoc
+        if: needs.detect.outputs.examples == 'true'
+        run: pnpm --filter superdoc run build:npm
+
+      - name: Install Chromium
+        if: needs.detect.outputs.examples == 'true'
+        run: pnpm --filter @superdoc-examples/vanilla exec playwright install --with-deps chromium
+
+      - name: Check examples
+        if: needs.detect.outputs.examples == 'true'
+        run: pnpm run check:examples
+
+      - name: Upload browser traces
+        if: failure() && needs.detect.outputs.examples == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: examples-browser-traces
+          path: examples/*/test-results
+          if-no-files-found: ignore
+          retention-days: 7

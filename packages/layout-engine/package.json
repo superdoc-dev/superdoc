@@ -1,0 +1,10 @@
+{
+  "name": "@superdoc/layout-engine-workspace",
+  "private": true,
+  "type": "module",
+  "description": "Layout engine POC - manages layout, pagination, and rendering for SuperDoc",
+  "scripts": {
+    "build": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/geometry-utils --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/layout-resolved --filter=@superdoc/layout-bridge --filter=@superdoc/painter-dom build",
+    "test": "pnpm run --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/geometry-utils --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/layout-resolved --filter=@superdoc/layout-bridge --filter=@superdoc/painter-dom test"
+  }
+}

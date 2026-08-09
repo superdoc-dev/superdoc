@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="430" viewBox="0 0 960 430" role="img" aria-labelledby="title description">
+  <title id="title">SuperDoc surfaces share one Document API and DOCX engine</title>
+  <desc id="description">People work through the browser editor, services and CI use the SDK or CLI, and agents use SDK agent tools. Each surface reaches the shared Document API, which operates on the same DOCX engine.</desc>
+  <rect width="960" height="430" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="480" y="42" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">CHOOSE A SURFACE FOR THE CALLER</text>
+
+    <rect x="46" y="72" width="250" height="108" rx="10" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="70" y="104" font-size="13" font-weight="700" fill="#5f636c">PERSON</text>
+    <text x="70" y="133" font-size="18" font-weight="700" fill="#16181d">Browser Editor</text>
+    <text x="70" y="157" font-size="13" fill="#5f636c">Visual editing and review</text>
+
+    <rect x="355" y="72" width="250" height="108" rx="10" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="379" y="104" font-size="13" font-weight="700" fill="#5f636c">SERVICE OR CI</text>
+    <text x="379" y="133" font-size="18" font-weight="700" fill="#16181d">SDK or CLI</text>
+    <text x="379" y="157" font-size="13" fill="#5f636c">Headless file workflows</text>
+
+    <rect x="664" y="72" width="250" height="108" rx="10" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="688" y="104" font-size="13" font-weight="700" fill="#5f636c">AGENT</text>
+    <text x="688" y="133" font-size="18" font-weight="700" fill="#16181d">SDK agent tools</text>
+    <text x="688" y="157" font-size="13" fill="#5f636c">Structured document actions</text>
+
+    <path d="M171 196v42h309" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <path d="M480 196v42" stroke="#7da2ff" stroke-width="3"/>
+    <path d="M789 196v42H480" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m470 226 10 14 10-14" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="282" y="256" width="396" height="72" rx="10" fill="#eef4ff" stroke="#7da2ff" stroke-width="2"/>
+    <text x="480" y="286" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="16" font-weight="700" fill="#0f44cc">Document API</text>
+    <text x="480" y="309" text-anchor="middle" font-size="13" fill="#5f636c">Query · target · mutate · receipt</text>
+
+    <path d="M480 344v28" stroke="#70c991" stroke-width="3"/>
+    <path d="m470 360 10 14 10-14" fill="none" stroke="#70c991" stroke-width="3"/>
+
+    <rect x="332" y="386" width="296" height="30" rx="8" fill="#edf9f1" stroke="#70c991" stroke-width="2"/>
+    <text x="480" y="406" text-anchor="middle" font-size="14" font-weight="700" fill="#006b31">DOCX engine · OOXML in and out</text>
+  </g>
+</svg>

@@ -1,0 +1,49 @@
+---
+title: Configure the built-in toolbar
+navTitle: Toolbar
+description: Keep the built-in command behavior while showing only the controls your workflow needs.
+---
+
+The built-in toolbar can stay complete or be reduced to a focused set of controls. Configure its layout when SuperDoc's interaction behavior fits your product but the default control set is broader than the task.
+
+In this guide, you build a compact editing toolbar with history, basic formatting, links, document mode, and zoom.
+
+## Add a toolbar mount
+
+Give the toolbar and document canvas separate mount elements. The editor uses natural height here, so the page scrolls with the document.
+
+<include>../../../../snippets/editor/focused-built-in-toolbar.html</include>
+
+Copy the [tracked-changes fixture](/fixtures/tracked-changes.docx) to your app's public directory as `contract.docx`, or update the document URL.
+
+## Choose the controls
+
+Use `groups` as an ordered allowlist. An item appears only when its name is included. The group keys become the toolbar regions.
+
+<include>../../../../snippets/editor/focused-built-in-toolbar.ts</include>
+
+This example keeps eight controls:
+
+- `undo` and `redo` for history.
+- `bold`, `italic`, `underline`, and `link` for focused editing.
+- `documentMode` and `zoom` for session and viewport control.
+
+Use `excludeItems` instead when the default toolbar already fits and you only need to remove one or two controls. Do not combine a long allowlist with a long exclusion list. One clear strategy is easier to maintain.
+
+## Keep responsive behavior enabled
+
+`responsiveToContainer: true` measures the toolbar's mount instead of the browser window. This matters when the editor sits beside navigation or another panel.
+
+Lower-priority controls leave the visible row when space becomes tight. That is on by default; set `ui.toolbar.hideButtons: false` to keep every control in the row and let it overflow instead. Keep the controls required for the primary task in the earliest groups, then test the actual product width rather than assuming a desktop viewport.
+
+## Let command state come from SuperDoc
+
+The built-in toolbar reads the same public controller state as a custom UI. Controls become enabled, disabled, or active based on the current document, selection, and mode.
+
+Do not add DOM listeners to force a built-in button into a state. If your application must present state differently, use the [custom UI controller](/editor/custom-ui/overview) instead.
+
+The toolbar is configuration, not authorization. Enforce permissions in your application and use document modes to control Editor behavior.
+
+Verify the result at your narrowest supported width. The document should remain usable, required controls should stay reachable, and the toolbar should not create horizontal page overflow.
+
+Continue with [Document modes](/editor/document-modes), or return to the [Built-in UI overview](/editor/built-in-ui/overview).

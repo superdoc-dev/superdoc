@@ -1,0 +1,1066 @@
+import type { MigrationCatalog, MigrationDisposition, MigrationEntry } from './types';
+
+/**
+ * Authored migration mappings for SuperDoc v1 → v2.
+ *
+ * AIDEV-NOTE: This file owns migration SEMANTICS (what replaces what, and why
+ * the replacement differs). It does NOT own the symbol inventory. The removed
+ * runtime-export list is derived from the real v1 and v2 package surfaces by
+ * `scripts/generate-migration-catalog.ts`, and `tests/migration-catalog.test.mjs`
+ * fails when this file and the packages disagree. Add an entry here when the
+ * generator reports an unmapped removal; never delete an entry to silence it.
+ */
+
+const REMOVED_SUBPATHS: MigrationEntry[] = [
+  {
+    id: 'subpath.types',
+    v1: 'superdoc/types',
+    v2: 'superdoc',
+    disposition: 'redesign',
+    failureMode: 'unresolved-path',
+    surface: 'package',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes:
+      'Not a path rename. v1 re-exported 116 names here, almost all of them ProseMirror and schema types, and none of them exist on the v2 root. Integration types such as `Config`, `DocumentMode`, `User`, and `DocumentApi` are exported from `superdoc`; types describing ProseMirror nodes, marks, commands, and transactions have no v2 equivalent because the model they described is gone.',
+    docsPath: '/document-api/mental-model',
+  },
+  {
+    id: 'subpath.super-editor',
+    v1: 'superdoc/super-editor',
+    v2: 'superdoc.activeEditor',
+    disposition: 'redesign',
+    failureMode: 'unresolved-path',
+    surface: 'package',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes:
+      'v2 has no importable editor class. Reach the active document through the `SuperDoc` instance and its Document API facade.',
+    docsPath: '/document-api/mental-model',
+  },
+  {
+    id: 'subpath.converter',
+    v1: 'superdoc/converter',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'unresolved-path',
+    surface: 'converter',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes:
+      'v2 owns DOCX parsing and serialization internally. Load documents through `document` and produce output through `export()`.',
+    docsPath: '/editor/load-and-save-documents',
+  },
+  {
+    id: 'subpath.docx-zipper',
+    v1: 'superdoc/docx-zipper',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'unresolved-path',
+    surface: 'converter',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes: 'No public archive surface in v2. Use the supported load and export workflow.',
+  },
+  {
+    id: 'subpath.file-zipper',
+    v1: 'superdoc/file-zipper',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'unresolved-path',
+    surface: 'converter',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes: 'No public archive surface in v2. Use the supported load and export workflow.',
+  },
+  {
+    id: 'subpath.headless-toolbar',
+    v1: 'superdoc/headless-toolbar',
+    v2: 'superdoc.ui',
+    disposition: 'redesign',
+    failureMode: 'unresolved-path',
+    surface: 'custom-ui',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes:
+      '`superdoc.ui` is a getter that lazily creates and owns the controller. It returns `BorrowedSuperDocUI`, which omits `destroy()` because `superdoc.destroy()` owns teardown. Call `createSuperDocUI({ superdoc })` from `superdoc/ui` only when you want an independently owned controller to dispose yourself.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+  {
+    id: 'subpath.headless-toolbar-react',
+    v1: 'superdoc/headless-toolbar/react',
+    v2: 'superdoc/ui/react',
+    disposition: 'redesign',
+    failureMode: 'unresolved-path',
+    surface: 'custom-ui',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes: 'Hooks and providers moved and now bind to the instance-owned controller.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+  {
+    id: 'subpath.headless-toolbar-vue',
+    v1: 'superdoc/headless-toolbar/vue',
+    v2: 'superdoc.ui',
+    disposition: 'redesign',
+    failureMode: 'unresolved-path',
+    surface: 'custom-ui',
+    symptom: 'Module resolution fails; the subpath is absent from the v2 exports map.',
+    notes: 'v2 ships no Vue-specific bindings. Build on the framework-agnostic controller.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+];
+
+const REMOVED_ROOT_EXPORTS: MigrationEntry[] = [
+  {
+    id: 'root.Editor',
+    v1: 'Editor',
+    v2: 'superdoc.activeEditor',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'v2 exposes no editor constructor. Mount through `SuperDoc` and read the active document via its Document API facade.',
+    docsPath: '/document-api/mental-model',
+  },
+  {
+    id: 'root.PresentationEditor',
+    v1: 'PresentationEditor',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 owns rendering internally. There is no public presentation-editor surface.',
+  },
+  {
+    id: 'root.SuperEditor',
+    v1: 'SuperEditor',
+    v2: 'SuperDoc',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'The mounting capability survives, the component does not. v1 rendered a Vue component taking `fileSource`, `documentId`, `state`, and `options` props; v2 mounts imperatively with `new SuperDoc({ selector, document })`. A React or Vue wrapper is now application code around that instance.',
+    docsPath: '/editor/quickstart',
+    // Bare class name, so there is no member path to derive a marker from.
+    docsMarker: 'SuperDoc',
+  },
+  {
+    id: 'root.SuperInput',
+    v1: 'SuperInput',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'v2 ships no importable single-line input component, and no v2 surface is a drop-in equivalent. Build the control in your application.',
+  },
+  {
+    id: 'root.SuperConverter',
+    v1: 'SuperConverter',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'converter',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'DOCX conversion is internal to the v2 engine. Load through `document` and produce output through `export()`.',
+    docsPath: '/editor/load-and-save-documents',
+  },
+  {
+    id: 'root.DocxZipper',
+    v1: 'DocxZipper',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'converter',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'No public archive surface in v2.',
+  },
+  {
+    id: 'root.createZip',
+    v1: 'createZip',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'converter',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'No public archive surface in v2.',
+  },
+  {
+    id: 'root.SuperToolbar',
+    v1: 'SuperToolbar',
+    v2: 'config.toolbar',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'For the built-in toolbar, pass a container through `toolbar` in the config. For a custom toolbar, drive `superdoc.ui`.',
+    docsPath: '/editor/built-in-ui/configure-the-toolbar',
+  },
+  {
+    id: 'root.Toolbar',
+    v1: 'Toolbar',
+    v2: 'config.toolbar',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'The built-in toolbar is configured, not imported and rendered by the consumer.',
+    docsPath: '/editor/built-in-ui/configure-the-toolbar',
+  },
+  {
+    id: 'root.ContextMenu',
+    v1: 'ContextMenu',
+    v2: 'superdoc.ui.viewport.contextAt',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'The component is gone, not the workflow. Add actions to the built-in menu with `ui.contextMenu.customItems`. For a fully application-owned menu, set `ui: { contextMenu: false }`, listen on the Editor host, and resolve entities and selection with `superdoc.ui.viewport.contextAt({ x, y })`. This does not restore arbitrary ProseMirror positions.',
+    docsPath: '/editor/custom-ui/context-menus',
+  },
+  {
+    id: 'root.SlashMenu',
+    v1: 'SlashMenu',
+    v2: 'config.ui.contextMenu.customItems',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'The v2 built-in surface combines right-click and slash actions under `ui.contextMenu`. Add application sections with `customItems`; use the application-owned context-menu path when your product replaces the complete surface.',
+    docsPath: '/editor/custom-ui/context-menus',
+  },
+  {
+    id: 'root.AIWriter',
+    v1: 'AIWriter',
+    v2: 'config.modules.ai',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'The built-in toolbar renders the AI writer when `modules.ai` is configured, and applies generated text through the Document API.',
+  },
+  {
+    id: 'root.Extensions',
+    v1: 'Extensions',
+    v2: 'defineSuperDocExtension',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'v2 extensions receive commands, anchors, and decorations. They do not receive ProseMirror state, custom schema, or mutable DOM, so extensions that defined custom nodes or marks may have no v2 equivalent.',
+    docsPath: '/editor/custom-ui/review-highlights',
+    docsMarker: 'defineSuperDocExtension',
+  },
+  {
+    id: 'root.defineNode',
+    v1: 'defineNode',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 has no custom-schema surface. Custom document nodes cannot be reproduced.',
+  },
+  {
+    id: 'root.defineMark',
+    v1: 'defineMark',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 has no custom-schema surface. Custom marks cannot be reproduced.',
+  },
+  {
+    id: 'root.getStarterExtensions',
+    v1: 'getStarterExtensions',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 loads its own document capabilities. There is no consumer-assembled extension list.',
+  },
+  {
+    id: 'root.getRichTextExtensions',
+    v1: 'getRichTextExtensions',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 loads its own document capabilities. There is no consumer-assembled extension list.',
+  },
+  {
+    id: 'root.isNodeType',
+    v1: 'isNodeType',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'ProseMirror node predicates have no v2 equivalent. Query structure through the Document API.',
+    docsPath: '/document-api/query-content',
+  },
+  {
+    id: 'root.assertNodeType',
+    v1: 'assertNodeType',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'ProseMirror node predicates have no v2 equivalent. Query structure through the Document API.',
+    docsPath: '/document-api/query-content',
+  },
+  {
+    id: 'root.isMarkType',
+    v1: 'isMarkType',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'ProseMirror mark predicates have no v2 equivalent.',
+  },
+  {
+    id: 'root.getSchemaIntrospection',
+    v1: 'getSchemaIntrospection',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 exposes no ProseMirror schema to introspect.',
+  },
+  {
+    id: 'root.registeredHandlers',
+    v1: 'registeredHandlers',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'extensions',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Marked internal in v1 and removed in v2.',
+  },
+  {
+    id: 'root.superEditorHelpers',
+    v1: 'superEditorHelpers',
+    v2: 'superdoc.activeEditor.doc',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Helper bags are replaced by explicit Document API operations.',
+    docsPath: '/document-api/mental-model',
+  },
+  {
+    id: 'root.trackChangesHelpers',
+    v1: 'trackChangesHelpers',
+    v2: 'superdoc.activeEditor.doc.trackChanges',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'Helper bag replaced by explicit Document API operations for listing, navigating, and deciding tracked changes.',
+    docsPath: '/document-api/tracked-changes',
+  },
+  {
+    id: 'root.fieldAnnotationHelpers',
+    v1: 'fieldAnnotationHelpers',
+    v2: 'superdoc.activeEditor.doc',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Field and annotation work moves to Document API operations.',
+  },
+  {
+    id: 'root.AnnotatorHelpers',
+    v1: 'AnnotatorHelpers',
+    v2: 'superdoc.activeEditor.doc',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'Helper bag replaced by explicit Document API operations. Field and annotation work goes through `doc`, not a helper namespace.',
+  },
+  {
+    id: 'root.SectionHelpers',
+    v1: 'SectionHelpers',
+    v2: 'superdoc.activeEditor.doc.sections',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Verify coverage before migrating: linked-section workflows may not have full v2 equivalents.',
+  },
+  {
+    id: 'root.getMarksFromSelection',
+    v1: 'getMarksFromSelection',
+    v2: 'superdoc.ui',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Active formatting is published as reactive controller state rather than read from a selection.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+  {
+    id: 'root.getActiveFormatting',
+    v1: 'getActiveFormatting',
+    v2: 'superdoc.ui',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'Active formatting is published as reactive controller state rather than read from a selection.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+  {
+    id: 'root.getAllowedImageDimensions',
+    v1: 'getAllowedImageDimensions',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes:
+      'No public sizing helper in v2. Compute the constraint in your application, or let the engine apply its own bounds on insert.',
+  },
+  {
+    id: 'root.CommentsPluginKey',
+    v1: 'CommentsPluginKey',
+    v2: 'superdoc.activeEditor.doc.comments',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 exposes no ProseMirror plugin keys. Use the Document API comments operations.',
+    docsPath: '/document-api/comments',
+  },
+  {
+    id: 'root.TrackChangesBasePluginKey',
+    v1: 'TrackChangesBasePluginKey',
+    v2: 'superdoc.activeEditor.doc.trackChanges',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'editor-internals',
+    symptom:
+      'ESM and TypeScript reject the import. A CommonJS `require` binds `undefined` instead, so the failure surfaces later at the call site.',
+    notes: 'v2 exposes no ProseMirror plugin keys.',
+    docsPath: '/document-api/tracked-changes',
+  },
+];
+
+/**
+ * Usages that survive the build and then fail, or fail silently, at runtime.
+ *
+ * AIDEV-NOTE: These are the migration's hardest cases precisely because
+ * TypeScript does not catch them. `editorExtensions` and `modules.collaboration`
+ * still typecheck against the v2 `Config`; the runtime warns and refuses. The
+ * facade sets `commands`, `state`, and `view` to null rather than deleting them,
+ * so property access throws a generic error that names nothing about v1 or v2.
+ */
+const RUNTIME_TRAPS: MigrationEntry[] = [
+  {
+    id: 'runtime.commands',
+    v1: 'editor.commands',
+    v2: 'superdoc.activeEditor.doc',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom:
+      'A null-property error at the point of use. The message names the command, not SuperDoc, so it does not read as a migration failure.',
+    notes:
+      'The v2 facade exposes `commands` as null rather than removing it. Optional chaining converts the throw into a silent no-op, which is harder to notice.',
+    docsPath: '/document-api/mental-model',
+  },
+  {
+    id: 'runtime.state',
+    v1: 'editor.state',
+    v2: 'superdoc.activeEditor.doc',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error, or `undefined` when accessed with optional chaining.',
+    notes:
+      'There is no ProseMirror document model in v2. Positions expressed as numeric offsets have no equivalent; use addresses and targets.',
+    docsPath: '/document-api/query-content',
+  },
+  {
+    id: 'runtime.view',
+    v1: 'editor.view',
+    v2: null,
+    disposition: 'unsupported',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error, or `undefined` when accessed with optional chaining.',
+    notes: 'v2 renders through its own engine and exposes no editor view or mutable DOM.',
+  },
+  {
+    id: 'runtime.documentRuntime',
+    v1: 'superdoc.getDocumentRuntimeForDocument(documentId)',
+    v2: 'superdoc.ui',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'The lookup returns `null`, and application code that treats the renderer as the ready UI surface throws an error such as `DocumentRuntime is not available`.',
+    notes:
+      'V2 custom UI does not need to retrieve the renderer runtime. Read the instance-owned `superdoc.ui` controller after `onReady`; it publishes reactive feature state and routes UI actions without exposing the renderer object. `superdoc.ui` is a getter, not an import. The instance creates it once and owns its cleanup.',
+    docsPath: '/editor/migrate-from-v1/overview',
+  },
+  {
+    id: 'runtime.documentRuntime.scrollToElement',
+    v1: 'documentRuntime.scrollToElement(elementId)',
+    v2: 'superdoc.ui.*.scrollTo',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'The preceding runtime lookup returns `null`, so navigation throws or is skipped even though the document is mounted.',
+    notes:
+      'Route known entities through their feature handle: `ui.trackChanges.scrollTo(changeId)`, `ui.comments.scrollTo(commentId)`, or `ui.contentControls.scrollIntoView({ id })`. For a paragraph block id, wrap it in a `TextAddress` and call `ui.viewport.scrollIntoView({ target })`, carrying the paragraph `story` when it is not in the body: an omitted story defaults to body and the paragraph never resolves. That form is a single-block text range resolved through the paragraph index, so a table, image, or content-control id needs the surface that owns it instead. Every one of these reveals one bounded step per call, so retry while `success` is false against a fixed step budget: a stale or unreachable id fails forever, and an unbounded loop never terminates. Do not substitute `superdoc.scrollToElement()` or `superdoc.navigateTo()`: both read the renderer runtime slot that nothing on the V2 path populates, so they return `false` for every target in current V2 packages.',
+    docsPath: '/editor/migrate-from-v1/overview',
+  },
+  // AIDEV-NOTE: Semantic breaks, not removed symbols. `editor.view` itself has
+  // no replacement, but the things people did WITH it mostly do, and an agent
+  // reading only `editor.view -> null / unsupported` classifies a supported
+  // migration as impossible. These entries key on the v1 CALL rather than the
+  // object, so a project scan matches what the code actually contains.
+  {
+    id: 'runtime.view.dispatchSelection',
+    v1: 'editor.view.dispatch(tr.setSelection(...))',
+    v2: 'superdoc.ui.selection.apply',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `view`, or `undefined` under optional chaining.',
+    notes:
+      'Setting the selection programmatically is supported. Pass a `SelectionTarget` to `selection.apply()` rather than dispatching a transaction. Read it from `selection.current().selectionTarget` or a query result; there is no ProseMirror position to hand it.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  // AIDEV-NOTE: `coordsAtPos` and `posAtCoords` are inverse operations and get
+  // separate rows. Collapsing them sends doc-position-to-geometry callers to a
+  // hit-test that cannot accept a position, and the generated JSON is what an
+  // agent scans.
+  {
+    id: 'runtime.view.posAtCoords',
+    v1: 'editor.view.posAtCoords',
+    v2: 'superdoc.ui.viewport.entityAt',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `view`, or `undefined` under optional chaining.',
+    notes:
+      'Partial. `viewport.entityAt({ x, y })` resolves the public entities painted under a point (tracked changes, comments, content controls, and citations), innermost first, and returns `[]` over plain text. That covers hit-testing, which is what most `posAtCoords` callers wanted, but v2 ships no general point-to-document-position resolver, so a caller that needs an arbitrary position under the cursor has no equivalent. The legacy positional form `entityAt(x, y)` fails closed and returns `null`.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.view.coordsAtPos',
+    v1: 'editor.view.coordsAtPos',
+    v2: 'superdoc.ui.viewport.getRect',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `view`, or `undefined` under optional chaining.',
+    notes:
+      'The opposite direction from `entityAt`, and a different surface. `viewport.getRect({ target })` resolves painted geometry for a public target and returns `{ found, rects, rect, reason }`. It is keyed on a target, not a numeric position, so obtain one from `selection.capture()` or a query result first.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.trackChanges.navigate',
+    v1: 'manual tracked-change traversal through editor.state',
+    v2: 'superdoc.ui.trackChanges.navigateNext',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `state`, or `undefined` under optional chaining.',
+    notes:
+      'Review navigation is supported. `trackChanges.navigateNext()` moves through changes and `trackChanges.list()` reads the catalog. The catalog resolves asynchronously, so observe the slice until `status` is `ready` before consuming `items`.',
+    docsPath: '/editor/custom-ui/tracked-changes',
+  },
+  {
+    id: 'runtime.editorExtensions',
+    v1: 'editorExtensions',
+    v2: 'extensions',
+    disposition: 'redesign',
+    failureMode: 'config-silent',
+    surface: 'extensions',
+    symptom:
+      'The config typechecks and the editor mounts, but the extensions never run. SuperDoc logs a console warning naming the field.',
+    notes:
+      'A legacy ProseMirror concept that v2 ignores. Rebuild against `extensions` with `defineSuperDocExtension`; extensions defining custom nodes or marks may have no equivalent.',
+    docsPath: '/editor/custom-ui/review-highlights',
+    docsMarker: 'editorExtensions',
+  },
+  {
+    id: 'runtime.modulesCollaboration',
+    v1: 'modules.collaboration',
+    v2: 'document.v2Collaboration',
+    disposition: 'redesign',
+    failureMode: 'config-silent',
+    surface: 'collaboration',
+    symptom:
+      'The config typechecks, then SuperDoc refuses to attach the provider and reports a terminal compatibility failure.',
+    notes:
+      'v2 owns the provider and Y.Doc. This is a data migration, not a config change: v2 rooms use a different format and must not be pointed at an existing v1 room.',
+    docsPath: '/editor/migrate-from-v1/overview',
+  },
+];
+
+/**
+ * Operation-level breaks: the things people DID with the removed internals.
+ *
+ * AIDEV-NOTE: These key on the v1 CALL, not the object, so a project scan
+ * matches what a consumer's source actually contains. `editor.state` and
+ * `editor.view` already have entries above, but those say only "no equivalent".
+ * An agent reading `editor.state -> null / unsupported` and stopping there
+ * classifies a supported migration as impossible, which is the specific failure
+ * this section exists to prevent.
+ *
+ * Several v1 usages here are plain DOM reads rather than SuperDoc calls. They
+ * belong in a migration catalog because v2 paints its own DOM: the selectors
+ * keep parsing, keep typechecking, and silently match nothing. That is a harder
+ * failure to notice than a missing export, not an easier one.
+ *
+ * Entries stay `unsupported` with `v2: null` when v2 has no public answer, even
+ * where a partial workaround exists. Naming a surface that cannot do the job is
+ * how a catalog stops being trustworthy.
+ */
+const SEMANTIC_BREAKS: MigrationEntry[] = [
+  {
+    // AIDEV-NOTE: One v1 call, two v2 migrations, so it is two rows rather than
+    // one row with two links. A reader arriving from `replaceWithFieldAnnotation`
+    // has to pick a branch before anything else is actionable, and a single
+    // `docsPath` can only ever teach one of them.
+    id: 'runtime.commands.replaceWithFieldAnnotation.citation',
+    // The label carries the branch; `v1Symbols` keeps the exact call a scanner
+    // greps for addressable, since neither row's `v1` is the bare symbol.
+    isGroup: true,
+    v1: 'editor.commands.replaceWithFieldAnnotation (citation)',
+    v1Symbols: ['editor.commands.replaceWithFieldAnnotation'],
+    v2: 'doc.citations.insert',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `commands`, or a silent no-op under optional chaining.',
+    notes:
+      'One v1 node type did two jobs and v2 splits them, so decide which this annotation was before porting it. This row is the citation branch: a marker backed by a source record is `citations.sources.insert()` followed by `citations.insert({ at, sourceIds })`, where `sourceIds` carries the canonical `sourceId` from the receipt rather than the source tag. The inserted field has a visible cached result such as `[Parity Handbook]`, and changing `sourceIds` with `citations.update` recomputes it. Not a rename, and not an atomic replacement: `citations.insert` accepts only a collapsed target. To replace selected text, derive its start as the insertion caret, delete the selected range, and only then pass the resulting collapsed caret to `citations.insert`. The returned `CitationAddress.anchor` spans the complete visible result in flattened paragraph offsets, while `CitationAddress.story` identifies the body, header/footer, note, or textbox containing it. If the annotation was application-owned data rather than a citation, use the `metadata.attach` row instead.',
+    docsPath: '/document-api/reference/citations/insert',
+  },
+  {
+    id: 'runtime.commands.replaceWithFieldAnnotation.metadata',
+    isGroup: true,
+    v1: 'editor.commands.replaceWithFieldAnnotation (application annotation)',
+    v1Symbols: ['editor.commands.replaceWithFieldAnnotation'],
+    v2: 'doc.metadata.attach',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `commands`, or a silent no-op under optional chaining.',
+    notes:
+      'The other half of the same v1 call. An annotation carrying application-owned data anchored to a range is `metadata.attach({ id, namespace, target, payload })`, and the entries it creates are not v1 field annotations: the ids, the payloads, and the anchoring model all differ, so treat this as remodelling rather than a rename. Read them back with `metadata.list({})` and `metadata.get({ id })`. If the annotation was a citation with a source record, use the `citations.insert` row instead.',
+    docsPath: '/document-api/reference/metadata/attach',
+  },
+  {
+    id: 'runtime.state.applicationMarks',
+    isGroup: true,
+    v1: 'editor.state.doc.descendants (application review marks)',
+    v1Symbols: ['editor.state.doc.descendants'],
+    v2: 'doc.metadata + ctx.visuals.highlight',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'extensions',
+    symptom: 'A null-property error on `state`, or `undefined` under optional chaining.',
+    notes:
+      'Split the old mark into two responsibilities. Store caller-owned identity and JSON payload with anchored metadata, resolve its current target with `metadata.resolve({ id })`, and paint that target through an extension visual. Metadata persists but renders nothing; visuals render but never enter the DOCX.',
+    docsPath: '/editor/custom-ui/review-highlights',
+  },
+  {
+    id: 'runtime.state.citationNodes',
+    v1: 'editor.state.doc.descendants (citation nodes)',
+    v2: 'doc.citations.list',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `state`, or `undefined` under optional chaining.',
+    notes:
+      'Reading citations no longer means walking a node tree. `citations.list()` returns the rows with their addresses and `sourceIds`. Item order can drive application-owned numbering, but that produces local UI labels only: it does not change the citation field result stored in the DOCX. The call is synchronous in some hosts and asynchronous in others, so shared browser and headless code should normalize with `await Promise.resolve(doc.citations.list())`.',
+    docsPath: '/document-api/reference/citations/list',
+  },
+  {
+    id: 'runtime.helpers.fieldAnnotations',
+    v1: 'editor.helpers.fieldAnnotations.getAll()',
+    v2: 'doc.metadata.list',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `helpers`, or `undefined` under optional chaining.',
+    notes:
+      'A shape change, not a rename. `getAll()` returned v1 field annotations; `metadata.list({})` returns anchored-metadata entries whose ids, payloads, and anchoring model all differ. `metadata.list` is the discovery call and `metadata.get({ id })` reads one payload, so pair them when you need the collection. `get` returns null for an entry that disappeared between the two calls. Treat legacy field annotations as something to remodel rather than something this call returns.',
+    docsPath: '/document-api/reference/metadata/list',
+  },
+  {
+    id: 'runtime.citations.presentation',
+    v1: 'tr.setNodeMarkup(pos, undefined, { resolvedText })',
+    v2: 'doc.citations.insert + ctx.visuals.inlineBox',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error reaching the transaction.',
+    notes:
+      'Insert and update citations through `doc.citations`; v2 writes and recomputes the visible cached field result from the source tags. For application-owned presentation, convert the returned address to `{ kind: "text", blockId: address.anchor.start.blockId, range: { start: address.anchor.start.offset, end: address.anchor.end.offset }, story: address.story }`. Create a visual handle with `const citationPill = ctx.visuals.inlineBox("citations", { layout: { paddingInline: 5, paddingBlock: 2, borderWidth: 1 }, appearance: { borderColor: "#8aa8d8", borderRadius: 8 } })`, then pass the target to `citationPill.replace([target])`. The offsets already span the complete citation result, and carrying `story` ensures a citation outside the body resolves and paints in its owning header, footer, note, or textbox. Local typing rebases the target. Remote edits fail closed until the extension re-queries. Presentation is render-only and never changes the DOCX.',
+    docsPath: '/document-api/reference/citations/insert',
+  },
+  {
+    id: 'runtime.dom.citationRuns',
+    v1: '.superdoc-text-run[data-pm-start] (citation pill styling)',
+    v2: 'ctx.visuals.inlineBox',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'extensions',
+    symptom:
+      'Nothing breaks, which is the problem. The painter still stamps `data-pm-start` on runs, so the selector keeps matching and the code keeps mutating renderer-owned DOM.',
+    notes:
+      'This one does not fail on upgrade. `layout-engine/dom-contract` stamps `data-pm-start` and `data-pm-end` alongside the editor-neutral attributes specifically so v1 consumers keep working, and `.superdoc-text-run` is still the painted class. What you lose is the guarantee: the DOM shape is renderer-owned and carries no stability contract, so this is worth migrating before a paint change breaks it silently rather than after. Replace a padded pill with `ctx.visuals.inlineBox(id, options)`. Its integer-pixel padding, gaps, and border participate in wrapping and pagination; `className` remains paint-only. A `CitationAddress` is not itself a visual target, but converting one is mechanical: `{ kind: "text", blockId: citation.address.anchor.start.blockId, range: { start: citation.address.anchor.start.offset, end: citation.address.anchor.end.offset }, story: citation.address.story }`. Carry `CitationAddress.story` so repeated block ids resolve in the owning body, header/footer, note, or textbox. Wrapped ranges clone box edges on each line. Overlaps, RTL targets, header/footer slot locators, and tracked-coordinate targets fail closed. Local typing, undo, and redo rebase the anchor; remote edits may briefly remove the pill until the extension re-queries. Deleting the whole range drops the box. The presentation is render-only, adds repaint and measurement cost when targets change, and never reaches the DOCX.',
+  },
+  {
+    id: 'runtime.on.fieldAnnotationClicked',
+    v1: "superdoc.on('fieldAnnotationClicked')",
+    v2: 'superdoc.ui.viewport.entityAt',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'The subscription is accepted and the handler never fires.',
+    notes:
+      "v2 emits no generic field-annotation click event, and the replacement depends on what the annotation became. For citations, register a listener on `superdoc.ui.viewport.getHost()`, call `viewport.entityAt({ x, y })`, and select the `{ type: \"citation\", id }` hit; that `id` matches a `doc.citations.list().items` row. For anchored metadata, read the record id from the content-control hit's `tag` and compare the hit control's `selectionTarget` with `doc.metadata.resolve({ id: tag }).target`. That comparison narrows the risk but does not confirm the hit: content-control hits carry no story, both lookups resolve against the body, and painted ids are unique only within the main document part, so a header, footer, note, or textbox control reusing a body anchor's id and tag passes every check. Treat a match as unverified for externally authored files. Remove the listener when the custom UI unmounts. Decide the document model before choosing the interaction path.",
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.state.selection',
+    v1: 'editor.state.selection',
+    v2: 'superdoc.ui.selection.current',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `state`, or `undefined` under optional chaining.',
+    notes:
+      'A v1 `Selection` was one live object used for both reading and preserving, and v2 splits those. To read the current selection use `selection.current()` or the observed snapshot; both describe a collapsed caret. To preserve a selection across something that moves focus, use `capture()` and then `restore()`. Do not reach for `capture()` as the general read: it returns null whenever the selection is empty, which includes a collapsed caret, so caret-dependent code migrated onto it loses the selection it was trying to keep. Either way the payload is document addresses rather than numeric positions.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.dom.selectionRect',
+    v1: 'document.getSelection().getRangeAt(0).getBoundingClientRect()',
+    v2: 'superdoc.ui.selection.getAnchorRect',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'The browser selection reflects rendered DOM rather than document state, so the rectangle is wrong or the call throws on an empty range.',
+    notes:
+      "`getAnchorRect()` resolves one rectangle from the document selection against the painted layout, and accepts `'start'`, `'end'`, or `'center'`. v1's `'union'` placement has no v2 value: use `selection.getRects()` when a bubble needs the full multi-line union.",
+  },
+  {
+    id: 'runtime.dom.commentAnchor',
+    // AIDEV-NOTE: Singular `data-comment-id` genuinely matches nothing, unlike
+    // the `data-pm-*` entries. The near-miss below is deliberate: `sed`-ing the
+    // selector to the plural attribute is the obvious next move and it lands
+    // right back on renderer-owned DOM.
+    v1: 'document.querySelector(\'[data-comment-id="..."]\')',
+    v2: 'superdoc.ui.viewport.getRect',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'Depends on the sidebar, which is the trap. With the built-in comments UI enabled the selector matches a sidebar card and positions against the wrong element; with it disabled the same selector matches nothing.',
+    notes:
+      'The painter stamps no singular `data-comment-id` on document content, but `FloatingComments.vue` binds one on each sidebar placeholder, so an integration running the built-in comments UI gets a match that is a panel card rather than the painted anchor. Code that scrolls or positions from it silently targets the sidebar. Turn the sidebar off and the same selector returns null, so the failure changes shape with configuration rather than being absent. There is a second near miss: the painter stamps `data-comment-ids`, plural and comma-separated, on `.superdoc-comment-highlight`, and retargeting the selector there puts you back on renderer-owned DOM with no stability contract. Read the comment through `ui.comments.getById()` and resolve its target with `viewport.getRect({ target })` instead. Treat a `null` from `getById()` as "not loaded yet" rather than "no such comment": it checks the loaded snapshot, then falls back to the Document API, and returns `null` when that fallback is a pending promise, which is the normal browser case. It does not prime the read either, unlike `contentControls.getById()`, and `comments.list()` returns `[]` on the same path. Gate on the observed comments slice, and gate on `listStatus` rather than `status`: `status` folds in the live selection read, so an unrelated selection change holds it at `pending` while the list is ready. Do not cache the rectangle as identity: geometry changes on scroll, zoom, resize, and pagination, and `viewport.observe()` is the signal to measure again.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.dom.trackedChangeAnchor',
+    // AIDEV-NOTE: `data-track-change-id`, not `data-tracked-change-id`. v1 spelled
+    // it without the `ed` throughout PresentationEditor and its DOM helpers, and
+    // `v1` is the key a project scan matches, so the wrong spelling matches no
+    // real consumer code.
+    v1: 'document.querySelector(\'[data-track-change-id="..."]\').scrollIntoView()',
+    v2: 'superdoc.ui.trackChanges.scrollTo',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'Usually a match, and a `TypeError` when not. The call as written dereferences the result, so a change that is not painted takes down whatever runs it, and the same code works in a short document and throws in a long one.',
+    notes:
+      'This survives the upgrade, which is why it is worth migrating deliberately. The v2 painter still stamps `data-track-change-id` on painted runs, so the selector keeps resolving and nothing announces that it has become unreliable. It misses in two different ways. A change on a page that is not currently painted has no element at all, because `querySelector` sees only mounted DOM and virtualization leaves the rest of the document unrendered. And where several changes affect one marker, only one id lands in the singular attribute: the rest are in `data-track-change-ids`, comma-separated, so a secondary overlapping change is unreachable by the selector even while it is on screen. Both misses reach `.scrollIntoView()` on `null` and throw, unless the call is guarded. The attribute is renderer-owned and carries no stability contract either. `trackChanges.scrollTo(changeId)` takes the id rather than a selector, mounts the target page when it has to, resolves overlapping changes through the same catalog the review UI uses, and reports whether it succeeded.',
+    docsPath: '/editor/custom-ui/tracked-changes',
+  },
+  {
+    id: 'runtime.dom.mutationObserver',
+    v1: 'new MutationObserver(...) on the editor element',
+    v2: 'superdoc.ui.viewport.observe',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'The observer attaches and fires on repaints that do not correspond to document changes, or never fires for layout changes that produce no mutations.',
+    notes:
+      'Watching the rendered DOM was always a proxy for the question consumers were asking. `viewport.observe()` fires when painted geometry is invalidated, including scroll, zoom, resize, pagination, and virtualized page mounts, which a subtree MutationObserver either misses or floods on.',
+    docsPath: '/editor/custom-ui/selection-and-viewport',
+  },
+  {
+    id: 'runtime.dom.contentControlScroll',
+    v1: 'element.scrollIntoView() on a content-control element',
+    v2: 'superdoc.ui.contentControls.scrollIntoView',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'There is no element to hold: the query that produced it matches nothing, so the call throws or is skipped.',
+    notes:
+      'Address the control by id rather than by element: `contentControls.scrollIntoView({ id, block })` resolves it through the host, including on pages that are not currently painted. A DOM-held reference cannot survive virtualization.',
+  },
+  {
+    id: 'runtime.comments.isTrackedChange',
+    v1: 'editor.comments.filter((c) => c.isTrackedChange)',
+    v2: 'superdoc.ui.trackChanges.list',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'A null-property error on `comments`. Once ported, the more damaging failure is quiet: a document full of tracked changes reports none.',
+    notes:
+      'v2 separates tracked changes from comments instead of tagging one list. The trap is readiness, not the split: the catalog is an async read, so a synchronous `list()` on a controller that has not settled returns an empty snapshot rather than an error. Observe the slice and consume `items` once `status` is `ready`. `total` and `authors` come from the same slice and carry the same caveat.',
+    docsPath: '/editor/custom-ui/tracked-changes',
+  },
+  {
+    id: 'runtime.presentationEditor',
+    v1: 'editor.presentationEditor',
+    isGroup: true,
+    v1Symbols: ['presentationEditor.getPages', 'presentationEditor.onLayoutUpdated', 'presentationEditor.element'],
+    v2: 'superdoc.activeEditor.pageMetrics',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `presentationEditor`, or `undefined` under optional chaining.',
+    notes:
+      'Page metrics survive as a capability. `pageMetrics` exposes `getSnapshot`, `subscribe`, `setZoom`, `scrollToPage`, `revealBodyTarget`, and `pageIndexForBodyTarget`, and `ui.viewport.getHost()` replaces reading `presentationEditor.element`. The facade types `pageMetrics` as `unknown`, so consuming it means declaring the shape yourself and re-verifying it on upgrade; it is not part of the typed public surface the rest of this catalog points at.',
+  },
+  {
+    id: 'runtime.dom.pageElement',
+    v1: '.superdoc-page[data-page-index] (page element lookup)',
+    v2: 'superdoc.activeEditor.pageMetrics',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'Usually nothing, which hides the two cases that matter. The painter still stamps `data-page-index` on `.superdoc-page`, so the selector keeps matching for mounted pages and returns null for virtualized ones.',
+    notes:
+      'The DOM lookup survives the upgrade rather than breaking, so this migrates on correctness rather than on a build error. Page windowing means only mounted pages have elements, and a page outside the window returns null from the selector while still having metrics. Read the page from the metrics snapshot instead. The same untyped-surface caveat applies as for `presentationEditor`, and the painted DOM carries no stability contract even where it currently answers.',
+  },
+  {
+    id: 'runtime.onTransaction',
+    v1: 'onTransaction',
+    v2: 'defineSuperDocExtension + ctx.onMutation',
+    disposition: 'redesign',
+    failureMode: 'config-silent',
+    surface: 'extensions',
+    symptom: 'The config typechecks and the editor mounts, and the callback never fires.',
+    notes:
+      'v2 has no transactions to hand back. Declare an extension and subscribe through its activation context: `ctx.onMutation({ origin, sourceComplete, affects }, handler)`. The filter is the point of the redesign, because a v1 handler had to inspect every transaction and decide whether it mattered.',
+  },
+  {
+    id: 'runtime.chain.insertPageBreak',
+    v1: 'editor.chain().insertPageBreak().run()',
+    v2: 'doc.create.paragraph + doc.format.paragraph.setFlowOptions',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom: 'A null-property error on `chain`, or `undefined` under optional chaining.',
+    notes:
+      'Not a behavioral equivalent, and the difference decides the port. v1 broke at the caret. v2 creates a paragraph at an address you supply and sets `pageBreakBefore` on it, which starts that paragraph on a new page rather than inserting a standalone break character. A mid-paragraph caret has no address of its own, so code that broke mid-paragraph must split the paragraph first or accept a block boundary. Await the creation: its returned address is the target of the formatting call.',
+    docsPath: '/document-api/reference/format/paragraph/set-flow-options',
+  },
+  {
+    id: 'runtime.documentApi.syncReads',
+    v1: 'doc.extract({}) / doc.getMarkdown({}) / doc.selection.current({}) read synchronously',
+    v2: 'the same operations, awaited',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'editor-internals',
+    symptom:
+      'The call returns a Promise where the code expected a value, so reads look empty and downstream property access yields `undefined`.',
+    notes:
+      'The v2 browser facade can route reads and mutations through a worker even when the underlying operation is synchronous in headless Node, so the same code is sync in one host and async in the other. Await browser calls, or normalize shared browser and headless code with `await Promise.resolve(call)`, and keep author overrides or other scoped state active until an awaited mutation settles.',
+    docsPath: '/document-api/mental-model',
+    // `v2` is prose here, so the derived marker would be the word `the`.
+    docsMarker: 'Promise-shaped',
+  },
+  {
+    id: 'runtime.ui.createScope',
+    v1: 'ui.createScope().register(...)',
+    v2: 'superdoc.ui.commands.register',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `createScope`, or `undefined` under optional chaining.',
+    notes:
+      'Register on the instance-owned controller: `superdoc.ui` is created once on first read and reused, and its type omits `destroy()` because the instance owns teardown. The registration result is callable and also exposes `unregister()`; keep either and call it on unmount. Command callbacks receive the public `doc`, `ui`, selection, and mode rather than ProseMirror command state, and the selection should be read from `context.selection`, which is synchronous and always present, not through the deep-partial `context.doc`.',
+    docsPath: '/editor/custom-ui/custom-commands',
+  },
+  {
+    id: 'runtime.on.selectionUpdate',
+    v1: "editor.on('selectionUpdate')",
+    v2: 'superdoc.ui.selection.subscribe',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'The subscription is accepted and the handler never fires.',
+    notes:
+      '`subscribe` fires immediately and passes `{ snapshot }`; `observe` is the value-shaped alias. Both return an unsubscribe function, where v1 required a matching `off`. The payload is a public selection slice with document addresses, not a ProseMirror selection, so handlers that read positions have to be rewritten rather than rebound.',
+  },
+  {
+    id: 'runtime.trackChanges.authorColor',
+    v1: 'trackedChange.authorColor',
+    v2: 'superdoc.ui.trackChanges.list',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom:
+      'Present on some rows and absent on others. Rows without it render `undefined` as a color, and nothing errors.',
+    notes:
+      'Conditional rather than removed. The row projection passes the v2 tracked-changes facade fields through, so `list()` returns `authorColor` for rows whose host supplies one. It is not declared on `TrackChangeInfo`, so it is not part of the typed public surface and reading it means asserting the shape yourself. `trackChanges.authors` is flattened to `readonly string[]` and drops the per-author color the facade returns, so it is not the fallback either. Keep an application-owned default rather than assuming the field is there, and do not mutate the readonly slice arrays to add one.',
+    docsPath: '/editor/custom-ui/tracked-changes',
+  },
+  {
+    id: 'runtime.view.domPaste',
+    v1: "editor.view.dom.addEventListener('paste', ...)",
+    v2: 'the element your application passed as the SuperDoc host',
+    disposition: 'redesign',
+    failureMode: 'runtime',
+    surface: 'custom-ui',
+    symptom: 'A null-property error on `view`, or `undefined` under optional chaining.',
+    notes:
+      'The capability survives as ordinary DOM work, but the element does not: v2 owns and re-paints its internal DOM, so attach the listener to the stable host element you passed to SuperDoc and remove it on unmount. A bubbling listener is enough when validation only needs `preventDefault()`. This guards browser input only; programmatic Document API mutations emit no DOM paste events.',
+  },
+];
+
+/**
+ * Names that disappeared from a subpath that still exists.
+ *
+ * AIDEV-NOTE: These are invisible to a key-only comparison of the exports map.
+ * `superdoc/ui` resolves in both versions, but v2 rebuilt it as a v2-native
+ * controller instead of re-exporting v1, so importing one of these names from a
+ * path that still works is a build error the rest of this catalog would not
+ * mention. `tests/migration-catalog.test.mjs` compares the snapshotted v1 names
+ * against the live v2 entry and fails when a dropped name is undocumented.
+ */
+const DROPPED_SUBPATH_EXPORTS: MigrationEntry[] = [
+  {
+    id: 'subpath-export.ui-types',
+    v1: 'superdoc/ui type exports',
+    isGroup: true,
+    v1Symbols: [
+      'ContextMenuContribution',
+      'ContextMenuWhenInput',
+      'DocumentExportInput',
+      'DynamicCommandHandle',
+      'PublicToolbarItemId',
+      'SelectionAnchorRectOptions',
+      'TextSegment',
+      'ToolbarCommandHandleState',
+      'UIToolbarCommandState',
+      'ViewportContextAtInput',
+      'ViewportEntityAtInput',
+      'ViewportPositionAtInput',
+      'ViewportPositionHit',
+      'ZoomMode',
+      'ZoomViewportMetrics',
+    ],
+    v2: 'superdoc/ui',
+    disposition: 'redesign',
+    failureMode: 'missing-export',
+    surface: 'custom-ui',
+    symptom:
+      'The import path still resolves, so only the named type fails. TypeScript reports the missing name; a plain JavaScript build sees nothing because these are type-only.',
+    notes:
+      'v2 rebuilt `superdoc/ui` as a native controller rather than re-exporting v1, so these 15 type names did not carry over. Use the controller types v2 publishes from the same path.',
+    docsPath: '/editor/custom-ui/overview',
+  },
+];
+
+export const MIGRATION_CATALOG: MigrationCatalog = {
+  v1Version: '1.45.0',
+  v1ExportCount: 41,
+  v1SubpathCount: 10,
+  entries: [
+    ...REMOVED_SUBPATHS,
+    ...DROPPED_SUBPATH_EXPORTS,
+    ...REMOVED_ROOT_EXPORTS,
+    ...RUNTIME_TRAPS,
+    ...SEMANTIC_BREAKS,
+  ],
+};
+
+/**
+ * Public definitions of what each disposition promises.
+ *
+ * AIDEV-NOTE: This is the automation-safety contract, and it lives here rather
+ * than in the generator so `tests/migration-catalog.test.mjs` can assert the
+ * exact text reaches both projections. An earlier guard checked only that the
+ * page contained the legend's heading, which let the definitions themselves be
+ * deleted while the test stayed green -- the same "assert something adjacent to
+ * the real thing" mistake this catalog exists to prevent.
+ */
+export const DISPOSITION_DEFINITIONS: Record<MigrationDisposition, string> = {
+  mechanical:
+    'A direct substitution with equivalent behavior. Safe to apply mechanically, and required to be backed by a compiled fixture before it carries this label.',
+  redesign:
+    'A replacement exists, but the semantics differ. Read the replacement and re-verify the behavior; do not apply it as a find-and-replace.',
+  unsupported: 'No v2 equivalent. The capability must be removed or rebuilt outside SuperDoc.',
+};
+
+/** Human-readable column values for each disposition. */
+export const DISPOSITION_LABELS: Record<MigrationDisposition, string> = {
+  mechanical: 'Mechanical',
+  redesign: 'Redesign',
+  unsupported: 'No equivalent',
+};

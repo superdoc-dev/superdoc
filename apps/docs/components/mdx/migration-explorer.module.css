@@ -1,0 +1,334 @@
+.explorer {
+  margin-block: 1.5rem;
+
+  /* AIDEV-NOTE: `--sd-blue-600` is a fixed palette value with no `.dark`
+     override, while `--sd-surface` flips to #151820. Using the palette value
+     directly rendered the v2 replacement names at 2.30:1 in dark mode. This
+     local token carries its own dark value the way the semantic tokens in
+     global.css do: 7.72:1 light, 6.44:1 dark. */
+  --sd-explorer-code: var(--sd-blue-600);
+}
+
+:global(.dark) .explorer {
+  --sd-explorer-code: var(--sd-blue-300);
+}
+
+/* Visually hidden, still announced. The table needs a caption for screen
+   readers, but the surrounding heading already names it for sighted readers. */
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-md);
+  background: var(--sd-surface);
+}
+
+.search:focus-within {
+  border-color: var(--sd-blue-500);
+  box-shadow: 0 0 0 3px var(--sd-blue-50);
+}
+
+.search svg {
+  flex: none;
+  color: var(--sd-text-tertiary);
+}
+
+.search input {
+  flex: 1;
+  padding-block: 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--sd-text-primary);
+  font-family: var(--sd-font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+}
+
+.search input:focus {
+  outline: none;
+}
+
+.facetGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.facetLabel {
+  margin-inline-end: 0.15rem;
+  color: var(--sd-text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chip {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--sd-border);
+  border-radius: 999px;
+  background: var(--sd-surface);
+  color: var(--sd-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--sd-blue-200);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--sd-blue-500);
+  outline-offset: 2px;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--sd-blue-500);
+  background: var(--sd-blue-500);
+  color: #fff;
+}
+
+/* AIDEV-NOTE: No opacity here. `opacity: 0.7` on this 11px count blended
+   --sd-text-secondary toward the surface and measured 3.35:1, failing WCAG AA
+   for small text (4.5:1); axe flagged it as a serious color-contrast
+   violation. The count carries meaning, so it must stay legible. Use a real
+   token and let the chip's own color states apply. */
+.count {
+  margin-inline-start: 0.35rem;
+  color: var(--sd-text-tertiary);
+  font-family: var(--sd-font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+}
+
+/* On a selected chip the label is white; the count must follow it rather than
+   keep the tertiary ink, which would sit on the blue fill. */
+.chip[aria-pressed='true'] .count {
+  color: inherit;
+}
+
+.status {
+  margin-block: 0.75rem 0.5rem;
+  color: var(--sd-text-tertiary);
+  font-family: var(--sd-font-mono, ui-monospace, monospace);
+  font-size: 0.78125rem;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid var(--sd-border-soft);
+  border-radius: var(--sd-radius-lg);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  /* Fixed layout stops the prose columns from being squeezed to a few
+     characters when a long `v1` value appears. The docs reading column is
+     narrower than a full-width table, so the browser's automatic algorithm
+     gives the code cells far more room than they need. */
+  table-layout: fixed;
+  min-width: 44rem;
+}
+
+.table col.colV1 {
+  width: 22%;
+}
+
+.table col.colV2 {
+  width: 18%;
+}
+
+.table col.colMigration {
+  width: 12%;
+}
+
+.table col.colSymptom {
+  width: 24%;
+}
+
+.table col.colNotes {
+  width: 24%;
+}
+
+.table th {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--sd-border-soft);
+  background: var(--sd-canvas);
+  color: var(--sd-text-tertiary);
+  font-family: var(--sd-font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: start;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--sd-border-soft);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table code {
+  font-size: 0.8125rem;
+}
+
+.v2 code {
+  color: var(--sd-explorer-code);
+}
+
+.none {
+  color: var(--sd-text-tertiary);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.symbols {
+  display: block;
+  margin-block-start: 0.3rem;
+  color: var(--sd-text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-family: var(--sd-font-mono, ui-monospace, monospace);
+  font-size: 0.71875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.redesign {
+  background: var(--sd-blue-50);
+  color: var(--sd-blue-600);
+}
+
+.unsupported {
+  background: var(--sd-error-surface);
+  color: var(--sd-error);
+}
+
+.mechanical {
+  background: var(--sd-success-surface);
+  color: var(--sd-success);
+}
+
+.prose {
+  color: var(--sd-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.more {
+  color: var(--sd-explorer-code);
+  white-space: nowrap;
+}
+
+.idle {
+  padding: 1.1rem 0.25rem 0.25rem;
+  color: var(--sd-text-tertiary);
+  font-size: 0.875rem;
+}
+
+.empty {
+  padding: 2.5rem 1rem;
+  color: var(--sd-text-tertiary);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* Below this width the five columns cannot hold their meaning side by side, so
+   each row becomes a labeled stack. `data-label` supplies the header text that
+   the hidden `thead` would otherwise carry. */
+@media (max-width: 48rem) {
+  .tableScroll {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  /* The stacked layout ignores column widths; keep the table from forcing a
+     horizontal scrollbar it no longer needs. */
+  .table {
+    min-width: 0;
+    table-layout: auto;
+  }
+
+  .table colgroup {
+    display: none;
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table tr {
+    padding-block: 0.75rem;
+    border: 1px solid var(--sd-border-soft);
+    border-radius: var(--sd-radius-md);
+    margin-block-end: 0.6rem;
+  }
+
+  .table td {
+    padding: 0.25rem 0.9rem;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--sd-text-tertiary);
+    font-family: var(--sd-font-mono, ui-monospace, monospace);
+    font-size: 0.65625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .table td:empty {
+    display: none;
+  }
+
+  .prose {
+    max-width: none;
+  }
+}

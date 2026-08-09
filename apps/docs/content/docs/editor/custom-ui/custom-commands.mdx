@@ -1,0 +1,36 @@
+---
+title: Register custom commands
+navTitle: Custom commands
+description: Add application-owned actions to the same reactive command system as SuperDoc controls.
+---
+
+Register a custom command when an application action should share the Editor's enabled state, execution path, cleanup, and optional context-menu metadata. Keep ordinary application buttons outside the command system unless they need that integration.
+
+Complete [Custom UI controller setup](/editor/custom-ui/controller-setup) first. This example expects `/contract.docx` to be available from your application.
+
+## Add the application action
+
+This control inserts a reusable clause at the live Editor selection:
+
+<include>../../../../snippets/editor/custom-command.html</include>
+
+## Register and execute the command
+
+Register after the Editor is ready and unregister during cleanup:
+
+<include>../../../../snippets/editor/custom-command.ts</include>
+
+The registration provides four optional integration points:
+
+- `getState()` derives `enabled`, `active`, `value`, and `reason` from current Editor state.
+- `execute()` receives the typed payload, live selection, document mode, controller, and Document API facade.
+- `shortcut` describes the intended shortcut. Your application still owns the keyboard listener and conflict policy.
+- `contextMenu` describes an item that your menu can obtain with `ui.commands.getContextMenuItems(context)`.
+
+Use the returned handle to observe state and call `executeAsync()`. This keeps the button and keyboard path on one execution contract. Inspect the result before reporting success or starting dependent work.
+
+## Keep commands focused
+
+A custom command should represent one user intent. Compose existing commands through `context.executeAsync()`, use `context.insertText()` for the narrow insertion helper, or call the public `context.doc` Document API for document operations. Do not reach into Editor state, view objects, or DOM offsets.
+
+Custom commands do not create an authorization boundary. The browser can gate normal interactions, but your backend must still enforce document access, identity, persistence, and collaboration permissions.

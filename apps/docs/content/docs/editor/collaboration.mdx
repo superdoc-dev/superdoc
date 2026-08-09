@@ -1,0 +1,32 @@
+---
+title: Real-time collaboration
+navTitle: Collaboration
+description: Connect the browser editor to a v2 collaboration room.
+---
+
+SuperDoc v2 can synchronize one DOCX through a y-websocket, Hocuspocus, or Liveblocks provider. The browser editor owns the provider and Y.Doc lifecycle after your application supplies a `v2Collaboration` target on the document.
+
+Use `roomMode: 'create'` once to seed a missing room from the document's `data`. Later clients use `roomMode: 'join'` with the same `documentId`:
+
+```ts
+const document = {
+  id: 'shared-document',
+  type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  data: docxBlob,
+  v2Collaboration: {
+    providerType: 'hocuspocus',
+    documentId: 'contract-123',
+    serverUrl: 'wss://collaboration.example.com',
+    roomMode: 'join',
+  },
+};
+```
+
+Wait for `onCollaborationReady` before enabling document-dependent controls. Call `destroy()` when the editor unmounts so SuperDoc releases its owned connection.
+
+The [collaboration example](https://go.superdoc.dev/examples/collaboration) provides a complete local setup with an in-memory Hocuspocus server and two synchronized browser pages. Authentication and persistence belong in server hooks and are intentionally outside that first example.
+
+<Callout title='Create and join are explicit'>
+  V2 does not provide a join-or-create mode. Creating an existing room or joining a missing room fails. Retry with a
+  fresh editor instance after your application decides which operation is correct.
+</Callout>

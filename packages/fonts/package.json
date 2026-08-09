@@ -1,0 +1,53 @@
+{
+  "name": "@superdoc/fonts",
+  "version": "0.1.1",
+  "description": "Optional bundled metric-compatible font substitutes for SuperDoc, shipped as bundler-resolvable assets.",
+  "type": "module",
+  "license": "SEE LICENSE IN assets/LICENSES.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc/docx-editor.git",
+    "directory": "packages/fonts"
+  },
+  "homepage": "https://github.com/superdoc/docx-editor/tree/main/packages/fonts#readme",
+  "bugs": {
+    "url": "https://github.com/superdoc/docx-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "assets"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "sync": "node scripts/sync-assets.mjs",
+    "generate": "node scripts/generate-asset-urls.mjs && pnpm exec tsx scripts/generate-bundled-families.ts",
+    "check:families": "pnpm exec tsx scripts/check-bundled-families.ts",
+    "build:cdn": "vp build",
+    "build": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vp build",
+    "prepare": "node scripts/sync-assets.mjs && node scripts/generate-asset-urls.mjs && tsc --project tsconfig.json && vp build",
+    "typecheck": "tsc --noEmit",
+    "test": "vp test"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

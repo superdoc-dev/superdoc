@@ -1,0 +1,23 @@
+---
+title: Build accessible Editor experiences
+navTitle: Accessibility
+description: Preserve keyboard access, names, focus, status announcements, and application-owned accessibility around SuperDoc.
+---
+
+The built-in toolbar and surfaces provide keyboard and ARIA behavior, but the complete experience includes the application shell, custom controls, dialogs, validation, and save state. Accessibility remains a shared responsibility.
+
+## Preserve the built-in contract
+
+- Keep visible labels or accessible names when replacing toolbar text and icons.
+- Do not remove focus outlines without an equally visible replacement.
+- Give dialogs and floating surfaces a title, `ariaLabel`, or `ariaLabelledBy`.
+- Keep Escape and focus behavior predictable. Do not trap focus in a non-modal floating tool.
+- Let fit-to-width respond to zoom and container changes without preventing browser zoom.
+
+## Own custom UI semantics
+
+Use native buttons, inputs, and selects whenever possible. Mirror command `active` with `aria-pressed`, disable unavailable actions, and announce async save or mutation outcomes through a polite live region. Return focus to the document when a temporary control closes and preserve the selection when a composer takes focus.
+
+Keyboard shortcut metadata does not install a listener. The application must bind shortcuts, prevent conflicts with browser and assistive-technology commands, and route every shortcut through the same command handle as its visible control.
+
+Test keyboard-only navigation, high contrast, 200% browser zoom, reduced motion, and at least one screen reader on supported browsers. Automated checks catch markup defects but do not prove that document editing is understandable.

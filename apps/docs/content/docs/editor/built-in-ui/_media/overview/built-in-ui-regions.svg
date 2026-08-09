@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="500" viewBox="0 0 960 500" role="img" aria-labelledby="title description">
+  <title id="title">Built-in SuperDoc interface regions</title>
+  <desc id="description">A labeled wireframe showing the application header, responsive toolbar, document canvas, and contextual review surfaces.</desc>
+  <rect width="960" height="500" rx="24" fill="#f7f8fb"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="44" y="42" width="872" height="416" rx="18" fill="#ffffff" stroke="#d9dde7"/>
+    <rect x="44" y="42" width="872" height="64" rx="18" fill="#ffffff" stroke="#d9dde7"/>
+    <text x="70" y="80" font-size="15" font-weight="700" fill="#202124">Application header</text>
+    <rect x="44" y="106" width="872" height="58" fill="#f9fafc" stroke="#d9dde7"/>
+    <text x="70" y="141" font-size="15" font-weight="700" fill="#202124">Responsive toolbar</text>
+    <g fill="#ffffff" stroke="#cbd2df">
+      <rect x="688" y="121" width="42" height="28" rx="6"/>
+      <rect x="738" y="121" width="42" height="28" rx="6"/>
+      <rect x="788" y="121" width="42" height="28" rx="6"/>
+      <rect x="838" y="121" width="52" height="28" rx="6"/>
+    </g>
+    <rect x="44" y="164" width="872" height="294" rx="0" fill="#eef1f6"/>
+    <rect x="256" y="190" width="448" height="242" rx="3" fill="#ffffff" stroke="#d6dae2"/>
+    <text x="388" y="286" font-size="17" font-weight="700" fill="#315f9a">DOCX document canvas</text>
+    <text x="363" y="318" font-size="14" fill="#5f6368">Rendering, layout, selection, editing</text>
+    <rect x="718" y="190" width="172" height="118" rx="12" fill="#ffffff" stroke="#a9bfff"/>
+    <text x="742" y="226" font-size="14" font-weight="700" fill="#244cae">Contextual surfaces</text>
+    <text x="742" y="254" font-size="13" fill="#5f6368">Comments</text>
+    <text x="742" y="277" font-size="13" fill="#5f6368">Tracked changes</text>
+  </g>
+</svg>

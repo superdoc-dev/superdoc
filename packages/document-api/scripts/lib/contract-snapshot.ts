@@ -1,0 +1,74 @@
+import {
+  COMMAND_CATALOG,
+  CONTRACT_VERSION,
+  JSON_SCHEMA_DIALECT,
+  OPERATION_DESCRIPTION_MAP,
+  OPERATION_EXPECTED_RESULT_MAP,
+  OPERATION_IDS,
+  OPERATION_MEMBER_PATH_MAP,
+  buildInternalContractSchemas,
+  type OperationId,
+} from '../../src/index.js';
+import { OPERATION_DEFINITIONS } from '../../src/contract/operation-definitions.js';
+import { sha256 } from './generation-utils.js';
+
+export interface ContractOperationSnapshot {
+  operationId: OperationId;
+  memberPath: string;
+  metadata: (typeof COMMAND_CATALOG)[keyof typeof COMMAND_CATALOG];
+  schemas: ReturnType<typeof buildInternalContractSchemas>['operations'][keyof ReturnType<
+    typeof buildInternalContractSchemas
+  >['operations']];
+  skipAsATool?: boolean;
+  intentGroup?: string;
+  intentAction?: string;
+}
+
+export interface ContractSnapshot {
+  contractVersion: string;
+  schemaDialect: string;
+  sourceHash: string;
+  $defs?: Record<string, Record<string, unknown>>;
+  operations: ContractOperationSnapshot[];
+}
+
+let cached: ContractSnapshot | null = null;
+
+export function buildContractSnapshot(): ContractSnapshot {
+  if (cached) return cached;
+
+  const internalSchemas = buildInternalContractSchemas();
+  const operations = OPERATION_IDS.map((operationId) => ({
+    operationId,
+    memberPath: OPERATION_MEMBER_PATH_MAP[operationId],
+    metadata: COMMAND_CATALOG[operationId],
+    schemas: internalSchemas.operations[operationId],
+    ...(OPERATION_DEFINITIONS[operationId]?.skipAsATool ? { skipAsATool: true } : {}),
+    ...(OPERATION_DEFINITIONS[operationId]?.intentGroup
+      ? { intentGroup: OPERATION_DEFINITIONS[operationId]!.intentGroup }
+      : {}),
+    ...(OPERATION_DEFINITIONS[operationId]?.intentAction
+      ? { intentAction: OPERATION_DEFINITIONS[operationId]!.intentAction }
+      : {}),
+  }));
+
+  const sourcePayload = {
+    contractVersion: CONTRACT_VERSION,
+    schemaDialect: JSON_SCHEMA_DIALECT,
+    operationCatalog: COMMAND_CATALOG,
+    operationMap: OPERATION_MEMBER_PATH_MAP,
+    operationDescriptions: OPERATION_DESCRIPTION_MAP,
+    operationExpectedResults: OPERATION_EXPECTED_RESULT_MAP,
+    schemas: internalSchemas.operations,
+  };
+
+  cached = {
+    contractVersion: CONTRACT_VERSION,
+    schemaDialect: JSON_SCHEMA_DIALECT,
+    sourceHash: sha256(sourcePayload),
+    ...(internalSchemas.$defs ? { $defs: internalSchemas.$defs } : {}),
+    operations,
+  };
+
+  return cached;
+}

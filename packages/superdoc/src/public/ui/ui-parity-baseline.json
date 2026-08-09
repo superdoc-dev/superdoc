@@ -1,0 +1,386 @@
+{
+  "trace": [
+    {
+      "label": "mounted",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": false
+      }
+    },
+    {
+      "label": "after custom bullet-list",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": true
+      }
+    },
+    {
+      "label": "after custom bullet-list toggle off",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": false
+      }
+    },
+    {
+      "label": "after custom numbered-list",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": false
+      }
+    },
+    {
+      "label": "after mode viewing",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "viewing",
+        "documentReady": true,
+        "toolbarListActive": false
+      }
+    },
+    {
+      "label": "after mode editing",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": false
+      }
+    },
+    {
+      "label": "after toolbar destroyed",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": null
+      }
+    },
+    {
+      "label": "after controller destroyed",
+      "state": {
+        "commands": {
+          "bullet-list": {
+            "supported": true,
+            "enabled": true,
+            "active": false,
+            "reason": null
+          },
+          "numbered-list": {
+            "supported": true,
+            "enabled": true,
+            "active": true,
+            "reason": null
+          },
+          "bold": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "italic": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "undo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          },
+          "redo": {
+            "supported": false,
+            "enabled": false,
+            "active": false,
+            "reason": "document-api-unavailable"
+          }
+        },
+        "documentMode": "editing",
+        "documentReady": true,
+        "toolbarListActive": null
+      }
+    }
+  ],
+  "applied": [
+    {
+      "kind": "bullet",
+      "behavior": "toggle"
+    },
+    {
+      "kind": "bullet",
+      "behavior": "toggle"
+    },
+    {
+      "kind": "ordered",
+      "behavior": "toggle"
+    }
+  ]
+}

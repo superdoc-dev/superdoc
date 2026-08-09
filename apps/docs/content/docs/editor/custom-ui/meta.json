@@ -1,0 +1,22 @@
+{
+  "title": "Custom UI",
+  "defaultOpen": false,
+  "pages": [
+    "overview",
+    "controller-setup",
+    "react-setup",
+    "commands-and-state",
+    "failures-and-capabilities",
+    "custom-commands",
+    "zoom-and-document-state",
+    "formatting-controls",
+    "selection-and-viewport",
+    "review-highlights",
+    "context-menus",
+    "comments",
+    "tracked-changes",
+    "content-controls",
+    "tables",
+    "search"
+  ]
+}

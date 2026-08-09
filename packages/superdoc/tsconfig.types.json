@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "../..",
+    "outDir": "dist-types"
+  },
+  "references": [
+    {
+      "path": "../../shared/common/tsconfig.json"
+    },
+    {
+      "path": "../../shared/font-system/tsconfig.json"
+    }
+  ]
+}

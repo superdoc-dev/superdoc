@@ -1,0 +1,40 @@
+.recovery {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 0 auto;
+  max-width: 34rem;
+  padding: 4rem 1.5rem;
+}
+
+.requested {
+  color: var(--color-fd-muted-foreground);
+}
+
+.requested code {
+  overflow-wrap: anywhere;
+}
+
+.heading {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+.actions {
+  border-top: 1px solid var(--color-fd-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding-top: 1.5rem;
+}

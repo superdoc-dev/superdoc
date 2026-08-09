@@ -1,0 +1,45 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "declarationMap": false,
+    "sourceMap": false,
+    "skipLibCheck": true,
+    "paths": {
+      "@shared/*": ["../../shared/*"]
+    }
+  },
+  "include": [
+    "src",
+    "../document-api/src",
+    "../layout-engine/contracts/src",
+    "../layout-engine/dom-contract/src",
+    "../layout-engine/layout-bridge/src",
+    "../layout-engine/layout-engine/src",
+    "../layout-engine/painters/dom/src",
+    "../layout-engine/style-engine/src/ooxml",
+    "../layout-engine/style-engine/src/cascade.ts",
+    "../layout-engine/style-engine/src",
+    "../word-layout/src"
+  ],
+  "exclude": [
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**",
+    "src/dev/**",
+    "../document-api/src/**/*.test.*",
+    "../document-api/src/**/*.spec.*",
+    "../document-api/src/**/__tests__/**",
+    "../layout-engine/**/*.test.*",
+    "../layout-engine/**/*.spec.*",
+    "../layout-engine/**/__tests__/**"
+  ]
+}

@@ -1,0 +1,45 @@
+---
+title: Find and replace in the built-in UI
+navTitle: Search
+description: Enable SuperDoc's find surface, navigate visible matches, and replace document text.
+---
+
+The built-in find surface searches the open document, highlights visible matches, and moves the Editor to the active result. In editable modes it can also replace the current match or every match in the session.
+
+## Enable the find surface
+
+Add toolbar and Editor containers:
+
+<include>../../../../snippets/editor/built-in-find-replace.html</include>
+
+Copy the [tracked-changes fixture](/fixtures/tracked-changes.docx) to your app's public directory as `contract.docx`, or use another DOCX.
+
+Enable the surface explicitly:
+
+<include>../../../../snippets/editor/built-in-find-replace.ts</include>
+
+`ui: { search: true }` connects the toolbar Search button and `Ctrl+F` or `Command+F` to SuperDoc's document-aware find surface. Without that setting, the browser keeps its native page search shortcut.
+
+The [search example](https://go.superdoc.dev/examples/search) is a complete project with this configuration and a real DOCX behavior test.
+
+## Find and navigate matches
+
+Enter a query, then use the previous and next controls to move through the document. The surface keeps the active result visible across paginated and virtualized pages.
+
+Match-case and regular-expression controls appear when the active v2 search host supports them. An invalid regular expression produces an inline error instead of running a partial search.
+
+## Replace only when editing is allowed
+
+Replace controls are available in editing and suggesting modes when the current search session can enumerate and change its matches. They are hidden in viewing or read-only sessions.
+
+Replacing text changes the DOCX. Export or save the document after the workflow. Search highlights and the active match are temporary Editor state and are not written into the file.
+
+## Verify the workflow
+
+1. Open the find surface from the toolbar and from the keyboard shortcut.
+2. Search for text that appears more than once.
+3. Navigate across matches and pages.
+4. Replace one match, then search again.
+5. Switch to viewing mode and confirm that find is still available but replace is not.
+
+Use [custom search controls](/editor/custom-ui/search) when the product needs to own the search layout. Use [Document API queries](/document-api/query-content) when code needs mutation-ready document targets instead of a visual search session.

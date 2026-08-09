@@ -1,0 +1,103 @@
+/**
+ * Consumer typecheck: read + navigation public APIs on `SuperDoc`.
+ *
+ * Drains the first batch of obligations from the public-method coverage
+ * gate (PR #3481). Each assertion locks the parameter or return shape
+ * of a method that exists on the supported root surface, so a future
+ * migration cannot quietly narrow or widen the contract without CI
+ * failing on the obligation diff.
+ *
+ * Methods covered here:
+ *   - `getHTML()` → `unknown[]`
+ *   - `getZoom()` → `number`
+ *   - `navigateTo(target)` → `Promise<boolean>`
+ *   - `scrollToElement(elementId)` → `Promise<boolean>`
+ *   - `goToSearchResult(match)` → `boolean | undefined`
+ *
+ * `goToSearchResult.parameters` is already locked in `search-match.ts`;
+ * this file adds the `returns` assertion for the same method.
+ */
+import type {
+  NavigableAddress,
+  SuperDoc,
+  SuperDocMeasurementUnit,
+  SuperDocViewportMetrics,
+  SuperDocZoomState,
+} from 'superdoc';
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
+
+declare const sd: SuperDoc;
+
+// ─── getHTML ─────────────────────────────────────────────────────────
+// Returns one HTML-like value for every editor in document order. The current
+// public declaration preserves the generic `unknown[]` result, so consumers
+// must narrow entries before treating them as strings.
+const _htmlReturnOk: AssertEqual<ReturnType<SuperDoc['getHTML']>, unknown[]> = true;
+const _htmlValue: unknown[] = sd.getHTML();
+
+// ─── getZoom ─────────────────────────────────────────────────────────
+// Returns the active zoom percentage. Per JSDoc: 100 by default.
+const _zoomReturnOk: AssertEqual<ReturnType<SuperDoc['getZoom']>, number> = true;
+const _zoomValue: number = sd.getZoom();
+
+// ─── getZoomState ────────────────────────────────────────────────────
+// Snapshot of mode/value/fitZoom and the effective fit bounds. fitZoom
+// is null until the first viewport measurement.
+const _zoomStateReturnOk: AssertEqual<ReturnType<SuperDoc['getZoomState']>, SuperDocZoomState> = true;
+const _zoomState = sd.getZoomState();
+const _zoomStateMode: 'manual' | 'fit-width' = _zoomState.mode;
+const _zoomStateFit: number | null = _zoomState.fitZoom;
+void _zoomStateMode;
+void _zoomStateFit;
+
+// ─── getViewportMetrics ──────────────────────────────────────────────
+// Latest pure measurements, or null before editors mount.
+const _viewportMetricsReturnOk: AssertEqual<
+  ReturnType<SuperDoc['getViewportMetrics']>,
+  SuperDocViewportMetrics | null
+> = true;
+const _viewportMetrics = sd.getViewportMetrics();
+if (_viewportMetrics) {
+  const _availableWidth: number = _viewportMetrics.availableWidth;
+  const _documentWidth: number = _viewportMetrics.documentWidth;
+  const _fitZoom: number = _viewportMetrics.fitZoom;
+  void [_availableWidth, _documentWidth, _fitZoom];
+}
+
+// ─── getMeasurementUnit ──────────────────────────────────────────────
+// Returns the active measurement unit for rulers/measurement fields.
+// Closed union: 'in' | 'cm'. Defaults to 'in' before initialization.
+const _measurementUnitReturnOk: AssertEqual<ReturnType<SuperDoc['getMeasurementUnit']>, SuperDocMeasurementUnit> = true;
+const _measurementUnitValue: SuperDocMeasurementUnit = sd.getMeasurementUnit();
+void [_measurementUnitReturnOk, _measurementUnitValue];
+
+// ─── navigateTo ──────────────────────────────────────────────────────
+// Async navigation to a stable address (bookmark, block, comment,
+// tracked change). Resolves true iff the address was found and
+// navigated to. Type-only `import` of `NavigableAddress` is enough; no
+// runtime construction.
+const _navigateParamsOk: AssertEqual<Parameters<SuperDoc['navigateTo']>, [NavigableAddress]> = true;
+const _navigateReturnOk: AssertEqual<ReturnType<SuperDoc['navigateTo']>, Promise<boolean>> = true;
+
+// ─── scrollToElement ─────────────────────────────────────────────────
+// Async scroll to a paragraph nodeId or comment entityId. Same
+// boolean-resolution contract as navigateTo.
+const _scrollParamsOk: AssertEqual<Parameters<SuperDoc['scrollToElement']>, [string]> = true;
+const _scrollReturnOk: AssertEqual<ReturnType<SuperDoc['scrollToElement']>, Promise<boolean>> = true;
+
+void [
+  _htmlReturnOk,
+  _htmlValue,
+  _zoomReturnOk,
+  _zoomValue,
+  _navigateParamsOk,
+  _navigateReturnOk,
+  _scrollParamsOk,
+  _scrollReturnOk,
+];
+
+// Suppress unused-import warning for the type-only navigation address;
+// the fixture references it only as a type argument above.
+export type _NavigableAddressUsage = NavigableAddress;

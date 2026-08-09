@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.types.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../contracts/tsconfig.json" },
+    { "path": "../dom-contract/tsconfig.json" },
+    { "path": "../layout-engine/tsconfig.json" },
+    { "path": "../measuring/dom/tsconfig.json" },
+    { "path": "../../word-layout/tsconfig.json" },
+    { "path": "../../../shared/common/tsconfig.json" },
+    { "path": "../../../shared/font-system/tsconfig.json" }
+  ]
+}

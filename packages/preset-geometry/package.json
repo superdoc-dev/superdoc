@@ -1,0 +1,15 @@
+{
+  "name": "@superdoc/preset-geometry",
+  "version": "0.0.0",
+  "description": "Pre-generated preset geometry shapes for SuperDoc vector graphics.",
+  "type": "module",
+  "private": true,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

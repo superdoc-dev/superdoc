@@ -1,0 +1,56 @@
+---
+title: Comments in the built-in UI
+navTitle: Comments
+description: Let people create, reply to, and resolve DOCX comment threads in the Editor.
+---
+
+The built-in UI imports Word comments with the DOCX and keeps new threads in the document. Your application provides the current user, document access, and persistence.
+
+In this guide, you turn on the standard comments experience. A person can select text, create a thread, reply to it, resolve it, and export the result without building a separate comments UI.
+
+## Mount the Editor
+
+Give the toolbar and document canvas separate mount elements:
+
+<include>../../../../snippets/editor/built-in-comments.html</include>
+
+Copy the [tracked-changes fixture](/fixtures/tracked-changes.docx) to your app's public directory as `contract.docx`, or use another DOCX.
+
+## Attribute comments to a user
+
+Pass a stable name and email. SuperDoc writes that identity into comments created during the session.
+
+<include>../../../../snippets/editor/built-in-comments.ts</include>
+
+Comments are enabled by default, and so is resolution. The explicit configuration above makes one presentation choice:
+
+- `displayMode: 'auto'` switches between the sidebar and a compact inline presentation as the Editor narrows.
+
+Resolve and reopen actions are shown unless you turn them off with `interaction: { comments: { allowResolve: false } }`, which is a permission rather than a presentation setting.
+
+The `comments-update` callback can update surrounding application state. The comments themselves remain document content and are preserved when you export the DOCX.
+
+## Keep the interaction policy explicit
+
+`ui: { comments: false }` turns off SuperDoc's own comments interface. It is a presentation switch, not a data or permission switch, so it helps to keep four things apart:
+
+- **Comment data.** Threads in the DOCX are always parsed. They stay in the document and survive export whether or not the built-in interface is mounted.
+- **The built-in interface.** This is what `ui: { comments: false }` removes: the sidebar, the floating threads, and the comment dialog.
+- **Application-owned controls.** `editor.ui.comments` keeps reading the parsed threads with the module off, and `resolve` and `reopen` still commit. Build your own panel on it when you want to own the presentation.
+- **Authorization.** None of these settings grant or deny access.
+
+Use `readOnly: true` instead when comments should remain visible but the built-in controls should not mutate them.
+
+These settings control browser behavior. They do not authorize access to the document or enforce permissions on a server. Your application still owns document access, trusted identity, persistence, and collaboration authorization.
+
+## Verify the workflow
+
+1. Select a phrase in the document.
+2. Create a comment from the built-in control.
+3. Reply to the thread.
+4. Resolve and reopen it.
+5. Export the DOCX and open it again.
+
+The thread, replies, author identity, and final status should survive the round trip.
+
+Use the [custom comments UI](/editor/custom-ui/comments) when your application needs to own the thread list or composer. Use [Document API comments](/document-api/comments) when code needs to create or resolve threads directly.

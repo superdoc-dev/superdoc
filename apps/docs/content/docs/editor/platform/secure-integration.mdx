@@ -1,0 +1,27 @@
+---
+title: Secure browser document workflows
+navTitle: Secure integration
+description: Define trusted boundaries for document access, identity, persistence, integrations, and browser policy.
+---
+
+SuperDoc runs document editing in the browser. That improves data locality, but it does not make every integration private or make client code a trusted authorization boundary.
+
+## Identify every data boundary
+
+- A URL document is fetched by the browser from its origin.
+- A local `File` or `Blob` stays in browser memory until application code sends or persists it.
+- Exported bytes remain local unless downloaded, uploaded, cached, or passed to another API.
+- Collaboration providers transmit document updates and awareness data.
+- Network proofing, AI, telemetry, logging, and upload handlers may transmit document content or metadata.
+
+Publish this behavior in product privacy language. Minimize data, retention, and logs. Never log document bodies, clauses, comment text, credentials, signed URLs, or mutation payloads by default.
+
+## Keep trusted decisions on trusted services
+
+Document mode, disabled buttons, permission resolvers, read-only comments, and hidden review controls guide normal browser interaction. They do not enforce access against a user who controls the browser. Authenticate document requests and enforce read, write, export, collaboration, and agent approval policy on trusted services.
+
+Treat names and emails supplied in `user` as display identity unless they came from an authenticated application session. Validate uploaded DOCX files, set size and timeout limits, and isolate sensitive processing where your threat model requires it.
+
+## Configure the browser boundary
+
+Use HTTPS, restrictive CORS, and a Content Security Policy that permits only the scripts, workers, connections, images, and fonts your deployment needs. Use `cspNonce` or `buildTheme()` when policy requires nonced styles. Avoid unversioned third-party runtime dependencies, and decide whether Editor assets are self-hosted before production.

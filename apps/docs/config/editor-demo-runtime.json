@@ -1,0 +1,8 @@
+{
+  "cdnOrigin": "https://cdn.jsdelivr.net/npm",
+  "enginePackage": "@superdoc/docx-engine",
+  "engineVersion": "0.3.0-next.60",
+  "runtimePackage": "superdoc",
+  "runtimeVersion": "2.4.0-next.64",
+  "uiModulePath": "/dist/public/ui.es.js"
+}

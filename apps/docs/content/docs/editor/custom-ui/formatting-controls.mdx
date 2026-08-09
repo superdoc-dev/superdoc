@@ -1,0 +1,48 @@
+---
+title: Build formatting controls
+navTitle: Formatting
+description: Connect custom font, size, paragraph-style, and document-mode controls to the active Editor state.
+---
+
+Use the custom UI controller when your application owns the formatting toolbar. The controller provides picker options, active values, disabled reasons, and commands that follow the current selection.
+
+If SuperDoc should render the toolbar instead, see [configure the built-in toolbar](/editor/built-in-ui/configure-the-toolbar).
+
+Complete [Custom UI controller setup](/editor/custom-ui/controller-setup) first. This example expects `/contract.docx` to be available from your application.
+
+## Add the controls
+
+Create font, size, paragraph-style, and document-mode selectors with a status message:
+
+<include>../../../../snippets/editor/custom-formatting-controls.html</include>
+
+## Bind options, state, and commands
+
+Read the Editor's controller, `superdoc.ui`, after the Editor is ready:
+
+<include>../../../../snippets/editor/custom-formatting-controls.ts</include>
+
+Each surface owns one part of the interface:
+
+- `ui.fonts` provides document-aware family options and supported size choices.
+- `ui.styles` provides the Word quick gallery and active paragraph style.
+- `ui.document` reports the current document mode.
+- `ui.commands` applies the selected value and reports whether the action can run.
+
+## Preserve document intent
+
+Pass the font option's `value` to `font-family`. The value is the logical family written to the DOCX. `previewFamily` is only for rendering the option in your application's picker.
+
+Pass the size option's `value` to `font-size`. The controller normalizes the public picker value before calling the formatting operation.
+
+Paragraph styles use stable style IDs. Show the catalogue's human-readable `name`, but execute `linked-style` with its `id`. Do not reproduce a style by copying its current CSS properties. Applying the style ID preserves the document's style relationship.
+
+## Follow selection and mode changes
+
+Observe the font, style, document, and command surfaces. A mixed selection can have no single active paragraph style. A locked content control or viewing mode can disable formatting even when the option remains visible.
+
+Use `executeAsync()` before saving or starting dependent work. Inspect the returned result instead of assuming that a change event mutated the document.
+
+Changing document mode updates the posture of the whole Editor. It is not an authorization boundary. Read [Document modes](/editor/document-modes) before exposing mode changes to users.
+
+Verify the workflow by selecting text, changing its font and size, applying a paragraph style, and exporting the DOCX. Reopen it and confirm that the formatting and style ID remain intact.

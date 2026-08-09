@@ -1,0 +1,71 @@
+---
+title: Automate a DOCX from the CLI
+navTitle: CLI
+description: Accept tracked changes and save a separate DOCX from a shell or CI job.
+---
+
+{/* Media decision: none. The commands and output check form one short linear workflow, so a diagram would repeat the numbered steps. */}
+
+Use the CLI when a shell script or CI job already knows which document operation to run. This guide accepts every
+tracked change in a DOCX and writes the result to a separate file.
+
+## 1. Install the CLI
+
+```bash
+pnpm add --global @superdoc/cli@latest
+```
+
+The package installs the matching native command for your platform. Published builds support macOS on Apple Silicon and
+Intel, Linux on ARM64 and x64, and Windows on x64.
+
+Confirm that the command is available:
+
+```bash
+superdoc --version
+```
+
+## 2. Prepare a document
+
+Download the [tracked-changes fixture](/fixtures/tracked-changes.docx) and save it as `contract.docx` in your working
+directory. It contains one tracked change.
+
+<FileDownload
+  href='/fixtures/tracked-changes.docx'
+  label='Download the tracked-changes fixture'
+  description='Synthetic NDA with one tracked change'
+  fileType='DOCX'
+/>
+
+## 3. Accept the changes and save
+
+Create `accept-changes.sh`:
+
+<include>../../../../snippets/headless/cli-accept-changes.sh</include>
+
+Run it from the directory containing `contract.docx`:
+
+```bash
+bash accept-changes.sh
+```
+
+`open` creates an active document session. The review command changes that session, and `save --out` writes a separate
+DOCX. The `EXIT` trap closes the session whether the script succeeds or fails. The source file is not overwritten.
+
+<Callout variant='warning' title='Keep the output path clear'>
+  The CLI refuses to replace an existing output file unless you pass `--force`. Rename or inspect the existing file
+  before rerunning the script.
+</Callout>
+
+## 4. Verify the output
+
+Open `contract.accepted.docx` in Microsoft Word or the SuperDoc editor. Every tracked change should be accepted. The
+original `contract.docx` should remain unchanged.
+
+<Callout variant='success' title='Verification target'>
+  The output contains the same document content and formatting with no pending tracked changes. The source file remains
+  unchanged.
+</Callout>
+
+Use the [Node.js SDK](/agents/automation/node-sdk) or [Python SDK](/agents/automation/python-sdk) when application code
+needs to own the workflow, errors, and output paths. For the operation and receipt model shared by every surface,
+continue with the [Document API mental model](/document-api/mental-model).

@@ -1,0 +1,70 @@
+---
+title: Mount SuperDoc in React
+navTitle: React
+description: Open, edit, and export a DOCX from a React component with SuperDoc v2.
+---
+
+{/* Media decision: none. The component and lifecycle are clearer as one complete code example than as a diagram or screenshot. */}
+
+Use the stable `superdoc` package in React. The component creates one Editor after its mount element exists, waits for
+the document to open, and destroys the Editor when React unmounts it.
+
+## 1. Create a React project
+
+```bash
+pnpm create vite@latest superdoc-react --template react-ts
+cd superdoc-react
+pnpm add superdoc
+```
+
+## 2. Prepare a document
+
+Download the sample DOCX and save it as `public/sample.docx`:
+
+<FileDownload
+  href='/fixtures/sample-nda.docx'
+  label='Download the sample document'
+  description='Synthetic agreement with headings, paragraphs, and a list'
+  fileType='DOCX'
+/>
+
+Vite serves files in `public` from the root of the development server, so SuperDoc can load it from `/sample.docx`.
+
+## 3. Create the Editor component
+
+Replace `src/App.tsx` with this component:
+
+<include>../../../../../../examples/react/src/App.tsx</include>
+
+The complete project is available at [go.superdoc.dev/examples/react](https://go.superdoc.dev/examples/react).
+
+Remove the starter `App.css` import and replace the contents of `src/index.css` with:
+
+```css
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+```
+
+The mount effect runs once. `onReady` enables export only after the DOCX is open. The cleanup calls `destroy()` to
+release Editor resources when React removes the component.
+
+## 4. Edit and export
+
+Run `pnpm dev` and open the printed URL. Replace a word in the document, then select **Export DOCX**. The browser should
+download `sample-edited.docx`.
+
+<Callout variant='success' title='Verification target'>
+  Reopen the exported file in Word or SuperDoc. Your edit should be present, and the document formatting should be
+  unchanged.
+</Callout>
+
+## Add React-owned controls
+
+The component above uses SuperDoc's built-in interface. When React should render your toolbar or panels, use the provider
+and hooks from the `superdoc/ui/react` subpath. They bind to the same Editor instance and do not require another package.
+
+Continue with [React custom UI setup](/editor/custom-ui/react-setup), or learn how to [load and save user documents](/editor/load-and-save-documents).

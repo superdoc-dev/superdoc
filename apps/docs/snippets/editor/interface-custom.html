@@ -1,0 +1,21 @@
+<style>
+  /* The application owns every control here, so it owns their states too. */
+  #bold[aria-pressed='true'] {
+    background: #1a1a1a;
+    color: #fff;
+  }
+  #bold:disabled {
+    opacity: 0.5;
+  }
+</style>
+
+<div role="toolbar" aria-label="Formatting">
+  <!-- Disabled until `onReady` attaches the handler and the first command
+       state arrives. A DOCX can take a moment to load, or fail to, and an
+       enabled button in that window swallows clicks silently. -->
+  <button id="bold" type="button" aria-pressed="false" disabled>Bold</button>
+</div>
+
+<div id="editor" style="height: 70vh"></div>
+
+<script type="module" src="/src/main.ts"></script>

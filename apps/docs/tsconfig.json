@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"],
+      "collections/*": ["./.source/*"],
+      "superdoc": ["../../packages/superdoc/src/public/index.ts"],
+      "superdoc/ui": ["../../packages/superdoc/src/public/ui.ts"],
+      "superdoc/ui/react": ["../../packages/superdoc/src/public/ui-react.ts"],
+      "@superdoc/document-api": ["../../packages/document-api/src/index.ts"],
+      "@superdoc/layout-bridge": ["../../packages/layout-engine/layout-bridge/src/index.ts"]
+    },
+    "allowJs": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".source/**/*.ts"
+  ],
+  "exclude": ["node_modules", "scripts"]
+}

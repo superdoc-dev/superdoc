@@ -1,0 +1,19 @@
+{
+  "name": "@superdoc/layout-engine",
+  "version": "0.0.0",
+  "description": "Pagination core for the SuperDoc layout engine.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*"
+  }
+}

@@ -1,0 +1,25 @@
+---
+title: Work with structured content
+navTitle: Structured content
+description: Expose tables, images, links, and content-control chrome in the built-in Editor interface.
+---
+
+Use the built-in interface when people need familiar controls for tables, images, links, and form-like content controls. The toolbar provides creation actions, while the document canvas provides contextual editing and field chrome.
+
+## Configure focused controls
+
+This example keeps only the structured-content tools and enables the default content-control chrome:
+
+<include>../../../../snippets/editor/built-in-structured-content.html</include>
+
+<include>../../../../snippets/editor/built-in-structured-content.ts</include>
+
+The example uses object URLs so it runs without an upload backend. They last only for the browser session. In production, `handleImageUpload` should upload the file to storage and return a URL that remains available when another user or process opens the DOCX.
+
+## Follow the document context
+
+Table actions become relevant when the selection is inside a table. Image and link actions operate on the current selection or insertion point. Content controls are document content, so their type and locking behavior come from the DOCX rather than from the toolbar configuration.
+
+Do not expose a control merely because the command ID exists. Start with the tasks people must perform, then add the smallest relevant toolbar group. Viewing mode and locked content controls can disable mutations even when the control remains visible.
+
+For application-owned table and field panels, use [Custom table controls](/editor/custom-ui/tables) and [Custom content controls](/editor/custom-ui/content-controls). For programmatic creation and mutation, use the Document API task guides and generated operation reference.

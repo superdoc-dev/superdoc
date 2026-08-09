@@ -1,0 +1,135 @@
+---
+title: Build an agent
+navTitle: Build an agent
+description: Give your product's agent document tools with a bounded, verifiable loop.
+---
+
+Use the SDK toolkit when the agent lives inside your product rather than in a coding tool. The toolkit returns the three pieces an agent loop needs, already agreeing with each other: tool definitions in your provider's shape, the matching system prompt, and a dispatcher bound to the same surface.
+
+## Get the toolkit
+
+```bash
+pnpm add @superdoc/sdk@latest
+```
+
+One call produces all three pieces:
+
+```ts
+import { createAgentToolkit } from '@superdoc/sdk';
+
+const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+  provider: 'openai',
+  preset: 'core',
+});
+```
+
+<Callout variant='warning' title='Always pass a preset'>
+  `preset: 'core'` is the surface to build on. Omitting `preset` selects the older `legacy` tool surface for backward
+  compatibility, which advertises a different set of tools.
+</Callout>
+
+`provider` accepts `openai`, `anthropic`, `vercel`, or `generic`. It changes the wire shape of the tool definitions, not the operations available.
+
+Assembling the three pieces separately is the most common integration mistake. A prompt that documents a tool the model cannot call teaches it to call that tool, and the failure looks like a model problem rather than a configuration one. The toolkit makes it impossible for the pieces to disagree.
+
+## The loop
+
+An agent loop is four steps repeated under a turn limit: ask the model, dispatch any tool calls, feed each receipt back, and stop when the model stops calling tools.
+
+<include>../../../../snippets/agents/agent-loop.mjs</include>
+
+The example uses OpenAI's Chat Completions message shape, so `callModel` can return the assistant message from `openai.chat.completions.create()` unchanged. The loop reads `tool_calls` and appends `role: 'tool'` results in that same shape, which keeps the conversation valid on the next request. A provider with a different wire format needs adapting in both directions: where tool calls are read, and where tool results are appended.
+
+Name the agent when you create the client. Without a `user`, tracked changes are attributed to a generic `CLI` author shared by every unattributed workflow, and a reviewer cannot tell which automation proposed what. The example takes the identity as a parameter so each deployment supplies its own:
+
+```ts
+await runAgent({
+  input: 'contract.docx',
+  output: 'contract.reviewed.docx',
+  instruction: 'Rewrite the termination clause to allow 30-day notice.',
+  author: { name: 'Contract bot', email: 'contract-bot@example.com' },
+  callModel,
+});
+```
+
+## What each piece does
+
+| Piece          | Role                                                                     |
+| -------------- | ------------------------------------------------------------------------ |
+| `tools`        | Tool definitions in your provider's shape. Pass through untouched.       |
+| `systemPrompt` | Documents the actions the model may call. Send it as the system message. |
+| `dispatch`     | Runs a named tool call against an open document and returns a receipt.   |
+
+`dispatch` takes the document handle, so tool arguments never carry `doc` or `sessionId`. The handle injects session targeting, which means a model cannot address a document it was not given.
+
+## Read the receipts
+
+Every dispatched _action_ returns a receipt rather than throwing on a rejected edit. Check `status` before treating the work as done:
+
+| `status`  | Meaning                                                         |
+| --------- | --------------------------------------------------------------- |
+| `ok`      | The requested edits applied and any post-check agreed           |
+| `partial` | Some applied and some did not. Never treat this as success.     |
+| `failed`  | The action did not complete. Some of it may still have applied. |
+| `aborted` | The action stopped before applying anything                     |
+
+Two dispatch outcomes are not receipts at all, and code that only reads `status` mishandles both.
+
+`superdoc_inspect` returns a document snapshot, not a receipt. It has no `status`, so testing for one treats every successful read as a failure. Branch on the tool before interpreting the result.
+
+Argument validation throws instead of returning. An unknown, missing, or excluded argument is rejected before an action runs, so the error arrives as an exception rather than a `failed` receipt. Wrap the dispatch in `try`/`catch` and hand that error back to the model as a tool result, or one malformed call ends the whole loop.
+
+`failed` does not mean nothing happened. An action can apply its operation and then fail its own post-check: `insert_table_row` inserts the row, compares the resulting table shape, and reports `failed` when the shape disagrees, with a `postSnapshot` revision showing the document already changed.
+
+So a failed receipt is not a safe retry. Compare `preSnapshot.revision` with `postSnapshot.revision` and read `executedOperations` before sending the same action again, or you may apply the edit twice.
+
+When an action runs verification the receipt also carries `verificationPassed`. A `false` value means at least one check disagreed with the intent, not that the edit landed: the standard `revision-changed` check fails just as readily when the mutation was a no-op and nothing applied. The snapshots are what separate those two cases.
+
+The example treats a dispatched failure as terminal for this reason: it stops rather than guessing whether a partly applied edit can be repeated safely.
+
+<ReceiptBar operation='replace' detail='replacement recorded in tracked mode' />
+
+## Keep the loop bounded
+
+A model that keeps calling tools will keep calling tools. The turn cap in the example is not decoration: without it, a confused model can loop until it exhausts a token budget.
+
+The cap only helps if hitting it stops the save. The example refuses to save in three cases: the model ran out of turns without signalling completion, any action reported a failure, or no mutation ever succeeded. That last one matters because a model can decide the work is already done and stop without touching the document, which would otherwise write an output file identical to the input.
+
+A failure is terminal for the save rather than something a later success clears. Once an edit half-applies, receipts cannot prove that a subsequent call repaired that exact work: a `partial` on one clause followed by a clean edit to a different clause is two facts, not a fix. Recovering from a partially applied edit is a decision for a person looking at the document. Save to a path separate from the source, and close the session in `finally` so a mid-loop failure still releases the runtime.
+
+## Dispatch only what you advertised
+
+`dispatch` accepts more tool names than the toolkit advertises. Alongside `superdoc_inspect` and `superdoc_perform_action`, the core preset can route `superdoc_execute_code`, `agent_apply`, `agent_verify`, and `agent_operation` — surfaces meant for SDK callers, not for a model to select. They skip the tracked-mode check, and they return shapes a loop built around receipts will misread.
+
+Check the tool name against the list you handed the model before dispatching. Two things make that worth doing even though the model was never told those names exist: a model can hallucinate one, and document content can suggest one. An agent reads text somebody else wrote, so treat a tool name arriving from the model as input rather than as a decision already validated.
+
+## Do not rely on the prompt for tracked mode
+
+`changeMode` is optional and defaults to a direct edit, so an instruction to work in tracked mode is a request the model can quietly skip. The example rejects any mutating call that omits `changeMode: 'tracked'` before it reaches the document, and returns that rejection as a receipt so the model can retry with the argument.
+
+The argument alone is not sufficient either. `superdoc_perform_action` advertises `changeMode` once for all forty actions, but only some of them honor it: `apply_style`, `set_paragraph_spacing`, and `insert_page_break` ignore it and always edit directly. `move_range` is a third case — it accepts the argument and then fails without mutating, because a block-range deletion cannot be tracked. Passing `changeMode: 'tracked'` to any of these looks compliant and does not produce a suggestion, so the example allows only the actions that actually record one and tells the model to pick a different action otherwise.
+
+A rejection is different from a dispatched failure. It never touched the document, so the model can correct it on the next turn and the run continues. A thrown call splits the same way: malformed arguments never reach the document, while a throw from `dispatch` itself may have applied part of the edit before failing, so that one is terminal.
+
+Enforce the constraint in code whenever the output is supposed to be reviewable. A prompt describes intent, and a permissive schema describes what is accepted rather than what is honored. Only the dispatch boundary decides what reaches the document.
+
+## What this loop does not prove
+
+The example produces a tracked, reviewable draft. It does not prove the model carried out every part of your instruction.
+
+Nothing in the receipts carries that information. If the model asks for two edits, has one refused, corrects it, and later stops, the loop sees a sequence of independent calls: no field links a retry to the request it repairs. Guessing at the link by action name is worse than not guessing, because the same action is used for unrelated edits — a refused `replace_text` on one clause looks identical to a successful `replace_text` on another.
+
+Two things close that gap, and both belong in your application rather than in the loop:
+
+- **Human review.** The output is a tracked draft precisely so a person decides what landed. This is the default and it is usually enough.
+- **An explicit plan.** Derive the list of required edits before execution, give each a stable id, and check them off as receipts arrive. That makes completeness a property of your plan, not an inference from tool traffic.
+
+Reach for the second only when a workflow has to assert completeness without a reviewer.
+
+A successful receipt is not proof of a change either. Some actions accept `dryRun: true` and report success while explicitly applying nothing, so the example counts a mutation only when the receipt's before and after revisions differ.
+
+Returning a failed dispatch to the model as a receipt, instead of throwing, is what lets it correct a malformed argument on the next turn.
+
+## Next
+
+[Tools](/agents/build/tools) explains the action surface, how to narrow it, and how to replay a tool call deterministically without the model. [Safety](/agents/operate/safety) covers what to settle before an agent touches documents that matter.

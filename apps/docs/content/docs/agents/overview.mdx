@@ -1,0 +1,71 @@
+---
+title: Overview
+navTitle: Overview
+description: Route to the right surface for editing DOCX files from code, a shell, or an agent.
+---
+
+SuperDoc changes DOCX files without an editor UI. Some of that work is deterministic: a script knows the operation before it runs. Some of it is model-driven: an agent decides which operation to run from an instruction. Both use the same document engine and the same Document API contract.
+
+Headless describes how these workflows run. It does not describe what you are trying to build, so start from the goal instead.
+
+## Start from your goal
+
+| Goal                                        | Start here                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| Let a coding agent edit DOCX files          | [Build an agent](/agents/build/build-an-agent)                     |
+| Add document tools to your product's agent  | [Build an agent](/agents/build/build-an-agent)                     |
+| Run a known operation from application code | [Node.js SDK](/agents/automation/node-sdk)                         |
+| Run a known operation from Python           | [Python SDK](/agents/automation/python-sdk)                        |
+| Run a known operation from a shell or CI    | [CLI](/agents/automation/cli)                                      |
+| Keep a person in the approval loop          | [Review tracked changes](/agents/workflows/review-tracked-changes) |
+| Understand the operation contract itself    | [Document API mental model](/document-api/mental-model)            |
+
+## The workflow underneath
+
+Every headless workflow follows the same sequence, whether a script or a model chooses the operations:
+
+```text
+open → inspect state → mutate → check receipt → save → close
+```
+
+A model-driven workflow adds one step in front of it:
+
+```text
+instruction → model selects a tool → SuperDoc runs the operation → receipt
+```
+
+The split matters. The model decides what to do. SuperDoc runs the operation deterministically and reports a structured result. A model that picks the wrong operation produces a valid receipt for the wrong edit, so treat model mistakes and operation failures as separate problems.
+
+## Which package to install
+
+| Surface     | Use it when                                         | Package         |
+| ----------- | --------------------------------------------------- | --------------- |
+| Node.js SDK | Node.js owns the workflow, errors, and output files | `@superdoc/sdk` |
+| Python SDK  | Python owns the workflow, errors, and output files  | `superdoc-sdk`  |
+| CLI         | A shell script or CI job runs the workflow          | `@superdoc/cli` |
+
+The Node.js SDK also provides the agent toolkit, so a Node.js product that embeds its own agent needs only
+`@superdoc/sdk`. Do not import `@superdoc/headless` or `@superdoc/document-api-v2-adapter`. Those are implementation
+details rather than integration surfaces.
+
+## What these surfaces share with the Editor
+
+- Queries return explicit matches, targets, handles, and revisions.
+- Mutations return receipts or structured failures.
+- Direct and tracked changes use the same operation contract.
+- Comments, lists, tables, images, and sections are reached through Document API operations.
+- DOCX remains the input and output format.
+
+Capability availability varies by runtime and document state. Check `doc.capabilities()` before relying on an optional operation.
+
+## What they do not provide
+
+These hosts never mount the Editor UI, so they have no toolbar, document canvas, viewport, browser selection, or pointer editing. There is no visual surface for accepting or rejecting a suggestion.
+
+When a person must decide, write a separate DOCX and open it in the Editor or Microsoft Word. The [tracked-change review workflow](/agents/workflows/review-tracked-changes) shows that handoff end to end.
+
+## Before you ship
+
+Your application owns the file and process boundary around the engine. Validate input paths, write results to a separate output until verification succeeds, bound retries, attribute changes to an explicit identity, and close sessions on success and failure alike.
+
+[Safety](/agents/operate/safety) covers those responsibilities in full, and matters most once a model is choosing the operations.

@@ -1,0 +1,59 @@
+name: Deploy Go Links
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-go-links.yml'
+      - 'go-links/**'
+      - 'scripts/check-go-links.mjs'
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-go-links
+  cancel-in-progress: false
+
+env:
+  LINKKEEPER_VERSION: 0.2.0
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: go-links
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate the permanent registry
+        working-directory: .
+        env:
+          GO_LINKS_HISTORY_REF: HEAD
+        run: node scripts/check-go-links.mjs
+
+      - name: Check every destination resolves
+        run: npx --yes --package="linkkeeper@${LINKKEEPER_VERSION}" linkkeeper check --commit "${GITHUB_SHA}"
+
+      - name: Build the redirect table
+        run: npx --yes --package="linkkeeper@${LINKKEEPER_VERSION}" linkkeeper build --commit "${GITHUB_SHA}"
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: go-links
+          command: pages deploy ./dist --project-name=linkkeeper --branch=main

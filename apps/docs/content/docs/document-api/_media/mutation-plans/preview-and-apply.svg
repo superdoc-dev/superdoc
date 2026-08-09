@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-labelledby="title description">
+  <title id="title">Preview and apply an atomic mutation plan</title>
+  <desc id="description">Two revision-scoped query references become steps in one atomic plan. Preview resolves and validates every step without changing the document. Apply commits all valid steps together and returns one plan receipt.</desc>
+  <rect width="960" height="340" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="42" y="58" width="196" height="96" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="140" y="91" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">query refs</text>
+    <text x="140" y="118" text-anchor="middle" font-size="13" fill="#5f636c">Same evaluated revision</text>
+    <text x="140" y="139" text-anchor="middle" font-size="12" fill="#5f636c">ref A · ref B</text>
+
+    <path d="M254 106h66" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m308 96 14 10-14 10" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="340" y="42" width="244" height="128" rx="9" fill="#eef4ff" stroke="#7da2ff" stroke-width="2"/>
+    <text x="462" y="75" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">atomic plan</text>
+    <rect x="366" y="93" width="192" height="24" rx="5" fill="#ffffff"/>
+    <text x="462" y="110" text-anchor="middle" font-size="12" fill="#16181d">1 · rewrite company</text>
+    <rect x="366" y="126" width="192" height="24" rx="5" fill="#ffffff"/>
+    <text x="462" y="143" text-anchor="middle" font-size="12" fill="#16181d">2 · rewrite liability cap</text>
+
+    <path d="M600 106h66" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m654 96 14 10-14 10" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="686" y="58" width="232" height="96" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="802" y="91" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">preview()</text>
+    <text x="802" y="118" text-anchor="middle" font-size="13" fill="#5f636c">Resolve without mutation</text>
+    <text x="802" y="139" text-anchor="middle" font-size="12" fill="#5f636c">valid · steps · failures</text>
+
+    <path d="M802 170v48" stroke="#70c991" stroke-width="3"/>
+    <path d="m792 206 10 14 10-14" fill="none" stroke="#70c991" stroke-width="3"/>
+    <text x="824" y="198" font-size="12" font-weight="700" fill="#006b31">VALID</text>
+
+    <rect x="640" y="238" width="278" height="66" rx="9" fill="#edf9f1" stroke="#70c991" stroke-width="2"/>
+    <text x="779" y="265" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#006b31">apply()</text>
+    <text x="779" y="287" text-anchor="middle" font-size="13" fill="#43634f">All steps commit · one receipt</text>
+
+    <text x="312" y="265" text-anchor="middle" font-size="14" font-weight="700" fill="#16181d">If preview fails, apply nothing.</text>
+    <text x="312" y="289" text-anchor="middle" font-size="13" fill="#5f636c">Fix the plan or re-query current document state.</text>
+  </g>
+</svg>

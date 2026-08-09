@@ -1,0 +1,210 @@
+/**
+ * TypeScript compatibility matrix for the v2 public package contract.
+ *
+ * The fixture installs SuperDoc from the packed tarball at
+ * ../../packages/superdoc/superdoc.tgz, so the matrix tests the
+ * customer-visible package surface rather than workspace symlinks.
+ *
+ * Run: npm run typecheck:matrix
+ *
+ * Pass --use-existing-tarball to freshly install an already-built
+ * superdoc.tgz, or --skip-pack to reuse the already-installed fixture.
+ */
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+import { installPackedSuperdocFixture } from './packed-fixture.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, '..', '..');
+const skipPack = process.argv.includes('--skip-pack');
+const useExistingTarball = process.argv.includes('--use-existing-tarball');
+
+if (skipPack && useExistingTarball) {
+  console.error('--skip-pack and --use-existing-tarball are mutually exclusive.');
+  process.exit(2);
+}
+
+console.log('Checking all-public-types.ts fixture against the classification...');
+try {
+  execSync('node check-all-public-types-fixture.mjs', { cwd: __dirname, stdio: 'inherit' });
+} catch {
+  console.error('\nPublic-types fixture check failed (see message above).');
+  process.exit(1);
+}
+console.log();
+
+if (!skipPack) {
+  const tarballPath = join(repoRoot, 'packages', 'superdoc', 'superdoc.tgz');
+  if (useExistingTarball) {
+    console.log('Installing fixture from the existing superdoc tarball...');
+  } else {
+    console.log('Packing superdoc and reinstalling fixture...');
+    try {
+      execSync('pnpm --filter superdoc run pack:es', {
+        cwd: repoRoot,
+        stdio: 'inherit',
+      });
+    } catch {
+      console.error('Failed to pack superdoc. Run with --skip-pack to use the installed fixture.');
+      process.exit(1);
+    }
+  }
+  if (!existsSync(tarballPath)) {
+    console.error(`Expected tarball at ${tarballPath} but it is missing.`);
+    process.exit(1);
+  }
+  try {
+    installPackedSuperdocFixture({
+      fixtureRoot: __dirname,
+      superdocTarball: tarballPath,
+      engineTarball: process.env.SUPERDOC_DOCX_ENGINE_TARBALL,
+    });
+  } catch {
+    console.error('Failed to install fixture from tarball.');
+    process.exit(1);
+  }
+  console.log('Fresh fixture install complete.\n');
+}
+
+const scenarios = [
+  {
+    name: 'bundler / root entry / strict',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-main.ts'],
+  },
+  {
+    name: 'node16 / root entry / strict',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-main.ts'],
+  },
+  {
+    name: 'nodenext / root entry / strict',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-main.ts'],
+  },
+  {
+    name: 'node16 / CJS root require / strict',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-cjs.cts'],
+  },
+  {
+    name: 'nodenext / CJS root require / strict',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-cjs.cts'],
+  },
+  {
+    name: 'bundler / all public types are real',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/all-public-types.ts'],
+  },
+  {
+    name: 'node16 / all public types are real',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/all-public-types.ts'],
+  },
+  {
+    name: 'bundler / v2 public fixtures / skipLibCheck=false',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+  },
+  {
+    name: 'node16 / v2 public fixtures / skipLibCheck=false',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+  },
+  {
+    name: 'nodenext / v2 public fixtures / skipLibCheck=false',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+  },
+];
+
+const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');
+let passed = 0;
+let failed = 0;
+
+console.log('TypeScript Compatibility Matrix');
+console.log('='.repeat(80));
+console.log();
+
+for (const scenario of scenarios) {
+  const tsconfig = {
+    compilerOptions: {
+      target: 'ES2022',
+      module: scenario.module,
+      moduleResolution: scenario.moduleResolution,
+      strict: scenario.strict,
+      skipLibCheck: scenario.skipLibCheck,
+      noEmit: true,
+      esModuleInterop: true,
+      types: ['node'],
+      ...(scenario.noPropertyAccessFromIndexSignature
+        ? { noPropertyAccessFromIndexSignature: true }
+        : {}),
+    },
+    include: scenario.files,
+  };
+
+  const tsconfigPath = join(__dirname, 'tsconfig.matrix.json');
+  const { writeFileSync } = await import('fs');
+  writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+
+  console.log(`Running: ${scenario.name}`);
+  try {
+    execSync(`${tscPath} -p tsconfig.matrix.json`, {
+      cwd: __dirname,
+      stdio: 'pipe',
+    });
+    console.log('  PASS\n');
+    passed += 1;
+  } catch (error) {
+    console.error('  FAIL');
+    const stdout = error.stdout?.toString();
+    const stderr = error.stderr?.toString();
+    if (stdout) console.error(stdout);
+    if (stderr) console.error(stderr);
+    console.error();
+    failed += 1;
+  }
+}
+
+console.log('='.repeat(80));
+console.log(`Results: ${passed} passed, ${failed} failed`);
+
+process.exit(failed === 0 ? 0 : 1);

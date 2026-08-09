@@ -1,0 +1,35 @@
+---
+title: Handle unavailable commands
+navTitle: Unavailable commands
+description: Turn command state, stable reasons, and mutation receipts into clear custom-UI behavior.
+---
+
+Custom controls must distinguish a temporarily disabled action from a capability the current host does not support. Read command state before execution, then inspect the execution result. Neither check replaces the other.
+
+## Explain the current state
+
+Map the stable `reason` value to product language. Keep a fallback so newer reasons remain understandable before your application adds tailored copy:
+
+<include>../../../../snippets/editor/command-failures.ts</include>
+
+Use the state fields together:
+
+- `enabled: false` means the action cannot run now.
+- `supported: false` means the controller cannot route the command on this host.
+- `reason` explains the current cause without requiring string parsing from an error message.
+- `active` and `value` describe current selection or control state. They do not imply that the next execution will succeed.
+
+Show unavailable actions only when their presence helps the reader understand what can change. Disable a familiar formatting action with a short reason. Hide an integration that the current product never provides. Do not render every ID from the command catalog as a toolbar.
+
+## Inspect the final result
+
+State is a snapshot, not a guarantee. The document can change mode, selection, revision, or capability between the check and execution. Call `executeAsync()` and inspect its result:
+
+- `false` means the controller could not route the action.
+- `true` means a legacy or host action completed without a structured receipt.
+- A receipt with `success: false` contains a machine-readable failure code and message.
+- A receipt with `success: true` confirms the Document API mutation.
+
+Branch on stable reason strings and failure codes. Show the supplied message to developers or adapt it for users, but do not infer success from the absence of an exception.
+
+For document-operation capability checks and receipt failure codes, read [Receipts and errors](/document-api/receipts-and-errors). For the complete reactive state contract, read [Commands and state](/editor/custom-ui/commands-and-state).

@@ -1,0 +1,98 @@
+---
+title: Work with tracked changes
+navTitle: Tracked changes
+description: Create reviewable edits, inspect open changes, and accept or reject an explicit change.
+---
+
+Tracked changes connect programmatic editing to human review. Operations that report tracked-mode support can request it. The review API then lists, inspects, accepts, or rejects the resulting logical changes.
+
+## Create a reviewable edit
+
+Pass `changeMode: 'tracked'` as the mutation options argument. There is no separate operation for creating a tracked change:
+
+```ts
+const result = await doc.query.match({
+  select: { type: 'text', pattern: 'Amazing' },
+  require: 'exactlyOne',
+});
+const match = result.items[0];
+
+if (!match || match.matchKind !== 'text') {
+  throw new Error('The company name was not found.');
+}
+
+const receipt = await doc.replace(
+  { target: match.target, text: 'Northstar' },
+  { changeMode: 'tracked', expectedRevision: result.evaluatedRevision },
+);
+
+if (!receipt.success) {
+  throw new Error(receipt.failure?.message ?? 'The tracked replacement failed.');
+}
+```
+
+The replacement remains open for review. Saving the DOCX preserves that review state until a person or programmatic workflow accepts or rejects it.
+
+## Review the result in the Editor
+
+The Editor owns document rendering, selection, and human review controls. Follow [Review tracked changes](/editor/review/tracked-changes) to open the sample DOCX and accept or reject a proposal visually.
+
+The underlying tracked-change operations remain the same in Editor and Headless hosts.
+
+## List and inspect changes
+
+`trackChanges.list()` returns a compact, paginated result. Call `trackChanges.get()` when the workflow needs full before/after details for one logical change:
+
+```ts
+const changes = await doc.trackChanges.list({ limit: 20, offset: 0 });
+const change = changes.items[0];
+
+if (!change) {
+  throw new Error('The document has no open tracked changes.');
+}
+
+const detail = await doc.trackChanges.get({ id: change.id });
+
+console.log({
+  id: detail.id,
+  type: detail.type,
+  author: detail.author,
+  before: detail.before,
+  after: detail.after,
+});
+```
+
+The list searches the document body by default. Pass `in: 'all'` when the workflow must include supported headers, footers, footnotes, and endnotes.
+
+## Accept or reject one change
+
+Decide against the logical change ID, and guard the decision with the revision returned by the list operation:
+
+```ts
+const decisionReceipt = await doc.trackChanges.decide(
+  {
+    decision: 'accept',
+    target: { kind: 'id', id: detail.id },
+  },
+  {
+    expectedRevision: changes.evaluatedRevision,
+  },
+);
+
+if (!decisionReceipt.success) {
+  throw new Error(`${decisionReceipt.failure.code}: ${decisionReceipt.failure.message}`);
+}
+
+console.log('Resolved change:', decisionReceipt.removed);
+```
+
+Use `decision: 'reject'` to restore the change's before-state instead. A review decision resolves an existing change, so `changeMode` and `dryRun` do not apply.
+
+Re-list changes after each decision. The receipt can invalidate or remap references, and partial range decisions can create successor fragments with new IDs.
+
+<Callout variant='success' title='Verification target'>
+  After the decision succeeds, a fresh `trackChanges.list()` result should no longer contain the resolved logical change
+  ID. The saved DOCX should preserve the accepted or rejected document state.
+</Callout>
+
+For a complete code-to-human handoff, follow [Review tracked changes](/agents/workflows/review-tracked-changes). The generated [`trackChanges` reference](/document-api/reference/track-changes) covers range, side, bulk, and story-specific targets.

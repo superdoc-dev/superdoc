@@ -1,0 +1,126 @@
+---
+title: Load and save documents
+navTitle: Load and save
+description: Open a DOCX in the browser, download the edited file, or send its bytes to your backend.
+---
+
+Load a DOCX through the public `SuperDoc` configuration, wait for the editor to be ready, and export the edited document through the same instance.
+
+Complete the [Editor quickstart](/editor/quickstart) first if you do not already have a mounted editor.
+
+## Choose a document input
+
+The `document` option accepts the browser inputs most applications already use:
+
+| Input      | Use it when                                                                   |
+| ---------- | ----------------------------------------------------------------------------- |
+| `File`     | A person selected a local DOCX with a file input or drag and drop             |
+| `Blob`     | Your application already downloaded or generated the DOCX bytes               |
+| URL string | The browser can fetch the DOCX from your application or a CORS-enabled origin |
+
+SuperDoc reads local `File` and `Blob` inputs in the browser. It does not upload them to a SuperDoc service.
+
+## Load a selected DOCX
+
+Mount the editor after a person selects a file. Enable document-dependent actions only after `onReady` runs:
+
+```ts
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const input = document.querySelector<HTMLInputElement>('#docx-file');
+const saveButton = document.querySelector<HTMLButtonElement>('#save-docx');
+
+if (!input || !saveButton) {
+  throw new Error('Document controls are missing.');
+}
+
+let superdoc: SuperDoc | null = null;
+
+input.addEventListener('change', () => {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  superdoc?.destroy();
+  saveButton.disabled = true;
+
+  superdoc = new SuperDoc({
+    selector: '#editor',
+    document: file,
+    onReady: () => {
+      saveButton.disabled = false;
+    },
+  });
+});
+```
+
+Use the same `document` option for a URL or an existing `Blob`:
+
+```ts
+new SuperDoc({
+  selector: '#editor',
+  document: '/documents/contract.docx',
+  onReady: ({ superdoc }) => {
+    console.log('Ready to edit', superdoc);
+  },
+});
+```
+
+A URL is fetched by the reader's browser. The server must allow that request and return the DOCX bytes.
+
+## Download the edited DOCX
+
+`export()` creates a DOCX download by default. Set `exportedName` without the extension:
+
+```ts
+saveButton.addEventListener('click', async () => {
+  if (!superdoc) return;
+
+  try {
+    saveButton.disabled = true;
+    await superdoc.export({
+      exportType: ['docx'],
+      exportedName: 'contract-reviewed',
+    });
+  } finally {
+    saveButton.disabled = false;
+  }
+});
+```
+
+This downloads `contract-reviewed.docx`. The export keeps comments and tracked changes unless you explicitly choose a different export policy.
+
+## Send the DOCX to your backend
+
+Set `triggerDownload: false` when your application needs the exported bytes instead of an automatic download:
+
+```ts
+const result = await superdoc.export({
+  exportType: ['docx'],
+  triggerDownload: false,
+});
+
+if (!(result instanceof Blob)) {
+  throw new Error('SuperDoc did not return a DOCX blob.');
+}
+
+const response = await fetch('/api/documents/contract', {
+  method: 'PUT',
+  headers: {
+    'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  },
+  body: result,
+});
+
+if (!response.ok) {
+  throw new Error(`Saving the document failed with ${response.status}.`);
+}
+```
+
+Your application decides where the file is stored and how the request is authenticated. SuperDoc produces the DOCX bytes but does not provide document storage.
+
+## Verify the round trip
+
+Open the exported DOCX in Microsoft Word or another DOCX reader. Confirm that the edited content, surrounding formatting, comments, and tracked changes match the state shown in SuperDoc.
+
+Next, choose how people can interact with the document in [Document modes](/editor/document-modes), or use the [Document API mental model](/document-api/mental-model) to understand how application code changes it.

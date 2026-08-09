@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussion
+    url: https://discord.com/invite/b9UuaZRyaB
+    about: Ask questions or chat with the community on Discord
+  - name: Want to contribute?
+    url: https://github.com/superdoc/docx-editor/blob/main/CONTRIBUTING.md
+    about: Check out our contributing guide to get started

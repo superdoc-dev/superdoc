@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import '../components/docs-components.css';
+@import '../components/site-header.css';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --color-fd-primary: #1355ff;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: #1355ff;
+}
+
+:root {
+  /* SuperDoc brand tokens. */
+  --sd-blue-50: #eef4ff;
+  --sd-blue-100: #d9e4ff;
+  --sd-blue-200: #b3c9ff;
+  --sd-blue-300: #7da2ff;
+  --sd-blue-400: #4478ff;
+  --sd-blue-500: #1355ff;
+  --sd-blue-600: #0f44cc;
+  --sd-blue-700: #0b3399;
+  --sd-blue: var(--sd-blue-500);
+  --sd-blue-hover: var(--sd-blue-600);
+  /* The wordmark blue from the SuperDoc website. Distinct from --sd-blue,
+     which is the interactive blue used for buttons, links, and focus rings. */
+  --sd-wordmark-blue: #2374dd;
+  --sd-gradient-from: #2563eb;
+  --sd-gradient-to: #9333ea;
+  --sd-background: #ffffff;
+  --sd-canvas: #fafafa;
+  --sd-surface: #ffffff;
+  --sd-text-primary: #212121;
+  --sd-text-secondary: #5a5a61;
+  --sd-text-tertiary: #71717a;
+  --sd-border: #dbdbdb;
+  --sd-border-soft: #ececee;
+  /* Document marks: green/red belong to documents, not UI chrome */
+  --sd-mark-insert: #00853d;
+  --sd-mark-delete: #cb0e47;
+  --sd-info: #0f44cc;
+  --sd-error: #b42318;
+  --sd-error-surface: #fff1f0;
+  --sd-success: #067647;
+  --sd-success-surface: #ecfdf3;
+  --sd-warning: #8a4b08;
+  --sd-warning-surface: #fff8e6;
+  --sd-radius-xs: 0.25rem;
+  --sd-radius-sm: 6px;
+  --sd-radius-md: 9px;
+  --sd-radius-lg: 14px;
+  --sd-radius-xl: 1rem;
+  --sd-radius-page: 2px;
+  --sd-shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --sd-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.07);
+  --sd-shadow-md: 0 8px 24px rgb(11 12 16 / 0.1);
+  --sd-shadow-page: 0 1px 2px rgb(0 0 0 / 0.06), 0 10px 30px rgb(0 0 0 / 0.09);
+  --color-fd-background: var(--sd-background);
+  --color-fd-foreground: var(--sd-text-primary);
+  --color-fd-muted: var(--sd-canvas);
+  --color-fd-muted-foreground: var(--sd-text-secondary);
+  --color-fd-popover: var(--sd-surface);
+  --color-fd-popover-foreground: var(--sd-text-primary);
+  --color-fd-card: var(--sd-surface);
+  --color-fd-card-foreground: var(--sd-text-primary);
+  --color-fd-border: var(--sd-border);
+  --color-fd-primary: var(--sd-blue);
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-accent: var(--sd-blue-50);
+  --color-fd-accent-foreground: var(--sd-blue-600);
+  --color-fd-secondary: #f4f6fa;
+  --color-fd-secondary-foreground: var(--sd-text-primary);
+}
+
+.dark {
+  --sd-gradient-from: #60a5fa;
+  --sd-gradient-to: #c084fc;
+  --sd-background: #0b0c10;
+  --sd-canvas: #101218;
+  --sd-surface: #151820;
+  --sd-text-primary: #f5f7fb;
+  --sd-text-secondary: #aeb4c0;
+  --sd-text-tertiary: #8b90a0;
+  --sd-border: #292e39;
+  --sd-border-soft: #1e222c;
+  --sd-mark-insert: #75e0a7;
+  --sd-mark-delete: #ff8fae;
+  --sd-info: #c6d5ff;
+  --sd-error: #ffb4ab;
+  --sd-error-surface: #351713;
+  --sd-success: #75e0a7;
+  --sd-success-surface: #102a20;
+  --sd-warning: #f6c86b;
+  --sd-warning-surface: #302411;
+  --sd-shadow-xs: 0 1px 2px rgb(0 0 0 / 0.24);
+  --sd-shadow-sm: 0 1px 3px rgb(0 0 0 / 0.3), 0 1px 2px rgb(0 0 0 / 0.2);
+  --sd-shadow-md: 0 8px 24px rgb(0 0 0 / 0.36);
+  --sd-shadow-page: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px rgb(0 0 0 / 0.4);
+  --color-fd-primary: #1355ff;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-accent: #152650;
+  --color-fd-accent-foreground: #c6d5ff;
+  --color-fd-secondary: #1a1d25;
+  --color-fd-secondary-foreground: var(--sd-text-primary);
+  --color-fd-ring: #1355ff;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
+a {
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  --color-fd-primary: var(--sd-blue-hover);
+}

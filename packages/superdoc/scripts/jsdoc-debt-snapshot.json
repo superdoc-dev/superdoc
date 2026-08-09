@@ -1,0 +1,4 @@
+{
+  "$comment": "Auto-managed by packages/superdoc/scripts/check-jsdoc.cjs. Run with --write to refresh after intentionally adding/removing public JSDoc files. Each entry is a public-reachable .js file with JSDoc that does not yet have // @ts-check.",
+  "knownUngated": []
+}

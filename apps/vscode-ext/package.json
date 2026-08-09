@@ -1,0 +1,106 @@
+{
+  "name": "superdoc-vscode-ext",
+  "displayName": "SuperDoc - Word Document Editor",
+  "description": "Open and edit Word documents (.docx) directly in VS Code using SuperDoc",
+  "version": "2.13.0",
+  "private": true,
+  "publisher": "superdoc-dev",
+  "icon": "logo.png",
+  "homepage": "https://superdoc.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superdoc/docx-editor",
+    "directory": "apps/vscode-ext"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc/docx-editor/issues"
+  },
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "docx",
+    "word",
+    "document",
+    "editor",
+    "office",
+    "ooxml",
+    "tracked changes",
+    "superdoc"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "superdoc.docxEditor",
+        "displayName": "SuperDoc Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.docx"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "superdoc.openWithSuperdoc",
+        "title": "Open with SuperDoc"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .docx",
+          "command": "superdoc.openWithSuperdoc",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SuperDoc",
+      "properties": {}
+    }
+  },
+  "scripts": {
+    "compile": "pnpm run compile:ext && pnpm run compile:webview && pnpm run copy-assets",
+    "compile:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile:webview": "esbuild webview/main.js --bundle --outfile=dist/webview/main.js --format=esm --platform=browser --target=es2020 --loader:.css=text",
+    "copy-assets": "cp webview/style.css dist/webview/",
+    "build": "pnpm run compile",
+    "watch": "pnpm run compile:ext -- --watch",
+    "package": "vsce package --no-dependencies",
+    "publish:vsce": "vsce publish --packagePath *.vsix --skip-duplicate",
+    "lint": "pnpm -w exec vp lint apps/vscode-ext",
+    "lint:fix": "pnpm -w exec vp lint --fix apps/vscode-ext",
+    "format": "pnpm -w exec vp fmt apps/vscode-ext",
+    "test": "vp test run",
+    "typecheck": "tsc --noEmit",
+    "release": "pnpx semantic-release",
+    "release:dry-run": "pnpx semantic-release --dry-run",
+    "vscode:prepublish": "pnpm run build"
+  },
+  "devDependencies": {
+    "@semantic-release/exec": "^6.0.3",
+    "@types/node": "catalog:",
+    "@types/vscode": "^1.107.0",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.28.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "dependencies": {
+    "superdoc": "workspace:*"
+  },
+  "license": "AGPL-3.0"
+}

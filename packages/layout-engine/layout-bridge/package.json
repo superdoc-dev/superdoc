@@ -1,0 +1,43 @@
+{
+  "name": "@superdoc/layout-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json",
+    "test": "vp test run",
+    "lint": "pnpm -w exec vp lint packages/layout-engine/layout-bridge/src",
+    "dev": "tsup src/index.ts --format esm --watch"
+  },
+  "dependencies": {
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/word-layout": "workspace:*"
+  },
+  "devDependencies": {
+    "@superdoc/layout-resolved": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

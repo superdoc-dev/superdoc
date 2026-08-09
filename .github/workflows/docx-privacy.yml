@@ -1,0 +1,122 @@
+name: DOCX privacy
+
+# Every .docx in this repository is a ZIP archive, so text-based scans and
+# secret scanners never see inside one. A fixture copied from a real document
+# carries its author, company, revision authors, and any document-management
+# taxonomy straight into a public commit.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docx-privacy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docx_privacy: ${{ steps.set.outputs.docx_privacy }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            docx_privacy:
+              # Every case, matching the gate's own `:(icase)` pathspec. A
+              # fixture committed as Contract.DOCX would otherwise skip the scan.
+              - '*.[dD][oO][cC][xX]'
+              - '**/*.[dD][oO][cC][xX]'
+              - 'scripts/check-docx-privacy.mjs'
+              - 'scripts/sanitize-docx.mjs'
+              - 'scripts/lib/docx-privacy.mjs'
+              - '.github/workflows/docx-privacy.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "docx_privacy=${{ steps.filter.outputs.docx_privacy }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "docx_privacy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  scan:
+    needs: detect
+    if: needs.detect.outputs.docx_privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # No install step: the gate deliberately depends on nothing beyond the
+      # Node standard library, so it keeps working in a fresh or partial clone.
+      - name: Check fixture privacy
+        run: node scripts/check-docx-privacy.mjs
+
+  unit:
+    name: DOCX privacy / unit
+    needs: detect
+    if: needs.detect.outputs.docx_privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: pnpm config ownership
+        run: pnpm run check:pnpm-config
+
+      - run: pnpm install --frozen-lockfile
+
+      # The detection rules themselves need tests, and they need a runner that
+      # actually collects them. Without this the suite passes by never running.
+      - name: Test the inspection rules
+        run: pnpm run test:docx-privacy
+
+  validate:
+    name: DOCX privacy / validate
+    if: always()
+    needs: [detect, scan, unit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.docx_privacy }}" != "true" ]]; then
+            echo "DOCX privacy scan skipped: no fixtures or gate scripts changed."
+            exit 0
+          fi
+          if [[ "${{ needs.scan.result }}" != "success" ]]; then
+            echo "Scan job did not succeed (result: ${{ needs.scan.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.unit.result }}" != "success" ]]; then
+            echo "Unit job did not succeed (result: ${{ needs.unit.result }})."
+            exit 1
+          fi

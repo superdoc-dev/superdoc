@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "allowJs": true,
+    "checkJs": false,
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts", "**/*.js", "**/*.vue"],
+  "exclude": ["node_modules", "dist", "**/*.test.js", "**/*.test.ts", "data/**", "icons/**", "styles/**"]
+}

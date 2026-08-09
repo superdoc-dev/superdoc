@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "lib": ["DOM", "ES2021"],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../contracts/tsconfig.json" },
+    { "path": "../../geometry-utils/tsconfig.json" },
+    { "path": "../../../word-layout/tsconfig.json" },
+    { "path": "../../../../shared/common/tsconfig.json" },
+    { "path": "../../../../shared/font-system/tsconfig.json" }
+  ]
+}

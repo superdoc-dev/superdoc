@@ -1,0 +1,38 @@
+---
+title: Replace and delete content
+navTitle: Replace and delete
+description: Use fresh query targets to change an open DOCX and inspect each mutation receipt.
+---
+
+Use `replace()` and `delete()` after a query has identified the exact content to change. Both operations accept a target from `query.match()` and return a receipt that says whether the mutation succeeded.
+
+This guide uses the [tracked-changes fixture](/fixtures/tracked-changes.docx). Serve it from `/contract.docx` in your app, or update the document URL in the example.
+
+## 1. Run two targeted mutations
+
+Wait for the editor, replace one company name, then run a fresh query before deleting a sentence:
+
+<include>../../../snippets/document-api/replace-delete-content.ts</include>
+
+The displayed source is typechecked against the public v2 browser API.
+
+## 2. Re-query after a mutation
+
+The replacement advances the document revision. The example runs a new query before deleting instead of reusing an earlier target.
+
+`expectedRevision` makes each operation reject stale query input. `changeMode: 'direct'` applies the change immediately. Use `'tracked'` when a change should remain a suggestion for human review.
+
+`behavior: 'exact'` removes only the resolved text range. The default `'selection'` behavior may expand to block edges when the query covers an entire boundary block.
+
+## 3. Inspect receipts before continuing
+
+Check `success` before saving, exporting, or starting another dependent operation. A failed receipt includes a stable failure code and message. A successful receipt includes the resolved target, and may include revision and effect details depending on the operation.
+
+Common failures at this stage mean the target is stale, the text no longer matches, or the current editor mode does not allow the mutation. Re-query current document state before retrying. Do not guess offsets or silently ignore the receipt.
+
+<Callout variant='success' title='Verification target'>
+  The mounted document should show `Northstar Corp` instead of `Amazing Corp`, and the liability sentence should be
+  absent. Both receipts should report `success: true`.
+</Callout>
+
+Next, learn how to handle [receipts and errors](/document-api/receipts-and-errors) without unsafe retry loops. For several edits that must succeed together, use a revision-guarded mutation plan instead of chaining independent calls. The generated [replace reference](/document-api/reference/replace) and [delete reference](/document-api/reference/delete) list the full input and receipt shapes.

@@ -1,0 +1,25 @@
+---
+title: Manage document files
+navTitle: Documents
+description: Replace the active DOCX, export for download or persistence, and define explicit storage ownership.
+---
+
+SuperDoc edits the active document in the browser. Your application owns where the source comes from, when changes are persisted, and who may read the result.
+
+<include>../../../../snippets/editor/document-management.ts</include>
+
+## Choose a source deliberately
+
+At construction, `document` accepts a URL, `File`, or `Blob`. A URL is fetched by the browser and must satisfy CORS, authentication, and Content Security Policy requirements. A local `File` or `Blob` stays in browser memory unless your application, collaboration provider, proofing provider, or other integration sends its contents elsewhere.
+
+Use `replaceFile()` to swap the active file while preserving the mounted SuperDoc instance when the runtime supports it. Await completion before enabling dependent controls. For a full application route change or a different Editor configuration, destroying and creating a new instance may be clearer.
+
+## Export once for the intended destination
+
+`export()` downloads by default. Set `triggerDownload: false` to receive the `Blob` for upload, storage, or another browser workflow. Choose comment and tracked-change export policy explicitly when producing a clean or final document.
+
+An export proves that SuperDoc produced bytes, not that your backend stored them. Check the persistence response and update application save state only after the trusted service succeeds.
+
+The [version history example](https://go.superdoc.dev/examples/version-history) keeps exported snapshots in browser memory and restores them with `replaceFile()`. Replace its in-memory array with your application's storage when versions must survive a reload.
+
+For the shorter end-to-end workflow, read [Load and save documents](/editor/load-and-save-documents). For server-side processing, use [Agents & automation](/agents/overview).

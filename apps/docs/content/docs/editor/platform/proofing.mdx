@@ -1,0 +1,17 @@
+---
+title: Add spelling and grammar proofing
+navTitle: Proofing
+description: Connect a provider to SuperDoc's segment, scheduling, rendering, and replacement workflow.
+---
+
+SuperDoc owns document segmentation, scheduling, issue rendering, ignore actions, and replacement. Your proofing provider receives text segments and returns issue ranges.
+
+<include>../../../../snippets/editor/proofing-provider.ts</include>
+
+The local example is intentionally small but executable. A production provider may call a service and return spelling, grammar, or style issues. Ranges are zero-based UTF-16 offsets within the supplied segment, not document-global positions.
+
+Declare capabilities honestly. Configure timeouts, concurrency, batching, debounce, language fallback, and error handling for the provider's real behavior. Treat proofing as advisory: the document can change while a request is in flight, and SuperDoc owns reconciling results with its current segments.
+
+If the provider uses a network, document text leaves the browser. Obtain the required user consent, send only necessary segments, use authenticated transport, set retention policy, and never place document text in logs or URL query strings.
+
+Proofing is disabled by default. Do not enable it without a provider and a clear data-handling policy.

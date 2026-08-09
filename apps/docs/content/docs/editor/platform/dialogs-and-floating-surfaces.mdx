@@ -1,0 +1,17 @@
+---
+title: Open dialogs and floating surfaces
+navTitle: Dialogs and surfaces
+description: Render application UI in SuperDoc-managed dialog and floating layers with explicit lifecycle outcomes.
+---
+
+Surfaces place application UI above the document without coupling it to Editor internals. Use a dialog for modal decisions and a floating surface for a non-modal tool or inspector.
+
+<include>../../../../snippets/editor/external-surface.ts</include>
+
+The `render()` callback receives an empty container plus `resolve()` and `close()` controls. Mount DOM, React, Vue, or another framework into that container and return cleanup for any framework root or listener that outlives the nodes themselves.
+
+`handle.result` resolves for normal lifecycle outcomes. Check `status` before reading data: a surface can be submitted, closed, replaced by another surface in the same slot, or destroyed with the Editor. There is one active slot per mode.
+
+Give every surface a visible `title`, `ariaLabel`, or `ariaLabelledBy`. Decide whether Escape, backdrop clicks, and outside pointer events should close it. These defaults affect interaction, not authorization or transaction safety.
+
+Configure `surfaces` only for shared defaults and intent resolution. Direct `openSurface()` calls do not require a resolver. The built-in find/replace surface has its own switch, `ui: { search: true }`, because it is chrome rather than infrastructure.

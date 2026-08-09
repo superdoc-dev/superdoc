@@ -1,0 +1,31 @@
+---
+title: How SuperDoc works
+navTitle: How it works
+description: Follow a DOCX file from OOXML package to editable document state and back.
+---
+
+A DOCX file is a package of OOXML parts. Those parts hold document content, styles, relationships, media, headers, footers, and other document data.
+
+SuperDoc opens that package directly. It does not turn the file into HTML before editing.
+
+## Open
+
+The engine parses the OOXML parts and owns the editable document state. Source details that are not currently being edited stay attached to the document rather than being flattened into a web format.
+
+## Render
+
+The document state is projected into layout data. The layout engine paginates that data. The browser painter then draws the resolved pages as DOM.
+
+The DOM is an output of the rendering pipeline. It is not the document format.
+
+## Edit
+
+Editor input and headless operations change the same document state. The Document API defines how callers query content, identify targets, apply mutations, and read receipts.
+
+## Write
+
+When the document is saved or exported, the engine writes the changes back into the OOXML package. It does not reconstruct a DOCX from an HTML copy.
+
+This is the no-conversion boundary: OOXML comes in, OOXML remains the source of document meaning, and OOXML goes out. Layout and DOM exist to display the document. They do not replace it.
+
+Next, [choose your path](/start/choose-your-path).

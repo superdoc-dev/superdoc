@@ -1,0 +1,722 @@
+/**
+ * Unit tests for resolveHeaderFooterTokens module
+ *
+ * Tests the resolution of page number tokens in header and footer blocks.
+ */
+
+import { describe, it, expect } from 'vite-plus/test';
+import {
+  resolveHeaderFooterTokens,
+  cloneHeaderFooterBlocks,
+  PROVISIONAL_PAGE_COUNT_PLACEHOLDER,
+} from '../src/resolveHeaderFooterTokens';
+import type { FlowBlock, ParagraphBlock, TextRun } from '@superdoc/contracts';
+
+describe('resolveHeaderFooterTokens', () => {
+  it('should resolve pageNumber token in header blocks', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-1',
+        runs: [
+          {
+            text: 'Page ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 3, 10);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[1].text).toBe('3');
+    // Token is preserved so painter can re-resolve at render time
+    expect((block.runs[1] as TextRun).token).toBe('pageNumber');
+  });
+
+  it('should use provided pageNumberText when resolving pageNumber tokens', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-dash',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 10, '-1-');
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('-1-');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+
+  it('should prefer explicit PAGE field format metadata over pageNumberText', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-format',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            pageNumberFieldFormat: { format: 'numberInDash' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 3, 10, 'iii', 7);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('- 7 -');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+
+  it('should preserve chapter prefix when run-local pageNumberFieldFormat is applied', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-chapter-local-format',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 10, '3:5', 5, 10, 'decimal', '3', 'colon');
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('3:V');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+  it('should resolve totalPageCount token in footer blocks', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'footer-1',
+        runs: [
+          {
+            text: 'Total: ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'totalPageCount',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 5, 99);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[1].text).toBe('99');
+    // Token is preserved so painter can re-resolve at render time
+    expect((block.runs[1] as TextRun).token).toBe('totalPageCount');
+  });
+
+  it('should zero-pad explicit NUMPAGES field metadata', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'footer-format',
+        runs: [
+          {
+            text: '0',
+            token: 'totalPageCount',
+            pageNumberFieldFormat: { format: 'decimal', zeroPadding: 2 },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 5, 7);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('07');
+    expect((block.runs[0] as TextRun).token).toBe('totalPageCount');
+  });
+
+  it('should resolve formatted sectionPageCount token from section context', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'footer-section-pages',
+        runs: [
+          {
+            text: 'Section pages: ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'sectionPageCount',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 99, '1', 1, 4);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[1].text).toBe('IV');
+    expect((block.runs[1] as TextRun).token).toBe('sectionPageCount');
+  });
+  it('should resolve both tokens in the same block', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-2',
+        runs: [
+          {
+            text: 'Page ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+          {
+            text: ' of ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'totalPageCount',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 7, 25);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[1].text).toBe('7');
+    // Tokens preserved for painter
+    expect((block.runs[1] as TextRun).token).toBe('pageNumber');
+    expect(block.runs[3].text).toBe('25');
+    expect((block.runs[3] as TextRun).token).toBe('totalPageCount');
+  });
+
+  it('should handle multiple paragraph blocks', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-3a',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+      {
+        kind: 'paragraph',
+        id: 'header-3b',
+        runs: [
+          {
+            text: '0',
+            token: 'totalPageCount',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 4, 12);
+
+    const block1 = blocks[0] as ParagraphBlock;
+    const block2 = blocks[1] as ParagraphBlock;
+    expect(block1.runs[0].text).toBe('4');
+    // Tokens preserved for painter
+    expect((block1.runs[0] as TextRun).token).toBe('pageNumber');
+    expect(block2.runs[0].text).toBe('12');
+    expect((block2.runs[0] as TextRun).token).toBe('totalPageCount');
+  });
+
+  it('should handle empty blocks array', () => {
+    const blocks: FlowBlock[] = [];
+
+    // Should not throw
+    expect(() => {
+      resolveHeaderFooterTokens(blocks, 1, 10);
+    }).not.toThrow();
+  });
+
+  it('should handle invalid page number (use fallback)', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-4',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, -1, 10);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('1'); // Should fallback to 1
+  });
+
+  it('should handle invalid total pages (use fallback)', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-5',
+        runs: [
+          {
+            text: '0',
+            token: 'totalPageCount',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 0);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('1'); // Should fallback to 1
+  });
+
+  // SD-1332: Word fixtures put PAGE fields inside table cells in the footer.
+  // The resolver previously walked only top-level paragraph blocks, so a
+  // pageNumber token nested in a TableCell.paragraph (or .blocks) was never
+  // substituted and the footer rendered without the digit.
+  describe('SD-1332: tokens nested in table cells', () => {
+    it('substitutes pageNumber token in a TableCell.paragraph', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-1',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-1',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'cell-para-1',
+                    runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+                  } as ParagraphBlock,
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 7, 10);
+
+      const para = (blocks[0] as { rows: { cells: { paragraph: ParagraphBlock }[] }[] }).rows[0].cells[0].paragraph;
+      expect(para.runs[0].text).toBe('7');
+      expect((para.runs[0] as TextRun).token).toBe('pageNumber');
+    });
+
+    it('substitutes tokens in TableCell.blocks (multi-block cells)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-2',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-2',
+                  blocks: [
+                    {
+                      kind: 'paragraph',
+                      id: 'inner-1',
+                      runs: [
+                        { text: 'Page ', fontFamily: 'Arial', fontSize: 12 },
+                        { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                        { text: ' of ', fontFamily: 'Arial', fontSize: 12 },
+                        { text: '0', token: 'totalPageCount', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                      ],
+                    } as ParagraphBlock,
+                  ],
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 4, 9);
+
+      const para = (blocks[0] as { rows: { cells: { blocks: ParagraphBlock[] }[] }[] }).rows[0].cells[0].blocks[0];
+      expect(para.runs[1].text).toBe('4');
+      expect(para.runs[3].text).toBe('9');
+    });
+
+    it('recurses into a table nested inside a cell (table-in-cell)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-outer',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-outer',
+                  blocks: [
+                    {
+                      kind: 'table',
+                      id: 'tbl-inner',
+                      rows: [
+                        {
+                          cells: [
+                            {
+                              id: 'cell-inner',
+                              paragraph: {
+                                kind: 'paragraph',
+                                id: 'inner-para',
+                                runs: [
+                                  { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+                                ],
+                              } as ParagraphBlock,
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+
+      resolveHeaderFooterTokens(blocks, 2, 5);
+
+      const innerPara = (
+        blocks[0] as {
+          rows: { cells: { blocks: { rows: { cells: { paragraph: ParagraphBlock }[] }[] }[] }[] }[];
+        }
+      ).rows[0].cells[0].blocks[0].rows[0].cells[0].paragraph;
+      expect(innerPara.runs[0].text).toBe('2');
+    });
+  });
+
+  it('should skip non-paragraph blocks', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'image',
+        id: 'img-1',
+        src: 'test.jpg',
+      },
+      {
+        kind: 'paragraph',
+        id: 'header-6',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 2, 5);
+
+    // Image block should be unchanged
+    expect(blocks[0].kind).toBe('image');
+    // Paragraph block should have token resolved
+    const block = blocks[1] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('2');
+  });
+});
+
+describe('cloneHeaderFooterBlocks', () => {
+  it('should create deep copy of paragraph blocks', () => {
+    const original: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'test-1',
+        runs: [
+          {
+            text: 'Original text',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+        attrs: {
+          alignment: 'center',
+        },
+      } as ParagraphBlock,
+    ];
+
+    const cloned = cloneHeaderFooterBlocks(original);
+
+    // Verify it's a different array
+    expect(cloned).not.toBe(original);
+    expect(cloned[0]).not.toBe(original[0]);
+
+    // Verify runs are cloned
+    const originalBlock = original[0] as ParagraphBlock;
+    const clonedBlock = cloned[0] as ParagraphBlock;
+    expect(clonedBlock.runs).not.toBe(originalBlock.runs);
+    expect(clonedBlock.runs[0]).not.toBe(originalBlock.runs[0]);
+
+    // Verify content is the same
+    expect(clonedBlock.id).toBe(originalBlock.id);
+    expect(clonedBlock.runs[0].text).toBe(originalBlock.runs[0].text);
+    expect(clonedBlock.attrs).toEqual(originalBlock.attrs);
+  });
+
+  it('should mutate clone without affecting original', () => {
+    const original: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'test-2',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    const cloned = cloneHeaderFooterBlocks(original);
+
+    // Resolve tokens in cloned version
+    resolveHeaderFooterTokens(cloned, 5, 10);
+
+    // Original should be unchanged
+    const originalBlock = original[0] as ParagraphBlock;
+    expect(originalBlock.runs[0].text).toBe('0');
+    expect((originalBlock.runs[0] as TextRun).token).toBe('pageNumber');
+
+    // Cloned should be modified (text updated, token preserved for painter)
+    const clonedBlock = cloned[0] as ParagraphBlock;
+    expect(clonedBlock.runs[0].text).toBe('5');
+    expect((clonedBlock.runs[0] as TextRun).token).toBe('pageNumber');
+  });
+
+  it('should handle empty blocks array', () => {
+    const original: FlowBlock[] = [];
+    const cloned = cloneHeaderFooterBlocks(original);
+
+    expect(cloned).toEqual([]);
+    expect(cloned).not.toBe(original);
+  });
+
+  it('should clone non-paragraph blocks with shallow copy', () => {
+    const original: FlowBlock[] = [
+      {
+        kind: 'image',
+        id: 'img-1',
+        src: 'test.jpg',
+        width: 100,
+        height: 100,
+      },
+    ];
+
+    const cloned = cloneHeaderFooterBlocks(original);
+
+    // Verify it's a different array and different object
+    expect(cloned).not.toBe(original);
+    expect(cloned[0]).not.toBe(original[0]);
+
+    // Verify content is the same
+    expect(cloned[0]).toEqual(original[0]);
+  });
+
+  it('should clone mixed block types', () => {
+    const original: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'para-1',
+        runs: [
+          {
+            text: 'Text',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+      } as ParagraphBlock,
+      {
+        kind: 'image',
+        id: 'img-1',
+        src: 'test.jpg',
+      },
+      {
+        kind: 'paragraph',
+        id: 'para-2',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    const cloned = cloneHeaderFooterBlocks(original);
+
+    expect(cloned.length).toBe(3);
+    expect(cloned[0].kind).toBe('paragraph');
+    expect(cloned[1].kind).toBe('image');
+    expect(cloned[2].kind).toBe('paragraph');
+
+    // Verify paragraph blocks have cloned runs
+    const clonedBlock1 = cloned[0] as ParagraphBlock;
+    const originalBlock1 = original[0] as ParagraphBlock;
+    expect(clonedBlock1.runs).not.toBe(originalBlock1.runs);
+  });
+});
+
+describe('atomic-first-page — provisional page-count fields', () => {
+  const run = (text: string, token?: string): TextRun =>
+    ({ text, ...(token ? { token } : {}), fontFamily: 'Arial', fontSize: 12 }) as TextRun;
+
+  const para = (id: string, runs: TextRun[]): ParagraphBlock => ({ kind: 'paragraph', id, runs }) as ParagraphBlock;
+
+  it('PAGE resolves immediately while NUMPAGES/SECTIONPAGES keep their source-cached text', () => {
+    const blocks: FlowBlock[] = [
+      para('p1', [
+        run('0', 'pageNumber'),
+        run(' of ', undefined),
+        run('12', 'totalPageCount'),
+        run(' / ', undefined),
+        run('7', 'sectionPageCount'),
+      ]),
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 3, undefined, undefined, 2, undefined, undefined, undefined, {
+      pageCountFieldsExact: false,
+    });
+
+    const p = blocks[0] as ParagraphBlock;
+    // The physical first-page number is known even under partial pagination.
+    expect(p.runs[0].text).toBe('1');
+    // Cached DOCX results survive; the partial totals (3 / 2) never paint.
+    expect(p.runs[2].text).toBe('12');
+    expect(p.runs[4].text).toBe('7');
+  });
+
+  it('renders an em dash when a provisional total field has no cached result', () => {
+    const blocks: FlowBlock[] = [para('p1', [run('', 'totalPageCount'), run('   ', 'sectionPageCount')])];
+
+    resolveHeaderFooterTokens(blocks, 1, 3, undefined, undefined, 2, undefined, undefined, undefined, {
+      pageCountFieldsExact: false,
+    });
+
+    const p = blocks[0] as ParagraphBlock;
+    expect(p.runs[0].text).toBe(PROVISIONAL_PAGE_COUNT_PLACEHOLDER);
+    expect(p.runs[1].text).toBe(PROVISIONAL_PAGE_COUNT_PLACEHOLDER);
+  });
+
+  it('exact mode (default) replaces provisional values with computed totals', () => {
+    const blocks: FlowBlock[] = [para('p1', [run('12', 'totalPageCount'), run('7', 'sectionPageCount')])];
+
+    resolveHeaderFooterTokens(blocks, 1, 34, undefined, undefined, 8);
+
+    const p = blocks[0] as ParagraphBlock;
+    expect(p.runs[0].text).toBe('34');
+    expect(p.runs[1].text).toBe('8');
+  });
+
+  it('applies the provisional policy to fields nested in table cells', () => {
+    const table = {
+      kind: 'table',
+      id: 't1',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [para('cell-p', [run('0', 'pageNumber'), run('99', 'totalPageCount')])],
+            },
+          ],
+        },
+      ],
+    } as unknown as FlowBlock;
+
+    resolveHeaderFooterTokens([table], 2, 5, undefined, undefined, undefined, undefined, undefined, undefined, {
+      pageCountFieldsExact: false,
+    });
+
+    const cellPara = (table as { rows: Array<{ cells: Array<{ blocks: ParagraphBlock[] }> }> }).rows[0].cells[0]
+      .blocks[0];
+    expect(cellPara.runs[0].text).toBe('2');
+    expect(cellPara.runs[1].text).toBe('99');
+  });
+
+  it('resolves textbox paragraph fields on an isolated deep clone', () => {
+    const textbox = {
+      kind: 'drawing',
+      id: 'footer-textbox',
+      drawingKind: 'textboxShape',
+      geometry: { width: 120, height: 30, rotation: 0, flipH: false, flipV: false },
+      contentBlocks: [para('textbox-p', [run('0', 'pageNumber'), run('19', 'totalPageCount')])],
+    } as unknown as FlowBlock;
+    const cloned = cloneHeaderFooterBlocks([textbox]);
+
+    resolveHeaderFooterTokens(cloned, 2, 3, undefined, undefined, undefined, undefined, undefined, undefined, {
+      pageCountFieldsExact: false,
+    });
+
+    const clonedParagraph = (cloned[0] as unknown as { contentBlocks: ParagraphBlock[] }).contentBlocks[0];
+    const originalParagraph = (textbox as unknown as { contentBlocks: ParagraphBlock[] }).contentBlocks[0];
+    expect(clonedParagraph.runs[0].text).toBe('2');
+    expect(clonedParagraph.runs[1].text).toBe('19');
+    expect(originalParagraph.runs[0].text).toBe('0');
+    expect(originalParagraph.runs[1].text).toBe('19');
+  });
+});

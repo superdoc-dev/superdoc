@@ -1,0 +1,51 @@
+name: CI V2 Public
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2-public-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: CI V2 Public / validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Validate pnpm ownership
+        run: pnpm run check:pnpm-config
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check formatting
+        run: pnpm run format:check
+      - name: Lint
+        run: pnpm run lint
+      - name: Build SuperDoc
+        run: pnpm run build:superdoc
+      - name: Typecheck public workspace
+        run: pnpm run type-check
+      - name: Validate workflow paths
+        run: pnpm run check:workflow-paths:tests && pnpm run check:workflow-paths
+      - name: Validate public boundary
+        run: pnpm run check:public-boundary:tests && pnpm run check:public-boundary
+      - name: Validate SuperDoc package surface
+        run: pnpm check:public:superdoc --skip-build
+      - name: Test SuperDoc
+        run: pnpm --filter superdoc exec vp test run
+      - name: Typecheck docs
+        run: pnpm --filter @superdoc/docs typecheck
+      - name: Build docs
+        run: pnpm --filter @superdoc/docs build

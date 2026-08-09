@@ -1,0 +1,88 @@
+---
+title: Document modes
+navTitle: Modes
+description: Choose whether people can view, edit, or suggest changes to a DOCX.
+---
+
+Document modes control how a person can interact with the open DOCX. Choose the mode that matches the task, then change it as the workflow moves from authoring to review.
+
+| Mode         | What a person can do                        | Use it for                      |
+| ------------ | ------------------------------------------- | ------------------------------- |
+| `editing`    | Change the document directly                | Authoring and form-like editing |
+| `suggesting` | Make edits recorded as tracked changes      | Review and approval workflows   |
+| `viewing`    | Read and select content without changing it | Previews and read-only review   |
+
+`editing` is the default.
+
+The [document modes example](https://go.superdoc.dev/examples/document-modes) is a complete project that switches one DOCX between all three modes and exports a suggested edit.
+
+## Try the modes
+
+Switch the same document between View, Edit, and Suggest. Editing changes the DOCX directly, suggesting records new edits for review, and viewing prevents changes.
+
+<EditorDemo fixture='/fixtures/tracked-changes.docx' preset='document-modes' title='Try document modes' />
+
+## Set the initial mode
+
+Pass `documentMode` when you create the editor. This example opens the document in suggesting mode so every new edit is reviewable:
+
+```ts
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/documents/contract.docx',
+  documentMode: 'suggesting',
+  user: {
+    name: 'Jordan Lee',
+    email: 'jordan@example.com',
+  },
+});
+```
+
+Provide the current `user` when edits need an author. SuperDoc preserves that author with the tracked changes in the exported DOCX.
+
+## Change modes after the editor is ready
+
+Use `setDocumentMode()` to move the same editor between authoring, review, and read-only states:
+
+```ts
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/documents/contract.docx',
+  onReady: ({ superdoc }) => {
+    superdoc.setDocumentMode('suggesting');
+  },
+});
+
+superdoc.on('document-mode-change', ({ documentMode }) => {
+  console.log(`Document mode: ${documentMode}`);
+});
+```
+
+`setDocumentMode()` requires a ready editor. Use the initial `documentMode` option when the mode is known before loading, or call the method from `onReady` and later application events.
+
+## Show tracked changes in viewing mode
+
+Viewing mode is read-only. By default, it shows the document before its tracked changes were applied. Enable tracked-change visibility when a read-only reviewer should still see the proposed edits:
+
+```ts
+new SuperDoc({
+  selector: '#editor',
+  document: '/documents/contract.docx',
+  documentMode: 'viewing',
+  modules: {
+    trackChanges: {
+      visible: true,
+    },
+  },
+});
+```
+
+<Callout title='Modes are not access control'>
+  Document modes control editor behavior in the browser. Your application still owns authentication, authorization, and
+  access to the DOCX file.
+</Callout>
+
+Next, try the [Editor tracked-change review workflow](/editor/review/tracked-changes), build a [code-to-human review handoff](/agents/workflows/review-tracked-changes), or return to [loading and saving documents](/editor/load-and-save-documents).

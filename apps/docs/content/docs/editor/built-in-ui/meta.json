@@ -1,0 +1,13 @@
+{
+  "title": "Built-in UI",
+  "defaultOpen": false,
+  "pages": [
+    "overview",
+    "configure-the-toolbar",
+    "comments",
+    "search-and-replace",
+    "links-and-context-menus",
+    "structured-content",
+    "responsive-layout"
+  ]
+}

@@ -1,0 +1,499 @@
+.sd-site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  grid-area: header;
+  height: 64px;
+  border-bottom: 1px solid #e2e8f0;
+  background: color-mix(in srgb, var(--sd-background) 80%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.sd-site-header-inner {
+  display: grid;
+  /* The center column must be allowed to shrink below its comfortable width,
+     otherwise the three columns overflow between 1024px and 1280px and the
+     brand, links, and search overlap. clamp() lets the gaps close first. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: clamp(12px, 2.2vw, 32px);
+  width: 100%;
+  /* Matches --fd-layout-width from the docs grid, so the brand sits on the same
+     left edge as the sidebar instead of drifting inward on wide screens. The
+     home page has no sidebar and is unaffected. */
+  max-width: var(--fd-layout-width, 97rem);
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 2.2vw, 32px);
+}
+
+.sd-site-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--sd-blue);
+  text-decoration: none;
+}
+
+/* The wordmark's cap-height band centers ~1.5px lower than the mark's ink,
+   because the artwork's own bounding box is taller than its visual mass. A
+   flex-centered box therefore leaves the mark reading high against the text.
+   Measured from a rendered header: mark ink rows 13-51 (center 32.0) vs
+   wordmark rows 24-43 (center 33.5). */
+.sd-site-brand-mark {
+  position: relative;
+  top: 1.5px;
+  width: 36px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.sd-site-wordmark {
+  color: var(--sd-blue);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+.sd-site-nav-links {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 1.8vw, 32px);
+  width: auto;
+  justify-self: center;
+}
+
+.sd-site-nav-link {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 150ms ease;
+}
+
+.sd-site-nav-link:hover {
+  color: var(--sd-text-primary);
+}
+
+.sd-site-nav-link[data-active='true'] {
+  color: var(--sd-blue);
+}
+
+.sd-site-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.sd-site-search {
+  width: min(240px, 24vw);
+}
+
+.sd-site-search > button {
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.sd-site-search-compact {
+  display: none;
+}
+
+.sd-site-theme-switch,
+.sd-site-icon-link,
+.sd-site-menu-button,
+.sd-site-mobile-control {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.sd-site-theme-switch {
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  transition: color 150ms ease;
+}
+
+.sd-site-theme-switch:hover {
+  background: transparent;
+  color: #0f172a;
+}
+
+.sd-site-theme-switch > svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+}
+
+.sd-site-icon-link,
+.sd-site-menu-button {
+  border: 0;
+  background: transparent;
+  color: #475569;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.sd-site-icon-link:hover,
+.sd-site-menu-button:hover {
+  background: var(--color-fd-secondary);
+  color: var(--sd-text-primary);
+}
+
+.sd-site-icon-link svg,
+.sd-site-menu-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sd-site-github-link {
+  gap: 8px;
+  min-width: 78px;
+  padding: 8px 12px;
+}
+
+.sd-site-github-count {
+  min-width: 25px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.sd-site-contact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 20px;
+  border-radius: 9999px;
+  background: var(--sd-blue);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 8px;
+  transition: background-color 150ms ease;
+}
+
+.sd-site-contact:hover {
+  background: var(--sd-blue-hover);
+  color: white;
+}
+
+.sd-site-contact-compact {
+  display: none;
+}
+
+.sd-site-mobile-actions,
+.sd-site-mobile-menu {
+  display: none;
+}
+
+.sd-sidebar-title {
+  color: var(--sd-text-primary);
+  font-weight: 600;
+}
+
+.sd-branded-docs-layout [data-sidebar-placeholder] {
+  top: 64px;
+  height: calc(100dvh - 64px);
+}
+
+/* The sidebar stacks a section list (Get started, Editor, ...) above the pages
+   of the open section. A section entry links to its own first page, so on that
+   page Fumadocs marks both entries active and they read as two selected pages.
+   The section keeps a quieter treatment - blue text, no fill - so only the
+   current page carries the filled selection.
+
+   Fumadocs renders both lists as flat siblings and ends the section block with
+   an `mb-4` spacer link, so that link and everything before it is the section
+   list. Matching on the spacer rather than a link count means adding or
+   reordering a section cannot silently break this. */
+.sd-branded-docs-layout [data-radix-scroll-area-viewport] a:has(~ a.mb-4)[data-active='true'],
+.sd-branded-docs-layout [data-radix-scroll-area-viewport] a.mb-4[data-active='true'] {
+  background: transparent;
+  font-weight: 600;
+}
+
+.dark .sd-site-wordmark {
+  color: var(--sd-blue-400);
+}
+
+.dark .sd-site-header {
+  border-bottom-color: rgb(255 255 255 / 0.05);
+}
+
+.dark .sd-site-nav-link,
+.dark .sd-site-menu-button,
+.dark .sd-site-theme-switch {
+  color: #94a3b8;
+}
+
+.dark .sd-site-icon-link {
+  color: #cbd5e1;
+}
+
+.dark .sd-site-nav-link:hover,
+.dark .sd-site-icon-link:hover,
+.dark .sd-site-menu-button:hover,
+.dark .sd-site-theme-switch:hover {
+  color: #ffffff;
+}
+
+/* Below 1280px the brand, four nav links, a full search field, and the full
+   contact label cannot share a row without colliding. Search collapses to its
+   icon and the contact button drops to its short label so the links keep their
+   space. */
+@media (max-width: 1279px) {
+  .sd-site-search {
+    display: none;
+  }
+
+  .sd-site-search-compact {
+    display: block;
+  }
+
+  .sd-site-contact {
+    padding-inline: 14px;
+  }
+
+  .sd-site-contact-full {
+    display: none;
+  }
+
+  .sd-site-contact-compact {
+    display: inline;
+  }
+}
+
+@media (max-width: 1023px) {
+  .sd-site-header-inner {
+    display: flex;
+    padding: 0 16px;
+  }
+
+  .sd-site-nav-links,
+  .sd-site-actions {
+    display: none;
+  }
+
+  .sd-site-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .sd-site-mobile-menu {
+    position: absolute;
+    top: 64px;
+    right: 0;
+    left: 0;
+    display: grid;
+    gap: 16px;
+    padding: 16px;
+    border-bottom: 1px solid var(--sd-border-soft);
+    background: var(--sd-background);
+    box-shadow: var(--sd-shadow-md);
+  }
+
+  .sd-site-mobile-menu nav {
+    display: grid;
+    gap: 4px;
+  }
+
+  .sd-site-mobile-link {
+    padding: 10px 8px;
+    border-radius: 8px;
+    color: var(--sd-text-secondary);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .sd-site-mobile-link:hover,
+  .sd-site-mobile-link[data-active='true'] {
+    background: var(--color-fd-accent);
+    color: var(--sd-blue);
+  }
+
+  .sd-site-mobile-utilities {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--sd-border-soft);
+  }
+
+  .sd-site-mobile-utilities > a:not(.sd-site-contact) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--sd-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .sd-site-mobile-utilities > a:not(.sd-site-contact) svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .sd-site-mobile-utilities .sd-site-contact {
+    margin-left: auto;
+  }
+
+  .sd-site-wordmark {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .sd-site-brand {
+    gap: 6px;
+  }
+
+  .sd-site-brand-mark {
+    width: 30px;
+    height: 34px;
+  }
+
+  .sd-site-wordmark {
+    font-size: 18px;
+  }
+
+  .sd-site-mobile-utilities {
+    flex-wrap: wrap;
+  }
+
+  .sd-site-mobile-utilities .sd-site-contact {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* Brand and version occupy a single grid item, so the header keeps the three
+   columns its template declares. */
+.sd-site-brand-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The version sits beside the wordmark so it reads as part of the product name
+   rather than as one more nav item. */
+.sd-version {
+  position: relative;
+  flex: none;
+}
+
+.sd-version-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px 2px 8px;
+  border: 1px solid var(--sd-border-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sd-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.sd-version-trigger:hover,
+.sd-version-trigger[aria-expanded='true'] {
+  border-color: var(--sd-blue);
+  color: var(--sd-blue);
+}
+
+.sd-version-chevron {
+  width: 12px;
+  height: 12px;
+}
+
+.sd-version-panel {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid var(--sd-border-soft);
+  border-radius: 10px;
+  background: var(--sd-background);
+  box-shadow: var(--sd-shadow-md);
+}
+
+.sd-version-link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  color: var(--sd-text-primary);
+  font-size: 13px;
+  line-height: 18px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sd-version-external {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--sd-text-secondary);
+}
+
+.sd-version-link:hover {
+  background: var(--color-fd-accent);
+}
+
+/* On a narrow screen the trigger sits far enough right that a left-anchored
+   panel reaches the viewport edge. Anchoring to the right keeps it inside the
+   padding the header already uses. */
+@media (max-width: 419px) {
+  .sd-version-panel {
+    right: 0;
+    left: auto;
+  }
+}
+
+.dark .sd-version-trigger {
+  border-color: rgb(255 255 255 / 0.12);
+  color: #94a3b8;
+}
+
+.dark .sd-version-trigger:hover,
+.dark .sd-version-trigger[aria-expanded='true'] {
+  border-color: var(--sd-blue-400);
+  color: var(--sd-blue-400);
+}
+
+.dark .sd-version-link {
+  color: #e2e8f0;
+}

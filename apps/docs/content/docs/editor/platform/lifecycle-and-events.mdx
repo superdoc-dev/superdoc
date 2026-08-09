@@ -1,0 +1,21 @@
+---
+title: Handle lifecycle and events
+navTitle: Lifecycle and events
+description: Connect Editor readiness, updates, errors, and cleanup to application lifecycle.
+---
+
+Use configuration callbacks for events known at construction time. Use `on()` and `off()` when a listener belongs to a later application lifecycle, and always remove it before destroying the instance.
+
+<include>../../../../snippets/editor/editor-lifecycle.ts</include>
+
+## Choose the narrowest signal
+
+- `onReady` means the SuperDoc instance and active Editor are ready for normal interaction.
+- `onEditorUpdate` reports document updates. Debounce persistence work and export the current DOCX instead of storing internal Editor state.
+- `onContentError` reports document loading or processing failures.
+- `onException` is the general integration error channel. Its payload is a union, so narrow optional fields before using them.
+- `document-mode-change`, `zoomChange`, `viewport-change`, comments, content-control, font, and collaboration events support focused integrations.
+
+Do not use a broad update event when a domain handle already exposes a snapshot and `observe()`. Custom UI controls should observe `editor.ui`; application lifecycle and operational logging belong on SuperDoc events.
+
+Call `destroy()` when the owning route or component unmounts. It releases Editor resources, listeners, surfaces, collaboration connections, and the instance's `ui` controller. Remove application listeners and framework roots as part of the same cleanup.

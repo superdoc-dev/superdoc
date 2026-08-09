@@ -1,0 +1,220 @@
+---
+title: Store application data in DOCX
+navTitle: Application data
+description: Choose the DOCX structure that matches how your application stores and presents data.
+---
+
+Choose a document structure by what the data means and how other DOCX tools should understand it. Do not recreate the ProseMirror node or mark that previously carried it.
+
+| What you need                                         | Use                   | Stored as                                       | How it appears        |
+| ----------------------------------------------------- | --------------------- | ----------------------------------------------- | --------------------- |
+| A Word-compatible citation with a bibliography source | `doc.citations`       | A citation field and source record              | From the field result |
+| A calculated or cached Word field                     | `doc.fields`          | An OOXML field instruction and result           | From the field result |
+| A structured region that people can edit              | `doc.contentControls` | A content control (`w:sdt`)                     | Yes                   |
+| Application JSON attached to a text range             | `doc.metadata`        | A hidden inline content control plus Custom XML | Not visible by itself |
+| Application data that is not attached to text         | `doc.customXml`       | A Custom XML part                               | Not visible           |
+
+Use the public API rather than editing these XML elements directly. SuperDoc keeps the related package parts and relationships consistent when the document changes.
+
+## Anchored application data
+
+Use anchored metadata for an application-owned record such as a review finding, external reference, or backend identifier. The caller chooses the record ID and namespace:
+
+```ts
+// A user action, not module scope: the guards below return early, and `return`
+// is only legal inside a function.
+async function attachFinding() {
+  const doc = superdoc.activeEditor?.doc;
+  // `capture()` reports readiness; `current()` does not. A worker-backed read is
+  // `pending` or `stale` while it settles and still carries the previous range,
+  // so writing from it anchors the record to the user's earlier selection.
+  const capture = superdoc.ui.selection.capture();
+  const target = capture?.status === 'ready' ? capture.selectionTarget : null;
+
+  // Anchoring is a single non-empty text range inside one **body** paragraph.
+  // Check every part of that before writing, rather than handling rejections:
+  //
+  // - `SelectionPoint` is a union; a `nodeEdge` endpoint has no blockId or offset.
+  // - Two paragraphs cannot share one hidden inline SDT.
+  // - The adapter resolves the paragraph against the main document part, so a
+  //   header, footer, footnote, or endnote paragraph is not found.
+  // - A selection crossing deleted tracked text reports `coordinateSpace:
+  //   'tracked'`, and the anchor rewrite searches visible `w:t` runs only, so the
+  //   same offsets address different characters.
+  //
+  // These guards are necessary but not sufficient. A selection crossing two
+  // `w:t` runs, which is what a bold or italic boundary produces, passes all of
+  // them and still throws: the rewrite requires both offsets inside one run.
+  // Nothing in the public selection shape reports run boundaries, so the catch
+  // below is the only place that case can be handled.
+  if (!doc || !target) return;
+  if (target.coordinateSpace === 'tracked') return;
+  if (target.start.kind !== 'text' || target.end.kind !== 'text') return;
+  if (target.start.blockId !== target.end.blockId) return;
+  if (target.start.offset === target.end.offset) return;
+  const story = target.story ?? target.start.story;
+  if (story !== undefined && story.storyType !== 'body') return;
+
+  // `attach()` throws for several ordinary cases instead of returning an
+  // unsuccessful receipt: when the id already exists (including the second time
+  // this action runs), when the range crosses two `w:t` runs, and when the
+  // paragraph is not in the main document part.
+  //
+  // Use try/catch rather than `.catch()`. This facade is typed `MaybePromise`, so
+  // on a synchronous host `attach()` returns the receipt itself and has no
+  // `.catch` method, and a synchronous validation throw happens before any
+  // promise exists to reject.
+  try {
+    const receipt = await doc.metadata.attach({
+      id: 'finding-42',
+      namespace: 'urn:example:review',
+      target,
+      payload: { sourceId: 'source-7', justification: 'Verify this statement' },
+    });
+    if (!receipt.success) reportToUser(receipt.failure.message);
+  } catch (error) {
+    reportToUser(error instanceof Error ? error.message : String(error));
+  }
+}
+```
+
+<Callout variant='warning' title='Attaching metadata discards run formatting'>
+  Attaching metadata currently discards the formatting of the text it wraps. The adapter removes the enclosing `w:r` and
+  rebuilds the selected text in a new run without its `w:rPr`, so bold, italic, colour, and character-style formatting
+  are lost from the saved DOCX with no error and no visible failure at attach time. The same rewrite can also drop a
+  space that follows the anchored range, described below. Both are adapter defects rather than intended behaviour, so
+  verify exported files if you anchor into formatted text or at a word boundary.
+</Callout>
+
+Metadata persists with the DOCX but does not add visible styling. Add a render-only extension visual when people need to see the anchored range.
+
+The anchor is painted as a content control. A viewport hit carries the metadata ID in `tag`, while `id` identifies the underlying content control. A record with that ID existing is not proof the click landed on its anchor: nothing stops an ordinary content control from carrying a tag that matches a record anchored elsewhere, including elsewhere in the same paragraph. Comparing the clicked control's full range with where the record resolves rules out that case, though not every case, as the note after the example explains:
+
+```ts
+import type { SelectionTarget } from 'superdoc/ui';
+
+// Both endpoints must be `text` to compare positions at all: a `nodeEdge`
+// endpoint carries a node reference rather than a block and offset.
+//
+// Compare the whole story, not just its `storyType`. Two different headers are
+// both `headerFooterPart`, and block ids are only unique within a story, so
+// comparing the type alone lets an anchor in one header match a control in
+// another. The Document API has an internal canonical key for this; until it is
+// public, discriminate on the fields that identify each variant.
+const storyKey = (story: SelectionTarget['story']) => {
+  if (!story) return 'body';
+  switch (story.storyType) {
+    case 'headerFooterPart':
+      return `headerFooterPart:${story.refId}`;
+    case 'headerFooterSlot':
+      return `headerFooterSlot:${story.section.sectionId}:${story.headerFooterKind}:${story.variant}`;
+    case 'footnote':
+    case 'endnote':
+      return `${story.storyType}:${story.noteId}`;
+    case 'textbox':
+      return `textbox:${story.textboxId}`;
+    default:
+      return 'body';
+  }
+};
+
+const sameTarget = (a: SelectionTarget, b: SelectionTarget) => {
+  if (a.start.kind !== 'text' || a.end.kind !== 'text') return false;
+  if (b.start.kind !== 'text' || b.end.kind !== 'text') return false;
+  return (
+    a.start.blockId === b.start.blockId &&
+    a.end.blockId === b.end.blockId &&
+    a.start.offset === b.start.offset &&
+    a.end.offset === b.end.offset &&
+    storyKey(a.story) === storyKey(b.story)
+  );
+};
+
+editorShell.addEventListener('pointerdown', async (event) => {
+  const doc = superdoc.activeEditor?.doc;
+  if (!doc) return;
+
+  const context = superdoc.ui.viewport.contextAt({ x: event.clientX, y: event.clientY });
+  // Hits are innermost-first, and a metadata anchor can contain an ordinary
+  // nested control. Test every content-control hit rather than the innermost,
+  // or a nested control shadows the anchor that encloses it.
+  //
+  // A non-body hit cannot be filtered out here, and it cannot be detected
+  // afterwards either. `context.position` is always `null` in v2 and
+  // `hit.story` is populated only for tracked-change hits, so nothing reports
+  // the story of a content control. Both lookups below read the main document
+  // part, and painted ids are unique only within that part, so a header,
+  // footer, note, or textbox control that reuses a body anchor's id and tag
+  // resolves the body record and passes every check below.
+  //
+  // The example opens the record because a colliding non-body control is
+  // unlikely in documents this application produced. That is a judgement about
+  // your corpus, not a guarantee from the API. If your documents come from
+  // elsewhere, treat a match as unverified and confirm through your own
+  // backend before acting on it.
+  for (const hit of context.entities.filter((entity) => entity.type === 'contentControl')) {
+    if (!hit.tag) continue;
+    // A metadata anchor is a hidden **inline** content control, so `kind` below
+    // must say `inline`. Read it from the hit rather than hardcoding it: `scope`
+    // is absent when the painted control carries no scope attribute, and a
+    // block control cannot be an anchor, so both cases skip.
+    if (hit.scope !== 'inline') continue;
+
+    // Read the control through the Document API rather than the UI catalog.
+    // `ui.contentControls.list()` schedules its read and returns whatever is
+    // cached, so an early click sees an empty or stale array; the awaited
+    // Document API call always answers about the current document.
+    //
+    // Compare the whole range, not just the block: a colliding tag can sit in
+    // the same paragraph as the real anchor.
+    //
+    // `get()` throws rather than returning null for an id it cannot find, and
+    // an uncaught throw here would surface as an unhandled rejection from this
+    // listener. Treat a failed lookup as "not this hit" and keep scanning.
+    let control: Awaited<ReturnType<typeof doc.contentControls.get>> | null = null;
+    let anchor: Awaited<ReturnType<typeof doc.metadata.resolve>> | null = null;
+    try {
+      [control, anchor] = await Promise.all([
+        doc.contentControls.get({ target: { kind: 'inline', nodeType: 'sdt', nodeId: hit.id } }),
+        doc.metadata.resolve({ id: hit.tag }),
+      ]);
+    } catch {
+      continue;
+    }
+    if (!anchor || !control?.selectionTarget) continue;
+    if (!sameTarget(anchor.target, control.selectionTarget)) continue;
+
+    const record = await doc.metadata.get({ id: hit.tag });
+    if (record) openApplicationRecord(record);
+    return;
+  }
+});
+```
+
+<Callout variant='warning' title='The range comparison narrows the risk without closing it'>
+  The adapter treats the public `w:alias` value `Anchored metadata` as proof on its own that a control is an anchor,
+  without checking the rest of the anchor shape. That alias is the **Title** field in Word's content-control properties
+  dialog, so any author or any other tool can set it. Anchors are then matched by document position, first match wins,
+  so a control carrying that alias and a colliding tag earlier in the document resolves *instead of* the real anchor.
+  The comparison above still succeeds, because both sides describe the same wrong control. Treat an anchored record as a
+  hint from document content rather than as an authenticated identity, and keep anything security-relevant in your own
+  backend, keyed by the record ID.
+</Callout>
+
+Anchored metadata currently requires a non-empty text range within one body paragraph, in visible coordinates, and within a single run. The adapter resolves the paragraph against the main document part, so a header, footer, or note paragraph is not found, and the anchor rewrite searches visible `w:t` runs, so a selection crossing deleted tracked text addresses different characters than its offsets suggest. Resolve the record again with `doc.metadata.resolve({ id })` after document edits instead of keeping an old range.
+
+The read path carries the same body-only restriction, and gives you nothing to check it with. `contentControls.get()` and `metadata.resolve()` both read the main document part, while painted content-control ids are unique only within that part. A control in a header, footer, note, or textbox that reuses a body anchor's id and tag therefore resolves the body record, and every comparison the example makes succeeds against it. Nothing lets you tell the two apart: `context.position` is always `null` in this release, and `hit.story` is populated only for tracked-change hits, so neither reports the story of a content control.
+
+The single-run requirement is the one that surfaces most often, because a bold or italic word splits a paragraph into several runs and a selection across that boundary throws even though it looks like ordinary text in one paragraph.
+
+Plain unformatted text is not a safe case either. The rewrite marks the text before the anchor with `xml:space="preserve"` and does not mark the text after it, so anchoring a word that ends right before a space can lose that space when the document is saved and reopened, turning `foo bar` into `foobar`. That is document text changing, not just formatting. Until it is fixed, prefer ranges that do not end next to a space, and check exported files if you anchor at word boundaries.
+
+Anything in a paragraph that is not literal text shifts the two coordinate systems apart. A selection counts a tab, a line break, and an inline image as caret positions, while the anchor rewrite accumulates offsets from `w:t` contents alone. Any of them before or inside the selection makes the stored anchor land later in the paragraph than the user selected, and a long enough run of following text absorbs the difference so the write succeeds instead of failing.
+
+Tabs make this ordinary rather than exotic: a hanging-indent list item begins with one. There is no public option to reconcile the two coordinate systems today, so prefer selections in paragraphs with no tabs, breaks, or inline objects before the range, and verify anchors in exported files when a paragraph has them.
+
+## Citation or application record?
+
+Use `doc.citations` when Word and other DOCX tools should recognize the value as a citation backed by a bibliography source. Use `doc.metadata` when the meaning belongs to your application and the document only needs to preserve its ID, payload, and text anchor.
+
+These models are not interchangeable. Check the generated operation reference for the current insertion and presentation capabilities before migrating a citation workflow.

@@ -1,0 +1,9 @@
+{
+  // Retained legacy name. The directory and package are `docs` since the V1
+  // app was removed, but the Cloudflare Pages project keeps its original
+  // name: renaming it would move the pages.dev hostname and require
+  // re-attaching the custom domain, for no benefit.
+  "name": "superdoc-docs-next",
+  "pages_build_output_dir": "./out",
+  "compatibility_date": "2026-07-23",
+}

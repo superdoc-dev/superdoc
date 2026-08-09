@@ -1,0 +1,3422 @@
+{
+  "description": "Every URL the V1 site answers, and where it goes after the cutover. Sources are the crawled live route list, not a derived guess. A V1 path that exists identically in V2 is recorded as a replacement; everything else falls back to the V1 archive until someone confirms a real replacement. Nothing is retired without a stated reason, and no unmapped URL is swept to the homepage.",
+  "dispositions": [
+    {
+      "source": "/AGENTS",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/custom-extensions",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/headless-toolbar",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/headless-toolbar-examples",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/supereditor/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/supereditor/events",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/supereditor/methods",
+      "kind": "archive"
+    },
+    {
+      "source": "/advanced/supereditor/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/architecture",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/best-practices",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/core-preset",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/custom-actions",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/debugging",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/eval-results",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/integrations",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/legacy-preset",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/llm-tools",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/agents/skills",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/mcp",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/mcp/debugging",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/mcp/how-to-use",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/mcp/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/ai/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/authentication",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/authentication/register",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/authentication/verify",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/documents/annotate",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/documents/convert",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/documents/sign",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/introduction",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/quickstart",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/signature/sign",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/system/health-check",
+      "kind": "archive"
+    },
+    {
+      "source": "/api-reference/verification/verify",
+      "kind": "archive"
+    },
+    {
+      "source": "/core/superdoc",
+      "kind": "archive"
+    },
+    {
+      "source": "/core/superdoc/properties",
+      "kind": "archive"
+    },
+    {
+      "source": "/core/supereditor",
+      "kind": "archive"
+    },
+    {
+      "source": "/core/supereditor/hooks",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/available-operations",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/common-workflows",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/content-controls",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/eval-results",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/features",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/features/content-controls",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference",
+      "kind": "v2",
+      "destination": "/document-api/reference/"
+    },
+    {
+      "source": "/document-api/reference/authorities",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/"
+    },
+    {
+      "source": "/document-api/reference/authorities/configure",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/configure/"
+    },
+    {
+      "source": "/document-api/reference/authorities/entries-get",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/entries-get/"
+    },
+    {
+      "source": "/document-api/reference/authorities/entries-insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/entries-insert/"
+    },
+    {
+      "source": "/document-api/reference/authorities/entries-list",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/entries-list/"
+    },
+    {
+      "source": "/document-api/reference/authorities/entries-remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/entries-remove/"
+    },
+    {
+      "source": "/document-api/reference/authorities/entries-update",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/entries-update/"
+    },
+    {
+      "source": "/document-api/reference/authorities/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/get/"
+    },
+    {
+      "source": "/document-api/reference/authorities/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/authorities/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/insert/"
+    },
+    {
+      "source": "/document-api/reference/authorities/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/list/"
+    },
+    {
+      "source": "/document-api/reference/authorities/rebuild",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/rebuild/"
+    },
+    {
+      "source": "/document-api/reference/authorities/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/authorities/remove/"
+    },
+    {
+      "source": "/document-api/reference/blocks",
+      "kind": "v2",
+      "destination": "/document-api/reference/blocks/"
+    },
+    {
+      "source": "/document-api/reference/blocks/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/blocks/delete/"
+    },
+    {
+      "source": "/document-api/reference/blocks/delete-range",
+      "kind": "v2",
+      "destination": "/document-api/reference/blocks/delete-range/"
+    },
+    {
+      "source": "/document-api/reference/blocks/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/blocks/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/blocks/list/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/get/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/insert/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/list/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/remove/"
+    },
+    {
+      "source": "/document-api/reference/bookmarks/rename",
+      "kind": "v2",
+      "destination": "/document-api/reference/bookmarks/rename/"
+    },
+    {
+      "source": "/document-api/reference/capabilities",
+      "kind": "v2",
+      "destination": "/document-api/reference/capabilities/"
+    },
+    {
+      "source": "/document-api/reference/capabilities/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/capabilities/get/"
+    },
+    {
+      "source": "/document-api/reference/capabilities/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/captions",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/"
+    },
+    {
+      "source": "/document-api/reference/captions/configure",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/configure/"
+    },
+    {
+      "source": "/document-api/reference/captions/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/get/"
+    },
+    {
+      "source": "/document-api/reference/captions/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/captions/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/insert/"
+    },
+    {
+      "source": "/document-api/reference/captions/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/list/"
+    },
+    {
+      "source": "/document-api/reference/captions/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/remove/"
+    },
+    {
+      "source": "/document-api/reference/captions/update",
+      "kind": "v2",
+      "destination": "/document-api/reference/captions/update/"
+    },
+    {
+      "source": "/document-api/reference/citations",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/"
+    },
+    {
+      "source": "/document-api/reference/citations/bibliography-configure",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/bibliography-configure/"
+    },
+    {
+      "source": "/document-api/reference/citations/bibliography-get",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/bibliography-get/"
+    },
+    {
+      "source": "/document-api/reference/citations/bibliography-insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/bibliography-insert/"
+    },
+    {
+      "source": "/document-api/reference/citations/bibliography-rebuild",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/bibliography-rebuild/"
+    },
+    {
+      "source": "/document-api/reference/citations/bibliography-remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/bibliography-remove/"
+    },
+    {
+      "source": "/document-api/reference/citations/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/get/"
+    },
+    {
+      "source": "/document-api/reference/citations/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/citations/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/insert/"
+    },
+    {
+      "source": "/document-api/reference/citations/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/list/"
+    },
+    {
+      "source": "/document-api/reference/citations/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/remove/"
+    },
+    {
+      "source": "/document-api/reference/citations/sources-get",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/sources-get/"
+    },
+    {
+      "source": "/document-api/reference/citations/sources-insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/sources-insert/"
+    },
+    {
+      "source": "/document-api/reference/citations/sources-list",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/sources-list/"
+    },
+    {
+      "source": "/document-api/reference/citations/sources-remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/sources-remove/"
+    },
+    {
+      "source": "/document-api/reference/citations/sources-update",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/sources-update/"
+    },
+    {
+      "source": "/document-api/reference/citations/update",
+      "kind": "v2",
+      "destination": "/document-api/reference/citations/update/"
+    },
+    {
+      "source": "/document-api/reference/clear-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/clear-content/"
+    },
+    {
+      "source": "/document-api/reference/comments",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/"
+    },
+    {
+      "source": "/document-api/reference/comments/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/create/"
+    },
+    {
+      "source": "/document-api/reference/comments/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/delete/"
+    },
+    {
+      "source": "/document-api/reference/comments/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/get/"
+    },
+    {
+      "source": "/document-api/reference/comments/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/comments/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/list/"
+    },
+    {
+      "source": "/document-api/reference/comments/patch",
+      "kind": "v2",
+      "destination": "/document-api/reference/comments/patch/"
+    },
+    {
+      "source": "/document-api/reference/content-controls",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/append-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/append-content/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/checkbox/get-state",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/checkbox/get-state/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/checkbox/set-state",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/checkbox/set-state/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/checkbox/set-symbol-pair",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/checkbox/set-symbol-pair/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/checkbox/toggle",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/checkbox/toggle/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/choice-list/get-items",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/choice-list/get-items/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/choice-list/set-items",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/choice-list/set-items/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/choice-list/set-selected",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/choice-list/set-selected/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/clear-binding",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/clear-binding/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/clear-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/clear-content/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/copy",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/copy/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/create/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/clear-value",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/clear-value/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/set-calendar",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/set-calendar/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/set-display-format",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/set-display-format/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/set-display-locale",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/set-display-locale/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/set-storage-format",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/set-storage-format/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/date/set-value",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/date/set-value/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/delete/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/get/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/get-binding",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/get-binding/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/get-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/get-content/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/get-parent",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/get-parent/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/get-raw-properties",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/get-raw-properties/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/group/ungroup",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/group/ungroup/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/group/wrap",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/group/wrap/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/content-controls/insert-after",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/insert-after/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/insert-before",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/insert-before/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/list/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/list-children",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/list-children/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/list-in-range",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/list-in-range/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/move",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/move/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/normalize-tag-payload",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/normalize-tag-payload/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/normalize-word-compatibility",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/normalize-word-compatibility/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/patch",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/patch/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/patch-raw-properties",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/patch-raw-properties/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/prepend-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/prepend-content/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/clone-item",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/clone-item/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/delete-item",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/delete-item/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/insert-item-after",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/insert-item-after/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/insert-item-before",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/insert-item-before/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/list-items",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/list-items/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/repeating-section/set-allow-insert-delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/repeating-section/set-allow-insert-delete/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/replace-content",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/replace-content/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/select-by-tag",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/select-by-tag/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/select-by-title",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/select-by-title/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/set-binding",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/set-binding/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/set-lock-mode",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/set-lock-mode/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/set-type",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/set-type/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/text/clear-value",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/text/clear-value/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/text/set-multiline",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/text/set-multiline/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/text/set-value",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/text/set-value/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/unwrap",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/unwrap/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/validate-word-compatibility",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/validate-word-compatibility/"
+    },
+    {
+      "source": "/document-api/reference/content-controls/wrap",
+      "kind": "v2",
+      "destination": "/document-api/reference/content-controls/wrap/"
+    },
+    {
+      "source": "/document-api/reference/core",
+      "kind": "v2",
+      "destination": "/document-api/reference/core/"
+    },
+    {
+      "source": "/document-api/reference/core/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/"
+    },
+    {
+      "source": "/document-api/reference/create/heading",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/heading/"
+    },
+    {
+      "source": "/document-api/reference/create/image",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/image/"
+    },
+    {
+      "source": "/document-api/reference/create/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/create/paragraph",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/paragraph/"
+    },
+    {
+      "source": "/document-api/reference/create/section-break",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/section-break/"
+    },
+    {
+      "source": "/document-api/reference/create/table",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/table/"
+    },
+    {
+      "source": "/document-api/reference/create/table-of-contents",
+      "kind": "v2",
+      "destination": "/document-api/reference/create/table-of-contents/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/get/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/insert/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/list/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/rebuild",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/rebuild/"
+    },
+    {
+      "source": "/document-api/reference/cross-refs/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/cross-refs/remove/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/parts/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/parts/create/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/parts/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/parts/get/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/parts/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/parts/list/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/parts/patch",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/parts/patch/"
+    },
+    {
+      "source": "/document-api/reference/custom-xml/parts/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/custom-xml/parts/remove/"
+    },
+    {
+      "source": "/document-api/reference/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/delete/"
+    },
+    {
+      "source": "/document-api/reference/diff",
+      "kind": "v2",
+      "destination": "/document-api/reference/diff/"
+    },
+    {
+      "source": "/document-api/reference/diff/apply",
+      "kind": "v2",
+      "destination": "/document-api/reference/diff/apply/"
+    },
+    {
+      "source": "/document-api/reference/diff/capture",
+      "kind": "v2",
+      "destination": "/document-api/reference/diff/capture/"
+    },
+    {
+      "source": "/document-api/reference/diff/compare",
+      "kind": "v2",
+      "destination": "/document-api/reference/diff/compare/"
+    },
+    {
+      "source": "/document-api/reference/diff/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/extract",
+      "kind": "v2",
+      "destination": "/document-api/reference/extract/"
+    },
+    {
+      "source": "/document-api/reference/fields",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/"
+    },
+    {
+      "source": "/document-api/reference/fields/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/get/"
+    },
+    {
+      "source": "/document-api/reference/fields/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/fields/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/insert/"
+    },
+    {
+      "source": "/document-api/reference/fields/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/list/"
+    },
+    {
+      "source": "/document-api/reference/fields/rebuild",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/rebuild/"
+    },
+    {
+      "source": "/document-api/reference/fields/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/fields/remove/"
+    },
+    {
+      "source": "/document-api/reference/find",
+      "kind": "v2",
+      "destination": "/document-api/reference/find/"
+    },
+    {
+      "source": "/document-api/reference/footnotes",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/configure",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/configure/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/get/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/footnotes/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/insert/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/list/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/remove/"
+    },
+    {
+      "source": "/document-api/reference/footnotes/update",
+      "kind": "v2",
+      "destination": "/document-api/reference/footnotes/update/"
+    },
+    {
+      "source": "/document-api/reference/format",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/"
+    },
+    {
+      "source": "/document-api/reference/format/apply",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/apply/"
+    },
+    {
+      "source": "/document-api/reference/format/b-cs",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/b-cs/"
+    },
+    {
+      "source": "/document-api/reference/format/bold",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/bold/"
+    },
+    {
+      "source": "/document-api/reference/format/border",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/border/"
+    },
+    {
+      "source": "/document-api/reference/format/caps",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/caps/"
+    },
+    {
+      "source": "/document-api/reference/format/char-scale",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/char-scale/"
+    },
+    {
+      "source": "/document-api/reference/format/color",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/color/"
+    },
+    {
+      "source": "/document-api/reference/format/contextual-alternates",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/contextual-alternates/"
+    },
+    {
+      "source": "/document-api/reference/format/cs",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/cs/"
+    },
+    {
+      "source": "/document-api/reference/format/dstrike",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/dstrike/"
+    },
+    {
+      "source": "/document-api/reference/format/east-asian-layout",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/east-asian-layout/"
+    },
+    {
+      "source": "/document-api/reference/format/em",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/em/"
+    },
+    {
+      "source": "/document-api/reference/format/emboss",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/emboss/"
+    },
+    {
+      "source": "/document-api/reference/format/fit-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/fit-text/"
+    },
+    {
+      "source": "/document-api/reference/format/font-family",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/font-family/"
+    },
+    {
+      "source": "/document-api/reference/format/font-size",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/font-size/"
+    },
+    {
+      "source": "/document-api/reference/format/font-size-cs",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/font-size-cs/"
+    },
+    {
+      "source": "/document-api/reference/format/highlight",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/highlight/"
+    },
+    {
+      "source": "/document-api/reference/format/i-cs",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/i-cs/"
+    },
+    {
+      "source": "/document-api/reference/format/imprint",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/imprint/"
+    },
+    {
+      "source": "/document-api/reference/format/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/format/italic",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/italic/"
+    },
+    {
+      "source": "/document-api/reference/format/kerning",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/kerning/"
+    },
+    {
+      "source": "/document-api/reference/format/lang",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/lang/"
+    },
+    {
+      "source": "/document-api/reference/format/letter-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/letter-spacing/"
+    },
+    {
+      "source": "/document-api/reference/format/ligatures",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/ligatures/"
+    },
+    {
+      "source": "/document-api/reference/format/num-form",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/num-form/"
+    },
+    {
+      "source": "/document-api/reference/format/num-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/num-spacing/"
+    },
+    {
+      "source": "/document-api/reference/format/o-math",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/o-math/"
+    },
+    {
+      "source": "/document-api/reference/format/outline",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/outline/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-alignment",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-alignment/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-all-tab-stops",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-all-tab-stops/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-border",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-border/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-direction",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-direction/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-indentation",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-indentation/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-shading",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-shading/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-spacing/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/clear-tab-stop",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/clear-tab-stop/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/reset-direct-formatting",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/reset-direct-formatting/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-alignment",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-alignment/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-border",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-border/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-direction",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-direction/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-flow-options",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-flow-options/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-indentation",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-indentation/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-keep-options",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-keep-options/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-numbering",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-numbering/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-outline-level",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-outline-level/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-shading",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-shading/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-spacing/"
+    },
+    {
+      "source": "/document-api/reference/format/paragraph/set-tab-stop",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/paragraph/set-tab-stop/"
+    },
+    {
+      "source": "/document-api/reference/format/position",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/position/"
+    },
+    {
+      "source": "/document-api/reference/format/r-fonts",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/r-fonts/"
+    },
+    {
+      "source": "/document-api/reference/format/r-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/r-style/"
+    },
+    {
+      "source": "/document-api/reference/format/rtl",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/rtl/"
+    },
+    {
+      "source": "/document-api/reference/format/shading",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/shading/"
+    },
+    {
+      "source": "/document-api/reference/format/shadow",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/shadow/"
+    },
+    {
+      "source": "/document-api/reference/format/small-caps",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/small-caps/"
+    },
+    {
+      "source": "/document-api/reference/format/snap-to-grid",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/snap-to-grid/"
+    },
+    {
+      "source": "/document-api/reference/format/spec-vanish",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/spec-vanish/"
+    },
+    {
+      "source": "/document-api/reference/format/strike",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/strike/"
+    },
+    {
+      "source": "/document-api/reference/format/stylistic-sets",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/stylistic-sets/"
+    },
+    {
+      "source": "/document-api/reference/format/underline",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/underline/"
+    },
+    {
+      "source": "/document-api/reference/format/vanish",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/vanish/"
+    },
+    {
+      "source": "/document-api/reference/format/vert-align",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/vert-align/"
+    },
+    {
+      "source": "/document-api/reference/format/web-hidden",
+      "kind": "v2",
+      "destination": "/document-api/reference/format/web-hidden/"
+    },
+    {
+      "source": "/document-api/reference/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/get/"
+    },
+    {
+      "source": "/document-api/reference/get-html",
+      "kind": "v2",
+      "destination": "/document-api/reference/get-html/"
+    },
+    {
+      "source": "/document-api/reference/get-markdown",
+      "kind": "v2",
+      "destination": "/document-api/reference/get-markdown/"
+    },
+    {
+      "source": "/document-api/reference/get-node",
+      "kind": "v2",
+      "destination": "/document-api/reference/get-node/"
+    },
+    {
+      "source": "/document-api/reference/get-node-by-id",
+      "kind": "v2",
+      "destination": "/document-api/reference/get-node-by-id/"
+    },
+    {
+      "source": "/document-api/reference/get-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/get-text/"
+    },
+    {
+      "source": "/document-api/reference/header-footers",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/get/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/header-footers/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/list/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/parts/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/parts/create/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/parts/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/parts/delete/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/parts/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/parts/list/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/refs/clear",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/refs/clear/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/refs/set",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/refs/set/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/refs/set-linked-to-previous",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/refs/set-linked-to-previous/"
+    },
+    {
+      "source": "/document-api/reference/header-footers/resolve",
+      "kind": "v2",
+      "destination": "/document-api/reference/header-footers/resolve/"
+    },
+    {
+      "source": "/document-api/reference/history",
+      "kind": "v2",
+      "destination": "/document-api/reference/history/"
+    },
+    {
+      "source": "/document-api/reference/history/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/history/get/"
+    },
+    {
+      "source": "/document-api/reference/history/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/history/redo",
+      "kind": "v2",
+      "destination": "/document-api/reference/history/redo/"
+    },
+    {
+      "source": "/document-api/reference/history/undo",
+      "kind": "v2",
+      "destination": "/document-api/reference/history/undo/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/get/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/insert/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/list/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/patch",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/patch/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/remove/"
+    },
+    {
+      "source": "/document-api/reference/hyperlinks/wrap",
+      "kind": "v2",
+      "destination": "/document-api/reference/hyperlinks/wrap/"
+    },
+    {
+      "source": "/document-api/reference/images",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/"
+    },
+    {
+      "source": "/document-api/reference/images/convert-to-floating",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/convert-to-floating/"
+    },
+    {
+      "source": "/document-api/reference/images/convert-to-inline",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/convert-to-inline/"
+    },
+    {
+      "source": "/document-api/reference/images/crop",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/crop/"
+    },
+    {
+      "source": "/document-api/reference/images/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/delete/"
+    },
+    {
+      "source": "/document-api/reference/images/flip",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/flip/"
+    },
+    {
+      "source": "/document-api/reference/images/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/get/"
+    },
+    {
+      "source": "/document-api/reference/images/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/images/insert-caption",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/insert-caption/"
+    },
+    {
+      "source": "/document-api/reference/images/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/list/"
+    },
+    {
+      "source": "/document-api/reference/images/move",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/move/"
+    },
+    {
+      "source": "/document-api/reference/images/remove-caption",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/remove-caption/"
+    },
+    {
+      "source": "/document-api/reference/images/replace-source",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/replace-source/"
+    },
+    {
+      "source": "/document-api/reference/images/reset-crop",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/reset-crop/"
+    },
+    {
+      "source": "/document-api/reference/images/rotate",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/rotate/"
+    },
+    {
+      "source": "/document-api/reference/images/scale",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/scale/"
+    },
+    {
+      "source": "/document-api/reference/images/set-alt-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-alt-text/"
+    },
+    {
+      "source": "/document-api/reference/images/set-anchor-options",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-anchor-options/"
+    },
+    {
+      "source": "/document-api/reference/images/set-decorative",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-decorative/"
+    },
+    {
+      "source": "/document-api/reference/images/set-hyperlink",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-hyperlink/"
+    },
+    {
+      "source": "/document-api/reference/images/set-lock-aspect-ratio",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-lock-aspect-ratio/"
+    },
+    {
+      "source": "/document-api/reference/images/set-name",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-name/"
+    },
+    {
+      "source": "/document-api/reference/images/set-position",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-position/"
+    },
+    {
+      "source": "/document-api/reference/images/set-size",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-size/"
+    },
+    {
+      "source": "/document-api/reference/images/set-wrap-distances",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-wrap-distances/"
+    },
+    {
+      "source": "/document-api/reference/images/set-wrap-side",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-wrap-side/"
+    },
+    {
+      "source": "/document-api/reference/images/set-wrap-type",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-wrap-type/"
+    },
+    {
+      "source": "/document-api/reference/images/set-z-order",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/set-z-order/"
+    },
+    {
+      "source": "/document-api/reference/images/update-caption",
+      "kind": "v2",
+      "destination": "/document-api/reference/images/update-caption/"
+    },
+    {
+      "source": "/document-api/reference/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/configure",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/entries-get",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/entries-insert",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/entries-list",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/entries-remove",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/entries-update",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/get",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/insert",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/list",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/rebuild",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/index/remove",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/info",
+      "kind": "v2",
+      "destination": "/document-api/reference/info/"
+    },
+    {
+      "source": "/document-api/reference/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/insert/"
+    },
+    {
+      "source": "/document-api/reference/lists",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/"
+    },
+    {
+      "source": "/document-api/reference/lists/apply-preset",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/apply-preset/"
+    },
+    {
+      "source": "/document-api/reference/lists/apply-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/apply-style/"
+    },
+    {
+      "source": "/document-api/reference/lists/apply-template",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/apply-template/"
+    },
+    {
+      "source": "/document-api/reference/lists/attach",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/attach/"
+    },
+    {
+      "source": "/document-api/reference/lists/can-continue-previous",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/can-continue-previous/"
+    },
+    {
+      "source": "/document-api/reference/lists/can-join",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/can-join/"
+    },
+    {
+      "source": "/document-api/reference/lists/capture-template",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/capture-template/"
+    },
+    {
+      "source": "/document-api/reference/lists/clear-level-overrides",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/clear-level-overrides/"
+    },
+    {
+      "source": "/document-api/reference/lists/continue-previous",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/continue-previous/"
+    },
+    {
+      "source": "/document-api/reference/lists/convert-to-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/convert-to-text/"
+    },
+    {
+      "source": "/document-api/reference/lists/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/create/"
+    },
+    {
+      "source": "/document-api/reference/lists/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/delete/"
+    },
+    {
+      "source": "/document-api/reference/lists/detach",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/detach/"
+    },
+    {
+      "source": "/document-api/reference/lists/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/get/"
+    },
+    {
+      "source": "/document-api/reference/lists/get-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/get-style/"
+    },
+    {
+      "source": "/document-api/reference/lists/indent",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/indent/"
+    },
+    {
+      "source": "/document-api/reference/lists/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/lists/insert",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/insert/"
+    },
+    {
+      "source": "/document-api/reference/lists/join",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/join/"
+    },
+    {
+      "source": "/document-api/reference/lists/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/list/"
+    },
+    {
+      "source": "/document-api/reference/lists/merge",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/merge/"
+    },
+    {
+      "source": "/document-api/reference/lists/outdent",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/outdent/"
+    },
+    {
+      "source": "/document-api/reference/lists/restart-at",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/restart-at/"
+    },
+    {
+      "source": "/document-api/reference/lists/separate",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/separate/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-alignment",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-alignment/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-bullet",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-bullet/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-indents",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-indents/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-layout",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-layout/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-marker-font",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-marker-font/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-number-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-number-style/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-numbering",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-numbering/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-picture-bullet",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-picture-bullet/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-restart",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-restart/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-start",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-start/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-text/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-level-trailing-character",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-level-trailing-character/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-type",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-type/"
+    },
+    {
+      "source": "/document-api/reference/lists/set-value",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/set-value/"
+    },
+    {
+      "source": "/document-api/reference/lists/split",
+      "kind": "v2",
+      "destination": "/document-api/reference/lists/split/"
+    },
+    {
+      "source": "/document-api/reference/markdown-to-fragment",
+      "kind": "v2",
+      "destination": "/document-api/reference/markdown-to-fragment/"
+    },
+    {
+      "source": "/document-api/reference/metadata",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/"
+    },
+    {
+      "source": "/document-api/reference/metadata/attach",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/attach/"
+    },
+    {
+      "source": "/document-api/reference/metadata/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/get/"
+    },
+    {
+      "source": "/document-api/reference/metadata/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/metadata/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/list/"
+    },
+    {
+      "source": "/document-api/reference/metadata/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/remove/"
+    },
+    {
+      "source": "/document-api/reference/metadata/resolve",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/resolve/"
+    },
+    {
+      "source": "/document-api/reference/metadata/update",
+      "kind": "v2",
+      "destination": "/document-api/reference/metadata/update/"
+    },
+    {
+      "source": "/document-api/reference/mutations",
+      "kind": "v2",
+      "destination": "/document-api/reference/mutations/"
+    },
+    {
+      "source": "/document-api/reference/mutations/apply",
+      "kind": "v2",
+      "destination": "/document-api/reference/mutations/apply/"
+    },
+    {
+      "source": "/document-api/reference/mutations/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/mutations/plan-execute",
+      "kind": "v2",
+      "destination": "/document-api/reference/mutations/plan-execute/"
+    },
+    {
+      "source": "/document-api/reference/mutations/preview",
+      "kind": "v2",
+      "destination": "/document-api/reference/mutations/preview/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/create",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/create/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/get/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/list/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/remove/"
+    },
+    {
+      "source": "/document-api/reference/permission-ranges/update-principal",
+      "kind": "v2",
+      "destination": "/document-api/reference/permission-ranges/update-principal/"
+    },
+    {
+      "source": "/document-api/reference/protection",
+      "kind": "v2",
+      "destination": "/document-api/reference/protection/"
+    },
+    {
+      "source": "/document-api/reference/protection/clear-editing-restriction",
+      "kind": "v2",
+      "destination": "/document-api/reference/protection/clear-editing-restriction/"
+    },
+    {
+      "source": "/document-api/reference/protection/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/protection/get/"
+    },
+    {
+      "source": "/document-api/reference/protection/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/protection/set-editing-restriction",
+      "kind": "v2",
+      "destination": "/document-api/reference/protection/set-editing-restriction/"
+    },
+    {
+      "source": "/document-api/reference/query",
+      "kind": "v2",
+      "destination": "/document-api/reference/query/"
+    },
+    {
+      "source": "/document-api/reference/query/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/query/match",
+      "kind": "v2",
+      "destination": "/document-api/reference/query/match/"
+    },
+    {
+      "source": "/document-api/reference/ranges",
+      "kind": "v2",
+      "destination": "/document-api/reference/ranges/"
+    },
+    {
+      "source": "/document-api/reference/ranges/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/ranges/resolve",
+      "kind": "v2",
+      "destination": "/document-api/reference/ranges/resolve/"
+    },
+    {
+      "source": "/document-api/reference/replace",
+      "kind": "v2",
+      "destination": "/document-api/reference/replace/"
+    },
+    {
+      "source": "/document-api/reference/sections",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/"
+    },
+    {
+      "source": "/document-api/reference/sections/clear-header-footer-ref",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/clear-header-footer-ref/"
+    },
+    {
+      "source": "/document-api/reference/sections/clear-page-borders",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/clear-page-borders/"
+    },
+    {
+      "source": "/document-api/reference/sections/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/get/"
+    },
+    {
+      "source": "/document-api/reference/sections/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/sections/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/list/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-break-type",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-break-type/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-columns",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-columns/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-header-footer-margins",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-header-footer-margins/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-header-footer-ref",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-header-footer-ref/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-line-numbering",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-line-numbering/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-link-to-previous",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-link-to-previous/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-odd-even-headers-footers",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-odd-even-headers-footers/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-page-borders",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-page-borders/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-page-margins",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-page-margins/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-page-numbering",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-page-numbering/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-page-setup",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-page-setup/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-section-direction",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-section-direction/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-title-page",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-title-page/"
+    },
+    {
+      "source": "/document-api/reference/sections/set-vertical-align",
+      "kind": "v2",
+      "destination": "/document-api/reference/sections/set-vertical-align/"
+    },
+    {
+      "source": "/document-api/reference/selection",
+      "kind": "v2",
+      "destination": "/document-api/reference/selection/"
+    },
+    {
+      "source": "/document-api/reference/selection/current",
+      "kind": "v2",
+      "destination": "/document-api/reference/selection/current/"
+    },
+    {
+      "source": "/document-api/reference/selection/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/styles",
+      "kind": "v2",
+      "destination": "/document-api/reference/styles/"
+    },
+    {
+      "source": "/document-api/reference/styles/apply",
+      "kind": "v2",
+      "destination": "/document-api/reference/styles/apply/"
+    },
+    {
+      "source": "/document-api/reference/styles/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/styles/paragraph",
+      "kind": "v2",
+      "destination": "/document-api/reference/styles/paragraph/"
+    },
+    {
+      "source": "/document-api/reference/styles/paragraph/clear-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/styles/paragraph/clear-style/"
+    },
+    {
+      "source": "/document-api/reference/styles/paragraph/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/styles/paragraph/set-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/styles/paragraph/set-style/"
+    },
+    {
+      "source": "/document-api/reference/tables",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/"
+    },
+    {
+      "source": "/document-api/reference/tables/apply-border-preset",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/apply-border-preset/"
+    },
+    {
+      "source": "/document-api/reference/tables/apply-preset",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/apply-preset/"
+    },
+    {
+      "source": "/document-api/reference/tables/apply-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/apply-style/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-border",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-border/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-cell-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-cell-spacing/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-contents",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-contents/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-default-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-default-style/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-shading",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-shading/"
+    },
+    {
+      "source": "/document-api/reference/tables/clear-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/clear-style/"
+    },
+    {
+      "source": "/document-api/reference/tables/convert-from-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/convert-from-text/"
+    },
+    {
+      "source": "/document-api/reference/tables/convert-to-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/convert-to-text/"
+    },
+    {
+      "source": "/document-api/reference/tables/delete",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/delete/"
+    },
+    {
+      "source": "/document-api/reference/tables/delete-cell",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/delete-cell/"
+    },
+    {
+      "source": "/document-api/reference/tables/delete-column",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/delete-column/"
+    },
+    {
+      "source": "/document-api/reference/tables/delete-row",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/delete-row/"
+    },
+    {
+      "source": "/document-api/reference/tables/distribute-columns",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/distribute-columns/"
+    },
+    {
+      "source": "/document-api/reference/tables/distribute-rows",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/distribute-rows/"
+    },
+    {
+      "source": "/document-api/reference/tables/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/get/"
+    },
+    {
+      "source": "/document-api/reference/tables/get-cells",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/get-cells/"
+    },
+    {
+      "source": "/document-api/reference/tables/get-properties",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/get-properties/"
+    },
+    {
+      "source": "/document-api/reference/tables/get-styles",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/get-styles/"
+    },
+    {
+      "source": "/document-api/reference/tables/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/tables/insert-cell",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/insert-cell/"
+    },
+    {
+      "source": "/document-api/reference/tables/insert-column",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/insert-column/"
+    },
+    {
+      "source": "/document-api/reference/tables/insert-row",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/insert-row/"
+    },
+    {
+      "source": "/document-api/reference/tables/merge-cells",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/merge-cells/"
+    },
+    {
+      "source": "/document-api/reference/tables/move",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/move/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-alt-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-alt-text/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-border",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-border/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-borders",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-borders/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-cell-padding",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-cell-padding/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-cell-properties",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-cell-properties/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-cell-spacing",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-cell-spacing/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-cell-text",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-cell-text/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-column-width",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-column-width/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-default-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-default-style/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-layout",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-layout/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-row-height",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-row-height/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-row-options",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-row-options/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-shading",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-shading/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-style",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-style/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-style-option",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-style-option/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-table-options",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-table-options/"
+    },
+    {
+      "source": "/document-api/reference/tables/set-table-padding",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/set-table-padding/"
+    },
+    {
+      "source": "/document-api/reference/tables/sort",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/sort/"
+    },
+    {
+      "source": "/document-api/reference/tables/split",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/split/"
+    },
+    {
+      "source": "/document-api/reference/tables/split-cell",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/split-cell/"
+    },
+    {
+      "source": "/document-api/reference/tables/unmerge-cells",
+      "kind": "v2",
+      "destination": "/document-api/reference/tables/unmerge-cells/"
+    },
+    {
+      "source": "/document-api/reference/templates",
+      "kind": "v2",
+      "destination": "/document-api/reference/templates/"
+    },
+    {
+      "source": "/document-api/reference/templates/apply",
+      "kind": "v2",
+      "destination": "/document-api/reference/templates/apply/"
+    },
+    {
+      "source": "/document-api/reference/templates/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/toc",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/"
+    },
+    {
+      "source": "/document-api/reference/toc/configure",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/configure/"
+    },
+    {
+      "source": "/document-api/reference/toc/edit-entry",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/edit-entry/"
+    },
+    {
+      "source": "/document-api/reference/toc/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/get/"
+    },
+    {
+      "source": "/document-api/reference/toc/get-entry",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/get-entry/"
+    },
+    {
+      "source": "/document-api/reference/toc/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/toc/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/list/"
+    },
+    {
+      "source": "/document-api/reference/toc/list-entries",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/list-entries/"
+    },
+    {
+      "source": "/document-api/reference/toc/mark-entry",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/mark-entry/"
+    },
+    {
+      "source": "/document-api/reference/toc/remove",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/remove/"
+    },
+    {
+      "source": "/document-api/reference/toc/unmark-entry",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/unmark-entry/"
+    },
+    {
+      "source": "/document-api/reference/toc/update",
+      "kind": "v2",
+      "destination": "/document-api/reference/toc/update/"
+    },
+    {
+      "source": "/document-api/reference/track-changes",
+      "kind": "v2",
+      "destination": "/document-api/reference/track-changes/"
+    },
+    {
+      "source": "/document-api/reference/track-changes/decide",
+      "kind": "v2",
+      "destination": "/document-api/reference/track-changes/decide/"
+    },
+    {
+      "source": "/document-api/reference/track-changes/get",
+      "kind": "v2",
+      "destination": "/document-api/reference/track-changes/get/"
+    },
+    {
+      "source": "/document-api/reference/track-changes/index",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-api/reference/track-changes/list",
+      "kind": "v2",
+      "destination": "/document-api/reference/track-changes/list/"
+    },
+    {
+      "source": "/document-engine",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/best-practices",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/debugging",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/eval-results",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/integrations",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/llm-tools",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/mcp-server",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/providers",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/ai-agents/skills",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/cli",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/diffing",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/mcp",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/sdk-diffing",
+      "kind": "archive"
+    },
+    {
+      "source": "/document-engine/sdks",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor",
+      "kind": "v2",
+      "destination": "/editor/"
+    },
+    {
+      "source": "/editor/built-in-ui",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/comments",
+      "kind": "v2",
+      "destination": "/editor/built-in-ui/comments/"
+    },
+    {
+      "source": "/editor/built-in-ui/context-menu",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/links",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/overview",
+      "kind": "v2",
+      "destination": "/editor/built-in-ui/overview/"
+    },
+    {
+      "source": "/editor/built-in-ui/pdf",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/built-in",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/track-changes",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/built-in-ui/whiteboard",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/collaboration",
+      "kind": "v2",
+      "destination": "/editor/collaboration/"
+    },
+    {
+      "source": "/editor/collaboration/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/collaboration/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/collaboration/quickstart",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/collaboration/storage",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/collaboration/upgrade-to-collaboration",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/api-reference",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/comments",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/comments/"
+    },
+    {
+      "source": "/editor/custom-ui/content-controls",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/content-controls/"
+    },
+    {
+      "source": "/editor/custom-ui/context-menu",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/controller-setup",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/controller-setup/"
+    },
+    {
+      "source": "/editor/custom-ui/custom-commands",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/custom-commands/"
+    },
+    {
+      "source": "/editor/custom-ui/document-control",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/navigation",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/overview",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/overview/"
+    },
+    {
+      "source": "/editor/custom-ui/react-setup",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/react-setup/"
+    },
+    {
+      "source": "/editor/custom-ui/selection-and-viewport",
+      "kind": "v2",
+      "destination": "/editor/custom-ui/selection-and-viewport/"
+    },
+    {
+      "source": "/editor/custom-ui/toolbar-and-commands",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/custom-ui/track-changes",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/pdf",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/pdf/whiteboard",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/proofing/custom-provider",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/proofing/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/react",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/react/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/react/methods",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/react/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/react/types",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/spell-check",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/spell-check/custom-provider",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/spell-check/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/events",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/import-export",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/methods",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/superdoc/surfaces",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/theming",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/theming/css-variable-migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/theming/custom-themes",
+      "kind": "archive"
+    },
+    {
+      "source": "/editor/theming/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/block-node",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/bold",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/bookmarks",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/bullet-list",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/color",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/comments",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/content-block",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/context-menu",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/custom-selection",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/document",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/document-index",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/document-section",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/dropcursor",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/field-annotation",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/font-family",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/font-size",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/footnote",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/format-commands",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/gapcursor",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/heading",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/highlight",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/history",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/image",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/italic",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/line-break",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/line-height",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/link",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/linked-styles",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/list-item",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/mention",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/noderesizer",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/ordered-list",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/page-number",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/paragraph",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/permission-ranges",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/placeholder",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/popover-plugin",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/run-item",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/search",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/shape-container",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/shape-textbox",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/slash-menu",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/strike",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/structured-content",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/tab",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/table",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/table-cell",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/table-header",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/table-of-contents",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/table-row",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/text-align",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/text-indent",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/text-style",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/text-transform",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/track-changes",
+      "kind": "archive"
+    },
+    {
+      "source": "/extensions/underline",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/ai",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/ai-agents",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/ai-ready",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/fonts",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/angular",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/laravel",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/nextjs",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/nuxt",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/react",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/solid",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/vanilla-js",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/frameworks/vue",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/import-export",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/installation",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/introduction",
+      "kind": "archive"
+    },
+    {
+      "source": "/getting-started/quickstart",
+      "kind": "v2",
+      "destination": "/editor/quickstart/",
+      "reason": "The V1 quickstart is the V2 editor quickstart. Confirmed, not inferred: it was hand-mapped in the V2 redirect config before this registry existed."
+    },
+    {
+      "source": "/getting-started/theming",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/accessibility",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/advanced",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/collaboration",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/components",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/field-annotation",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/integration",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/modes-roles",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/modules",
+      "kind": "archive"
+    },
+    {
+      "source": "/guide/quick-start",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/breaking-changes-v1",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration/hocuspocus",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration/liveblocks",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration/self-hosted-overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration/superdoc-yjs",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/collaboration/yhub",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general/accessibility",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general/custom-proofing-provider",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general/custom-themes",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general/proofing",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/general/security",
+      "kind": "v2",
+      "destination": "/resources/security/"
+    },
+    {
+      "source": "/guides/general/storage",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration/breaking-changes-v1",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration/css-variables",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration/document-api",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration/prosemirror",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/migration/typescript-migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/guides/typescript-migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/backend",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/client",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/cloud/liveblocks",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/hocuspocus",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/pdf",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/toolbar",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/toolbar/built-in",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/toolbar/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/modules/whiteboard",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources/accessibility",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources/docx-engine-license",
+      "kind": "v2",
+      "destination": "/resources/docx-engine-license/"
+    },
+    {
+      "source": "/resources/guides",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources/license",
+      "kind": "v2",
+      "destination": "/resources/license/"
+    },
+    {
+      "source": "/resources/migration",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources/security",
+      "kind": "v2",
+      "destination": "/resources/security/"
+    },
+    {
+      "source": "/resources/storage",
+      "kind": "archive"
+    },
+    {
+      "source": "/resources/telemetry",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign/api-reference",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign/backend",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign/introduction",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/esign/quickstart",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/overview",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/template-builder",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/template-builder/api-reference",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/template-builder/configuration",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/template-builder/introduction",
+      "kind": "archive"
+    },
+    {
+      "source": "/solutions/template-builder/quickstart",
+      "kind": "archive"
+    }
+  ]
+}

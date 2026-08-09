@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title description">
+  <title id="title">A text query returns document-native targets</title>
+  <desc id="description">Two highlighted occurrences of Confidential Information in a document become two query result items. Each item includes a readable snippet, a direct target, and a revision-scoped reference.</desc>
+  <rect width="960" height="360" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="48" y="36" width="348" height="288" rx="10" fill="#ffffff" stroke="#d9dbe1" stroke-width="2"/>
+    <text x="76" y="72" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">OPEN DOCX</text>
+    <rect x="76" y="98" width="272" height="12" rx="4" fill="#dfe3ea"/>
+    <rect x="76" y="124" width="220" height="12" rx="4" fill="#dfe3ea"/>
+    <rect x="76" y="150" width="268" height="28" rx="5" fill="#eef4ff" stroke="#7da2ff"/>
+    <text x="88" y="169" font-size="14" font-weight="700" fill="#0f44cc">Confidential Information</text>
+    <rect x="76" y="194" width="242" height="12" rx="4" fill="#dfe3ea"/>
+    <rect x="76" y="220" width="268" height="28" rx="5" fill="#eef4ff" stroke="#7da2ff"/>
+    <text x="88" y="239" font-size="14" font-weight="700" fill="#0f44cc">Confidential Information</text>
+    <rect x="76" y="264" width="254" height="12" rx="4" fill="#dfe3ea"/>
+    <rect x="76" y="290" width="190" height="12" rx="4" fill="#dfe3ea"/>
+
+    <path d="M424 180h72" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m484 170 14 10-14 10" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <text x="460" y="157" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">query.match()</text>
+
+    <rect x="526" y="36" width="386" height="288" rx="10" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="554" y="72" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#0f44cc">RESULT · 2 ITEMS</text>
+
+    <rect x="554" y="94" width="330" height="90" rx="8" fill="#eef4ff"/>
+    <text x="574" y="120" font-size="14" font-weight="700" fill="#16181d">Item 1</text>
+    <text x="574" y="145" font-size="13" fill="#5f636c">snippet: “Confidential Information…”</text>
+    <text x="574" y="166" font-family="JetBrains Mono, monospace" font-size="12" fill="#0f44cc">target · handle.ref</text>
+
+    <rect x="554" y="200" width="330" height="90" rx="8" fill="#eef4ff"/>
+    <text x="574" y="226" font-size="14" font-weight="700" fill="#16181d">Item 2</text>
+    <text x="574" y="251" font-size="13" fill="#5f636c">snippet: “Confidential Information…”</text>
+    <text x="574" y="272" font-family="JetBrains Mono, monospace" font-size="12" fill="#0f44cc">target · handle.ref</text>
+
+    <text x="719" y="310" text-anchor="middle" font-size="13" fill="#5f636c">Targets belong to the evaluated document revision.</text>
+  </g>
+</svg>

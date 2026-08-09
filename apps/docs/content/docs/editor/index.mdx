@@ -1,0 +1,63 @@
+---
+title: Editor overview
+navTitle: Overview
+description: Embed SuperDoc v2 in a web application and keep DOCX as the document format.
+---
+
+Use the Editor when a person needs to read, edit, comment on, or review a DOCX file inside your application.
+
+SuperDoc v2 is selected by package version, and `latest` is the v2 line, so `pnpm add superdoc` installs it. There is no runtime setting that switches an installed editor between v1 and v2.
+
+## Mount the Editor
+
+SuperDoc v2 has one stable browser mounting API: `SuperDoc` from `superdoc`. Use it directly in vanilla JavaScript, or
+bind its creation and cleanup to your framework's component lifecycle.
+
+| Application                             | Start with                                       | What it owns                                            |
+| --------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| Vanilla JavaScript or another framework | [Editor quickstart](/editor/quickstart)          | Editor creation, configuration, lifecycle, and export   |
+| React                                   | [React guide](/editor/frameworks/react)          | Mount timing, readiness state, cleanup, and export      |
+| React with application-owned controls   | [React custom UI](/editor/custom-ui/react-setup) | Reactive toolbar and panel state over the same instance |
+
+`superdoc/ui/react` provides hooks for custom controls. It is part of the `superdoc` package and does not mount a second
+Editor.
+
+After mounting the Editor, decide who owns the controls around the document. [Choose your editor interface](/editor/ui/choose-an-interface) compares the built-in UI, a configured built-in UI, and application-owned controls.
+
+## What v2 changes
+
+The v2 engine edits the DOCX package directly. It does not convert the document to HTML and back.
+
+For a browser integration:
+
+- Wait for editor readiness before calling methods that depend on the open document.
+- Use document modes to control whether a person views, edits, or suggests changes.
+- Use the Document API when application code needs to inspect or change document content.
+- Export or save through the `SuperDoc` instance.
+
+## The editor lifecycle
+
+A browser integration follows five steps:
+
+1. Install the public package and its styles.
+2. Give SuperDoc a DOCX file and a mount element.
+3. Wait for `onReady` before changing modes or using document-dependent methods.
+4. Let the person work in the editor or call the Document API against the open document.
+5. Export the result and call `destroy()` when the editor is no longer needed.
+
+The [Editor quickstart](/editor/quickstart) implements this lifecycle with a real DOCX file and a direct edit.
+
+## Where the Document API fits
+
+The Editor is a browser host for the document engine. The Document API is the shared contract for querying content, identifying targets, applying mutations, and inspecting receipts.
+
+Use editor controls for direct human interaction. Use the Document API when application code needs to make an explicit document change. Both operate on the same open document state.
+
+Start with the [Document API mental model](/document-api/mental-model) when application code needs to edit the document.
+
+## What to build next
+
+- [Mount the editor and export an edit](/editor/quickstart).
+- [Choose the built-in UI or custom controls](/editor/ui/choose-an-interface).
+- [Understand how SuperDoc preserves DOCX meaning](/start/how-superdoc-works).
+- [Learn the Document API operation lifecycle](/document-api/mental-model).

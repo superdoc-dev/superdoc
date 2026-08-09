@@ -1,0 +1,16 @@
+{
+  "pageMoves": [
+    {
+      "source": "/agents/quickstart/",
+      "destination": "/agents/build/build-an-agent/",
+      "reason": "The agent setup now starts with the supported SDK toolkit."
+    },
+    {
+      "source": "/editor/platform/security-and-privacy/",
+      "destination": "/editor/platform/secure-integration/",
+      "reason": "The guide now uses a title that distinguishes integration security from SuperDoc trust and compliance information."
+    }
+  ],
+  "redirects": [],
+  "retiredRoutes": []
+}

@@ -1,0 +1,27 @@
+---
+title: Build a responsive Editor layout
+navTitle: Layout
+description: Fit the document to its container, adapt built-in chrome, and refit after fullscreen changes.
+---
+
+Responsive Editor layouts have three independent concerns: the document scale, the available toolbar width, and whether the document scrolls inside a fixed-height host. Configure each explicitly.
+
+## Build the shell
+
+Request fullscreen on an element that contains the toolbar, the fullscreen button, and the Editor:
+
+<include>../../../../snippets/editor/responsive-built-in.html</include>
+
+## Fit to the container
+
+Configure fit-to-width and container-aware chrome, then refit after the browser enters or exits fullscreen:
+
+<include>../../../../snippets/editor/responsive-built-in.ts</include>
+
+`zoom.mode: 'fit-width'` continuously follows the available document width. The `min`, `max`, and `padding` values constrain that policy. Calling `setZoom()` switches to manual mode; call `setZoomMode('fit-width')` to resume automatic fitting.
+
+`responsiveToContainer` measures the toolbar's container rather than the browser window. Lower-priority controls leave the visible row when space becomes tight, which is the default and needs no setting. `comments.displayMode: 'auto'` lets the review UI move between the sidebar and a compact inline presentation.
+
+Set `contained: true` only when the host has a deliberate fixed height and should own an internal scroll region. Leave it off when the document should expand with the page. Avoid nesting the Editor inside another horizontal scroller.
+
+The Fullscreen API is browser-owned, so the application must provide the button and handle rejected fullscreen requests where required by its product. The explicit `fullscreenchange` refit prevents the document from keeping dimensions calculated for the previous viewport.

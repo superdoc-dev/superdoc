@@ -1,0 +1,39 @@
+---
+title: Build contextual table controls
+navTitle: Tables
+description: Enable application-owned table actions from the current cell and explain why an action is unavailable.
+---
+
+Table commands depend on the current Editor selection. Use `ui.tables` to read the active table context and `ui.commands` to run actions against it.
+
+Complete [Custom UI controller setup](/editor/custom-ui/controller-setup) first. This example expects `/contract.docx` to contain a table.
+
+## Add the controls
+
+Create two table actions, context output, status output, and an Editor container:
+
+<include>../../../../snippets/editor/custom-table-controls.html</include>
+
+## Bind actions to table context
+
+Read the Editor's controller, `superdoc.ui`, after the Editor is ready:
+
+<include>../../../../snippets/editor/custom-table-controls.ts</include>
+
+The example does not construct table locators. The controller resolves the enclosing table, row, column, and cell from the live selection. It then builds the Document API input for each command.
+
+## Render command state, not assumptions
+
+Each table command reports whether it is supported and enabled. Outside a table, contextual actions fail closed with `table-context-unavailable`. In viewing mode, mutations report `document-readonly`.
+
+Use `getState()` for the initial render and `observe()` for later selection, mode, and capability changes. Still inspect the result from `executeAsync()`. Context can change between rendering a button and clicking it.
+
+The routed table command family includes inserting or deleting rows and columns, deleting a table, merging cells, splitting a cell, and removing borders. Add only the controls your workflow needs. Do not render every catalog command as a toolbar.
+
+## Keep context tied to selection
+
+`ui.tables.getContext()` returns the current table ID, row and column indices, cell ID, and dimensions when the host can resolve them. Treat that snapshot as presentation state. Do not cache it as a durable mutation target or derive table identity from painted DOM attributes.
+
+Verify the workflow by placing the caret in a table, adding a row, deleting a row, and exporting the DOCX. Outside the table, both buttons should disable with a contextual reason.
+
+Use the Document API tables reference when application code already has an explicit table target or needs an operation that is not selection-driven.

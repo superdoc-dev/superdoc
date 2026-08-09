@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# Git passes the message file relative to the repository top level (usually
+# .git/COMMIT_EDITMSG), so absolutize it before leaving that directory. The cd
+# then makes the pathspec below and commitlint's config lookup work the same in
+# an Orbit checkout (superdoc/public) and in the exported repository (the root).
+msg="$1"
+case "$msg" in /*) ;; *) msg="$PWD/$msg" ;; esac
+cd "$(dirname "$0")/.."
+export PATH="$PWD/node_modules/.bin:$PATH"
+# Only commits touching this tree must follow its conventional-commit policy;
+# in Orbit, commits elsewhere in the monorepo are out of scope. No diff-filter:
+# a delete-only commit must be linted too, and ACMR would hide it.
+if git diff --cached --name-only -- . | grep -q .; then
+  commitlint --edit "$msg"
+fi

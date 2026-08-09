@@ -1,0 +1,123 @@
+---
+title: Editor quickstart
+navTitle: Quickstart
+description: Open a real DOCX in the browser, edit it, and export the result.
+---
+
+Use the browser editor when a person needs to read or change a DOCX file inside your application.
+
+By the end you will have opened a real DOCX, made an edit, exported it, and reopened the result in Word or SuperDoc. This guide uses a sample non-disclosure agreement, a small synthetic document with headings, body text, and a bulleted list so you can see how faithfully formatting survives the round trip. Any DOCX works.
+
+<FileDownload
+  href='/fixtures/sample-nda.docx'
+  label='Download the sample document'
+  description='Synthetic agreement with headings, paragraphs, and a list'
+  fileType='DOCX'
+/>
+
+Want to try SuperDoc first? Open the live [document modes demo](/editor/document-modes) in your browser.
+
+## 1. Create a project and install the editor
+
+Start from any bundler-based setup. A minimal one:
+
+```bash
+pnpm create vite@latest superdoc-quickstart --template vanilla-ts
+cd superdoc-quickstart
+pnpm add superdoc
+```
+
+SuperDoc v2 is the stable major release, so the default `latest` tag installs it. For production, pin the exact version your lockfile resolved so upgrades stay deliberate.
+
+## 2. Add the sample document
+
+Save the sample above as `public/sample.docx`. Vite serves files in `public` from the root of the development server, so the editor can load it from `/sample.docx`.
+
+## 3. Add the editor surface
+
+Replace the body of `index.html` with an export button and a mount point. Keep the `<script type="module" src="/src/main.ts"></script>` tag, which loads your code:
+
+```html
+<button id="export-docx" type="button" disabled>Export DOCX</button>
+<div id="editor"></div>
+```
+
+The editor grows to the height of the document it opens, and the page scrolls. You do not need to size the container. To keep the editor inside a fixed-height box and scroll the document internally instead, see [choosing a layout](#choose-a-layout) below.
+
+## 4. Mount the document and wire up export
+
+Replace the contents of `src/main.ts`:
+
+<include>../../../../../examples/vanilla/src/main.ts</include>
+
+The complete project is available at [go.superdoc.dev/examples/vanilla](https://go.superdoc.dev/examples/vanilla).
+
+The editor opens in editing mode by default, so edits apply directly to the document.
+
+`onReady` fires once the document is open. Wait for it before enabling anything that depends on the open document, which is why the export button starts disabled.
+
+`onException` reports failures during loading, including a missing file, a blocked cross-origin request, and a file whose bytes cannot be read as a DOCX. Without it, those failures look like an editor that never appears.
+
+## 5. Make an edit and export
+
+Run `pnpm dev` and open the printed URL. You should see the document with its heading, paragraphs, and list, and the export button should become enabled. Replace a word in the document, then click the button to download `sample-edited.docx`.
+
+The handler disables the button while the export runs and re-enables it afterwards, so a slow export cannot be started twice, and a failed one reports itself instead of surfacing as an unhandled rejection.
+
+<Callout variant='success' title='Verification target'>
+  Reopen the exported file in Word or SuperDoc. Your edit should be present, and the heading, paragraph, and list
+  formatting should be unchanged.
+</Callout>
+
+## Choose a layout
+
+SuperDoc supports two layouts, and the difference is where scrolling happens:
+
+- **Natural height**, the default used above. The editor grows to the full height of the document and the page scrolls. The container needs no height.
+- **Contained**, for embedding the editor in a fixed-height panel. Pass `contained: true` and give the container a definite height. The document then scrolls inside it:
+
+  ```ts
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: '/sample.docx',
+    contained: true,
+  });
+  ```
+
+  ```css
+  #editor {
+    height: 400px;
+  }
+  ```
+
+Setting a height without `contained: true` does not constrain the document or scroll it inside the box. The editor still grows to its full height and the page scrolls.
+
+## Clean up
+
+Call `destroy()` when your application removes or replaces the editor, such as when a route unmounts or a component tears down:
+
+```ts
+superdoc.destroy();
+```
+
+It unmounts the editor and releases its listeners and document resources. A page that keeps one editor for its lifetime does not need to call it.
+
+## Decide who renders the interface
+
+The editor above renders the document canvas and SuperDoc's default surfaces. It has no toolbar: the built-in toolbar needs an element to mount into, and this example never named one. Adding `ui: { toolbar: { container: '#toolbar' }, search: true }` and a matching element is all it takes.
+
+Pair the toolbar with `search: true`. The toolbar draws a Search button either way, and that button opens the find/replace surface, so without it the control renders and does nothing.
+
+That is the first of three ownership modes, and moving between them is a configuration change rather than a different architecture.
+
+- **Keep the built-in UI.** Give the toolbar a mount target and configure what you need. [Built-in UI overview](/editor/built-in-ui/overview).
+- **Replace selected surfaces.** Turn off the ones your product owns and keep the rest. This is where most production integrations land.
+- **Build a fully custom UI.** `ui: false` hides all built-in chrome while editing, the Document API, and `superdoc.ui` keep working. [Custom UI overview](/editor/custom-ui/overview).
+
+[Choose an interface](/editor/ui/choose-an-interface) walks through all three with a runnable example of each.
+
+## Continue building
+
+- [Load and save documents](/editor/load-and-save-documents) covers letting people choose their own file, loading from a URL or `Blob`, and saving to a backend.
+- [Document modes](/editor/document-modes) explains editing, suggesting, and viewing, and how to record edits as tracked changes.
+- [Configure the Editor](/editor/platform/configuration) explains how `ui`, `interaction`, and `surfaces` divide up the configuration.

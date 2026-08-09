@@ -1,0 +1,15 @@
+<div id="editor-shell" style="position: relative">
+  <div id="selection-overlay" hidden style="position: absolute; z-index: 2">
+    <span id="selection-preview"></span>
+    <button id="restore-selection" type="button">Restore selection</button>
+  </div>
+  <div id="editor" style="height: 70vh"></div>
+</div>
+
+<label>
+  Review note
+  <textarea id="review-note" placeholder="Move focus here after selecting document text"></textarea>
+</label>
+<p id="selection-status" role="status">Select text in the document.</p>
+
+<script type="module" src="/src/main.ts"></script>

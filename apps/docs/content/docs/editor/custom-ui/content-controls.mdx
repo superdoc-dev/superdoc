@@ -1,0 +1,48 @@
+---
+title: Build a content-control panel
+navTitle: Content controls
+description: List document fields, move people to them, and update text controls from application-owned UI.
+---
+
+Content controls are structured fields stored in a DOCX. Use `ui.contentControls` to keep an application-owned panel synchronized with the Editor. Use the Document API to change a control's content or properties.
+
+If SuperDoc should render the control chrome instead, see [structured content](/editor/built-in-ui/structured-content).
+
+Complete [Custom UI controller setup](/editor/custom-ui/controller-setup) first. This example expects `/contract.docx` to contain at least one plain-text content control.
+
+The [content controls example](https://go.superdoc.dev/examples/content-controls) provides a complete project and a synthetic DOCX containing one text control.
+
+## Add the field panel
+
+Create a status message, field list, and Editor container:
+
+<include>../../../../snippets/editor/custom-content-controls.html</include>
+
+## Bind navigation and editing
+
+Read the Editor's controller, `superdoc.ui`, after the Editor and Document API are ready:
+
+<include>../../../../snippets/editor/custom-content-controls.ts</include>
+
+The example uses two public surfaces for different jobs:
+
+- `ui.contentControls` observes the loaded list, reports controls at the current selection, focuses a known control, and keeps navigation aligned with the document canvas.
+- `doc.contentControls.text.setValue()` performs the document mutation and returns the receipt.
+
+Do not find controls by querying rendered DOM attributes. The list item contains the stable control ID, mutation target, type, lock mode, properties, and an optional selection target.
+
+## Check the control type before editing
+
+`text.setValue()` applies to plain-text controls. Date, checkbox, choice-list, repeating-section, and rich-text controls have different operations and constraints. Branch on `controlType` and expose only actions that match the current control.
+
+Read `lockMode` before presenting an edit affordance, but still inspect the mutation receipt. The document can change between the list read and the update.
+
+## Keep the panel reactive
+
+Call `list()` when opening the panel to request the catalog, then keep `observe()` active. The snapshot reports `pending`, `stale`, or `ready` state as the document loads and changes.
+
+`focus()` scrolls to the control and places the caret inside it when the host can resolve its selection target. It does not bypass a content lock or viewing mode. Focus is navigation. The later mutation still decides whether editing is allowed.
+
+Verify the workflow by updating one plain-text control, exporting the DOCX, and reopening it. The new value should remain attached to the same content control.
+
+Continue with [Load and save documents](/editor/load-and-save-documents). Use the generated Document API reference for checkbox, date, choice-list, metadata, binding, and structural operations.

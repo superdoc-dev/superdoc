@@ -1,0 +1,44 @@
+{
+  "name": "@superdoc/style-engine",
+  "version": "0.1.0",
+  "description": "OOXML style resolution engine - produces ComputedStyle objects for layout engines",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./ooxml": {
+      "source": "./src/ooxml/index.ts",
+      "default": "./src/ooxml/index.ts"
+    },
+    "./normalize": {
+      "source": "./src/normalize/index.ts",
+      "default": "./src/normalize/index.ts"
+    },
+    "./ooxml/word-style-model/parse-xml": {
+      "source": "./src/ooxml/word-style-model/parse-xml.ts",
+      "default": "./src/ooxml/word-style-model/parse-xml.ts"
+    },
+    "./ooxml/word-style-model/parse-theme": {
+      "source": "./src/ooxml/word-style-model/parse-theme.ts",
+      "default": "./src/ooxml/word-style-model/parse-theme.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/font-utils": "workspace:*",
+    "xml-js": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title description">
+  <title id="title">Built-in and custom editor interface paths</title>
+  <desc id="description">The built-in SuperDoc UI and an application-owned custom UI both connect to the same editor and Document API.</desc>
+  <rect width="960" height="360" rx="24" fill="#f7f8fb"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="56" y="62" width="250" height="92" rx="14" fill="#ffffff" stroke="#d9dde7"/>
+    <text x="80" y="98" font-size="18" font-weight="700" fill="#202124">Built-in UI</text>
+    <text x="80" y="126" font-size="14" fill="#5f6368">SuperDoc owns the controls</text>
+    <rect x="56" y="206" width="250" height="92" rx="14" fill="#ffffff" stroke="#d9dde7"/>
+    <text x="80" y="242" font-size="18" font-weight="700" fill="#202124">Custom UI</text>
+    <text x="80" y="270" font-size="14" fill="#5f6368">Your application owns the controls</text>
+    <path d="M306 108H410" stroke="#3167ed" stroke-width="3"/>
+    <path d="M306 252H370C392 252 410 234 410 212V184" fill="none" stroke="#3167ed" stroke-width="3"/>
+    <path d="M398 96L410 108L398 120" fill="none" stroke="#3167ed" stroke-width="3"/>
+    <rect x="410" y="102" width="230" height="156" rx="18" fill="#202124"/>
+    <text x="442" y="148" font-size="20" font-weight="700" fill="#ffffff">SuperDoc Editor</text>
+    <text x="442" y="180" font-size="14" fill="#d6d8dc">DOCX rendering and editing</text>
+    <rect x="442" y="204" width="166" height="32" rx="8" fill="#30343b"/>
+    <text x="459" y="225" font-size="13" fill="#ffffff">Document API</text>
+    <path d="M640 180H744" stroke="#3167ed" stroke-width="3"/>
+    <path d="M732 168L744 180L732 192" fill="none" stroke="#3167ed" stroke-width="3"/>
+    <rect x="744" y="126" width="160" height="108" rx="16" fill="#eef3ff" stroke="#a9bfff"/>
+    <text x="780" y="171" font-size="18" font-weight="700" fill="#244cae">DOCX</text>
+    <text x="770" y="199" font-size="13" fill="#48618f">Open · edit · save</text>
+  </g>
+</svg>

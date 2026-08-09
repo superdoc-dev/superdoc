@@ -1,0 +1,32 @@
+---
+title: Configure the Editor
+navTitle: Configuration
+description: Organize SuperDoc initialization around document input, interface, behavior, and host integration.
+---
+
+Start with the smallest configuration that loads the document and interface you need. Add a field only when a product requirement justifies it.
+
+## Use one typed configuration
+
+<include>../../../../snippets/editor/editor-configuration.html</include>
+
+<include>../../../../snippets/editor/editor-configuration.ts</include>
+
+The important configuration groups are:
+
+- `selector`, `document`, and `documentMode` establish the Editor and its starting posture.
+- `user` identifies the person for comments, suggestions, and collaboration presence. Supply trusted identity from your application.
+- `ui` decides which built-in interface SuperDoc renders, one surface at a time.
+- `interaction` decides what a user is allowed to do, which outlives the built-in UI: a custom comments panel still has to honor `readOnly`.
+- `surfaces` configures the shared dialog and floating infrastructure both built-in and application-owned UI mount into.
+- `modules` configures integration subsystems such as collaboration, tracked changes, and AI.
+- `zoom`, `contained`, fonts, proofing, and layout options control host behavior.
+- `onReady`, the `onContentError` and `onException` callbacks, and events such as `document-mode-change` connect the Editor to your application's lifecycle.
+
+Keep the configuration object stable in reactive frameworks. Recreating the Editor to apply a new object can reset selection and transient UI state. Use runtime methods for supported changes such as mode and zoom, and remount deliberately for initialization-only fields such as extensions.
+
+Most applications should keep the default 30-second worker startup limit. If your worker bundle needs longer to download or evaluate, set `workerStartupTimeoutMs` to a larger value in milliseconds.
+
+Rendering and permission are separate decisions, which is why `ui` and `interaction` are separate groups. Turning off a built-in surface says nothing about what the application's own replacement may do, and `ui: false` never disables editing, the Document API, `interaction`, `surfaces`, or `superdoc.ui`. Add only the configuration your application uses; every omitted key keeps its default.
+
+Client configuration is not authorization. A browser user can inspect or alter client code, so document access and collaboration authorization must be enforced by trusted services.

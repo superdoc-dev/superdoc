@@ -1,0 +1,82 @@
+/* A compact card, not a landing-page panel. It sits between the scope callout
+   and step 1, so it has to read as one more thing on the page rather than an
+   interruption. */
+.card {
+  margin-block: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-lg);
+  background: var(--sd-canvas);
+}
+
+.header {
+  margin-bottom: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sd-text-primary);
+}
+
+.summary {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--sd-text-secondary);
+}
+
+.promptShell {
+  position: relative;
+  border: 1px solid var(--sd-border-soft);
+  border-radius: var(--sd-radius-md);
+  background: var(--sd-surface);
+}
+
+/* Absolutely positioned so the button does not push the prompt down, and
+   inset from the corner so it clears the first line of text. */
+.copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-md);
+  background: var(--sd-canvas);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--sd-text-secondary);
+  cursor: pointer;
+}
+
+.copy:hover {
+  color: var(--sd-text-primary);
+  border-color: var(--sd-text-tertiary);
+}
+
+.copy:focus-visible {
+  outline: 2px solid var(--sd-blue-500);
+  outline-offset: 2px;
+}
+
+/* `pre` keeps the newlines that separate the two source URLs from the numbered
+   report items. Wrapping matters because the absolute URLs are long and a
+   horizontal scrollbar would hide the instruction that follows them. */
+.prompt {
+  margin: 0;
+  /* Room for the copy button on the first line. */
+  padding: 2.25rem 0.875rem 0.875rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--sd-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--sd-text-tertiary);
+}

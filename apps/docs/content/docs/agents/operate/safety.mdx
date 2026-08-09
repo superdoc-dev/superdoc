@@ -1,0 +1,116 @@
+---
+title: Safety
+navTitle: Safety
+description: Operational boundaries to settle before an agent edits documents that matter.
+---
+
+An agent makes non-deterministic choices against real files. The engine runs each operation deterministically and reports what happened, but nothing stops a model from confidently choosing the wrong operation. These boundaries keep that failure recoverable.
+
+## Prefer tracked changes for consequential edits
+
+Set `changeMode: 'tracked'` when an edit changes meaning rather than formatting. The edit becomes a suggestion a person can accept or reject, so a wrong call costs a rejection instead of a restore.
+
+The argument is optional and defaults to a direct edit, so asking for tracked mode in the prompt is not enough. When a model chooses the arguments, check for `changeMode: 'tracked'` before dispatching and refuse the call without it.
+
+Check the action too. Not every action honors `changeMode` — `apply_style`, `set_paragraph_spacing`, and `insert_page_break` ignore it and always edit directly, while `move_range` accepts it and then fails without mutating. The tool schema accepts the argument in every case. An allowlist of tracked-capable actions is the only reliable guard; without one, a run that promised reviewable suggestions can quietly rewrite the document.
+
+Treat a successful receipt as a claim, not proof. Actions that support `dryRun` report success while applying nothing, so compare the receipt's before and after revisions when you need to know a change actually landed.
+
+Direct edits are appropriate for mechanical work: normalizing fonts, fixing spacing, filling known placeholders. Reserve them for cases where being wrong is cheap.
+
+## Write to a separate output
+
+Save to a new path and keep the source until the result is verified:
+
+```ts
+await doc.save({ out: 'contract.reviewed.docx' });
+await doc.close({ discard: true });
+```
+
+`discard: true` closes the in-memory session without writing back to the source. Overwriting the input removes the only copy of what the document looked like before the agent ran.
+
+Leave `force` off. Without it, the SDK's `save` refuses a path that already exists, so a typo in the output name fails instead of destroying whatever was there. Add it only where overwriting a known artifact is the intended behavior, such as a scheduled job that rewrites its own output each run. When the path is model-supplied or assembled from input, check that it does not resolve to the source before saving.
+
+## Bound the loop
+
+Cap turns explicitly. A model that misreads a receipt can retry the same failing action indefinitely, and an uncapped loop turns that into an exhausted token budget rather than an error.
+
+Bound retries after a stale revision failure too, and re-query before retrying. A target resolved against an older revision may no longer point where the model thinks it does.
+
+## Inspect receipts instead of assuming success
+
+A dispatch that returns is not a dispatch that worked. Check `status` on every receipt, and treat `partial` as failure that needs handling: some edits applied and some did not, which is the state most likely to be silently shipped.
+
+`failed` needs the same care. An action can apply its operation and then fail its own post-check, so a failed receipt can sit on top of a document that already changed. Compare `preSnapshot.revision` with `postSnapshot.revision` before retrying, or the retry may apply the edit a second time.
+
+When `verificationPassed` is `false`, at least one post-check disagreed with the intent. That does not tell you whether anything changed: it covers an edit that landed wrongly and an edit that never applied at all, because the standard `revision-changed` check also fails when a mutation turns out to be a no-op. Read `preSnapshot.revision` against `postSnapshot.revision`, and `executedOperations`, to find out which happened. Surface it either way rather than swallowing it.
+
+<Callout variant='warning' title='Two different failures'>
+  A receipt reporting `failed` is an operation problem. A successful receipt for an edit nobody wanted is a model
+  problem. They need different fixes, so separate them before debugging.
+</Callout>
+
+Receipts also cannot tell you whether the agent finished the job. They report what each call did, not whether the set of calls covered your instruction, and nothing links a retry to the request it repairs. A run where every receipt is clean can still have dropped an edit the model asked for and then abandoned.
+
+When completeness has to be asserted without a reviewer, decide the required edits before the run, give each one a stable id, and check them off as receipts arrive. Otherwise treat a clean run as a draft worth reviewing, not as proof the instruction was carried out.
+
+## Keep a human in the loop
+
+Decide up front which operations an agent may complete alone. Excluding the review actions is a practical default: the agent proposes, a person decides.
+
+```ts
+import { createAgentToolkit } from '@superdoc/sdk';
+
+const toolkit = await createAgentToolkit({
+  provider: 'openai',
+  preset: 'core',
+  excludeActions: ['accept_tracked_changes', 'reject_tracked_changes'],
+});
+```
+
+Exclusions apply to the tools, the prompt, and the dispatcher together, so an excluded action is refused even if the model guesses its name.
+
+## Do not log document contents
+
+Documents carry contract terms, personal data, and unreleased material. Log operation ids, action names, receipt statuses, and error codes. Do not log document text, full mutation payloads, or complete receipts, and be deliberate about what reaches a model provider: content sent for a decision leaves your infrastructure.
+
+## Attribute every change
+
+Give the client an explicit user identity so tracked changes and comments carry a real author:
+
+```ts
+import { createSuperDocClient } from '@superdoc/sdk';
+
+const client = createSuperDocClient({ user: { name: 'Contract bot' } });
+```
+
+Omitting it does not leave the author blank. Edits are attributed to a generic `CLI` author, which every unattributed workflow shares, so a reviewer opening a document touched by two automations cannot tell which one proposed what. Author-based accept and reject operations cannot separate them either.
+
+Give each automation its own name for the same reason. A shared identity copied between deployments recreates the problem the identity was meant to solve.
+
+A reviewer needs to see that a machine proposed an edit, and which machine it was.
+
+## Handle files the engine cannot open
+
+Validate input paths and file types before opening a session. Encrypted or password-protected documents fail at open, so handle that case explicitly rather than letting it surface as an unexplained crash mid-run.
+
+## Close sessions on every path
+
+Sessions hold a managed runtime. Close the document and dispose the client in `finally` so success, failure, and cancellation all release it:
+
+```ts
+try {
+  // open, mutate, save
+} finally {
+  if (doc) await doc.close({ discard: true }).catch(() => {});
+  await client.dispose().catch(() => {});
+}
+```
+
+Make cleanup best-effort. A close failure that throws will mask the error that actually ended the run.
+
+## Treat tool calls as untrusted input
+
+A model chooses tool names from what it was shown, but nothing guarantees it stays there. It can invent a name, and it can be persuaded toward one by text inside the document it is editing.
+
+The SDK dispatcher accepts several tool names the toolkit never advertises, including `superdoc_execute_code` and the `agent_*` surfaces. Those exist for SDK callers and bypass the checks a model-facing loop relies on. Validate the tool name against the list you advertised before dispatching, and reject anything else rather than passing it through.

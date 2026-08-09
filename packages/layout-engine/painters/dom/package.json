@@ -1,0 +1,40 @@
+{
+  "name": "@superdoc/painter-dom",
+  "version": "0.0.0",
+  "description": "DOM renderer for the SuperDoc layout engine.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./ruler-core": {
+      "types": "./src/ruler/ruler-core.ts",
+      "default": "./src/ruler/ruler-core.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/dom-contract": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
+    "@superdoc/font-utils": "workspace:*",
+    "@superdoc/geometry-utils": "workspace:*",
+    "@superdoc/preset-geometry": "workspace:*",
+    "@superdoc/url-validation": "workspace:*"
+  },
+  "devDependencies": {
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

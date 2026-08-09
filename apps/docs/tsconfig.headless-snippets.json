@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "paths": {}
+  },
+  "include": ["snippets/headless/**/*.mjs", "snippets/agents/**/*.mjs"],
+  "exclude": ["node_modules"]
+}

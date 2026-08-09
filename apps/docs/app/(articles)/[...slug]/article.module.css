@@ -1,0 +1,81 @@
+.page {
+  --fd-page-width: 44rem;
+  padding-top: clamp(2rem, 5vw, 3rem);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.headerCopy {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.description {
+  max-width: 41.25rem;
+  margin: 0.65rem 0 0;
+  color: var(--sd-text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+.body {
+  max-width: 41.25rem;
+  color: var(--sd-text-primary);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.body:has(:global(.sd-docapi-reference)) {
+  max-width: 62rem;
+}
+
+/* The migration explorer is a five-column reference table, not prose. It needs
+   the same wider measure the Document API reference uses; at the 41.25rem
+   reading width the two prose columns collapse to a few characters each. */
+.body:has(:global(.sd-migration-explorer)) {
+  max-width: 62rem;
+}
+
+.body :global(h2) {
+  margin-top: 2.75rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.body :global(h3) {
+  margin-top: 2rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.body :global(a) {
+  text-decoration-color: var(--sd-blue-200);
+  text-underline-offset: 0.2em;
+}
+
+.body :global(:not(pre) > code) {
+  border: 1px solid var(--sd-border-soft);
+  border-radius: 0.3125rem;
+  background: var(--sd-canvas);
+}
+
+@media (max-width: 42rem) {
+  .header {
+    flex-direction: column;
+  }
+}

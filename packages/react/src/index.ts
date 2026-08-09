@@ -1,0 +1,33 @@
+// Main component
+export { SuperDocEditor, default } from './SuperDocEditor';
+
+// Types - extracted from superdoc package for convenience
+export type {
+  // Component props and ref
+  SuperDocEditorProps,
+  SuperDocRef,
+
+  // Core types (extracted from superdoc constructor)
+  DocumentMode,
+  UserRole,
+  SuperDocUser,
+  SuperDocModules,
+  SuperDocConfig,
+  SuperDocInstance,
+
+  // Callback props
+  CallbackProps,
+
+  // Callback event types
+  EditorSurface,
+  SuperDocRuntimeEditor,
+  SuperDocRuntimeTransaction,
+  SuperDocReadyEvent,
+  SuperDocEditorCreateEvent,
+  SuperDocEditorUpdateEvent,
+  SuperDocTransactionEvent,
+  SuperDocContentErrorEvent,
+  SuperDocExceptionEvent,
+  SuperDocZoomChangeEvent,
+  SuperDocViewportChangeEvent,
+} from './types';

@@ -1,0 +1,74 @@
+---
+title: Build tracked-change review controls
+navTitle: Track changes
+description: Render open changes, move reviewers to them, and await accept or reject decisions from a custom interface.
+---
+
+Use `ui.trackChanges` when your application owns the review panel. The handle provides the reactive change list, active change, document navigation, and review actions.
+
+If SuperDoc should render the review surfaces instead, see [tracked changes](/editor/review/tracked-changes).
+
+Complete [Custom UI controller setup](/editor/custom-ui/controller-setup) first. Use [Document API tracked changes](/document-api/tracked-changes) when code reviews known change IDs without an Editor.
+
+## Add the review panel
+
+Create a status message, change list, and Editor container:
+
+<include>../../../../snippets/editor/custom-tracked-review.html</include>
+
+Copy the [tracked-changes fixture](/fixtures/tracked-changes.docx) to your app's public directory as `contract.docx`, or use another DOCX with open changes.
+
+## Bind review state and actions
+
+Read the Editor's controller, `superdoc.ui`, after the Editor is ready. Observe `ui.trackChanges` so the panel follows document mutations and selection changes.
+
+<include>../../../../snippets/editor/custom-tracked-review.ts</include>
+
+The example keeps each responsibility on its public surface:
+
+- `observe()` renders the current list and active change.
+- `setActive()` marks the change the application is showing.
+- `scrollTo()` moves the document canvas to that change.
+- `executeAsync()` waits for the accept or reject operation to settle.
+
+## Step through the review sequence
+
+`setActive()` and `scrollTo()` are the right pair when the application already knows which row to show. When the reader is walking the document in order, use `ui.trackChanges.navigateNext()` and `navigatePrevious()` instead. Each one moves `activeId` to the adjacent change and awaits viewport navigation to it.
+
+Traversal wraps. Stepping past the last change returns to the first, so there is no end of the list to detect and `{ success: false }` never means the reader finished the document.
+
+Navigation reads the loaded change list, and it does not start that read. `observe()`, `getSnapshot()`, and `list()` do. Calling `navigateNext()` on a controller whose catalog has not settled finds no rows and returns `{ success: false }` even in a document full of changes, so gate the control on a ready slice instead of navigating and interpreting the failure:
+
+```ts
+ui.trackChanges.observe(() => {
+  const changes = ui.trackChanges.getSnapshot();
+  nextButton.disabled = changes.status !== 'ready' || changes.total === 0;
+});
+
+nextButton.addEventListener('click', async () => {
+  const result = await ui.trackChanges.navigateNext();
+  if (!result.success && reviewStatus) {
+    reviewStatus.textContent = 'Could not move to the next change.';
+  }
+});
+```
+
+Both resolve `{ success }`. Behind a ready, non-empty catalog, `{ success: false }` means a target that could not be resolved or a scroll the host could not route, and both roll the `activeId` move back. When the target resolves but cannot be made visible, `activeId` stays on the requested change and `success` is still false.
+
+Coming from v1, this replaces walking `editor.state` to find the next change yourself. `list()` reads the catalog and the navigate pair owns the traversal.
+
+## Await every decision
+
+Pass the change ID to `acceptChange` or `rejectChange`. An explicit ID lets a sidebar decide its own row without depending on the live Editor selection.
+
+Use `executeAsync()` when saving, navigation, or status UI depends on the decision. Inspect `false` and unsuccessful receipts before announcing success. The observed change list refreshes after a successful mutation.
+
+Bulk decisions use `acceptAllChanges` and `rejectAllChanges`. They can be unavailable when the host has not enabled bulk review. Keep per-change controls available as the predictable path.
+
+## Keep access enforcement outside the panel
+
+Viewing mode and client-side controls can prevent a normal interaction, but they are not an authorization boundary. Your application still owns trusted identity, document access, persistence, and collaboration authorization.
+
+Verify the workflow by accepting or rejecting one row, exporting the DOCX, and reopening it. The resolved change should be absent. Unresolved changes should remain reviewable.
+
+For the standard interface, use [Review tracked changes](/editor/review/tracked-changes). For the operation contract, use [Document API tracked changes](/document-api/tracked-changes).

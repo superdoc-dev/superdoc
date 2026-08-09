@@ -1,0 +1,36 @@
+{
+  "name": "@superdoc/measuring-dom",
+  "version": "0.0.0",
+  "description": "DOM-based block measurer for the SuperDoc layout pipeline.",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./canvas-resolver": {
+      "types": "./src/canvas-resolver.ts",
+      "source": "./src/canvas-resolver.ts",
+      "default": "./src/canvas-resolver.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --noEmit",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/common": "workspace:*",
+    "@superdoc/font-system": "workspace:*",
+    "@superdoc/font-utils": "workspace:*",
+    "@superdoc/geometry-utils": "workspace:*",
+    "@superdoc/word-layout": "workspace:*"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  }
+}

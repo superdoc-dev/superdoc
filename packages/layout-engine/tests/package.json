@@ -1,0 +1,26 @@
+{
+  "name": "@superdoc/layout-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vp test run",
+    "test:memory": "NODE_OPTIONS=--expose-gc vp test run src/memory-profile.test.ts --pool forks --no-file-parallelism",
+    "test:parity": "vp test run --grep 'Parity'",
+    "test:integration": "vp test run --grep 'Integration'"
+  },
+  "dependencies": {
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/geometry-utils": "workspace:*",
+    "@superdoc/common": "workspace:*"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "catalog:",
+    "jsdom": "catalog:",
+    "tsx": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

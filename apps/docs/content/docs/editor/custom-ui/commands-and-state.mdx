@@ -1,0 +1,61 @@
+---
+title: Commands and state
+navTitle: Commands and state
+description: Keep custom controls synchronized with the Editor and handle command results explicitly.
+---
+
+A custom control has two responsibilities: render the current command state and route an action back through the same command handle. SuperDoc owns the state because availability can change with the selection, document mode, history, and document content.
+
+Start with the [framework-neutral controller example](/editor/custom-ui/controller-setup) or [React setup](/editor/custom-ui/react-setup). Both use the contract described here.
+
+## Read the state you need
+
+Each command exposes a small state object:
+
+| Field       | Use it for                                                               |
+| ----------- | ------------------------------------------------------------------------ |
+| `enabled`   | Disable the control when the command cannot run in the current context   |
+| `active`    | Show toggle state for formatting, lists, links, and similar controls     |
+| `value`     | Show a command-specific value such as document mode, zoom, font, or link |
+| `reason`    | Explain why a recognized command is disabled                             |
+| `supported` | Distinguish a routed command from an unknown or unsupported command      |
+
+Use `getState()` for the initial framework-neutral value and `observe()` for updates. In React, `useSuperDocCommand(id)` performs both steps and rerenders the component when the state changes.
+
+Do not infer these fields from the document DOM. The canvas is the rendered document, not the public command-state boundary.
+
+## Keep unavailable controls understandable
+
+Disable a control when `enabled` is false. Use `reason` in a tooltip or nearby explanation when the cause is useful to the person editing.
+
+A disabled command often needs context rather than removal. Bold needs a text selection. Undo needs document history. Table actions need a table selection. Hiding those controls can make a stable toolbar appear to change unpredictably.
+
+Remove a control when the workflow does not need it. Disable it when the workflow needs it but the current context does not allow it.
+
+## Await actions that affect later work
+
+Use `executeAsync()` when saving, navigating, or running another action depends on the command finishing.
+
+The result can be:
+
+- `false` when the controller could not route the command.
+- `true` when the host reports completion without a structured receipt.
+- A receipt object when the command routes through a document operation.
+
+For a receipt, inspect `success` before continuing. Do not treat a resolved promise or the absence of an exception as proof that the document changed.
+
+## Treat values as command-specific
+
+`value` is intentionally not one universal type. A document-mode control reads a mode string. Zoom reads a percentage. A font control reads a font value. A link control can expose the active URL.
+
+Pass only the payload documented for that command. Do not reuse a value from one command as another command's payload.
+
+## Choose commands for the workflow
+
+`BUILT_IN_COMMAND_IDS` from `superdoc/ui` provides the stable core command ids. `ui.commands.ids` lists the commands recognized by the bound controller, including registered custom commands. `ui.commands.has(id)` checks one id.
+
+Do not render every recognized command automatically. Choose the controls the product task needs, then use command state to keep those controls truthful.
+
+The exhaustive command reference remains generated-source work. Until it is integrated into this site, use the focused examples in this section instead of copying the old command matrix.
+
+Continue with [React custom UI setup](/editor/custom-ui/react-setup), or compare custom controls with the [configured built-in toolbar](/editor/built-in-ui/configure-the-toolbar).

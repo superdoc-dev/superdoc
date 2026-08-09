@@ -1,0 +1,57 @@
+name: Bug Report
+description: Something isn't working as expected
+labels:
+  - "stage: triage"
+  - "type: bug"
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug. What did you expect to happen vs what actually happened?
+      placeholder: |
+        When I open [document] in SuperDoc, the table borders are missing.
+        In Microsoft Word, the same document shows borders correctly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this? Include a sample .docx file if possible.
+      placeholder: |
+        1. Open the attached .docx file
+        2. Scroll to page 2
+        3. Notice the table borders are missing
+
+        Sample file: [drag and drop your .docx here]
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: SuperDoc version
+      placeholder: e.g. 1.13.0
+    validations:
+      required: false
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Firefox
+        - Safari
+        - Edge
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, error messages, browser console output, or anything else that helps.

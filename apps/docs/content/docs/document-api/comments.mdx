@@ -1,0 +1,39 @@
+---
+title: Create and resolve comment threads
+navTitle: Comments
+description: Anchor a DOCX comment to document content, add a reply, and resolve the thread.
+---
+
+Comments are document content. Use the Document API when code needs to create, inspect, update, or delete a thread without driving the built-in comments interface.
+
+This guide creates one anchored thread, adds a reply, and resolves it. The operations work against an open document in the Editor and through supported headless clients.
+
+## Run the complete workflow
+
+Copy the [tracked-changes fixture](/fixtures/tracked-changes.docx) to your app's public directory as `contract.docx`, then run this browser example:
+
+<include>../../../snippets/document-api/comment-thread.ts</include>
+
+The example deliberately re-lists comments between mutations. Each mutation advances the document revision, so the next operation uses a current `expectedRevision`.
+
+## Anchor the root comment
+
+A root comment needs text and a document target. A text query returns a `SelectionTarget` that can be passed directly to `comments.create()`.
+
+Do not derive the target from the rendered DOM or from `highlightRange`. DOM positions belong to layout. `highlightRange` describes the displayed snippet. The query target addresses document content.
+
+On success, the creation receipt includes the new thread ID. Keep that ID for replies and later lifecycle changes.
+
+## Add replies without another target
+
+A reply belongs to an existing thread. Pass `parentCommentId` and text. Do not pass the root target again.
+
+The reply is another document mutation. Inspect its receipt before resolving the thread or saving the file.
+
+## Resolve or reopen the thread
+
+`comments.patch()` changes exactly one comment field per call. Set `status: 'resolved'` to resolve the root thread. Set `status: 'active'` in a later call to reopen it.
+
+List with `includeResolved: true` when the application needs to show both states. A resolved thread remains in the DOCX unless it is explicitly deleted.
+
+Use [comments in the built-in UI](/editor/built-in-ui/comments) for the standard human workflow. Use [a custom comments UI](/editor/custom-ui/comments) when your application owns the thread list and navigation.

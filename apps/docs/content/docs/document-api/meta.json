@@ -1,0 +1,15 @@
+{
+  "title": "Document API",
+  "root": true,
+  "pages": [
+    "mental-model",
+    "application-data",
+    "query-content",
+    "replace-delete-content",
+    "mutation-plans",
+    "tracked-changes",
+    "comments",
+    "receipts-and-errors",
+    "reference"
+  ]
+}

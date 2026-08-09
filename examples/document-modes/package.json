@@ -1,0 +1,24 @@
+{
+  "name": "@superdoc-examples/document-modes",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test": "playwright test",
+    "browsers": "playwright install chromium",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "superdoc": "^2.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^22.0.0",
+    "jszip": "^3.10.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.2.7"
+  }
+}

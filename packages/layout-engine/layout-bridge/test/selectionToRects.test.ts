@@ -1,0 +1,723 @@
+import { describe, it, expect } from 'vite-plus/test';
+import { selectionToRects, getFragmentAtPosition } from '../src/index.ts';
+import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
+import {
+  simpleLayout,
+  simpleBlock,
+  simpleMeasure,
+  blocks,
+  measures,
+  multiLineLayout,
+  multiBlocks,
+  multiMeasures,
+  columnsLayout,
+  drawingLayout,
+  drawingBlock,
+  drawingMeasure,
+  tableLayout,
+  tableBlock,
+  tableMeasure,
+  tableEmptyParaLayout,
+  tableEmptyParaBlock,
+  tableEmptyParaMeasure,
+  bodyEmptyParaLayout,
+  bodyEmptyParaBlocks,
+  bodyEmptyParaMeasures,
+  tableSpacingBeforeBlock,
+  tableSpacingBeforeMeasure,
+  tableSpacingBeforeLayout,
+  TABLE_SPACING_FRAGMENT_Y,
+  TABLE_SPACING_BEFORE,
+  tableSpacingAbsorbedBlock,
+  tableSpacingAbsorbedMeasure,
+  tableSpacingAbsorbedLayout,
+  TABLE_ABSORBED_FRAGMENT_Y,
+  TABLE_ABSORBED_PADDING_TOP,
+  tableSpacingPartialBlock,
+  tableSpacingPartialMeasure,
+  tableSpacingPartialLayout,
+  TABLE_PARTIAL_FRAGMENT_Y,
+  tableSpacingAfterBlock,
+  tableSpacingAfterMeasure,
+  tableSpacingAfterLayout,
+  TABLE_SPACING_AFTER,
+  TABLE_SPACING_AFTER_PADDING_BOTTOM,
+  TABLE_CELL_LINE_HEIGHT,
+  tableMixedBlockSelectionBlock,
+  tableMixedBlockSelectionMeasure,
+  tableMixedBlockSelectionLayout,
+  TABLE_INLINE_IMAGE_HEIGHT,
+  TABLE_MIXED_BLOCK_FRAGMENT_Y,
+} from './mock-data';
+import { PageGeometryHelper } from '../src/page-geometry-helper';
+
+describe('selectionToRects', () => {
+  it('returns rect for single-line range', () => {
+    const rects = selectionToRects(simpleLayout, blocks, measures, 2, 10);
+    expect(rects.length).toBe(1);
+  });
+
+  it('returns multiple rects for multi-line range', () => {
+    const rects = selectionToRects(multiLineLayout, multiBlocks, multiMeasures, 2, 20);
+    expect(rects.length).toBeGreaterThan(1);
+  });
+
+  it('returns rects in each column when selection spans columns', () => {
+    const rects = selectionToRects(columnsLayout, blocks, measures, 2, 10);
+    expect(rects.some((rect) => rect.x < 200)).toBe(true);
+    expect(rects.some((rect) => rect.x > 200)).toBe(true);
+  });
+
+  it('returns rect for drawing fragments when selection covers node', () => {
+    const rects = selectionToRects(drawingLayout, [drawingBlock], [drawingMeasure], 20, 21);
+    expect(rects).toHaveLength(1);
+    expect(rects[0].width).toBeCloseTo(60);
+  });
+
+  it('returns rects for selections inside table cells', () => {
+    const rects = selectionToRects(tableLayout, [tableBlock], [tableMeasure], 2, 8);
+    expect(rects.length).toBeGreaterThan(0);
+    expect(rects[0].x).toBeGreaterThan(tableLayout.pages[0].fragments[0].x);
+  });
+
+  it('highlights an empty paragraph row spanned by a table-cell selection (SD-3328)', () => {
+    // Selection 2..26 passes through p1 -> empty paragraph -> p3. The empty line is a
+    // zero-width slice; before the fix the builder skipped it, leaving a gap in the
+    // highlight band (the reported "selection highlight disappears over empty space").
+    const rects = selectionToRects(tableEmptyParaLayout, [tableEmptyParaBlock], [tableEmptyParaMeasure], 2, 26);
+
+    // One rect per line: text, empty, text — the empty row must NOT be dropped.
+    expect(rects).toHaveLength(3);
+
+    // The middle (empty) row sits vertically between the two text rows and is visible.
+    const sorted = [...rects].sort((a, b) => a.y - b.y);
+    const emptyRect = sorted[1];
+    expect(emptyRect.y).toBeGreaterThan(sorted[0].y);
+    expect(emptyRect.y).toBeLessThan(sorted[2].y);
+    expect(emptyRect.width).toBeGreaterThan(1);
+  });
+
+  it('highlights a blank line between body paragraphs spanned by a selection (SD-3328)', () => {
+    // Selection 1..25 passes through p1 -> empty paragraph -> p3 in body text.
+    // The blank line must be highlighted just like inside a table cell.
+    const rects = selectionToRects(bodyEmptyParaLayout, bodyEmptyParaBlocks, bodyEmptyParaMeasures, 1, 25);
+
+    expect(rects).toHaveLength(3);
+
+    const sorted = [...rects].sort((a, b) => a.y - b.y);
+    const emptyRect = sorted[1];
+    expect(emptyRect.y).toBeGreaterThan(sorted[0].y);
+    expect(emptyRect.y).toBeLessThan(sorted[2].y);
+    expect(emptyRect.width).toBeGreaterThan(1);
+  });
+
+  it('accounts for visual-only prefix runs when mapping PM selections to X coordinates', () => {
+    const blockWithoutMarker: FlowBlock = {
+      kind: 'paragraph',
+      id: 'note-without-marker',
+      runs: [{ text: ' simple footnote', fontFamily: 'Arial', fontSize: 16, pmStart: 2, pmEnd: 18 }],
+      attrs: {},
+    };
+
+    const blockWithMarker: FlowBlock = {
+      kind: 'paragraph',
+      id: 'note-with-marker',
+      runs: [
+        { text: '1', fontFamily: 'Arial', fontSize: 10 },
+        { text: ' simple footnote', fontFamily: 'Arial', fontSize: 16, pmStart: 2, pmEnd: 18 },
+      ],
+      attrs: {},
+    };
+
+    const measureWithoutMarker: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 16, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const measureWithMarker: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 1, toChar: 16, width: 110, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layoutWithoutMarker: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'note-without-marker',
+              fromLine: 0,
+              toLine: 1,
+              x: 10,
+              y: 20,
+              width: 200,
+              pmStart: 2,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const layoutWithMarker: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'note-with-marker',
+              fromLine: 0,
+              toLine: 1,
+              x: 10,
+              y: 20,
+              width: 200,
+              pmStart: 2,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const selectionFrom = 3;
+    const selectionTo = 9;
+
+    const rectWithoutMarker = selectionToRects(
+      layoutWithoutMarker,
+      [blockWithoutMarker],
+      [measureWithoutMarker],
+      selectionFrom,
+      selectionTo,
+    )[0];
+    const rectWithMarker = selectionToRects(
+      layoutWithMarker,
+      [blockWithMarker],
+      [measureWithMarker],
+      selectionFrom,
+      selectionTo,
+    )[0];
+
+    expect(rectWithoutMarker).toBeTruthy();
+    expect(rectWithMarker).toBeTruthy();
+    expect(rectWithMarker.x).toBeGreaterThan(rectWithoutMarker.x);
+    expect(rectWithMarker.x - rectWithoutMarker.x).toBeGreaterThan(1);
+  });
+
+  describe('table cell spacing.before', () => {
+    it('includes effective spacing.before in rect Y when paragraph has spacing.before', () => {
+      const rects = selectionToRects(
+        tableSpacingBeforeLayout,
+        [tableSpacingBeforeBlock],
+        [tableSpacingBeforeMeasure],
+        1,
+        9,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_SPACING_FRAGMENT_Y + TABLE_SPACING_BEFORE);
+    });
+
+    it('uses only excess over paddingTop for first paragraph (Word absorption)', () => {
+      const rects = selectionToRects(
+        tableSpacingAbsorbedLayout,
+        [tableSpacingAbsorbedBlock],
+        [tableSpacingAbsorbedMeasure],
+        1,
+        5,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_ABSORBED_FRAGMENT_Y + TABLE_ABSORBED_PADDING_TOP);
+    });
+
+    it('does not add spacing.before to rect Y when block starts mid-paragraph (startLine > 0)', () => {
+      const rects = selectionToRects(
+        tableSpacingPartialLayout,
+        [tableSpacingPartialBlock],
+        [tableSpacingPartialMeasure],
+        7,
+        19,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_PARTIAL_FRAGMENT_Y);
+    });
+  });
+
+  describe('table cell spacing.after', () => {
+    it('offsets second paragraph rect Y by first paragraph full spacing.after (non-last block)', () => {
+      // Select text in p2 (pmStart: 7, pmEnd: 13)
+      const rects = selectionToRects(
+        tableSpacingAfterLayout,
+        [tableSpacingAfterBlock],
+        [tableSpacingAfterMeasure],
+        7,
+        13,
+      );
+      expect(rects).toHaveLength(1);
+      // p1 is NOT the last block, so full spacing.after is used (not absorbed)
+      // p2's rect Y = fragment.y + padding.top(0) + p1 height (lineHeight + full spacing.after)
+      const expectedY =
+        tableSpacingAfterLayout.pages[0].fragments[0].y + (TABLE_CELL_LINE_HEIGHT + TABLE_SPACING_AFTER);
+      expect(rects[0].y).toBe(expectedY);
+    });
+  });
+
+  describe('table cell mixed blocks', () => {
+    it('offsets later paragraph rects by visible non-paragraph blocks between paragraphs', () => {
+      const rects = selectionToRects(
+        tableMixedBlockSelectionLayout,
+        [tableMixedBlockSelectionBlock],
+        [tableMixedBlockSelectionMeasure],
+        5,
+        11,
+      );
+
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_MIXED_BLOCK_FRAGMENT_Y + TABLE_CELL_LINE_HEIGHT + TABLE_INLINE_IMAGE_HEIGHT);
+    });
+  });
+
+  describe('firstLineIndentMode integration', () => {
+    it('uses textStartPx for first line of list with firstLineIndentMode', () => {
+      // Create a list item with firstLineIndentMode and textStartPx
+      const listBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'list-item-1',
+        runs: [
+          { text: 'First line ', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 12 },
+          { text: 'content', fontFamily: 'Arial', fontSize: 16, pmStart: 12, pmEnd: 19 },
+        ],
+        attrs: {
+          indent: {
+            left: 36, // paraIndentLeft
+            firstLine: 0,
+            hanging: 18,
+          },
+          wordLayout: {
+            firstLineIndentMode: true,
+            textStartPx: 56, // Pre-calculated position: paraIndentLeft + markerWidth + tabWidth
+            marker: {
+              markerText: '1.',
+              markerX: 36,
+              textStartX: 56,
+            },
+          },
+        },
+      };
+
+      const listMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 1,
+            toChar: 7,
+            width: 150,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+        marker: {
+          markerWidth: 20,
+        },
+      };
+
+      const listLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'list-item-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 30,
+                y: 40,
+                width: 300,
+                pmStart: 1,
+                pmEnd: 19,
+                markerWidth: 20,
+              },
+            ],
+          },
+        ],
+      };
+
+      const rects = selectionToRects(listLayout, [listBlock], [listMeasure], 1, 19);
+
+      expect(rects).toHaveLength(1);
+      // Rect x should be: fragment.x (30) + textStartPx (56) + startX offset
+      // textStartPx is the indent adjustment for first line in firstLineIndentMode
+      // At the start of the line, startX offset is 0, so x = 30 + 56 = 86
+      expect(rects[0].x).toBeGreaterThanOrEqual(30 + 56);
+      expect(rects[0].x).toBeLessThan(30 + 56 + 150); // Should be within line width
+    });
+
+    it('uses paraIndentLeft for second line of list with firstLineIndentMode', () => {
+      // Create a multi-line list item with firstLineIndentMode
+      const multiLineListBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'list-item-multiline',
+        runs: [
+          { text: 'First line text ', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 17 },
+          { text: 'second line text', fontFamily: 'Arial', fontSize: 16, pmStart: 17, pmEnd: 33 },
+        ],
+        attrs: {
+          indent: {
+            left: 36,
+            firstLine: 0,
+            hanging: 18,
+          },
+          wordLayout: {
+            firstLineIndentMode: true,
+            textStartPx: 56, // Only applies to first line
+            marker: {
+              markerText: '1.',
+              markerX: 36,
+              textStartX: 56,
+            },
+          },
+        },
+      };
+
+      const multiLineListMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 16,
+            width: 200,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 1,
+            fromChar: 0,
+            toRun: 1,
+            toChar: 16,
+            width: 220,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+        marker: {
+          markerWidth: 20,
+        },
+      };
+
+      const multiLineListLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'list-item-multiline',
+                fromLine: 0,
+                toLine: 2,
+                x: 30,
+                y: 40,
+                width: 300,
+                pmStart: 1,
+                pmEnd: 33,
+                markerWidth: 20,
+              },
+            ],
+          },
+        ],
+      };
+
+      // Select only the second line
+      const rects = selectionToRects(multiLineListLayout, [multiLineListBlock], [multiLineListMeasure], 17, 33);
+
+      expect(rects).toHaveLength(1);
+      // Second line should use paraIndentLeft (36), not textStartPx (56)
+      // Rect x should be: fragment.x (30) + paraIndentLeft (36) + startX offset
+      const expectedMinX = 30 + 36; // fragment.x + paraIndentLeft
+      expect(rects[0].x).toBeGreaterThanOrEqual(expectedMinX);
+      expect(rects[0].x).toBeLessThan(30 + 56); // Should not use textStartPx
+    });
+
+    it('correctly positions selection rects for standard hanging indent list', () => {
+      // Create a standard list item WITHOUT firstLineIndentMode
+      const standardListBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'standard-list-item',
+        runs: [{ text: 'Standard list content', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 22 }],
+        attrs: {
+          indent: {
+            left: 36,
+            firstLine: 0,
+            hanging: 18,
+          },
+          // No wordLayout.firstLineIndentMode
+        },
+      };
+
+      const standardListMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 21,
+            width: 180,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+        marker: {
+          markerWidth: 20,
+        },
+      };
+
+      const standardListLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'standard-list-item',
+                fromLine: 0,
+                toLine: 1,
+                x: 30,
+                y: 40,
+                width: 300,
+                pmStart: 1,
+                pmEnd: 22,
+                markerWidth: 20,
+              },
+            ],
+          },
+        ],
+      };
+
+      const rects = selectionToRects(standardListLayout, [standardListBlock], [standardListMeasure], 1, 22);
+
+      expect(rects).toHaveLength(1);
+      // Standard list uses paraIndentLeft (36) for text positioning
+      // Rect x should be: fragment.x (30) + paraIndentLeft (36) + startX offset
+      const expectedMinX = 30 + 36;
+      expect(rects[0].x).toBeGreaterThanOrEqual(expectedMinX);
+    });
+
+    it('handles edge case with textStartPx=0 in firstLineIndentMode', () => {
+      // Test edge case where textStartPx is explicitly 0
+      const zeroTextStartBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'zero-textstart-list',
+        runs: [{ text: 'Zero textStart', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 15 }],
+        attrs: {
+          indent: {
+            left: 0,
+            firstLine: 0,
+            hanging: 0,
+          },
+          wordLayout: {
+            firstLineIndentMode: true,
+            textStartPx: 0, // Explicitly 0
+            marker: {
+              markerText: '•',
+            },
+          },
+        },
+      };
+
+      const zeroMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 14,
+            width: 120,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+        marker: {
+          markerWidth: 10,
+        },
+      };
+
+      const zeroLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'zero-textstart-list',
+                fromLine: 0,
+                toLine: 1,
+                x: 30,
+                y: 40,
+                width: 300,
+                pmStart: 1,
+                pmEnd: 15,
+                markerWidth: 10,
+              },
+            ],
+          },
+        ],
+      };
+
+      const rects = selectionToRects(zeroLayout, [zeroTextStartBlock], [zeroMeasure], 1, 15);
+
+      expect(rects).toHaveLength(1);
+      // With textStartPx=0, indent adjustment is 0, so rect x is fragment.x + startX
+      expect(rects[0].x).toBeGreaterThanOrEqual(30);
+    });
+
+    it('handles missing wordLayout gracefully (non-list paragraph)', () => {
+      // Ensure non-list paragraphs work correctly without wordLayout
+      const regularBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'regular-para',
+        runs: [{ text: 'Regular paragraph', fontFamily: 'Arial', fontSize: 16, pmStart: 1, pmEnd: 18 }],
+        attrs: {
+          indent: {
+            left: 36,
+            firstLine: 18, // First-line indent for non-list
+            hanging: 0,
+          },
+          // No wordLayout
+        },
+      };
+
+      const regularMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 17,
+            width: 160,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const regularLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'regular-para',
+                fromLine: 0,
+                toLine: 1,
+                x: 30,
+                y: 40,
+                width: 300,
+                pmStart: 1,
+                pmEnd: 18,
+              },
+            ],
+          },
+        ],
+      };
+
+      const rects = selectionToRects(regularLayout, [regularBlock], [regularMeasure], 1, 18);
+
+      expect(rects).toHaveLength(1);
+      // Non-list paragraph: indent adjustment is paraIndentLeft + firstLineOffset
+      // firstLineOffset = firstLineIndent (18) - hanging (0) = 18
+      // Expected indent adjustment: 36 + 18 = 54
+      const expectedMinX = 30 + 54;
+      expect(rects[0].x).toBeGreaterThanOrEqual(expectedMinX);
+    });
+  });
+
+  it('uses per-page heights and gaps for Y offsets (mixed page sizes)', () => {
+    const layout = {
+      pageSize: { w: 400, h: 400 },
+      pageGap: 30,
+      pages: [
+        {
+          number: 1,
+          size: { w: 400, h: 400 },
+          fragments: [
+            {
+              kind: 'para',
+              blockId: '0-paragraph',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 300,
+              pmStart: 1,
+              pmEnd: 12,
+            },
+          ],
+        },
+        {
+          number: 2,
+          size: { w: 400, h: 600 },
+          fragments: [
+            {
+              kind: 'para',
+              blockId: '0-paragraph',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 300,
+              pmStart: 1,
+              pmEnd: 12,
+            },
+          ],
+        },
+      ],
+    } as Layout;
+
+    const helper = new PageGeometryHelper({ layout, pageGap: layout.pageGap });
+    const rects = selectionToRects(layout, [simpleBlock], [simpleMeasure], 1, 5, helper);
+    expect(rects).toHaveLength(2);
+    // Second page rect should start at pageTop (400 + 30) + fragment.y (0)
+    expect(rects[1].y).toBe(430);
+  });
+});
+
+describe('getFragmentAtPosition', () => {
+  it('finds fragment covering position', () => {
+    const hit = getFragmentAtPosition(simpleLayout, blocks, measures, 3);
+    expect(hit?.fragment.blockId).toBe('0-paragraph');
+  });
+
+  it('returns drawing fragment for drawing positions', () => {
+    const hit = getFragmentAtPosition(drawingLayout, [drawingBlock], [drawingMeasure], 20);
+    expect(hit?.fragment.kind).toBe('drawing');
+    expect(hit?.block.id).toBe('drawing-0');
+  });
+});

@@ -1,0 +1,27 @@
+{
+  "name": "@superdoc-examples/collaboration",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "dev": "concurrently -k \"tsx server.ts\" \"vite\"",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test": "playwright test",
+    "browsers": "playwright install chromium",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^2.13.6",
+    "superdoc": "^2.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.1.2",
+    "jszip": "^3.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "vite": "^7.2.7"
+  }
+}

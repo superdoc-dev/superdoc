@@ -1,0 +1,212 @@
+// v2-keyboard-005 — Durable public routes for the v2 shell/session/reference
+// keyboard shortcuts.
+//
+// The keyboard trigger plumbing lives in `@superdoc/v2-host`
+// (`bindV2SessionShortcuts`). This module supplies the SHELL/PUBLIC routes those
+// shortcuts call, so the keyboard layer never reaches V1 editor internals:
+//
+//   • toolbar focus  -> shell chrome (the built-in toolbar container)
+//   • field update   -> the public Document API reference workflow facade
+//   • page-field      -> the public Document API `fields.insert` workflow
+//
+// Header/footer focus and Escape session exit are intentionally NOT provided:
+// the public V2 host exposes no story-focus or session-exit seam yet, so those
+// routes stay absent and the binder fails closed with a stable diagnostic rather
+// than fabricating behavior.
+
+/**
+ * The narrow slice of the public Document API facade (`activeEditor.doc`) the
+ * reference shortcuts route through. Every method is optional so capability is
+ * detected per facade rather than assumed.
+ */
+interface ReferenceDocumentApi {
+  selection?: {
+    current?: (input?: unknown) => unknown;
+  };
+  toc?: {
+    list?: () => unknown;
+    update?: (input: unknown) => unknown;
+  };
+  fields?: {
+    list?: () => unknown;
+    rebuild?: (input: unknown) => unknown;
+    insert?: (input: unknown) => unknown;
+  };
+  index?: {
+    list?: () => unknown;
+    rebuild?: (input: unknown) => unknown;
+  };
+}
+
+interface SessionShortcutRouteResult {
+  handled: boolean;
+  reason?: string;
+}
+
+type RouteReturn = SessionShortcutRouteResult | boolean;
+
+interface SessionShortcutRoutes {
+  focusToolbar?: () => RouteReturn;
+  focusHeaderFooter?: (region: 'header' | 'footer') => RouteReturn;
+  exitSession?: () => RouteReturn;
+  updateFields?: () => RouteReturn;
+  insertPageField?: (kind: 'page' | 'numpages') => RouteReturn;
+}
+
+export interface CreateV2SessionShortcutRoutesDeps {
+  /** Resolve the live toolbar container element for this SuperDoc instance. */
+  resolveToolbarElement: () => HTMLElement | null | undefined;
+  /** Resolve the live public Document API facade, or null when unavailable. */
+  getDocumentApi: () => ReferenceDocumentApi | null | undefined;
+}
+
+const TOOLBAR_FOCUS_SELECTOR = '.superdoc-toolbar';
+
+/** Normalize a public list result (`{ items: [...] }` or an array) to an array. */
+function listItems(result: unknown): unknown[] {
+  if (Array.isArray(result)) return result;
+  if (result && typeof result === 'object' && Array.isArray((result as { items?: unknown[] }).items)) {
+    return (result as { items: unknown[] }).items;
+  }
+  return [];
+}
+
+/** A best-effort update target derived from a listed reference item. The durable
+ *  `address` (carrying the node id that `toc.update` / `fields.rebuild` resolve
+ *  against) is preferred over the ephemeral `handle` ref, which those ops cannot
+ *  resolve. */
+function targetOf(item: unknown): unknown {
+  if (item && typeof item === 'object') {
+    const record = item as Record<string, unknown>;
+    return record.target ?? record.address ?? record.handle ?? item;
+  }
+  return item;
+}
+
+function isFn(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === 'function';
+}
+
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  return Boolean(value && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isTextTarget(value: unknown): value is { kind: 'text'; segments: unknown[]; story?: unknown } {
+  return isRecord(value) && value.kind === 'text' && Array.isArray(value.segments) && value.segments.length > 0;
+}
+
+function isHeaderFooterStory(story: unknown): boolean {
+  return (
+    isRecord(story) &&
+    story.kind === 'story' &&
+    (story.storyType === 'headerFooterSlot' || story.storyType === 'headerFooterPart')
+  );
+}
+
+function resolveCurrentHeaderFooterTextTarget(doc: ReferenceDocumentApi): SessionShortcutRouteResult & {
+  target?: { kind: 'text'; segments: unknown[]; story?: unknown };
+} {
+  if (!isFn(doc.selection?.current)) return { handled: false, reason: 'page-field-selection-unavailable' };
+  let currentSelection: unknown;
+  try {
+    currentSelection = doc.selection.current({ includeText: false });
+  } catch {
+    return { handled: false, reason: 'page-field-selection-unavailable' };
+  }
+  if (isPromiseLike(currentSelection)) return { handled: false, reason: 'page-field-selection-async' };
+  if (!isRecord(currentSelection) || !isTextTarget(currentSelection.target)) {
+    return { handled: false, reason: 'page-field-selection-unavailable' };
+  }
+  if (!isHeaderFooterStory(currentSelection.target.story)) {
+    return { handled: false, reason: 'page-field-context-unavailable' };
+  }
+  return { handled: true, target: currentSelection.target };
+}
+
+/**
+ * List reference entries through the facade and rebuild/update each. Runs async
+ * and best-effort: list/update may be sync or Promise-returning, and any
+ * rejection is swallowed (the durability of the result is proven separately by
+ * the Labs reference-workflow rows, not by this keyboard route).
+ */
+function runListThenApply(
+  list: (() => unknown) | undefined,
+  apply: ((input: unknown) => unknown) | undefined,
+): boolean {
+  if (!isFn(list) || !isFn(apply)) return false;
+  void Promise.resolve()
+    .then(() => list())
+    .then((result) => {
+      for (const item of listItems(result)) {
+        try {
+          void Promise.resolve(apply({ target: targetOf(item) })).catch(() => {});
+        } catch {
+          /* best-effort per item */
+        }
+      }
+    })
+    .catch(() => {});
+  return true;
+}
+
+/**
+ * Build the durable session/reference shortcut routes. Returned routes match the
+ * `SessionShortcutRoutes` shape consumed by `bindV2SessionShortcuts`.
+ */
+export function createV2SessionShortcutRoutes(deps: CreateV2SessionShortcutRoutesDeps): SessionShortcutRoutes {
+  const focusToolbar = (): RouteReturn => {
+    const container = deps.resolveToolbarElement();
+    if (!container) return { handled: false, reason: 'no-toolbar' };
+    const inner =
+      typeof container.matches === 'function' && container.matches(TOOLBAR_FOCUS_SELECTOR)
+        ? container
+        : ((container.querySelector?.(TOOLBAR_FOCUS_SELECTOR) as HTMLElement | null) ?? container);
+    if (!inner) return { handled: false, reason: 'no-toolbar' };
+    if (!inner.hasAttribute('tabindex')) inner.setAttribute('tabindex', '0');
+    if (typeof inner.focus !== 'function') return { handled: false, reason: 'no-toolbar' };
+    inner.focus();
+    return true;
+  };
+
+  const updateFields = (): RouteReturn => {
+    const doc = deps.getDocumentApi();
+    if (!doc) return { handled: false, reason: 'document-api-unavailable' };
+    // V1 `F9`: update TOCs first, then stat/reference fields, then indexes.
+    let ran = runListThenApply(doc.toc?.list, doc.toc?.update);
+    ran = runListThenApply(doc.fields?.list, doc.fields?.rebuild) || ran;
+    ran = runListThenApply(doc.index?.list, doc.index?.rebuild) || ran;
+    return ran ? true : { handled: false, reason: 'field-update-workflow-unavailable' };
+  };
+
+  const insertPageField = (kind: 'page' | 'numpages'): RouteReturn => {
+    const doc = deps.getDocumentApi();
+    if (!doc) return { handled: false, reason: 'document-api-unavailable' };
+    if (!isFn(doc.fields?.insert)) return { handled: false, reason: 'page-field-insert-unavailable' };
+    const target = resolveCurrentHeaderFooterTextTarget(doc);
+    if (!target.handled || !target.target) {
+      return { handled: false, reason: target.reason ?? 'page-field-context-unavailable' };
+    }
+    const instruction = kind === 'page' ? 'PAGE' : 'NUMPAGES';
+    try {
+      const result = doc.fields!.insert!({
+        at: target.target,
+        instruction,
+        mode: 'raw',
+      });
+      if (isPromiseLike(result)) {
+        void result.catch(() => {});
+      } else if (isRecord(result) && result.success === false) {
+        return { handled: false, reason: 'page-field-insert-failed' };
+      }
+    } catch {
+      return { handled: false, reason: 'page-field-insert-failed' };
+    }
+    return true;
+  };
+
+  return { focusToolbar, updateFields, insertPageField };
+}

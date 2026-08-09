@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/caiopizzol/linkkeeper/v0.2.0/schema/links.schema.json",
+  "version": 1,
+  "defaults": {
+    "repository": "superdoc/docx-editor",
+    "ref": "main"
+  },
+  "links": {
+    "ai-redlining": { "path": "go-links/unavailable" },
+    "angular": { "path": "go-links/unavailable" },
+    "cdn": { "path": "go-links/unavailable" },
+    "chrome-extension": { "path": "go-links/unavailable" },
+    "collaborative-agent": { "path": "go-links/unavailable" },
+    "comments": { "path": "go-links/unavailable" },
+    "contract-templates": { "path": "go-links/unavailable" },
+    "doc-rag": { "repository": "superdoc-dev/demos", "path": "rag" },
+    "docx-from-html": { "path": "go-links/unavailable" },
+    "esign": { "repository": "superdoc-dev/demos", "path": "esign" },
+    "examples/collaboration": { "path": "examples/collaboration" },
+    "examples/content-controls": { "path": "examples/content-controls" },
+    "examples/custom-ui": { "path": "examples/custom-ui" },
+    "examples/document-modes": { "path": "examples/document-modes" },
+    "examples/react": { "path": "examples/react" },
+    "examples/search": { "path": "examples/search" },
+    "examples/vanilla": { "path": "examples/vanilla" },
+    "examples/version-history": { "path": "examples/version-history" },
+    "grading-papers": { "path": "go-links/unavailable" },
+    "hocuspocus": { "path": "go-links/unavailable" },
+    "laravel": { "path": "go-links/unavailable" },
+    "linked-sections": { "path": "go-links/unavailable" },
+    "nextjs": { "path": "go-links/unavailable" },
+    "nextjs-ssr": { "path": "go-links/unavailable" },
+    "nuxt": { "path": "go-links/unavailable" },
+    "react": { "path": "examples/react" },
+    "solid": { "path": "go-links/unavailable" },
+    "template-builder": {
+      "repository": "superdoc-dev/demos",
+      "path": "template-builder"
+    },
+    "theming": { "path": "go-links/unavailable" },
+    "toolbar": { "path": "go-links/unavailable" },
+    "track-changes": { "path": "go-links/unavailable" },
+    "vanilla": { "path": "examples/vanilla" },
+    "vue": { "path": "go-links/unavailable" },
+    "word-addin": { "path": "go-links/unavailable" }
+  }
+}

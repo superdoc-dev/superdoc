@@ -1,0 +1,90 @@
+---
+title: Automate a DOCX with Python
+navTitle: Python SDK
+description: Accept tracked changes and save a separate DOCX from Python.
+---
+
+{/* Media decision: none. The install, script, and output check form one short linear workflow, so a diagram would repeat the numbered steps. */}
+
+Use the Python SDK when application code already knows which document operation to run. This guide accepts every
+tracked change in a DOCX and writes the result to a separate file.
+
+## 1. Install the Python SDK
+
+SuperDoc supports Python 3.9 and newer:
+
+```bash
+python -m pip install superdoc-sdk
+```
+
+The package installs the matching SuperDoc CLI companion automatically. You do not need Node.js or a separate CLI
+installation. Published companions support macOS on Apple Silicon and Intel, Linux on ARM64 and x64, and Windows on x64.
+
+## 2. Prepare a document
+
+Download the [tracked-changes fixture](/fixtures/tracked-changes.docx) and save it as `contract.docx` in your working
+directory. It contains one tracked change.
+
+<FileDownload
+  href='/fixtures/tracked-changes.docx'
+  label='Download the tracked-changes fixture'
+  description='Synthetic NDA with one tracked change'
+  fileType='DOCX'
+/>
+
+<Callout variant='warning' title='Keep the source file'>
+  Write the first result to a separate path so you can compare the output with the original document.
+</Callout>
+
+## 3. Accept the changes and save
+
+Create `accept_changes.py`:
+
+<include>../../../../snippets/headless/python-accept-changes.py</include>
+
+Run it from the directory containing `contract.docx`:
+
+```bash
+python accept_changes.py
+```
+
+`SuperDocClient` owns one persistent host process. The context manager starts it on entry and disposes it on exit. The
+document still has its own lifecycle, so the `finally` block closes the session even when a mutation or save fails.
+
+## 4. Verify the output
+
+Open `contract.accepted.docx` in Microsoft Word or the SuperDoc editor. Every tracked change should be accepted. The
+original `contract.docx` should remain unchanged.
+
+<Callout variant='success' title='Verification target'>
+  The output contains the same document content and formatting with no pending tracked changes. The source file remains
+  unchanged.
+</Callout>
+
+## Use the asynchronous client
+
+Use `AsyncSuperDocClient` when the surrounding application already runs an event loop. Its document methods mirror the
+synchronous client and are awaited:
+
+```python
+import asyncio
+
+from superdoc import AsyncSuperDocClient
+
+
+async def main():
+    async with AsyncSuperDocClient() as client:
+        document = await client.open({"doc": "./contract.docx"})
+        try:
+            info = await document.info({})
+            print(info["counts"])
+        finally:
+            await document.close({"discard": True})
+
+
+asyncio.run(main())
+```
+
+Use the [Node.js SDK](/agents/automation/node-sdk) for the same deterministic workflow from JavaScript or TypeScript.
+For the operation and receipt model shared by both SDKs, continue with the
+[Document API mental model](/document-api/mental-model).

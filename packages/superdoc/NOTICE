@@ -1,0 +1,8 @@
+SuperDoc is licensed under AGPL-3.0 or a separate commercial agreement. See LICENSE.
+
+SuperDoc 2 depends on the separately published @superdoc/docx-engine package.
+The SuperDoc npm tarball does not contain the engine implementation or its
+license files. The exact engine version is declared in package.json.
+
+The engine package carries its own license and notices:
+https://docs.superdoc.dev/resources/docx-engine-license

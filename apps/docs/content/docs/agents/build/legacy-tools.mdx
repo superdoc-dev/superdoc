@@ -1,0 +1,71 @@
+---
+title: Legacy tools
+navTitle: Legacy tools
+description: What the legacy preset advertises, why it is still the default, and how to move to core.
+---
+
+The `legacy` preset is the original LLM tool surface: ten grouped intent tools generated from the Document API contract. Most take an `action` argument selecting the operation within the group; `superdoc_search` does not, because it exposes a single query surface driven by `select`.
+
+It is still the default. A `createAgentToolkit()` call that omits `preset` gets this surface. Changing that default would break integrations built before presets existed, so it stays until a coordinated SDK release moves it.
+
+## What it advertises
+
+| Tool                     | Covers                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| `superdoc_get_content`   | Read the document as text, markdown, HTML, blocks, or metadata       |
+| `superdoc_search`        | Find content and return stable targets. Takes `select`, not `action` |
+| `superdoc_edit`          | Insert, replace, and delete text, plus undo and redo                 |
+| `superdoc_format`        | Inline and paragraph formatting, styles, direction, and flow         |
+| `superdoc_create`        | Create paragraphs, headings, and tables                              |
+| `superdoc_list`          | Create, convert, nest, split, merge, and renumber lists              |
+| `superdoc_table`         | Table structure, content, and styling                                |
+| `superdoc_comment`       | Create, update, resolve, and read comment threads                    |
+| `superdoc_track_changes` | List tracked changes and decide on them                              |
+| `superdoc_mutations`     | Preview and apply multi-step edits as one atomic batch               |
+
+Each tool's exact action list comes from the generated catalog and changes with the contract, so read the advertised schema rather than a copy of it:
+
+```ts
+import { getToolCatalog } from '@superdoc/sdk';
+
+const catalog = await getToolCatalog('legacy');
+for (const tool of catalog.tools) {
+  console.log(
+    tool.toolName,
+    tool.operations.map((operation) => operation.intentAction),
+  );
+}
+```
+
+The [Document API reference](/document-api/reference) documents the operations these tools dispatch to.
+
+## Choosing between them
+
+|                            | `legacy`                            | `core`                                            |
+| -------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Advertised tools           | 10 grouped intent tools             | 2 (`superdoc_inspect`, `superdoc_perform_action`) |
+| Edit selection             | Tool plus `action` within its group | One `action` from a 40-verb registry              |
+| `excludeActions`           | Ignored, no action surface          | Supported                                         |
+| Receipts with verification | No                                  | Yes                                               |
+| Default                    | Yes                                 | No, pass `preset: 'core'`                         |
+
+Build new integrations on `core`. It narrows the advertised surface, supports exclusions, and returns receipts carrying verification results.
+
+## Moving to core
+
+Set the preset explicitly and re-check the tool names your dispatch layer expects:
+
+```ts
+import { createAgentToolkit } from '@superdoc/sdk';
+
+const { tools, systemPrompt, dispatch } = await createAgentToolkit({
+  provider: 'openai',
+  preset: 'core',
+});
+```
+
+Three things change. Tool names collapse to two, so any code branching on a tool name needs updating. Edits move to `action` verbs on `superdoc_perform_action`, so a prompt naming legacy tools must be replaced by the preset's own `systemPrompt`. Receipts gain `verificationPassed` when an action runs a post-check.
+
+Presets are not versioned. A new tool _shape_ ships as a new preset id rather than a new version of an existing one, so `legacy` will not silently turn into an actions-style surface.
+
+That is not a stability guarantee for the contents. Both catalogs are generated from the Document API contract and the action registry, so a preset can gain, lose, or change operations across SDK releases without changing its id. Pin the SDK version if your integration needs the advertised surface to hold still, and re-read the catalog after upgrading.

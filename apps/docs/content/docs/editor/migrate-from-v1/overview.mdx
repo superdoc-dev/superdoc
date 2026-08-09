@@ -1,0 +1,550 @@
+---
+title: Migrate from v1
+navTitle: Overview
+description: Move a browser editor from SuperDoc v1 to the v2 DOCX engine.
+---
+
+{/* Media decision: none. Every step here is a code change, and the V1/V2 tabs put the before and after side by side. A diagram of the sequence would restate the headings. */}
+
+If your v1 application mounts `SuperDoc` from the package root, waits for readiness, and exports through the same instance, most of that integration remains valid. The migration is mainly about selecting the v2 package and removing dependencies on v1 internals.
+
+<Callout title='This guide covers local browser editing'>
+  V2 collaboration rooms use a different document format and require a separate migration. Do not connect a v2 editor
+  directly to an existing v1 collaboration room.
+</Callout>
+
+<MigrationAgentPrompt />
+
+## 1. Install the v2 package
+
+SuperDoc v2 is the current `latest` release:
+
+```bash
+pnpm add superdoc
+```
+
+Keep the package name `superdoc`. Do not add `editorVersion`, `v2`, or `v2Integration` to the editor configuration. The v2 package always runs the v2 DOCX engine and has no runtime fallback to v1.
+
+## 2. Keep the supported root integration
+
+These browser integration points remain the same:
+
+| Integration point | V2 path                                  |
+| ----------------- | ---------------------------------------- |
+| Editor class      | `SuperDoc` from `superdoc`               |
+| Styles            | `superdoc/style.css`                     |
+| Document input    | `document` with a `File`, `Blob`, or URL |
+| Ready lifecycle   | `onReady` or the `ready` event           |
+| Mode changes      | `setDocumentMode()`                      |
+| DOCX output       | `export()`                               |
+| Cleanup           | `destroy()`                              |
+
+A minimal v2 mount still looks familiar:
+
+```ts
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: file,
+  onReady: ({ superdoc }) => {
+    superdoc.setDocumentMode('editing');
+  },
+});
+```
+
+Call document-dependent methods only after `onReady`. V2 opens and renders the DOCX progressively, so readiness is the public boundary for starting product interaction.
+
+## 3. Remove legacy package subpaths
+
+SuperDoc v2 exposes a smaller public package surface:
+
+| V1 import                                                               | V2 replacement                                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `superdoc/types`                                                        | Not a rename. See [Removed in v2](/editor/migrate-from-v1/removed-apis)              |
+| `superdoc/headless-toolbar`                                             | `superdoc.ui`, the controller the instance owns                                      |
+| `superdoc/headless-toolbar/react`                                       | Hooks and providers from `superdoc/ui/react`                                         |
+| `superdoc/headless-toolbar/vue`                                         | Build on `superdoc.ui`, the framework-agnostic controller                            |
+| `superdoc/super-editor`                                                 | Use the `SuperDoc` instance and its public active-editor facade                      |
+| `superdoc/converter`, `superdoc/docx-zipper`, or `superdoc/file-zipper` | Use the supported `SuperDoc` load and export workflow; there is no direct v2 subpath |
+
+Do not replace a removed public path with an internal package. Packages such as `@superdoc/v2-host`, `@superdoc/headless`, and `@superdoc/document-api-v2-adapter` are implementation details, not customer integration surfaces.
+
+### Migrate a custom toolbar
+
+A v1 custom toolbar is not restored by changing only its import. Bind the application UI to the controller owned by the ready `SuperDoc` instance, then move each control's state and execution to a public command handle.
+
+| V1 integration responsibility                | V2 path                                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Import React headless-toolbar bindings       | Import `SuperDocUIProvider`, `useSetSuperDoc`, and hooks from `superdoc/ui/react`                     |
+| Bind controls to an editor or toolbar scope  | Call `useSetSuperDoc()` with the `SuperDoc` instance received by `onReady`                            |
+| Read whether a control is active or disabled | Read `active`, `enabled`, `value`, and `reason` from `useSuperDocCommand(id)`                         |
+| Run a toolbar action                         | Await `superdoc.ui.commands.executeAsync(id, payload)` and inspect `false` or an unsuccessful receipt |
+| Replace the document in the mounted editor   | Call `superdoc.replaceFile(file)` and keep the existing controller binding                            |
+| Replace the entire `SuperDoc` instance       | Bind the new instance from its `onReady` and destroy the instances your application created           |
+
+Do not create a controller for every render, tab, or document. One `SuperDoc` instance owns one stable controller. Replacing its document resets document-scoped state while existing command hooks stay subscribed. Replacing the entire instance is different: the provider must receive the new ready instance.
+
+Follow the complete [React custom UI setup](/editor/custom-ui/react-setup) for a toolbar that reports command outcomes and stays live after document replacement. Use [Commands and state](/editor/custom-ui/commands-and-state) for the framework-neutral contract.
+
+## 4. Replace direct editor internals
+
+V1 code could reach through the editor to ProseMirror state and commands:
+
+```ts
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  onEditorCreate: ({ editor }) => {
+    const text = editor.state.doc.textContent;
+    console.log(text);
+  },
+});
+```
+
+In v2, read and change document content through the public Document API after the editor is ready:
+
+```ts
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  onReady: async ({ superdoc }) => {
+    const doc = superdoc.activeEditor?.doc;
+    if (!doc) throw new Error('The active document is unavailable.');
+
+    const text = await doc.getText({});
+    console.log(text);
+  },
+});
+```
+
+Do not use `editor.state`, `editor.view`, DOM text offsets, or private command objects as the document model. Use the Document API for fresh reads and mutations, and `superdoc/ui` for reactive custom UI state.
+
+### Move UI interactions off the document runtime
+
+`DocumentRendererRuntime` is part of SuperDoc's rendering path. V1 integrations sometimes retrieved it with
+`getDocumentRuntimeForDocument()` and called navigation methods on it. That lookup is not the V2 readiness boundary. It
+can return `null` when the renderer is not available, which often surfaces as an application error such as
+`DocumentRuntime is not available`.
+
+Read the instance-owned controller from `superdoc.ui` after `onReady` instead. The controller groups state and actions by
+the feature your interface is showing. It also owns the navigation needed to reveal content on a virtualized page.
+
+#### Scroll to a tracked change
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function scrollToChange(superdoc: SuperDoc, changeId: string): Promise<boolean> {
+      const result = await superdoc.ui.trackChanges.scrollTo(changeId);
+      return result.success;
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function scrollToChange(
+      superdoc: SuperDoc,
+      documentId: string,
+      changeId: string,
+    ): Promise<boolean> {
+      const runtime = superdoc.getDocumentRuntimeForDocument(documentId);
+      if (!runtime?.scrollToElement) throw new Error('DocumentRuntime is not available.');
+      return Boolean(await runtime.scrollToElement(changeId));
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+Use the narrowest navigation method for the target you already know:
+
+| Target you have    | V2 navigation method                                       |
+| ------------------ | ---------------------------------------------------------- |
+| Tracked-change ID  | `superdoc.ui.trackChanges.scrollTo(changeId)`              |
+| Comment ID         | `superdoc.ui.comments.scrollTo(commentId)`                 |
+| Content-control ID | `superdoc.ui.contentControls.scrollIntoView({ id })`       |
+| Paragraph block ID | `superdoc.ui.viewport.scrollIntoView({ target: { ... } })` |
+
+The first three return structured results and keep feature state, such as the active tracked change, in the same
+controller. A paragraph block ID has no feature handle, so wrap it in a `TextAddress` and scroll the viewport directly:
+
+```ts
+import type { SuperDoc } from 'superdoc';
+import type { TextAddress } from 'superdoc/ui';
+
+// Take the story from `TextAddress` itself. The root `superdoc` package also
+// exports a `StoryLocator`, but that is the legacy `string | Record<string,
+// unknown>` alias and is not assignable to the Document API locator this
+// address requires.
+async function revealBlock(
+  superdoc: SuperDoc,
+  blockId: string,
+  maxSteps: number,
+  story?: TextAddress['story'],
+): Promise<boolean> {
+  // Carry the paragraph's story. Omitting it defaults the address to the body,
+  // so a header, footer, or note paragraph never resolves however many times
+  // you retry.
+  const target: TextAddress = { kind: 'text', blockId, range: { start: 0, end: 0 }, ...(story ? { story } : {}) };
+
+  // A block beyond the retained frontier of a long virtualized document needs
+  // more than one pass: the host performs one bounded reveal step per call and
+  // returns `success: false` while the target is still out of reach. Retry
+  // against a step budget rather than treating the first result as final.
+  //
+  // `maxSteps` is yours to choose and to bound: a stale or unreachable ID
+  // fails on every pass, so an unbounded loop never terminates. Measure it
+  // against your own longest document rather than copying a number.
+  for (let step = 0; step < maxSteps; step += 1) {
+    const result = await superdoc.ui.viewport.scrollIntoView({ target, block: 'center' });
+    if (result.success) return true;
+  }
+  return false;
+}
+```
+
+`scrollIntoView` also accepts a `TextTarget` for a multi-segment range, or an `EntityAddress` when you would rather
+address a comment or tracked change by ID than go through its feature handle. The feature-specific methods delegate to
+the same one-step host call, so a deep target reached through `ui.trackChanges.scrollTo()`, `ui.comments.scrollTo()`, or
+`ui.contentControls.scrollIntoView()` needs the same bounded retry. Apply the pattern above to whichever call you use,
+and keep the step budget: a stale or unreachable ID returns `success: false` forever, so a loop with no ceiling never
+terminates.
+
+<Callout variant='warning' title='Only paragraph IDs work with this recipe'>
+  `TextAddress` is a single-block **text** range, and the host resolves an off-screen `blockId` through its paragraph
+  index. A structural block such as a table, image, TOC, or content control has no entry there, so wrapping its ID this
+  way resolves nothing. Reach those through the surface that owns them, such as
+  `superdoc.ui.contentControls.scrollIntoView({id})`, or navigate to a paragraph inside them.
+</Callout>
+
+<Callout variant='warning' title='Root navigation is not a working replacement yet'>
+  `superdoc.scrollToElement()` and `superdoc.navigateTo()` read the renderer runtime slot directly, and nothing on the
+  V2 path populates it, so both return `false` for every target in current V2 packages. Use the method for your target
+  type above instead. If you hold a stable extracted ID and do not know its type, resolve the type through the Document
+  API first, then choose from the table.
+</Callout>
+
+You do not need to import the normal controller from `superdoc/ui`. The `superdoc.ui` getter creates it once, and
+`superdoc.destroy()` owns its cleanup. Import `createSuperDocUI` from `superdoc/ui` only when you need a separately owned
+controller with its own lifecycle. Continue with [Custom UI controller setup](/editor/custom-ui/controller-setup) for
+subscriptions and cleanup, or the [tracked-changes UI guide](/editor/custom-ui/tracked-changes) for review navigation.
+
+## 5. Map common editor and ProseMirror internals
+
+These are the mappings most applications need: reading text, resolving a selection, inserting at it, and exporting. Each example includes its imports, inputs, async boundary, and returned value. V2 is selected by default;
+switching an example switches every example on this page.
+
+For everything else, work from [Removed in v2](/editor/migrate-from-v1/removed-apis). Each entry names the v1
+symbol, what you will observe when it breaks, and the v2 replacement if one exists. Entries link to a canonical API
+page where one covers the replacement.
+
+### Document API
+
+#### getText
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='headless' testCase='get-text'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function readText(superdoc: SuperDoc): Promise<string> {
+      const doc = superdoc.activeEditor?.doc;
+      if (!doc) throw new Error('The active document is unavailable.');
+      return doc.getText({});
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export function readText(superdoc: SuperDoc): string {
+      return superdoc.activeEditor!.state.doc.textContent;
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+#### selection.current
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='node' testCase='selection-current'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function currentSelection(superdoc: SuperDoc) {
+      const doc = superdoc.activeEditor?.doc;
+      if (!doc) throw new Error('The active document is unavailable.');
+      return doc.selection.current({ includeText: true });
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export function currentSelection(superdoc: SuperDoc) {
+      return superdoc.activeEditor!.state.selection;
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+#### selection.current().selectionTarget
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='node' testCase='selection-target'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function selectionTarget(superdoc: SuperDoc) {
+      const doc = superdoc.activeEditor?.doc;
+      if (!doc) throw new Error('The active document is unavailable.');
+      const selection = await doc.selection.current({});
+      return selection.selectionTarget;
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export function selectionRange(superdoc: SuperDoc) {
+      const { from, to } = superdoc.activeEditor!.state.selection;
+      return { from, to };
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+#### insert
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='headless' testCase='insert-text'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function insertText(superdoc: SuperDoc, text: string) {
+      const doc = superdoc.activeEditor?.doc;
+      if (!doc) throw new Error('The active document is unavailable.');
+      // A targetless insert appends at the end of the document. V1 inserted at
+      // the caret, so a missing target is a lost selection, not a default.
+      // Failing loudly beats silently putting the text somewhere else.
+      const selection = await doc.selection.current({});
+      if (!selection.selectionTarget) {
+        throw new Error('No selection target. Capture one while the editor has focus, or pass an explicit target.');
+      }
+      const result = (await doc.insert({ value: text, target: selection.selectionTarget })) as
+        | { success: boolean }
+        | { receipt: { success: boolean } };
+      const receipt = 'receipt' in result ? result.receipt : result;
+      if (!receipt.success) throw new Error('Text insertion failed.');
+      return result;
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export function insertText(superdoc: SuperDoc, text: string) {
+      const editor = superdoc.activeEditor!;
+      return editor.view.dispatch(editor.state.tr.insertText(text));
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+Pass a target unless you mean to append. `doc.insert({ value })` with no `target` or `ref` routes to the end of the
+document, so a direct port of `tr.insertText(text)` appends instead of inserting at the caret. In a browser this
+example throws rather than falling back, because losing the selection means the text would land somewhere the user did
+not choose. Headless callers with no selection can omit the target deliberately and take the append.
+
+The Editor returns a mutation receipt directly, while the headless SDK returns an operation envelope containing the
+receipt. Normalize the two shapes before checking `success`, as shown above. Headless callers can also use the envelope's
+`target`, `resolvedRange`, and `context` for details about the applied mutation. Verify persisted output by saving and
+reopening the DOCX when insertion is part of an automated workflow.
+
+### Export
+
+#### getMarkdown
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='headless' testCase='get-markdown'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function markdown(superdoc: SuperDoc): Promise<string> {
+      const doc = superdoc.activeEditor?.doc;
+      if (!doc) throw new Error('The active document is unavailable.');
+      return doc.getMarkdown({});
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export function markdown(superdoc: SuperDoc): string {
+      return superdoc.activeEditor!.getMarkdown();
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+#### export
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function exportDocx(superdoc: SuperDoc) {
+      return superdoc.export({ exportType: ['docx'], triggerDownload: false });
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import type { SuperDoc } from 'superdoc';
+
+    export async function exportDocx(superdoc: SuperDoc) {
+      return superdoc.export({ exportType: ['docx'], triggerDownload: false });
+    }
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+## 6. Migrate changed integration contracts
+
+The following changes are public V2 contracts rather than replacements for ProseMirror internals. Treat the browser
+Document API as asynchronous, keep document and UI namespaces explicit, and preserve every returned cleanup function.
+
+### Content-control clicks
+
+V2 keeps the `onContentControlClick` configuration callback. The equivalent instance event is
+`content-control:click`:
+
+```ts
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: file,
+  onContentControlClick: ({ target, source }) => {
+    console.log(target.id, target.scope, source);
+  },
+});
+
+const handleClick = ({ target, source }) => {
+  console.log(target.id, target.controlType, source);
+};
+
+superdoc.on('content-control:click', handleClick);
+```
+
+Each user click emits once for the innermost clicked content control. `target` contains `id`, `controlType`,
+`scope: 'inline' | 'block'`, and the optional `tag` and `alias`; `source` is `'pointer'`. The listener remains active
+after document replacement and collaboration updates. Programmatic `focus()` and selection changes do not emit this
+event. Use `superdoc.ui.contentControls` — for example `observe()` and `activeIds` — when the integration needs
+focus or selection state instead. See [Custom content controls](/editor/custom-ui/content-controls).
+
+### Collaboration
+
+#### document.v2Collaboration
+
+<MigrationExampleTabs>
+  <MigrationExample version='V2' test='node' testCase='collaboration-config'>
+    ```ts
+    import type { Document, V2CollaborationConfig } from 'superdoc';
+
+    export function collaborativeDocument(
+      data: Blob,
+      id: string,
+      serverUrl: string,
+      token: string,
+      roomMode: 'join' | 'create' = 'join',
+    ): Document {
+      const v2Collaboration: V2CollaborationConfig = {
+        providerType: 'hocuspocus', documentId: id, serverUrl, token, roomMode,
+      };
+      return {
+        id, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data, v2Collaboration,
+      };
+    }
+    ```
+
+  </MigrationExample>
+  <MigrationExample version='V1'>
+    ```ts
+    import * as Y from 'yjs';
+    import { HocuspocusProvider } from '@hocuspocus/provider';
+
+    const ydoc = new Y.Doc();
+    const provider = new HocuspocusProvider({ url: serverUrl, name: id, document: ydoc });
+    const modules = { collaboration: { ydoc, provider } };
+    ```
+
+  </MigrationExample>
+</MigrationExampleTabs>
+
+V2 owns the provider and `Y.Doc`; do not pass an external pair through `modules.collaboration`. Use `roomMode: 'join'`
+for an existing room and `'create'` only while seeding a missing room. Wait for `onCollaborationReady` before reading
+`instance.provider`, handle `collaboration-v2-room-missing` and `collaboration-v2-room-already-exists` in `onException`,
+and let `destroy()` release the owned collaboration lifecycle. V2 has no `join-or-create` mode: retrying with a different
+room mode requires a fresh mount.
+
+#### Split-origin worker assets
+
+If your JavaScript bundle is served from a different origin than the application, copy the three emitted v2 worker
+assets to the application's origin and pass their URLs explicitly:
+
+```ts
+new SuperDoc({
+  selector: '#editor',
+  document,
+  workerUrls: {
+    document: '/superdoc-workers/document.js',
+    collaboration: '/superdoc-workers/collaboration.js',
+    reviewIndex: '/superdoc-workers/review-index.js',
+  },
+});
+```
+
+Each URL must be same-origin with the page and serve a module worker. Omit this option when SuperDoc and the
+application share an origin; the bundled worker URLs remain the default.
+
+## 7. Verify one DOCX round trip
+
+Before migrating advanced UI or automation, verify the smallest complete path:
+
+1. Open a representative DOCX in v2.
+2. Wait for `onReady`.
+3. Make one direct or tracked edit.
+4. Export the document with `SuperDoc.export()`.
+5. Reopen the result in Microsoft Word or another DOCX reader.
+6. Confirm the edited content, formatting, comments, and tracked changes still match the intended document state.
+
+Keep v1 and v2 on separate branches or deployments while comparing the same input documents. A package upgrade should remain easy to reverse until the documents that matter to your product complete this round trip.
+
+Once that round trip holds, migrate whatever else your application uses, working from [Removed in
+v2](/editor/migrate-from-v1/removed-apis) and the canonical API pages it links to.
+
+Next, follow the [Editor quickstart](/editor/quickstart) for a complete v2 mount, or learn the [Document API mental model](/document-api/mental-model) before migrating programmatic edits.

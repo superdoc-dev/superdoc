@@ -1,0 +1,98 @@
+logs
+*.log
+.cache
+.vite
+.DS_Store
+.temp
+node_modules
+dist
+dist-cdn
+dist-devapp
+dist-ssr
+dist-types
+companion-dist
+*.local
+.env
+.npmrc
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/*
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+packages/word-layout/tests/**/*.js
+packages/word-layout/tests/**/*.d.ts
+packages/word-layout/tests/**/*.map
+
+# Transient prepack manifest backup (sanitize-pack-manifest.cjs); left behind
+# only when a pack is interrupted — never commit it.
+.package.json.prepack-backup
+
+# Playwright
+test-results
+*.tgz
+
+# Coverage reports
+coverage
+reports/
+
+**/src/**/*.d.ts.map
+**/src/**/*.js.map
+
+# TypeScript build info files
+*.tsbuildinfo
+
+# Planning and progress tracking documents
+**/plan/progress.md
+wrangler/
+codex.config.json
+perf-baseline-results.json
+.claude
+plans/
+
+test-corpus/
+.pnpm-store
+
+.bun-cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+# Generated platform companion build metadata (do not commit)
+packages/sdk/langs/python/platforms/**/*.egg-info/
+# Generated python packaging metadata (do not commit)
+packages/sdk/langs/python/**/*.egg-info/
+# Generated Node SDK platform binaries staged during release/publish
+packages/sdk/langs/node/platforms/sdk-*/bin/
+
+# Exported documents the collaboration examples write at runtime. Unanchored on
+# purpose: the FastAPI example has already moved once, and a checkout that ran
+# it at the old path keeps the ignored directory there after the update. A
+# path-pinned rule stops covering those files the moment the example moves,
+# which turns a stale exported document into something `git add -A` will stage.
+.superdoc-state/
+
+# Generated artifacts — run `pnpm run generate:all` to produce
+packages/document-api/generated/
+packages/document-api/.generated-internal/
+apps/cli/generated/
+packages/sdk/langs/node/src/generated/
+packages/sdk/langs/python/superdoc/generated/
+packages/sdk/tools/*.json
+
+.playwright-cli/
+.prqrc.json
+tmp/
+.tmp/

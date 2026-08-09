@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260" role="img" aria-labelledby="title description">
+  <title id="title">Document API operation lifecycle</title>
+  <desc id="description">A query discovers document content and returns a stable target. A mutation applies to that target and returns a receipt that the caller inspects.</desc>
+  <rect width="960" height="260" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="44" y="61" width="176" height="112" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="132" y="107" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#0f44cc">query.match()</text>
+    <text x="132" y="138" text-anchor="middle" font-size="14" fill="#5f636c">Discover content</text>
+
+    <path d="M236 117h52" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m278 108 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="306" y="61" width="150" height="112" rx="9" fill="#eef4ff" stroke="#7da2ff" stroke-width="2"/>
+    <text x="381" y="107" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#0f44cc">target</text>
+    <text x="381" y="138" text-anchor="middle" font-size="14" fill="#5f636c">Address the change</text>
+
+    <path d="M472 117h52" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m514 108 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="542" y="61" width="176" height="112" rx="9" fill="#16181d" stroke="#343741" stroke-width="2"/>
+    <text x="630" y="107" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#ffffff">mutation(...)</text>
+    <text x="630" y="138" text-anchor="middle" font-size="14" fill="#c4c7cf">Apply explicitly</text>
+
+    <path d="M734 117h52" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m776 108 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="804" y="61" width="112" height="112" rx="9" fill="#edf9f1" stroke="#70c991" stroke-width="2"/>
+    <circle cx="860" cy="96" r="8" fill="#18a957"/>
+    <text x="860" y="127" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#006b31">receipt</text>
+    <text x="860" y="149" text-anchor="middle" font-size="12" fill="#43634f">Inspect</text>
+
+    <text x="480" y="220" text-anchor="middle" font-size="14" fill="#5f636c">The host changes how the call runs, not what the operation means.</text>
+  </g>
+</svg>

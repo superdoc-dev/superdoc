@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title description">
+  <title id="title">Mutation result decision flow</title>
+  <desc id="description">After a Document API mutation, a successful receipt continues the workflow. A state-drift failure re-queries the document before one bounded retry. Capability, permission, or invalid-input failures stop so the caller can change the request or workflow.</desc>
+  <rect width="960" height="420" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="48" y="48" width="190" height="76" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="143" y="79" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#0f44cc">mutation(...)</text>
+    <text x="143" y="103" text-anchor="middle" font-size="13" fill="#5f636c">Await the result</text>
+
+    <path d="M254 86h76" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m318 76 14 10-14 10" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="350" y="48" width="190" height="76" rx="9" fill="#eef4ff" stroke="#7da2ff" stroke-width="2"/>
+    <text x="445" y="79" text-anchor="middle" font-size="14" font-weight="700" fill="#16181d">Success?</text>
+    <text x="445" y="103" text-anchor="middle" font-size="13" fill="#5f636c">Receipt or caught error</text>
+
+    <path d="M556 86h76" stroke="#70c991" stroke-width="3"/>
+    <path d="m620 76 14 10-14 10" fill="none" stroke="#70c991" stroke-width="3"/>
+    <text x="594" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#006b31">YES</text>
+
+    <rect x="652" y="48" width="260" height="76" rx="9" fill="#edf9f1" stroke="#70c991" stroke-width="2"/>
+    <circle cx="684" cy="86" r="9" fill="#18a957"/>
+    <text x="710" y="82" font-size="14" font-weight="700" fill="#006b31">Continue</text>
+    <text x="710" y="104" font-size="13" fill="#43634f">Use the receipt in the next step</text>
+
+    <path d="M445 140v56" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m435 184 10 14 10-14" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <text x="466" y="172" font-size="12" font-weight="700" fill="#0f44cc">NO</text>
+
+    <rect x="310" y="216" width="270" height="76" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <text x="445" y="247" text-anchor="middle" font-size="14" font-weight="700" fill="#16181d">Read the failure code</text>
+    <text x="445" y="270" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#0f44cc">failure.code or error.code</text>
+
+    <path d="M294 254H190v68" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m180 310 10 14 10-14" fill="none" stroke="#7da2ff" stroke-width="3"/>
+    <text x="224" y="244" text-anchor="middle" font-size="12" font-weight="700" fill="#0f44cc">STATE DRIFT</text>
+
+    <rect x="48" y="324" width="284" height="62" rx="9" fill="#eef4ff" stroke="#7da2ff" stroke-width="2"/>
+    <text x="190" y="350" text-anchor="middle" font-size="14" font-weight="700" fill="#0f44cc">Re-query current state</text>
+    <text x="190" y="372" text-anchor="middle" font-size="13" fill="#5f636c">Review the match, then retry once</text>
+
+    <path d="M596 254h104v68" fill="none" stroke="#d27832" stroke-width="3"/>
+    <path d="m690 310 10 14 10-14" fill="none" stroke="#d27832" stroke-width="3"/>
+    <text x="664" y="244" text-anchor="middle" font-size="12" font-weight="700" fill="#955018">REQUEST OR POLICY</text>
+
+    <rect x="628" y="324" width="284" height="62" rx="9" fill="#fff5e9" stroke="#e4a66e" stroke-width="2"/>
+    <text x="770" y="350" text-anchor="middle" font-size="14" font-weight="700" fill="#7b3d0b">Stop and change the workflow</text>
+    <text x="770" y="372" text-anchor="middle" font-size="13" fill="#6b5542">Do not retry the same request</text>
+  </g>
+</svg>

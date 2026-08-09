@@ -1,0 +1,95 @@
+name: CI Document API
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-document-api-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      document_api: ${{ steps.set.outputs.document_api }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            document_api:
+              - 'packages/document-api/**'
+              # The public gate regenerates the documentation reference to check
+              # every operation is rendered, so a change to that generator can
+              # fail this workflow.
+              - 'apps/docs/scripts/generate-document-api-reference.ts'
+              - 'apps/docs/lib/document-api-reference/**'
+              - 'scripts/check-public-docapi.mjs'
+              - '.nvmrc'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-document-api.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "document_api=${{ steps.filter.outputs.document_api }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "document_api=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  check:
+    needs: detect
+    if: needs.detect.outputs.document_api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: pnpm config ownership
+        run: pnpm run check:pnpm-config
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check contract parity and generated outputs
+        run: pnpm run docapi:check
+
+  validate:
+    name: CI Document API / validate
+    if: always()
+    needs: [detect, check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.document_api }}" != "true" ]]; then
+            echo "Document API CI skipped: no relevant paths changed."
+            exit 0
+          fi
+          if [[ "${{ needs.check.result }}" != "success" ]]; then
+            echo "Check job did not succeed (result: ${{ needs.check.result }})."
+            exit 1
+          fi

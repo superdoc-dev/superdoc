@@ -1,0 +1,25 @@
+---
+title: Links and context menus
+navTitle: Links and menus
+description: Configure link behavior and add application actions to the built-in Editor context menu.
+---
+
+The built-in UI can create and edit hyperlinks, show a link popover, and combine SuperDoc's default context menu with application-owned actions.
+
+## Configure both interaction surfaces
+
+This example keeps the default menu, adds one selection-aware action, and replaces the clicked-link popover with framework-neutral DOM:
+
+<include>../../../../snippets/editor/built-in-links-context.html</include>
+
+<include>../../../../snippets/editor/built-in-links-context.ts</include>
+
+`modules.links.popoverResolver` runs synchronously when a link is clicked. Return `default` to use SuperDoc's popover, `none` to suppress it, or `external` to render with your own framework or DOM. The external renderer must return a cleanup function when it installs listeners or mounts a framework root. This resolver is the one built-in UI setting that has no `ui` equivalent yet, so it stays under `modules.links`; `ui: { linkPopover: false }` suppresses the popover entirely.
+
+`ui.contextMenu.customItems` adds sections to both the built-in right-click menu and the slash menu. SuperDoc calls `showWhen()` with the current context; return `true` when the action is relevant. Keep application actions narrow and avoid reconstructing document positions from `selectionStart` or `selectionEnd`; use the Document API and public selection targets for document work.
+
+## Separate navigation from mutation
+
+Opening a link is browser navigation. Creating, changing, and removing hyperlinks are document mutations. The built-in toolbar handles those mutations against the live selection and respects viewing mode. For programmatic hyperlink changes, use the generated Document API hyperlink operations instead of simulating toolbar clicks.
+
+Context-menu visibility is not authorization. Server-side access and collaboration policy remain the application's responsibility.

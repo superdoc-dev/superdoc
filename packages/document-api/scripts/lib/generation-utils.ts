@@ -1,0 +1,232 @@
+import { createHash } from 'node:crypto';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const PUBLIC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+export interface GeneratedFile {
+  path: string;
+  content: string;
+}
+
+export interface GeneratedCheckIssue {
+  kind: 'missing' | 'extra' | 'content';
+  path: string;
+}
+
+export function stableSort(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stableSort(entry));
+  }
+
+  if (value && typeof value === 'object') {
+    const sortedEntries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, stableSort(nested)]);
+    return Object.fromEntries(sortedEntries);
+  }
+
+  return value;
+}
+
+export function stableStringify(value: unknown): string {
+  return JSON.stringify(stableSort(value), null, 2);
+}
+
+export function sha256(value: unknown): string {
+  const payload = typeof value === 'string' ? value : stableStringify(value);
+  return createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+export function normalizeFileContent(content: string): string {
+  return content.endsWith('\n') ? content : `${content}\n`;
+}
+
+/**
+ * Format with the workspace formatter, keyed by the output path.
+ *
+ * The generated file has to come out the way `vp fmt` wants it, or the format
+ * step of `vp check` rewrites it on the next run and `docapi:check` reports a
+ * drift the generator caused. `--stdin-filepath` is how Oxfmt is told which
+ * parser and which `fmt` block options apply, so the answer is the repository's
+ * own rather than a second set of defaults maintained here.
+ */
+async function formatGeneratedContent(file: GeneratedFile): Promise<GeneratedFile> {
+  if (!file.path.endsWith('.json')) return file;
+  // Run the JavaScript CLI through Node so pnpm's Windows `.cmd` shim is never involved.
+  const vitePlusCli = fileURLToPath(import.meta.resolve('vite-plus/bin'));
+  const formatted = execFileSync(process.execPath, [vitePlusCli, 'fmt', '--stdin-filepath', file.path], {
+    cwd: PUBLIC_ROOT,
+    input: file.content,
+    encoding: 'utf8',
+    // The contract snapshot is over a megabyte, and the default 1 MB buffer
+    // fails it with ENOBUFS rather than a formatting error.
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return { ...file, content: formatted };
+}
+
+export function resolveWorkspacePath(path: string): string {
+  return resolve(process.cwd(), path);
+}
+
+export async function writeGeneratedFiles(files: GeneratedFile[]): Promise<void> {
+  for (const file of files) {
+    const formatted = await formatGeneratedContent(file);
+    const absolutePath = resolveWorkspacePath(formatted.path);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, normalizeFileContent(formatted.content), 'utf8');
+  }
+}
+
+async function listFilesRecursive(root: string): Promise<string[]> {
+  const absoluteRoot = resolveWorkspacePath(root);
+  const entries = await readdir(absoluteRoot, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const relativePath = `${root}/${entry.name}`;
+    if (entry.isDirectory()) {
+      files.push(...(await listFilesRecursive(relativePath)));
+      continue;
+    }
+    files.push(relativePath);
+  }
+
+  return files;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(resolveWorkspacePath(path));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Compare expected generated files against the on-disk state.
+ *
+ * - `roots`: tracked directories whose committed contents must match the
+ *   in-memory build. Files under these roots are checked for existence,
+ *   content equality, and "extras on disk that should not be there."
+ *   Use for outputs that are committed to the repository.
+ * - `inMemoryRoots`: directories whose contents are gitignored. Files
+ *   under these roots are NOT checked for existence, content, or extras
+ *   on disk. A clean checkout has none, and a developer who ran
+ *   `generate:*` earlier may have a stale copy on disk. The in-memory
+ *   build is still exercised (any error thrown by the builder still
+ *   propagates), confirming the artifacts CAN be produced. The verdict is
+ *   therefore deterministic regardless of disk state: stale optional
+ *   generated outputs can never make the authoritative check false-fail.
+ */
+export async function checkGeneratedFiles(
+  expectedFiles: GeneratedFile[],
+  options: {
+    roots?: string[];
+    inMemoryRoots?: string[];
+  } = {},
+): Promise<GeneratedCheckIssue[]> {
+  const issues: GeneratedCheckIssue[] = [];
+  const expected = new Map<string, GeneratedFile>(expectedFiles.map((file) => [file.path, file]));
+  const inMemoryRoots = options.inMemoryRoots ?? [];
+
+  const isUnderInMemoryRoot = (path: string): boolean =>
+    inMemoryRoots.some((root) => path === root || path.startsWith(`${root}/`));
+
+  for (const [path, file] of expected.entries()) {
+    const onDiskOptional = isUnderInMemoryRoot(path);
+    if (onDiskOptional) {
+      // In-memory roots are gitignored. Building the GeneratedFile entry above
+      // already proved the artifact can be produced; the on-disk state (absent
+      // or stale) must never affect the verdict. Skip existence and content
+      // checks entirely so the authoritative check stays deterministic.
+      continue;
+    }
+    if (!(await pathExists(path))) {
+      issues.push({ kind: 'missing', path });
+      continue;
+    }
+
+    const formatted = await formatGeneratedContent(file);
+    const expectedContent = normalizeFileContent(formatted.content);
+    const actualContent = await readFile(resolveWorkspacePath(path), 'utf8');
+    if (actualContent !== expectedContent) {
+      issues.push({ kind: 'content', path });
+    }
+  }
+
+  const roots = options.roots ?? [];
+  const actualFiles = new Set<string>();
+
+  for (const root of roots) {
+    if (!(await pathExists(root))) continue;
+    const rootFiles = await listFilesRecursive(root);
+    for (const path of rootFiles) {
+      actualFiles.add(path);
+    }
+  }
+
+  for (const path of actualFiles) {
+    if (!expected.has(path)) {
+      issues.push({ kind: 'extra', path });
+    }
+  }
+
+  return issues.sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind.localeCompare(right.kind);
+    return left.path.localeCompare(right.path);
+  });
+}
+
+export function formatGeneratedCheckIssues(issues: GeneratedCheckIssue[]): string {
+  if (issues.length === 0) return '';
+
+  return issues
+    .map((issue) => {
+      if (issue.kind === 'missing') return `missing generated file: ${issue.path}`;
+      if (issue.kind === 'extra') return `unexpected generated file: ${issue.path}`;
+      return `stale generated file content: ${issue.path}`;
+    })
+    .join('\n');
+}
+
+export async function runArtifactCheck(
+  label: string,
+  buildFiles: () => GeneratedFile[],
+  roots: string[],
+  extraChecks?: (files: GeneratedFile[], issues: GeneratedCheckIssue[]) => Promise<void>,
+): Promise<void> {
+  const files = buildFiles();
+  const issues = await checkGeneratedFiles(files, { roots });
+
+  if (extraChecks) {
+    await extraChecks(files, issues);
+  }
+
+  if (issues.length > 0) {
+    console.error(`${label} check failed`);
+    console.error(formatGeneratedCheckIssues(issues));
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`${label} check passed (${files.length} files)`);
+}
+
+export async function runArtifactGenerate(label: string, buildFiles: () => GeneratedFile[]): Promise<void> {
+  const files = buildFiles();
+  await writeGeneratedFiles(files);
+  console.log(`generated ${label} (${files.length} files)`);
+}
+
+export function runScript(label: string, fn: () => Promise<void>): void {
+  fn().catch((error) => {
+    console.error(`${label} failed with an unexpected error`);
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

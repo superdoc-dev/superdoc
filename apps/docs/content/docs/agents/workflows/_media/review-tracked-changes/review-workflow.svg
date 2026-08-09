@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" role="img" aria-labelledby="title description">
+  <title id="title">Tracked-change review workflow</title>
+  <desc id="description">Code creates a tracked edit in a DOCX file, a person reviews the suggestion in the SuperDoc editor, and the editor exports the final DOCX.</desc>
+  <rect width="960" height="300" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif" fill="#212121">
+    <rect x="44" y="64" width="228" height="164" rx="9" fill="#16181d" stroke="#343741" stroke-width="2"/>
+    <circle cx="69" cy="87" r="4" fill="#7da2ff"/>
+    <text x="85" y="92" font-family="JetBrains Mono, monospace" font-size="12" fill="#a9bfff">Node.js SDK</text>
+    <text x="70" y="135" font-family="JetBrains Mono, monospace" font-size="13" fill="#ffffff">query.match(...)</text>
+    <text x="70" y="168" font-family="JetBrains Mono, monospace" font-size="13" fill="#ffffff">replace(..., tracked)</text>
+    <circle cx="242" cy="164" r="7" fill="#18a957"/>
+    <text x="158" y="254" text-anchor="middle" font-size="16" font-weight="700">Propose an edit</text>
+
+    <path d="M296 146h66" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m352 137 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="380" y="46" width="246" height="200" rx="9" fill="#ffffff" stroke="#b3c9ff" stroke-width="2"/>
+    <rect x="398" y="64" width="210" height="30" rx="5" fill="#eef4ff"/>
+    <circle cx="416" cy="79" r="4" fill="#1355ff"/>
+    <rect x="421" y="112" width="164" height="106" rx="2" fill="#ffffff" stroke="#dbdbdb"/>
+    <path d="M440 139h75M440 160h31" stroke="#a1a1aa" stroke-width="5" stroke-linecap="round"/>
+    <path d="M475 160h43" stroke="#cb0e47" stroke-width="5" stroke-linecap="round"/>
+    <path d="M440 181h59" stroke="#00853d" stroke-width="5" stroke-linecap="round"/>
+    <path d="m555 159 7 7 13-15" fill="none" stroke="#00853d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="503" y="272" text-anchor="middle" font-size="16" font-weight="700">Review in the editor</text>
+
+    <path d="M644 146h66" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m700 137 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="728" y="82" width="188" height="136" rx="9" fill="#ffffff" stroke="#dbdbdb"/>
+    <path d="M770 112h71l31 31v50H770z" fill="#eef4ff" stroke="#1355ff" stroke-width="2"/>
+    <path d="M841 112v31h31" fill="none" stroke="#1355ff" stroke-width="2"/>
+    <path d="M797 166h48" stroke="#00853d" stroke-width="4" stroke-linecap="round"/>
+    <text x="822" y="242" text-anchor="middle" font-size="16" font-weight="700">Export the decision</text>
+  </g>
+</svg>

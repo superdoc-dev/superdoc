@@ -1,0 +1,1223 @@
+/**
+ * Unit tests for resolvePageNumberTokens module
+ *
+ * Tests the resolution of page number and total page count tokens with
+ * section-aware numbering context support.
+ */
+
+import { describe, it, expect } from 'bun:test';
+import { resolvePageNumberTokens } from './resolvePageTokens';
+import type { Layout, FlowBlock, ParagraphBlock, Measure, TextRun } from '@superdoc/contracts';
+import type { NumberingContext } from './resolvePageTokens';
+
+describe('resolvePageNumberTokens', () => {
+  describe('basic token resolution', () => {
+    it('should resolve pageNumber tokens with display page text', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Page ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 10,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: 'i', // Roman numeral
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(1);
+      expect(result.affectedBlockIds.has('para-1')).toBe(true);
+
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock).toBeDefined();
+      expect(updatedBlock.runs[1].text).toBe('i');
+      expect(updatedBlock.runs[1].token).toBe('pageNumber');
+
+      // Verify original block is not mutated
+      expect((blocks[0] as ParagraphBlock).runs[1].text).toBe('0');
+      expect((blocks[0] as ParagraphBlock).runs[1].token).toBe('pageNumber');
+    });
+
+    it('resolves PAGE from local layout order when a resumed window uses global page numbers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-resumed',
+          runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+        } as ParagraphBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 41,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-resumed',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [
+          {
+            physicalPage: 41,
+            displayNumber: 37,
+            displayText: '37',
+            sectionIndex: 4,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect((result.updatedBlocks.get('para-resumed') as ParagraphBlock).runs[0].text).toBe('37');
+    });
+
+    it('should resolve explicit PAGE field format using section-aware display number', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-format',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              pageNumberFieldFormat: { format: 'lowerRoman' },
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 4,
+            fragments: [{ kind: 'para', blockId: 'para-format', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 }],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 12,
+        displayPages: [
+          { physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 },
+          { physicalPage: 2, displayNumber: 2, displayText: '2', sectionIndex: 0 },
+          { physicalPage: 3, displayNumber: 3, displayText: '3', sectionIndex: 0 },
+          { physicalPage: 4, displayNumber: 5, displayText: '5', sectionIndex: 1 },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      const updatedBlock = result.updatedBlocks.get('para-format') as ParagraphBlock;
+      expect(updatedBlock.runs[0].text).toBe('v');
+      expect(updatedBlock.runs[0].token).toBe('pageNumber');
+      expect(updatedBlock.runs[0].pageNumberFieldFormat).toEqual({ format: 'lowerRoman' });
+    });
+
+    it('should update already-resolved body page tokens when display context changes', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+        } as ParagraphBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'para-1', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 }],
+          },
+        ],
+      };
+
+      const firstPass = resolvePageNumberTokens(layout, blocks, measures, {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
+      });
+      const firstBlock = firstPass.updatedBlocks.get('para-1') as ParagraphBlock;
+
+      const secondPass = resolvePageNumberTokens(layout, [firstBlock], measures, {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 2, displayText: '2', sectionIndex: 0 }],
+      });
+
+      expect(secondPass.affectedBlockIds.has('para-1')).toBe(true);
+      expect((secondPass.updatedBlocks.get('para-1') as ParagraphBlock).runs[0].text).toBe('2');
+    });
+
+    it('should resolve totalPageCount tokens', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Total: ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'totalPageCount',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 99,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(1);
+
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[1].text).toBe('99');
+      expect(updatedBlock.runs[1].token).toBe('totalPageCount');
+    });
+
+    it('should resolve formatted sectionPageCount tokens', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Section pages: ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'sectionPageCount',
+              pageNumberFieldFormat: { format: 'upperRoman' },
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 9,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+            sectionPageCount: 4,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+
+      expect(result.affectedBlockIds.has('para-1')).toBe(true);
+      expect(updatedBlock.runs[1].text).toBe('IV');
+      expect(updatedBlock.runs[1].token).toBe('sectionPageCount');
+      expect(updatedBlock.runs[1].pageNumberFieldFormat).toEqual({ format: 'upperRoman' });
+    });
+
+    it('should resolve both pageNumber and totalPageCount in same paragraph', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Page ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+            {
+              text: ' of ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'totalPageCount',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 25,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 7,
+            displayText: '7',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[1].text).toBe('7');
+      expect(updatedBlock.runs[3].text).toBe('25');
+    });
+  });
+
+  describe('section-aware numbering', () => {
+    it('should use display page text from numbering context for section with restart', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+        {
+          kind: 'paragraph',
+          id: 'para-2',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+        {
+          kind: 'paragraph',
+          id: 'para-3',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [], totalHeight: 0 },
+        { kind: 'paragraph', lines: [], totalHeight: 0 },
+        { kind: 'paragraph', lines: [], totalHeight: 0 },
+      ];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+          {
+            number: 2,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-2',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+          {
+            number: 3,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-3',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      // Section 0: pages 1-2 with lowercase roman (i, ii)
+      // Section 1: page 3 with restart at 1 in decimal format
+      const numberingCtx: NumberingContext = {
+        totalPages: 3,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: 'i',
+            sectionIndex: 0,
+          },
+          {
+            physicalPage: 2,
+            displayNumber: 2,
+            displayText: 'ii',
+            sectionIndex: 0,
+          },
+          {
+            physicalPage: 3,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 1,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(3);
+
+      const block1 = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(block1.runs[0].text).toBe('i');
+
+      const block2 = result.updatedBlocks.get('para-2') as ParagraphBlock;
+      expect(block2.runs[0].text).toBe('ii');
+
+      const block3 = result.updatedBlocks.get('para-3') as ParagraphBlock;
+      expect(block3.runs[0].text).toBe('1');
+    });
+  });
+
+  describe('optimization and edge cases', () => {
+    it('should skip blocks without page tokens', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Regular text',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(0);
+      expect(result.updatedBlocks.size).toBe(0);
+    });
+
+    it('should handle hasPageTokens flag optimization', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Text without tokens',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+          ],
+          attrs: {
+            hasPageTokens: false,
+          },
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Should skip due to hasPageTokens: false optimization
+      expect(result.affectedBlockIds.size).toBe(0);
+    });
+
+    it('should handle empty layout', () => {
+      const blocks: FlowBlock[] = [];
+      const measures: Measure[] = [];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 0,
+        displayPages: [],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(0);
+      expect(result.updatedBlocks.size).toBe(0);
+    });
+
+    it('should handle invalid numbering context gracefully', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const invalidNumberingCtx: NumberingContext = {
+        totalPages: 0,
+        displayPages: [],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, invalidNumberingCtx);
+
+      // Should return empty result due to invalid context
+      expect(result.affectedBlockIds.size).toBe(0);
+      expect(result.updatedBlocks.size).toBe(0);
+    });
+
+    it('should not mutate original blocks', () => {
+      const originalRun = {
+        text: '0',
+        token: 'pageNumber',
+        fontFamily: 'Arial',
+        fontSize: 12,
+        bold: true,
+        color: '#FF0000',
+      } as TextRun;
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [originalRun],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 5,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Original block should not be mutated
+      expect(originalRun.text).toBe('0');
+      expect(originalRun.token).toBe('pageNumber');
+
+      // Updated block should have resolved token
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[0].text).toBe('1');
+      expect(updatedBlock.runs[0].token).toBe('pageNumber');
+
+      // Other properties should be preserved
+      expect(updatedBlock.runs[0].bold).toBe(true);
+      expect(updatedBlock.runs[0].color).toBe('#FF0000');
+    });
+
+    it('should skip non-paragraph fragments', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: 'img-1',
+          src: 'test.png',
+        },
+      ];
+
+      const measures: Measure[] = [{ kind: 'image', width: 100, height: 100 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'image',
+                blockId: 'img-1',
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.size).toBe(0);
+    });
+
+    it('should handle missing display page info gracefully', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      // Numbering context with no display pages
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [], // Empty array
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Should handle gracefully and not process blocks
+      expect(result.affectedBlockIds.size).toBe(0);
+    });
+
+    it('should process each block only once even if it spans multiple pages', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 5,
+                x: 0,
+                y: 0,
+                width: 100,
+                continuesOnNext: true,
+              },
+            ],
+          },
+          {
+            number: 2,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 5,
+                toLine: 10,
+                x: 0,
+                y: 0,
+                width: 100,
+                continuesFromPrev: true,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 2,
+        displayPages: [
+          {
+            physicalPage: 1,
+            displayNumber: 1,
+            displayText: '1',
+            sectionIndex: 0,
+          },
+          {
+            physicalPage: 2,
+            displayNumber: 2,
+            displayText: '2',
+            sectionIndex: 0,
+          },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Block should only be processed once
+      expect(result.affectedBlockIds.size).toBe(1);
+      expect(result.updatedBlocks.size).toBe(1);
+
+      // Should use display text from first page where block appears
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[0].text).toBe('1');
+    });
+  });
+
+  describe('convergence scenarios', () => {
+    it('should handle digit count transitions (9 -> 10)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: 'Page ',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 10,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 15,
+        displayPages: Array.from({ length: 15 }, (_, i) => ({
+          physicalPage: i + 1,
+          displayNumber: i + 1,
+          displayText: String(i + 1),
+          sectionIndex: 0,
+        })),
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[1].text).toBe('10'); // Two digits
+    });
+
+    it('should handle digit count transitions (99 -> 100)', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-1',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 100,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'para-1',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const numberingCtx: NumberingContext = {
+        totalPages: 105,
+        displayPages: Array.from({ length: 105 }, (_, i) => ({
+          physicalPage: i + 1,
+          displayNumber: i + 1,
+          displayText: String(i + 1),
+          sectionIndex: 0,
+        })),
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      const updatedBlock = result.updatedBlocks.get('para-1') as ParagraphBlock;
+      expect(updatedBlock.runs[0].text).toBe('100'); // Three digits
+    });
+  });
+
+  // SD-1332: pin the body resolver's intentional limitation. Body tables can
+  // span multiple physical pages (one TableBlock, multiple table fragments,
+  // each with its own fromRow..toRow). Substituting the whole table once
+  // would resolve every PAGE field to the first fragment's page number.
+  // Per-fragment substitution is the correct fix and is deferred until a
+  // body-table-with-PAGE fixture motivates it (see the comment in
+  // resolvePageTokens.ts). For SD-1332 itself the substitution happens in
+  // layout-bridge/resolveHeaderFooterTokens.ts (page-local).
+  describe('SD-1332: body tables intentionally not processed', () => {
+    it('returns no affected blocks when the only token sits inside a body table', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-1',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-1',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'cell-para-1',
+                    runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+                  } as ParagraphBlock,
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'table' as const, rows: [], columnWidths: [], totalHeight: 0 } as unknown as Measure,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 'tbl-1',
+                fromRow: 0,
+                toRow: 1,
+                x: 0,
+                y: 0,
+                width: 612,
+                height: 20,
+              } as unknown as Layout['pages'][number]['fragments'][number],
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Body resolver does not recurse into tables — the table block must NOT
+      // be reported as affected and the original tree must stay untouched.
+      expect(result.affectedBlockIds.has('tbl-1')).toBe(false);
+      expect(result.updatedBlocks.has('tbl-1')).toBe(false);
+      const originalTable = blocks[0] as unknown as { rows: { cells: { paragraph: ParagraphBlock }[] }[] };
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].text).toBe('0');
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].token).toBe('pageNumber');
+    });
+  });
+});
+
+describe('atomic-first-page — provisional page-count fields (body tokens)', () => {
+  const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+  const layoutFor = (blockId: string): Layout => ({
+    pageSize: { w: 612, h: 792 },
+    pages: [
+      {
+        number: 1,
+        fragments: [{ kind: 'para', blockId, fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 }],
+      },
+    ],
+  });
+  const numberingCtx: NumberingContext = {
+    totalPages: 3,
+    displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
+  };
+
+  it('resolves PAGE immediately but preserves cached NUMPAGES text under provisional mode', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'para-prov',
+        runs: [
+          { text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+          { text: '48', token: 'totalPageCount', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+          { text: '9', token: 'sectionPageCount', fontFamily: 'Arial', fontSize: 12 } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    const result = resolvePageNumberTokens(layoutFor('para-prov'), blocks, measures, numberingCtx, {
+      pageCountFieldsExact: false,
+    });
+
+    const updated = result.updatedBlocks.get('para-prov') as ParagraphBlock;
+    expect(updated.runs[0].text).toBe('1');
+    expect(updated.runs[1].text).toBe('48');
+    expect(updated.runs[2].text).toBe('9');
+  });
+
+  it('renders an em dash for a provisional total with no cached result and upgrades it in exact mode', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'para-dash',
+        runs: [{ text: '', token: 'totalPageCount', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+      } as ParagraphBlock,
+    ];
+
+    const provisional = resolvePageNumberTokens(layoutFor('para-dash'), blocks, measures, numberingCtx, {
+      pageCountFieldsExact: false,
+    });
+    const provisionalBlock = provisional.updatedBlocks.get('para-dash') as ParagraphBlock;
+    expect(provisionalBlock.runs[0].text).toBe('—');
+
+    const exact = resolvePageNumberTokens(layoutFor('para-dash'), [provisionalBlock], measures, numberingCtx);
+    const exactBlock = exact.updatedBlocks.get('para-dash') as ParagraphBlock;
+    expect(exactBlock.runs[0].text).toBe('3');
+  });
+});

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" role="img" aria-labelledby="title description">
+  <title id="title">Headless document lifecycle</title>
+  <desc id="description">A DOCX file enters a SuperDoc SDK workflow, the workflow queries the document and accepts its tracked changes, then saves a separate DOCX output.</desc>
+  <rect width="960" height="300" rx="18" fill="#fafafa"/>
+  <g font-family="Inter, Arial, sans-serif" fill="#212121">
+    <rect x="48" y="82" width="214" height="136" rx="9" fill="#ffffff" stroke="#dbdbdb"/>
+    <path d="M104 112h71l31 31v50h-102z" fill="#eef4ff" stroke="#1355ff" stroke-width="2"/>
+    <path d="M175 112v31h31" fill="none" stroke="#1355ff" stroke-width="2"/>
+    <text x="151" y="169" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#0f44cc">DOCX</text>
+    <text x="155" y="242" text-anchor="middle" font-size="16" font-weight="700">Open the source</text>
+
+    <path d="M286 150h70" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m346 141 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="374" y="48" width="250" height="204" rx="9" fill="#16181d" stroke="#343741" stroke-width="2"/>
+    <circle cx="397" cy="70" r="4" fill="#7da2ff"/>
+    <text x="413" y="75" font-family="JetBrains Mono, monospace" font-size="12" fill="#a9bfff">@superdoc/sdk</text>
+    <text x="402" y="119" font-family="JetBrains Mono, monospace" font-size="14" fill="#ffffff">query.match(...)</text>
+    <text x="402" y="151" font-family="JetBrains Mono, monospace" font-size="14" fill="#ffffff">trackChanges.decide(...)</text>
+    <text x="402" y="183" font-family="JetBrains Mono, monospace" font-size="14" fill="#ffffff">save(...)</text>
+    <circle cx="598" cy="147" r="7" fill="#18a957"/>
+    <text x="499" y="278" text-anchor="middle" font-size="16" font-weight="700">Query, mutate, save</text>
+
+    <path d="M642 150h70" stroke="#7da2ff" stroke-width="3"/>
+    <path d="m702 141 12 9-12 9" fill="none" stroke="#7da2ff" stroke-width="3"/>
+
+    <rect x="730" y="82" width="182" height="136" rx="9" fill="#ffffff" stroke="#dbdbdb"/>
+    <path d="M770 112h71l31 31v50H770z" fill="#eef4ff" stroke="#1355ff" stroke-width="2"/>
+    <path d="M841 112v31h31" fill="none" stroke="#1355ff" stroke-width="2"/>
+    <path d="M797 166h48" stroke="#00853d" stroke-width="4" stroke-linecap="round"/>
+    <text x="821" y="242" text-anchor="middle" font-size="16" font-weight="700">Save a new DOCX</text>
+  </g>
+</svg>

@@ -1,0 +1,18 @@
+{
+  "title": "Editor",
+  "root": true,
+  "pages": [
+    "index",
+    "quickstart",
+    "frameworks",
+    "load-and-save-documents",
+    "document-modes",
+    "collaboration",
+    "ui",
+    "built-in-ui",
+    "custom-ui",
+    "platform",
+    "review",
+    "migrate-from-v1"
+  ]
+}

@@ -2,7 +2,8 @@ name: "SuperDoc: Dispatch OSS Push To Orbit"
 
 on:
   push:
-    branches: [main]
+    # This copy lives on the V1 maintenance branch; main has its own dispatcher.
+    branches: [v1]
 
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
     steps:
       - name: Create Orbit dispatch App token
         id: orbit-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ secrets.ORBIT_DISPATCH_APP_ID }}
           private-key: ${{ secrets.ORBIT_DISPATCH_APP_PRIVATE_KEY }}

@@ -23,6 +23,12 @@ or [help wanted](https://github.com/superdoc/docx-editor/issues?q=is%3Aissue+is%
 For anything large, open an issue first so we can agree on the approach before
 you write code.
 
+## Choose a branch
+
+Open contributions against `main` for the current V2 editor. Target `v1` only
+for fixes that must also ship in the maintained V1 editor. If you are unsure,
+use `main` or ask in the issue before starting implementation.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22, pinned in `.nvmrc`

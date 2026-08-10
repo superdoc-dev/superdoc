@@ -62,6 +62,7 @@ import {
   type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
 import { selectionToRects } from '@superdoc/layout-bridge';
+import { resolveCaretLineBox } from '../../../dom-observer/CaretLineAnchoring.js';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
@@ -2236,12 +2237,13 @@ export class HeaderFooterSessionManager {
     }
 
     const localX = (pos <= entry.pmStart ? elementRect.left : elementRect.right) - pageRect.left;
+    const yRect = resolveCaretLineBox(entry.el) ?? elementRect;
     return {
       pageIndex: context.region.pageIndex,
       x: localX / zoom,
-      y: context.region.pageIndex * bodyPageHeight + (elementRect.top - pageRect.top) / zoom,
+      y: context.region.pageIndex * bodyPageHeight + (yRect.top - pageRect.top) / zoom,
       width: 1,
-      height: Math.max(1, elementRect.height / zoom),
+      height: Math.max(1, yRect.height / zoom),
     };
   }
 

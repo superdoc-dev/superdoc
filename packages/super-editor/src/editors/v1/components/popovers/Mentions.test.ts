@@ -18,6 +18,7 @@ describe('Mentions.vue rendering', () => {
     document.addEventListener('mousedown', documentMousedown);
 
     wrapper = mount(Mentions, {
+      attachTo: document.body,
       props: {
         users: [user],
         insertMention,

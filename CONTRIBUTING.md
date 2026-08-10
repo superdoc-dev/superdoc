@@ -125,6 +125,10 @@ These are areas where community contributions are especially welcome. Check [iss
 
 ## Your First PR
 
+The `v1` branch is for fixes that must ship in the maintained V1 editor. For
+the current V2 editor, open your pull request against `main`. If you are unsure
+which version is affected, ask in the issue before starting implementation.
+
 Here's a step-by-step walkthrough to make your first contribution:
 
 ### 1. Find something to work on
@@ -139,6 +143,9 @@ Here's a step-by-step walkthrough to make your first contribution:
 # Fork the repo on GitHub, then:
 git clone https://github.com/<your-username>/superdoc.git
 cd superdoc
+
+# For fixes that must ship in the maintained V1 editor:
+git switch v1
 
 # Install dependencies (pnpm 9+ required)
 pnpm install
@@ -202,7 +209,8 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/) for your com
 
 ### 8. Open a Pull Request
 
-Open a PR against the `main` branch. In the description:
+Open the PR against `v1` for a V1 maintenance fix or against `main` for the
+current V2 editor. In the description:
 - Describe what you changed and why
 - Link to the related issue (e.g., `Closes #123`)
 - Include screenshots for visual changes

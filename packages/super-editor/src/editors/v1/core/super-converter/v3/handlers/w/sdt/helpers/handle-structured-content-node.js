@@ -2,6 +2,7 @@ import { parseAnnotationMarks } from './handle-annotation-node';
 import { parseStrictStOnOff } from '../../../utils.js';
 import { BLOCK_FIELD_XML_NAMES } from '../../../sd/shared/block-field-xml-names.js';
 import { isInlineNode } from '../../../helpers/is-inline-node.js';
+import { preProcessNodesForFldChar } from '@converter/field-references/preProcessNodesForFldChar.js';
 
 const INLINE_CONTEXT_XML_NAMES = new Set(['w:p', 'w:r', 'w:hyperlink', 'w:smartTag']);
 
@@ -85,6 +86,14 @@ function detectControlType(sdtPr) {
   return 'richText';
 }
 
+function detectReferenceSdtType(sdtPr) {
+  if (!Array.isArray(sdtPr?.elements)) return null;
+  const names = new Set(sdtPr.elements.map((el) => el?.name));
+  if (names.has('w:citation')) return 'citation';
+  if (names.has('w:bibliography')) return 'bibliography';
+  return null;
+}
+
 /**
  * Extract the appearance value from sdtPr.
  * @param {Object|null} sdtPr
@@ -153,6 +162,7 @@ export function handleStructuredContentNode(params) {
 
   // Control type detection from sdtPr children
   const controlType = detectControlType(sdtPr);
+  const referenceSdtType = detectReferenceSdtType(sdtPr);
 
   // Appearance, placeholder, and temporary toggle
   const appearance = extractAppearance(sdtPr);
@@ -163,18 +173,22 @@ export function handleStructuredContentNode(params) {
     return null;
   }
 
-  const { marks } = parseAnnotationMarks(sdtContent);
+  // Some importer paths reach this handler without the body-level field preprocessor.
+  const { processedNodes } = preProcessNodesForFldChar(sdtContent.elements ?? [], params.docx);
+  const processedSdtContent = { ...sdtContent, elements: processedNodes };
+
+  const { marks } = parseAnnotationMarks(processedSdtContent);
   const translatedContent = nodeListHandler.handler({
     ...params,
-    nodes: sdtContent.elements,
-    path: [...(params.path || []), sdtContent],
+    nodes: processedSdtContent.elements,
+    path: [...(params.path || []), processedSdtContent],
   });
 
   const schema = params.editor?.schema;
   const content = Array.isArray(translatedContent) ? translatedContent : [];
   const isBlockNode =
     hasTranslatedBlockContent(content, schema) ||
-    hasDirectBlockSignal(sdtContent) ||
+    hasDirectBlockSignal(processedSdtContent) ||
     !canEmitInlineStructuredContent(params.path);
   const sdtContentType = isBlockNode ? 'structuredContentBlock' : 'structuredContent';
   const normalizedContent = isBlockNode ? wrapInlineRunsAsParagraphs(content, schema) : content;
@@ -190,6 +204,7 @@ export function handleStructuredContentNode(params) {
       lockMode,
       controlType,
       type: controlType,
+      referenceSdtType,
       appearance,
       placeholder,
       // `temporary` is only set when the XML carries `<w:temporary/>`;

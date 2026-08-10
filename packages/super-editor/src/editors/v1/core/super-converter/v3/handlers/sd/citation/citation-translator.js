@@ -33,9 +33,9 @@ const encode = (params) => {
       instructionTokens: node.attributes?.instructionTokens || null,
       sourceIds,
       resolvedText: extractResolvedText(processedText),
+      fieldResultContent: processedText,
       marksAsAttrs: node.marks || [],
     },
-    content: processedText,
   };
 };
 
@@ -46,7 +46,7 @@ const encode = (params) => {
  */
 const decode = (params) => {
   const { node } = params;
-  const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
+  const outputMarks = processOutputMarks([...(node.attrs?.marksAsAttrs || []), ...(node.marks || [])]);
   const contentNodes = buildFieldResultRuns(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);
 

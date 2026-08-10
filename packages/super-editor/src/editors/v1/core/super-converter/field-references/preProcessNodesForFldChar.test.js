@@ -505,6 +505,34 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes citation fields inside w:sdtContent without emptying the content', () => {
+    const nodes = [
+      {
+        name: 'w:sdt',
+        elements: [
+          { name: 'w:sdtPr', elements: [{ name: 'w:citation' }] },
+          {
+            name: 'w:sdtContent',
+            elements: complexFieldNodes(' CITATION Jam68 \\l 1033 ', '(Austen, 1868)'),
+          },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    const sdtContent = processedNodes[0].elements.find((el) => el.name === 'w:sdtContent');
+
+    expect(sdtContent.elements).toHaveLength(1);
+    expect(sdtContent.elements[0]).toMatchObject({
+      name: 'sd:citation',
+      attributes: {
+        instruction: 'CITATION Jam68 \\l 1033',
+        instructionTokens: [{ type: 'text', text: ' CITATION Jam68 \\l 1033 ' }],
+      },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '(Austen, 1868)' }] }] }],
+    });
+  });
+
   it('processes fields that end inside child nodes after starting at the parent level', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

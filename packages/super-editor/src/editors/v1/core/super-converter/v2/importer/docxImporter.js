@@ -19,6 +19,7 @@ import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
 import { sequenceFieldEntity } from './sequenceFieldImporter.js';
+import { citationEntity } from './citationImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
 import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
@@ -378,6 +379,7 @@ export const defaultNodeListHandler = () => {
     pageReferenceEntity,
     crossReferenceEntity,
     sequenceFieldEntity,
+    citationEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,

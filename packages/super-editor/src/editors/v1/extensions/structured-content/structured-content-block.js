@@ -115,6 +115,11 @@ export const StructuredContentBlock = Node.create({
         rendered: false,
       },
 
+      referenceSdtType: {
+        default: null,
+        rendered: false,
+      },
+
       sdtPr: {
         rendered: false,
       },

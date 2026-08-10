@@ -44,9 +44,7 @@ export const cloneXmlNode = (nodeLike) => {
   };
 };
 
-export const applyRunPropertiesTemplate = (runNode, runPropertiesTemplate) => {
-  if (!runNode || !runPropertiesTemplate) return;
-
+export const getOrCreateRunProperties = (runNode) => {
   if (!Array.isArray(runNode.elements)) runNode.elements = [];
   let runProps = runNode.elements.find((el) => el?.name === 'w:rPr');
   if (!runProps) {
@@ -55,6 +53,13 @@ export const applyRunPropertiesTemplate = (runNode, runPropertiesTemplate) => {
   }
 
   if (!Array.isArray(runProps.elements)) runProps.elements = [];
+  return runProps;
+};
+
+export const applyRunPropertiesTemplate = (runNode, runPropertiesTemplate) => {
+  if (!runNode || !runPropertiesTemplate) return;
+
+  const runProps = getOrCreateRunProperties(runNode);
 
   if (runPropertiesTemplate.attributes) {
     runProps.attributes = {

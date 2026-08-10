@@ -5,7 +5,7 @@ permissions:
 
 on:
   pull_request:
-    branches: [main, stable, 'release/**']
+    branches: [main, v1, stable, 'release/**']
   merge_group:
   workflow_dispatch:
 

@@ -383,6 +383,22 @@ describe('handleStructuredContentNode nested SDT import regression', () => {
     elements: [textRun(text)],
   });
 
+  const paragraphWithElements = (elements) => ({
+    name: 'w:p',
+    elements,
+  });
+
+  const citationField = (instruction, cachedText) => [
+    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+    {
+      name: 'w:r',
+      elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: instruction }] }],
+    },
+    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+    textRun(cachedText),
+    { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+  ];
+
   const sdtPr = ({ id, tag, alias, lockMode = 'unlocked', controlType = 'w:richText' }) => ({
     name: 'w:sdtPr',
     elements: [
@@ -508,6 +524,39 @@ describe('handleStructuredContentNode nested SDT import regression', () => {
     expect(nested.attrs.sdtPr?.elements?.find((el) => el.name === 'w:alias')?.attributes?.['w:val']).toBe(
       'Inner Alias',
     );
+
+    expectSchemaValid(result);
+  });
+
+  it('imports a Word citation SDT as structured content wrapping a citation atom', () => {
+    const citationSdt = sdt(
+      { id: 'citation-sdt', tag: 'citation-tag', alias: 'Citation', controlType: 'w:citation' },
+      citationField(' CITATION Jam68 \\l 1033 ', '(Austen, 1868)'),
+    );
+
+    const result = importNodes([paragraphWithElements([citationSdt])]);
+    const citationWrapper = findFirstJson(
+      result[0],
+      (node) => node.type === 'structuredContent' && node.attrs?.id === 'citation-sdt',
+    );
+
+    expect(citationWrapper).toBeTruthy();
+    expect(citationWrapper.attrs).toMatchObject({
+      id: 'citation-sdt',
+      tag: 'citation-tag',
+      alias: 'Citation',
+      controlType: null,
+      referenceSdtType: 'citation',
+    });
+    expect(citationWrapper.content).toHaveLength(1);
+    expect(citationWrapper.content[0]).toMatchObject({
+      type: 'citation',
+      attrs: {
+        instruction: 'CITATION Jam68 \\l 1033',
+        instructionTokens: [{ type: 'text', text: ' CITATION Jam68 \\l 1033 ' }],
+        resolvedText: '(Austen, 1868)',
+      },
+    });
 
     expectSchemaValid(result);
   });

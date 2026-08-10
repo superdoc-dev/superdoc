@@ -65,6 +65,85 @@ describe('translateStructuredContent', () => {
     ]);
   });
 
+  it('preserves imported citation SDT wrappers for final doc export', () => {
+    const node = {
+      type: 'structuredContent',
+      attrs: {
+        id: 'citation-sdt',
+        referenceSdtType: 'citation',
+        sdtPr: {
+          name: 'w:sdtPr',
+          elements: [{ name: 'w:id', attributes: { 'w:val': 'citation-sdt' } }, { name: 'w:citation' }],
+        },
+      },
+      content: [{ type: 'citation' }],
+    };
+    const params = { node, isFinalDoc: true };
+    const childElements = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+    ];
+    translateChildNodes.mockReturnValueOnce(childElements);
+
+    const result = translateStructuredContent(params);
+
+    expect(result).toEqual({
+      name: 'w:sdt',
+      elements: [
+        {
+          name: 'w:sdtPr',
+          type: 'element',
+          elements: [
+            { name: 'w:id', type: 'element', attributes: { 'w:val': 'citation-sdt' } },
+            { name: 'w:citation' },
+          ],
+        },
+        { name: 'w:sdtContent', elements: childElements },
+      ],
+    });
+  });
+
+  it('preserves imported bibliography SDT wrappers for final doc export', () => {
+    const node = {
+      type: 'structuredContentBlock',
+      attrs: {
+        id: 'bibliography-sdt',
+        referenceSdtType: 'bibliography',
+        sdtPr: {
+          name: 'w:sdtPr',
+          elements: [{ name: 'w:id', attributes: { 'w:val': 'bibliography-sdt' } }, { name: 'w:bibliography' }],
+        },
+      },
+      content: [{ type: 'bibliography' }],
+    };
+    const params = { node, isFinalDoc: true };
+    const childElements = [
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: ' BIBLIOGRAPHY ' }] }] },
+        ],
+      },
+    ];
+    translateChildNodes.mockReturnValueOnce(childElements);
+
+    const result = translateStructuredContent(params);
+
+    expect(result).toEqual({
+      name: 'w:sdt',
+      elements: [
+        {
+          name: 'w:sdtPr',
+          type: 'element',
+          elements: [
+            { name: 'w:id', type: 'element', attributes: { 'w:val': 'bibliography-sdt' } },
+            { name: 'w:bibliography' },
+          ],
+        },
+        { name: 'w:sdtContent', elements: childElements },
+      ],
+    });
+  });
+
   it('returns table element for structuredContentBlock in final doc', () => {
     const node = {
       type: 'structuredContentBlock',

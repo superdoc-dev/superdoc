@@ -1,6 +1,8 @@
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 
+const CITATION_PLACEHOLDER = '[Citation]';
+
 export const Citation = Node.create({
   name: 'citation',
 
@@ -13,6 +15,8 @@ export const Citation = Node.create({
   selectable: false,
 
   draggable: false,
+
+  leafText: (node) => node.attrs.resolvedText || CITATION_PLACEHOLDER,
 
   addOptions() {
     return {
@@ -42,6 +46,10 @@ export const Citation = Node.create({
         default: '',
         rendered: false,
       },
+      fieldResultContent: {
+        default: null,
+        rendered: false,
+      },
       sdBlockId: {
         default: null,
         rendered: false,
@@ -58,7 +66,7 @@ export const Citation = Node.create({
   },
 
   renderDOM({ node, htmlAttributes }) {
-    const text = node.attrs.resolvedText || '[Citation]';
+    const text = node.attrs.resolvedText || CITATION_PLACEHOLDER;
     return ['span', Attribute.mergeAttributes(this.options.htmlAttributes, htmlAttributes), text];
   },
 });

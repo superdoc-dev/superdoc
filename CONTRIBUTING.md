@@ -125,6 +125,10 @@ These are areas where community contributions are especially welcome. Check [iss
 
 ## Your First PR
 
+The `v1` branch is for fixes that must ship in the maintained V1 editor. For
+the current V2 editor, open your pull request against `main`. If you are unsure
+which version is affected, ask in the issue before starting implementation.
+
 Here's a step-by-step walkthrough to make your first contribution:
 
 ### 1. Find something to work on

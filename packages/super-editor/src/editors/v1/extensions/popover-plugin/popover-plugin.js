@@ -126,7 +126,7 @@ class Popover {
         props: {
           users: this.editor.users,
           mention: atMention,
-          inserMention: (user) => {
+          insertMention: (user) => {
             const { $from } = this.state.selection;
             const length = atMention.length;
             const attributes = { ...user };

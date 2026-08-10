@@ -1,3 +1,5 @@
+# AIDEV-NOTE: The standalone OSS projection omits CLI, MCP, and SDK workspaces;
+# their validation remains in Orbit instead of being duplicated here.
 name: CI V2 Public
 
 on:

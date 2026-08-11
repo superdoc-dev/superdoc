@@ -1,0 +1,21 @@
+node_modules
+
+# SvelteKit
+/.svelte-kit
+/build
+/dist
+
+# Logs
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Misc
+.DS_Store
+
+# Test
+/test-results
+/playwright-report

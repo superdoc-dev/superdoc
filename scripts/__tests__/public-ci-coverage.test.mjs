@@ -137,6 +137,15 @@ test('the public gate excludes validation owned by private Orbit workspaces', ()
   }
 });
 
+test('public package tests use the installed DOCX Engine', () => {
+  const workflow = readWorkflow('validate.yml');
+  const blocks = new Map(jobBlocks(workflow).map((block) => [block.id, block.source]));
+  const packages = blocks.get('packages');
+
+  assert.match(packages, /^          SUPERDOC_V2_RUNTIME_MODE: package$/mu);
+  assert.doesNotMatch(packages, /^          SUPERDOC_V2_RUNTIME_MODE: source$/mu);
+});
+
 test('public validation stays read-only and on GitHub-hosted default runners', () => {
   for (const name of ['validate.yml', ...reusableWorkflows.keys()]) {
     const workflow = readWorkflow(name);

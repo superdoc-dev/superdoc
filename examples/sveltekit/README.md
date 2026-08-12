@@ -1,13 +1,7 @@
 # SvelteKit quickstart
 
 Mount SuperDoc from a SvelteKit route, wait for the document to open, and destroy the editor when the route tears down.
-
-SuperDoc is browser-only. Instantiating it during SSR throws `ReferenceError: document is not defined`. This example scopes SSR off on the editor route so the rest of a real SvelteKit app can keep server-side rendering:
-
-```ts
-// src/routes/+page.ts
-export const ssr = false;
-```
+SuperDoc starts inside `$effect`, so it only runs after the route mounts in the browser.
 
 ## Run it
 
@@ -33,4 +27,4 @@ The browser test edits a real DOCX, exports it, and verifies the edit in `word/d
 
 Inside this monorepo the example is tested against the current workspace build. A standalone copy installs the versions declared in `package.json`.
 
-See [SvelteKit page options](https://svelte.dev/docs/kit/page-options#ssr) and the [configuration reference](https://docs.superdoc.dev/editor/superdoc/configuration).
+See the [configuration reference](https://docs.superdoc.dev/editor/superdoc/configuration).

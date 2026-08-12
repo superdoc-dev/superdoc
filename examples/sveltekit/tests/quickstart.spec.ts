@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 
 const edit = 'SVELTEKITQUICKSTARTEDITMARKER';
 
-test('gates readiness, edits, and exports the sample document', async ({ page }) => {
+test('renders on the server, gates readiness, edits, and exports the sample document', async ({ page, request }) => {
   test.setTimeout(240_000);
   const errors: string[] = [];
   page.on('console', (message) => {
@@ -20,6 +20,9 @@ test('gates readiness, edits, and exports the sample document', async ({ page })
     await documentHeld;
     await route.continue();
   });
+
+  const response = await request.get('/');
+  expect(await response.text()).toContain('Export DOCX');
 
   await page.goto('/');
   const exportButton = page.getByRole('button', { name: 'Export DOCX' });

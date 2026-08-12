@@ -10,7 +10,7 @@ Every example is typechecked and has a behavior test for the outcome its README 
 
 - [Vanilla TypeScript quickstart](https://go.superdoc.dev/examples/vanilla) — open a DOCX, edit it, and export the result.
 - [React quickstart](https://go.superdoc.dev/examples/react) — own the editor lifecycle from a React component.
-- [SvelteKit quickstart](https://go.superdoc.dev/examples/sveltekit) — mount SuperDoc in a SvelteKit route with SSR scoped off.
+- [SvelteKit quickstart](https://go.superdoc.dev/examples/sveltekit) — own the editor lifecycle from a SvelteKit route.
 
 ### Focused workflows
 

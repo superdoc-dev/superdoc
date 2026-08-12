@@ -12,6 +12,7 @@ export type ParagraphLineIndentationParams = {
   continuesFromPrev?: boolean;
   suppressFirstLineIndent: boolean;
   resetContinuationTextIndent?: boolean;
+  positionedTextGeometry?: boolean;
 };
 
 export const hasExplicitSegmentPositioning = (line: Line): boolean =>
@@ -29,18 +30,20 @@ export const applyParagraphLineIndentation = (params: ParagraphLineIndentationPa
     continuesFromPrev,
     suppressFirstLineIndent,
     resetContinuationTextIndent,
+    positionedTextGeometry,
   } = params;
   const paraIndentLeft = indent?.left ?? 0;
   const paraIndentRight = indent?.right ?? 0;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (indent?.firstLine ?? 0) - (indent?.hanging ?? 0);
   const isFirstLine = lineIndex === 0 && localStartLine === 0 && !continuesFromPrev;
   const explicitSegmentPositioning = hasExplicitSegmentPositioning(line);
+  const usesPositionedGeometry = positionedTextGeometry ?? explicitSegmentPositioning;
 
   if (hasListMarkerLayout && indentLeftPx) {
-    if (!explicitSegmentPositioning) {
+    if (!usesPositionedGeometry) {
       lineEl.style.paddingLeft = `${indentLeftPx}px`;
     }
-  } else if (explicitSegmentPositioning) {
+  } else if (usesPositionedGeometry) {
     if (isFirstLine && firstLineOffset !== 0) {
       const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
       const adjustedPadding = effectiveLeftIndent + firstLineOffset;
@@ -57,9 +60,9 @@ export const applyParagraphLineIndentation = (params: ParagraphLineIndentationPa
   if (paraIndentRight && paraIndentRight > 0) {
     lineEl.style.paddingRight = `${paraIndentRight}px`;
   }
-  if (isFirstLine && firstLineOffset && !explicitSegmentPositioning) {
+  if (isFirstLine && firstLineOffset && !usesPositionedGeometry) {
     lineEl.style.textIndent = `${firstLineOffset}px`;
-  } else if (firstLineOffset && explicitSegmentPositioning) {
+  } else if (firstLineOffset && usesPositionedGeometry) {
     lineEl.style.textIndent = '0px';
   } else if (firstLineOffset && !hasListMarkerLayout && resetContinuationTextIndent) {
     lineEl.style.textIndent = '0px';

@@ -96,7 +96,7 @@ jobs:
       - name: Test other Vitest packages
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
-          SUPERDOC_V2_RUNTIME_MODE: source
+          SUPERDOC_V2_RUNTIME_MODE: package
           VITEST_MAX_WORKERS: '1'
           VITEST_MIN_WORKERS: '1'
         run: pnpm exec vp test run '--project=!*super-editor*'

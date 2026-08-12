@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vite-plus/test';
 import type { FlowBlock, Line, ParagraphBlock, Run, TabRun, TextRun, TrackedChangeMeta } from './index.js';
-import { expandRunsForInlineNewlines, isEmptySdtPlaceholderRun, sliceRunsForLine } from './run-helpers.js';
+import {
+  expandRunsForInlineNewlines,
+  isEmptySdtPlaceholderRun,
+  sliceRunsForLine,
+  usesPositionedTextGeometry,
+} from './run-helpers.js';
 
 describe('expandRunsForInlineNewlines', () => {
   const makeRun = (text: string, pmStart = 0): TextRun => ({
@@ -193,5 +198,45 @@ describe('sliceRunsForLine', () => {
 
     expect(sliceRunsForLine(boxed, line)).toEqual(sliceRunsForLine(plain, line));
     expect(sliceRunsForLine(boxed, line)).toMatchObject([{ text: 'itatio', pmStart: 11, pmEnd: 17 }]);
+  });
+});
+
+describe('usesPositionedTextGeometry', () => {
+  const makeLine = (overrides: Partial<Line> = {}): Line => ({
+    fromRun: 0,
+    fromChar: 0,
+    toRun: 0,
+    toChar: 4,
+    width: 40,
+    ascent: 12,
+    descent: 4,
+    lineHeight: 16,
+    ...overrides,
+  });
+
+  const textRun = (horizontalScale?: number): TextRun => ({
+    kind: 'text',
+    text: 'text',
+    fontFamily: 'Arial',
+    fontSize: 12,
+    pmStart: 0,
+    pmEnd: 4,
+    ...(horizontalScale === undefined ? {} : { horizontalScale }),
+  });
+
+  it('uses positioned geometry for explicit measured segment coordinates', () => {
+    const line = makeLine({ segments: [{ runIndex: 0, fromChar: 0, toChar: 4, width: 40, x: 12 }] });
+    expect(usesPositionedTextGeometry(line, [textRun()], false)).toBe(true);
+  });
+
+  it('uses positioned geometry when horizontal scaling needs measured advances', () => {
+    const line = makeLine({ segments: [{ runIndex: 0, fromChar: 0, toChar: 4, width: 40 }] });
+    expect(usesPositionedTextGeometry(line, [textRun(1.5)], false)).toBe(true);
+  });
+
+  it('keeps ordinary and RTL text in browser inline flow', () => {
+    const line = makeLine({ segments: [{ runIndex: 0, fromChar: 0, toChar: 4, width: 40 }] });
+    expect(usesPositionedTextGeometry(line, [textRun()], false)).toBe(false);
+    expect(usesPositionedTextGeometry(line, [textRun(1.5)], true)).toBe(false);
   });
 });

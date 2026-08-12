@@ -10,7 +10,12 @@ import type {
   ResolvedListMarkerItem,
   MarkerTrackedChange,
 } from '@superdoc/contracts';
-import { adjustAvailableWidthForTextIndent, getParagraphInlineDirection } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  getParagraphInlineDirection,
+  sliceRunsForLine,
+  usesPositionedTextGeometry,
+} from '@superdoc/contracts';
 import {
   isMinimalWordLayout,
   resolveListMarkerGeometry,
@@ -252,6 +257,7 @@ export function resolveParagraphContent(
   // --- Resolve each line ---
   const resolvedLines: ResolvedTextLineItem[] = lines.map((line, index) => {
     const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+    const hasPositionedTextGeometry = usesPositionedTextGeometry(line, sliceRunsForLine(block, line), isRtl);
     const hasListFirstLineMarker =
       index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
     const shouldUseResolvedListTextStart =
@@ -285,7 +291,7 @@ export function resolveParagraphContent(
     let textIndentPx = 0;
 
     if (!isListFirstLine) {
-      if (hasExplicitSegmentPositioning) {
+      if (hasPositionedTextGeometry) {
         if (isFirstLine && firstLineOffset !== 0) {
           const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
           const adjustedPadding = effectiveLeftIndent + firstLineOffset;
@@ -311,7 +317,7 @@ export function resolveParagraphContent(
 
     // Text indent for first line of non-list paragraphs without explicit segment positioning
     if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
-      if (!hasExplicitSegmentPositioning) {
+      if (!hasPositionedTextGeometry) {
         textIndentPx = firstLineOffset;
       }
     }

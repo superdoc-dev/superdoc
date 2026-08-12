@@ -263,6 +263,33 @@ describe('DomPainter hanging indent with tabs', () => {
       // textIndent = firstLine(0) - hanging(360) = -360
       expect(lineEl.style.textIndent).toBe('-360px');
     });
+
+    it('materializes a hanging indent when horizontal scaling selects positioned text geometry', () => {
+      const blockId = 'hanging-horizontal-scale';
+      const block = createBlockWithIndent(blockId, 'Scaled text', {
+        left: 720,
+        hanging: 360,
+      });
+      block.runs[0] = { ...block.runs[0], horizontalScale: 1.5 };
+
+      const measure = createMeasure(11, false);
+      measure.lines![0]!.segments = [{ runIndex: 0, fromChar: 0, toChar: 11, width: 120 }];
+      const layout = createLayout(blockId, 11);
+
+      const painter = createDomPainter({ blocks: [block], measures: [measure], container });
+      painter.paint(layout, container);
+
+      const lineEl = container.querySelector('.superdoc-line') as HTMLElement;
+      const textRun = lineEl.querySelector('.superdoc-text-run') as HTMLElement;
+
+      // Positioned runs already carry the resolved first-line origin in `left`.
+      // Keeping CSS text-indent here would apply the hanging indent a second time
+      // to every absolutely positioned run.
+      expect(lineEl.style.paddingLeft).toBe('360px');
+      expect(lineEl.style.textIndent).toBe('');
+      expect(textRun.style.position).toBe('absolute');
+      expect(textRun.style.left).toBe('360px');
+    });
   });
 
   describe('Tabs WITHOUT hanging indent', () => {

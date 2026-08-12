@@ -126,3 +126,27 @@ export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
 
   return result;
 }
+
+/**
+ * Whether a line's text must be painted from measured segment coordinates.
+ *
+ * Explicit tab coordinates require positioned painting. Horizontally scaled
+ * text does as well because browser inline flow cannot preserve the measured
+ * advance after `scaleX`. Keeping this decision in the shared contracts layer
+ * prevents the resolver and painter from disagreeing about whether paragraph
+ * indentation is represented by CSS or by the segments' absolute X values.
+ */
+export function usesPositionedTextGeometry(line: Line, runsForLine: Run[], isRtl: boolean): boolean {
+  if (isRtl || !line.segments) return false;
+  if (line.segments.some((segment) => segment.x !== undefined)) return true;
+
+  return runsForLine.some(
+    (run) =>
+      (run.kind === 'text' || run.kind === undefined) &&
+      'horizontalScale' in run &&
+      typeof run.horizontalScale === 'number' &&
+      Number.isFinite(run.horizontalScale) &&
+      run.horizontalScale >= 0 &&
+      run.horizontalScale !== 1,
+  );
+}

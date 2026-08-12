@@ -9,13 +9,14 @@ import {
   shouldApplyJustify,
   sliceRunsForLine,
   SPACE_CHARS,
+  usesPositionedTextGeometry,
 } from '@superdoc/contracts';
 import {
   isMinimalWordLayout as isMinimalWordLayoutShared,
   type MinimalWordLayout,
 } from '@superdoc/common/list-marker-utils';
 import { CLASS_NAMES, lineStyles } from '../styles.js';
-import { applyRtlStyles, shouldUseSegmentPositioning } from '../features/inline-direction/index.js';
+import { applyRtlStyles } from '../features/inline-direction/index.js';
 import { applyTooltipAccessibility } from './links.js';
 import { appendFormattingParagraphMark } from './formatting-marks.js';
 import { textRunMergeSignature } from './hash.js';
@@ -597,15 +598,6 @@ export const renderLine = ({
   // Only a top-aligned, line-expanding image triggers the Word text-bottom
   // workaround. Glyph-like baseline images leave the surrounding text alone.
   const lineContainsLineExpandingImage = runsForLine.some((run) => isLineExpandingImageRun(run, line));
-  const hasHorizontallyScaledText = runsForLine.some(
-    (run) =>
-      (run.kind === 'text' || run.kind === undefined) &&
-      'horizontalScale' in run &&
-      typeof run.horizontalScale === 'number' &&
-      Number.isFinite(run.horizontalScale) &&
-      run.horizontalScale >= 0 &&
-      run.horizontalScale !== 1,
-  );
   // CSS inline baseline alignment has no font strut when a line contains only
   // an image (the line container intentionally uses font-size: 0). Route that
   // structural case through the deterministic measured-baseline painter used
@@ -615,16 +607,14 @@ export const renderLine = ({
     runsForLine.length > 0 &&
     runsForLine.every((run) => isImageRun(run) && (run as ImageRun).verticalAlign === 'baseline');
   const useSegmentPositioning =
-    shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl) ||
-    (!isRtl && Boolean(line.segments) && hasHorizontallyScaledText) ||
-    (!isRtl && isBaselineImageOnlyLine);
+    usesPositionedTextGeometry(line, runsForLine, isRtl) || (!isRtl && isBaselineImageOnlyLine);
   // Enabled for both inline-flow and segment-positioned lines: a single measured underline
   // overlay owns the mark across text + preserved spaces + tabs, so the two never disagree
   // on the underline's y (SD-3330). The segment-positioned branch captures span geometry as
   // it renders; the inline branch builds it from segment/tab widths.
   // The inline-flow overlay builds left-origin offsets that only line up with the content when the
   // content actually starts at the left. Several layouts shift it the overlay can't see:
-  //  - RTL: shouldUseSegmentPositioning returns false, so RTL falls to inline flow where the browser
+  //  - RTL: positioned text geometry is disabled, so RTL falls to inline flow where the browser
   //    bidi-places the tabs - the LTR overlay would land on the wrong side.
   //  - center / right alignment: the browser shifts the in-flow content; the overlay does not.
   //  - hanging or negative indent: renderParagraphContent's CSS clamps negative indent and treats
@@ -785,9 +775,9 @@ const renderExplicitlyPositionedRuns = ({
   underlineSpanCollector?: UnderlineOverlaySpan[];
 }): void => {
   // Use segment-based rendering with absolute positioning for tab-aligned text.
-  // shouldUseSegmentPositioning returns false for RTL because the layout engine
-  // computes tab positions in LTR order; RTL lines fall through to inline-flow
-  // rendering where dir="rtl" lets the browser handle tab positioning.
+  // Positioned geometry is disabled for RTL because the layout engine computes
+  // tab positions in LTR order; RTL lines fall through to inline-flow rendering
+  // where dir="rtl" lets the browser handle tab positioning.
   //
   // The segment x positions from layout are relative to the content area (left margin = 0).
   // We need to add the paragraph indent to ALL positions (both explicit and calculated).

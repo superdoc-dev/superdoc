@@ -3655,6 +3655,7 @@ export {
   isEmptyInlineSdtPlaceholderRun,
   isEmptySdtPlaceholderRun,
   sliceRunsForLine,
+  usesPositionedTextGeometry,
 } from './run-helpers.js';
 
 export {

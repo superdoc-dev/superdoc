@@ -16,6 +16,7 @@ import {
   isEmptySdtPlaceholderRun,
   shouldApplyJustify,
   sliceRunsForLine,
+  usesPositionedTextGeometry,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import { resolvePhysicalFamily, type ResolvePhysicalFamily } from '@superdoc/font-system';
@@ -866,6 +867,7 @@ const renderMeasuredLines = (
   const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
   const expandedRunsForBlock = containerKind === 'body-fragment' ? expandRunsForInlineNewlines(block.runs) : undefined;
+  const runsForTextGeometry = expandedRunsForBlock ?? expandRunsForInlineNewlines(block.runs);
   const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
   const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
   const markerLayout = wordLayout?.marker;
@@ -892,6 +894,8 @@ const renderMeasuredLines = (
   for (let lineIdx = localStartLine; lineIdx < localEndLine && lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
     const explicitSegmentPositioning = hasExplicitSegmentPositioning(line);
+    const lineRuns = sliceRunsForLine({ ...block, runs: runsForTextGeometry }, line);
+    const positionedTextGeometry = usesPositionedTextGeometry(line, lineRuns, isRtl);
     const isFirstLine = lineIdx === 0 && !continuesFromPrev;
     const isListFirstLine = Boolean(lineIdx === 0 && !continuesFromPrev && legacyMarkerWidth && markerLayout);
     const shouldUseResolvedListTextStart =
@@ -967,6 +971,7 @@ const renderMeasuredLines = (
         continuesFromPrev,
         suppressFirstLineIndent,
         resetContinuationTextIndent: containerKind === 'body-fragment',
+        positionedTextGeometry,
       });
     }
 

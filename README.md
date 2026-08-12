@@ -20,7 +20,7 @@
 
 <div align="center">
   <a href="https://www.superdoc.dev" target="_blank">
-   <img width="800px" height="auto" alt="SuperDoc" src="https://github.com/user-attachments/assets/112339d3-446c-4320-8219-7ec7dbd6c8d4" />
+   <img width="800px" height="auto" alt="SuperDoc" src="https://github.com/user-attachments/assets/3d74b4a7-b112-4591-a3be-7c965721d22b" />
   </a>
 </div>
 

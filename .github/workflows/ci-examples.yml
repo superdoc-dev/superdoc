@@ -169,7 +169,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        example: [superdoc-yjs, hocuspocus, liveblocks]
+        example: ${{ fromJSON(vars.VITE_LIVEBLOCKS_PUBLIC_KEY == '' && '["superdoc-yjs","hocuspocus"]' || '["superdoc-yjs","hocuspocus","liveblocks"]') }}
     steps:
       - uses: actions/checkout@v6
 

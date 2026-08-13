@@ -80,6 +80,64 @@ describe('w:del translator', () => {
       expect(getMarkAttrs(result)).toEqual(expect.objectContaining({ id: '123', sourceId: '123' }));
     });
 
+    it('marks a leading non-text atom (e.g. noBreakHyphen) and the text that follows it', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'noBreakHyphen' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
+    it('does not mark a non-whitelisted content child but still marks trailing text', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'tab' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toBeUndefined();
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackDelete', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
     it('remaps id via trackedChangeIdMap and preserves sourceId', () => {
       const converter = {
         trackedChangeIdMap: new Map([['123', 'shared-uuid-abc']]),
@@ -206,6 +264,42 @@ describe('w:del translator', () => {
       const run = result.elements[0];
       expect(run.elements.map((n) => n.name)).toEqual(['w:delText', 'w:br', 'w:delText']);
       expect(run.elements.some((n) => n.name === 'w:t')).toBe(false);
+    });
+
+    it('spreads a multi-node decode result (e.g. a deleted field) as siblings, renaming w:t and w:instrText (regression for plans/TASK.md)', () => {
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: '901',
+          sourceId: '',
+          author: 'Orbital Copilot',
+          authorEmail: '',
+          date: '2026-07-30T12:30:01Z',
+        },
+      };
+
+      // crossReference-translator.js (and other field translators) decode to an
+      // ARRAY of sibling w:r nodes (begin/instr/separate/result/end), not a
+      // single node with `.elements`. Before this fix, `elements: [translatedResult]`
+      // nested the array inside a single-element array instead of spreading it,
+      // and the rename step never touched w:instrText.
+      exportSchemaToJson.mockReturnValue([
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+        { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'REF bm \\h' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '10.6' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+      ]);
+
+      const node = { type: 'crossReference', marks: [mockTrackedMark] };
+      const result = config.decode({ node });
+
+      expect(result.name).toBe('w:del');
+      expect(result.elements).toHaveLength(5);
+      expect(result.elements.every((n) => n.name === 'w:r')).toBe(true);
+
+      const names = result.elements.flatMap((n) => n.elements.map((el) => el.name));
+      expect(names).toEqual(['w:fldChar', 'w:delInstrText', 'w:fldChar', 'w:delText', 'w:fldChar']);
     });
 
     it('writes sourceId to w:id for round-trip fidelity', () => {

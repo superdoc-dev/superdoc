@@ -19,11 +19,12 @@ import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
 import { sequenceFieldEntity } from './sequenceFieldImporter.js';
+import { citationEntity } from './citationImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
 import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
 import { importFootnoteData, importEndnoteData } from './documentFootnotesImporter.js';
-import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
+import { attrValue, getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
 import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
@@ -378,6 +379,7 @@ export const defaultNodeListHandler = () => {
     pageReferenceEntity,
     crossReferenceEntity,
     sequenceFieldEntity,
+    citationEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,
@@ -725,34 +727,15 @@ function getStyleDefinitions(docx) {
   if (!styles) return [];
 
   const elements = styles.elements?.[0]?.elements ?? [];
-  const styleDefinitions = elements.filter((el) => el.name === 'w:style');
+  // A w:style without w:styleId cannot be referenced by the document, so it is not a usable definition.
+  const styleDefinitions = elements.filter((el) => el.name === 'w:style' && attrValue(el, 'w:styleId'));
 
-  // Track latent style exceptions
-  const latentStyles = elements.find((el) => el.name === 'w:latentStyles');
-  const matchedLatentStyles = [];
-  (latentStyles?.elements ?? []).forEach((el) => {
-    const { attributes } = el;
-    const match = styleDefinitions.find((style) => style.attributes['w:styleId'] === attributes['w:name']);
-    if (match) matchedLatentStyles.push(el);
-  });
-
-  // Parse all styles
-  const allParsedStyles = [];
-  styleDefinitions.forEach((style) => {
-    const id = style.attributes['w:styleId'];
-    const parsedStyle = getDefaultStyleDefinition(id, docx);
-
-    const importedStyle = {
-      id: style.attributes['w:styleId'],
-      type: style.attributes['w:type'],
-      definition: parsedStyle,
-      attributes: {},
-    };
-
-    allParsedStyles.push(importedStyle);
-  });
-
-  return allParsedStyles;
+  return styleDefinitions.map((style) => ({
+    id: attrValue(style, 'w:styleId'),
+    type: attrValue(style, 'w:type'),
+    definition: getDefaultStyleDefinition(attrValue(style, 'w:styleId'), docx),
+    attributes: {},
+  }));
 }
 
 export function translateStyleDefinitions(docx) {

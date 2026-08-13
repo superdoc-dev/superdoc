@@ -131,15 +131,15 @@ test('release-local helper honors explicit preview-branch overrides', () => {
 test('release-local helper rewrites both ssh and https repository urls for previews', () => {
   const candidates = getRepositoryUrlCandidates('packages/superdoc');
   assert.ok(
-    candidates.includes('git+https://github.com/superdoc-dev/superdoc.git'),
+    candidates.includes('git+https://github.com/superdoc/docx-editor.git'),
     'packages/superdoc/package.json repository url must be included',
   );
   assert.ok(
-    candidates.includes('https://github.com/superdoc-dev/superdoc.git'),
+    candidates.includes('https://github.com/superdoc/docx-editor.git'),
     'git+https package repository urls must normalize to https for git rewrites',
   );
   assert.ok(
-    candidates.includes('git@github.com:superdoc-dev/superdoc.git'),
+    candidates.includes('git@github.com:superdoc/docx-editor.git'),
     'origin ssh urls must also be rewritten for preview remotes',
   );
 });
@@ -299,9 +299,10 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   // @semantic-release/git pushes to `stable` queue instead of racing on
   // `git push origin stable`. Per-workflow groups parallelize and leave
   // npm/PyPI tarballs published with no corresponding tag/commit pushed.
+  // `release-superdoc.yml` is intentionally absent: it publishes PR previews
+  // only and never releases from `stable`, so it has no stable run to serialize.
   const stableWorkflows = [
     '.github/workflows/release-stable.yml',
-    '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-fonts.yml',
     '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
@@ -355,9 +356,9 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   }
 
   // Workflows that no longer auto-fire on stable - the orchestrator is
-  // their single stable release path.
+  // their single stable release path. `release-superdoc.yml` is absent
+  // because it has no push trigger at all (PR previews are dispatch-only).
   const orchestratorOnlyOnStable = [
-    '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-fonts.yml',
     '.github/workflows/release-react.yml',
     '.github/workflows/release-vscode-ext.yml',
@@ -381,6 +382,8 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
   // runs are never cancelled by a newer release run (each merge is a
   // release-worthy state). queue: max cannot be combined with
   // cancel-in-progress: true (validation error).
+  // `release-superdoc.yml` is absent: dispatch-only PR previews are keyed by
+  // PR number and have no stable run to queue behind.
   const releaseWorkflows = [
     '.github/workflows/release-cli.yml',
     '.github/workflows/release-create.yml',
@@ -390,7 +393,6 @@ test('release workflows queue (do not cancel) and use queue: max so multi-packag
     '.github/workflows/release-react.yml',
     '.github/workflows/release-sdk.yml',
     '.github/workflows/release-stable.yml',
-    '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-template-builder.yml',
     '.github/workflows/release-vscode-ext.yml',
   ];
@@ -943,8 +945,10 @@ test('docs promotion supports manual workflow_dispatch with optional sha input',
 });
 
 test('stable release workflows and commit filters include shared workspace coverage', async () => {
+  // `release-superdoc.yml` is absent: it has no path filters to cover because
+  // it has no push trigger. Its `.releaserc.cjs` commit filter is still checked
+  // below — the stable orchestrator relies on it.
   const workflowFiles = [
-    '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-fonts.yml',
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-react.yml',

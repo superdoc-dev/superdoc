@@ -2992,9 +2992,12 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  let editor: Editor;
+  const dispatch = vi.fn(() => {
+    (editor.state as { doc: ProseMirrorNode }).doc = createNode('doc', [sdtNode], { isBlock: false });
+  });
 
-  const editor = {
+  editor = {
     state: {
       doc,
       tr,

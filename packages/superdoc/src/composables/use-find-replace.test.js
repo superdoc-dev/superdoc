@@ -586,6 +586,31 @@ describe('useFindReplace', () => {
       expect(editor.commands.replaceAllSearchMatches).toHaveBeenCalledWith('new text');
     });
 
+    it('replaceAll resets matchCount/activeMatchIndex when nothing was skipped', () => {
+      editor.commands.replaceAllSearchMatches.mockReturnValue({ replacedCount: 3, skippedCount: 0 });
+      handle.matchCount.value = 3;
+      handle.replaceText.value = 'new text';
+
+      handle.replaceAll();
+
+      expect(handle.matchCount.value).toBe(0);
+      expect(handle.activeMatchIndex.value).toBe(-1);
+    });
+
+    it('replaceAll resyncs from storage instead of hardcoding a reset when matches were skipped', () => {
+      editor.commands.replaceAllSearchMatches.mockReturnValue({ replacedCount: 1, skippedCount: 1 });
+      // The command leaves the session refreshed with the remaining (locked) match.
+      editor.extensionStorage.Search.searchResults = [{ id: 'locked-1' }];
+      editor.extensionStorage.Search.activeMatchIndex = 0;
+      handle.matchCount.value = 2;
+      handle.replaceText.value = 'new text';
+
+      handle.replaceAll();
+
+      expect(handle.matchCount.value).toBe(1);
+      expect(handle.activeMatchIndex.value).toBe(0);
+    });
+
     it('replaceCurrent is a no-op when replaceEnabled is false', async () => {
       // Close and reopen with replaceEnabled: false
       manager.lastHandle._settle({ status: 'closed' });

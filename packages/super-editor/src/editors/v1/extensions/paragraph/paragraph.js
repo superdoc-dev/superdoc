@@ -170,6 +170,15 @@ export const Paragraph = OxmlNode.create({
       },
       filename: { rendered: false },
       paragraphProperties: { rendered: false },
+      // The paragraph MARK's own tracked revision — OOXML
+      // `w:pPr/w:rPr/w:del` (ECMA-376 §17.13.5.14). Deleting a whole list item
+      // or paragraph in tracked mode marks the runs AND the paragraph mark;
+      // accepting removes the content and collapses the now-markless paragraph
+      // into its successor, which is how the numbered item disappears and the
+      // rest of the list renumbers. Structural like tableRow.trackChange, so it
+      // lives on node attrs rather than as an inline mark.
+      // Shape: { type: 'paragraphMarkDelete', id, sourceId?, author, authorEmail?, date, importedAuthor? }
+      markTrackChange: { default: null, rendered: false, keepOnSplit: false },
       pageBreakSource: { rendered: false },
       tocSourceId: { rendered: false },
       sectionMargins: { rendered: false },

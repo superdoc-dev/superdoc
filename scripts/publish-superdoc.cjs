@@ -61,6 +61,15 @@ const ensureDist = () => {
   }
 };
 
+// The scoped mirror is a V1-only package: nothing else publishes it, and no
+// V2 release line claims its dist-tags. So the tag split that protects the
+// unscoped `superdoc` (V1 -> `legacy`, V2 owns `latest`) must not be applied
+// here — it would freeze `@harbour-enterprises/superdoc@latest` at whatever
+// shipped last and silently stop default installs from updating.
+//
+// `scopedDistTag` lets the caller keep the two apart. It defaults to the
+// package's own tag so the PR-preview path (`pr-<number>`) stays identical
+// across both names.
 const publishScopedMirror = (packageJson, distTag, logger = console) => {
   const scopedName = '@harbour-enterprises/superdoc';
 
@@ -107,6 +116,7 @@ const publishScopedMirror = (packageJson, distTag, logger = console) => {
 
 const publishPackages = ({
   distTag = 'latest',
+  scopedDistTag = distTag,
   publishUnscoped = true,
   build = true,
   logger = console
@@ -129,8 +139,20 @@ const publishPackages = ({
     }
   }
 
-  publishScopedMirror(packageJson, distTag, logger);
+  publishScopedMirror(packageJson, scopedDistTag, logger);
 };
+
+// The unscoped `superdoc` shares its npm name with the V2 release line, so V1
+// stable releases publish it to `legacy`. The scoped mirror has no such
+// contention — mapping `legacy` onto it too would strand its `latest`.
+const SCOPED_MIRROR_STABLE_TAG = 'latest';
+const V1_STABLE_DIST_TAG = 'legacy';
+
+// The dist-tag the scoped mirror should use for a given unscoped tag. Only the
+// V1 stable channel is remapped; previews and prereleases stay aligned so
+// `pr-<number>` and `next` mean the same thing under both names.
+const scopedTagFor = (distTag) =>
+  distTag === V1_STABLE_DIST_TAG ? SCOPED_MIRROR_STABLE_TAG : distTag;
 
 const parseArgs = (argv) => {
   let distTag;
@@ -154,6 +176,7 @@ const parseArgs = (argv) => {
 
   return {
     distTag: resolvedTag,
+    scopedDistTag: scopedTagFor(resolvedTag),
     publishUnscoped: !skipUnscoped && process.env.SKIP_UNSCOPED_PUBLISH !== 'true',
     build: !skipBuild && process.env.SKIP_BUILD !== 'true'
   };
@@ -169,6 +192,9 @@ if (require.main === module) {
   }
 }
 
+// The unscoped `superdoc` shares its npm name with the V2 release line, so V1
+// stable releases publish it to `legacy`. The scoped mirror has no such
+// contention — mapping `legacy` onto it too would strand its `latest`.
 module.exports = {
   publish: async (pluginConfig, context) => {
     const { nextRelease, logger = console } = context;
@@ -176,10 +202,12 @@ module.exports = {
 
     publishPackages({
       distTag,
+      scopedDistTag: scopedTagFor(distTag),
       publishUnscoped: true,
       build: true,
       logger
     });
   },
-  publishPackages
+  publishPackages,
+  scopedTagFor
 };

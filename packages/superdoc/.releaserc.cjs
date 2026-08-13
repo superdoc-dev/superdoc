@@ -42,15 +42,20 @@ Object.keys(require.cache)
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 const isLocalPreview = process.env.SUPERDOC_RELEASE_PREVIEW === '1';
 
+// Tag ownership: `superdoc` on npm is published by two release lines. V2 owns
+// the default channels — `latest` for stable, `next` for previews — and V1 is
+// maintenance-only under `legacy`. V1 must never claim `latest` or `next`:
+// both lines publish the same package name, so a V1 release that claimed a V2
+// channel would silently take it over (last write wins).
+//
+// `main` is deliberately absent. V1 no longer ships prereleases, so there is no
+// branch here that could produce a `next` release. PR previews are unaffected —
+// they publish `pr-<number>` directly through scripts/publish-superdoc.cjs and
+// never run semantic-release.
 const branches = [
   {
     name: 'stable',
-    channel: 'latest', // Only stable gets @latest
-  },
-  {
-    name: 'main',
-    channel: 'next',
-    prerelease: 'next',
+    channel: 'legacy', // V1 maintenance line; V2 owns `latest`
   },
   // Maintenance branches - channel defaults to branch name
   {
@@ -137,7 +142,7 @@ if (shouldPublishGitHubRelease) {
     '@semantic-release/github',
     {
       successComment:
-        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc/docx-editor/releases/tag/${nextRelease.gitTag})',
     },
   ]);
 }

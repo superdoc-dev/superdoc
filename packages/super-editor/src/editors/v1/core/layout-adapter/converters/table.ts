@@ -778,7 +778,8 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * @param args.context - Parser dependencies (block ID generator, converters, style context)
  * @param args.defaultCellPadding - Optional default padding from table style to pass to cells
  * @param args.tableStyleId - Optional table style ID for paragraph style cascade in cells
- * @returns TableRow object with cells and attributes, or null if the row contains no valid cells
+ * @returns TableRow object with cells and attributes, including structurally empty rowspan continuation rows,
+ *   or null when the node is not a table row
  *
  * @example
  * // Row with cells
@@ -790,13 +791,14 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: { id: 'row-0', cells: [...], attrs: {...} }
  *
  * @example
- * // Row with no valid cells returns null
+ * // A structurally empty row is preserved. ProseMirror emits these rows when
+ * // a full-width cell spans vertically across them.
  * parseTableRow({
  *   rowNode: { type: 'tableRow', content: [] },
  *   rowIndex: 0,
  *   context: parserDeps,
  * });
- * // Returns: null
+ * // Returns: { id: 'row-0', cells: [] }
  */
 /**
  * Builds shared {@link TrackedChangeMeta} for a structural row-level tracked
@@ -842,15 +844,16 @@ const buildRowTrackedChangeMeta = (rowNode: PMNode, storyKey?: string): TrackedC
 
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
-  if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
+  if (!isTableRowNode(rowNode)) {
     return null;
   }
 
+  const rowContent = Array.isArray(rowNode.content) ? rowNode.content : [];
   const cells: TableCell[] = [];
   const rowCnfStyle = (rowNode.attrs?.tableRowProperties as Record<string, unknown> | undefined)?.cnfStyle as
     | Record<string, unknown>
     | undefined;
-  rowNode.content.forEach((cellNode, cellIndex) => {
+  rowContent.forEach((cellNode, cellIndex) => {
     if (isTableCellNode(cellNode) && isTableSkipPlaceholderCell(cellNode)) {
       return;
     }
@@ -862,7 +865,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       context,
       defaultCellPadding,
       tableProperties,
-      numCells: rowNode?.content?.length || 1,
+      numCells: rowContent.length || 1,
       numRows,
       rowCnfStyle,
       gridPlacement: args.cellGridPlacements?.[cellIndex] ?? null,
@@ -872,8 +875,6 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       cells.push(parsedCell);
     }
   });
-
-  if (cells.length === 0) return null;
 
   const rowProps = rowNode.attrs?.tableRowProperties;
   const rowHeight = normalizeRowHeight(rowProps as Record<string, unknown> | undefined);
@@ -1162,7 +1163,7 @@ export function tableNodeToBlock(
     }
   });
 
-  if (rows.length === 0) return null;
+  if (rows.every((row) => row.cells.length === 0)) return null;
 
   const tableAttrs: Record<string, unknown> = {};
 

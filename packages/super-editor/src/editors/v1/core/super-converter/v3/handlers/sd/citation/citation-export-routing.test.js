@@ -35,6 +35,10 @@ function getRunText(node) {
     .join('');
 }
 
+function getRunProperties(node) {
+  return node?.elements?.find((element) => element?.name === 'w:rPr')?.elements ?? [];
+}
+
 describe('citation export routing', () => {
   it('exports citation nodes as Word field-code runs', () => {
     const exported = exportSchemaToJson({
@@ -80,6 +84,95 @@ describe('citation export routing', () => {
 
     expect(exported.map(getRunText).join('')).toBe('(Smith, 2024)');
   });
+
+  it('preserves cached result run formatting when exporting imported citation fields', () => {
+    const exported = exportSchemaToJson({
+      node: buildCitationNode({
+        attrs: {
+          resolvedText: '(Smith, 2024)',
+          fieldResultContent: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: { bold: true },
+                runPropertiesInlineKeys: ['bold'],
+              },
+              content: [{ type: 'text', text: '(Smith, 2024)', marks: [] }],
+            },
+          ],
+        },
+      }),
+    });
+
+    const resultRun = exported.find((node) => getRunText(node) === '(Smith, 2024)');
+
+    expect(resultRun).toBeTruthy();
+    expect(getRunProperties(resultRun)).toContainEqual({ name: 'w:b', attributes: {} });
+  });
+
+  it('exports citation node marks as inline run properties on cached result runs', () => {
+    const exported = exportSchemaToJson({
+      node: {
+        ...buildCitationNode({
+          attrs: {
+            resolvedText: '(Smith, 2024)',
+            fieldResultContent: [
+              {
+                type: 'run',
+                attrs: {
+                  runProperties: { noProof: true },
+                  runPropertiesInlineKeys: ['noProof'],
+                },
+                content: [{ type: 'text', text: '(Smith, 2024)', marks: [] }],
+              },
+            ],
+          },
+        }),
+        marks: [{ type: 'bold', attrs: {} }],
+      },
+    });
+
+    const resultRun = exported.find((node) => getRunText(node) === '(Smith, 2024)');
+
+    expect(resultRun).toBeTruthy();
+    expect(getRunProperties(resultRun)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'w:noProof', attributes: {} }),
+        { name: 'w:b', type: 'element' },
+      ]),
+    );
+  });
+
+  it('does not export the editor placeholder when resolvedText is empty', () => {
+    const exported = exportSchemaToJson({
+      node: buildCitationNode({
+        attrs: { resolvedText: '' },
+      }),
+    });
+
+    expect(exported.some((node) => hasFieldCharType(node, 'separate'))).toBe(true);
+    expect(exported.some((node) => hasFieldCharType(node, 'end'))).toBe(true);
+    expect(exported.map(getRunText).join('')).toBe('');
+  });
+
+  it('prefers updated resolvedText over stale cached result content', () => {
+    const exported = exportSchemaToJson({
+      node: buildCitationNode({
+        attrs: {
+          resolvedText: '(Updated, 2026)',
+          fieldResultContent: [
+            {
+              type: 'run',
+              attrs: {},
+              content: [{ type: 'text', text: '(Stale, 2024)', marks: [] }],
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(exported.map(getRunText).join('')).toBe('(Updated, 2026)');
+  });
 });
 
 describe('citation import resolvedText extraction (SD-2975)', () => {
@@ -122,6 +215,9 @@ describe('citation import resolvedText extraction (SD-2975)', () => {
 
     expect(encoded.type).toBe('citation');
     expect(encoded.attrs.resolvedText).toBe('(Smith, 2024)');
+    expect(encoded.attrs.fieldResultContent).toEqual([
+      { type: 'run', attrs: {}, content: [{ type: 'text', text: '(Smith, 2024)' }] },
+    ]);
   });
 
   it('concatenates cached text across multiple run wrappers', () => {
@@ -132,5 +228,14 @@ describe('citation import resolvedText extraction (SD-2975)', () => {
     const encoded = citationTranslator.encode({ nodes: [xmlNode], nodeListHandler: runWrappingHandler });
 
     expect(encoded.attrs.resolvedText).toBe('(Doe, 2023)');
+  });
+
+  it('extracts primary and \\m citation source IDs from the instruction', () => {
+    const xmlNode = buildSdCitation('CITATION Austen1868 \\l 1033 \\m Bronte1847 \\m Shelley1818', [
+      buildRun([{ type: 'element', name: 'w:t', elements: [{ type: 'text', text: '(Austen; Bronte; Shelley)' }] }]),
+    ]);
+    const encoded = citationTranslator.encode({ nodes: [xmlNode], nodeListHandler: runWrappingHandler });
+
+    expect(encoded.attrs.sourceIds).toEqual(['Austen1868', 'Bronte1847', 'Shelley1818']);
   });
 });

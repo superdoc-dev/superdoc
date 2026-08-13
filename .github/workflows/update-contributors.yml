@@ -3,7 +3,7 @@ name: Update README Contributors
 on:
   pull_request_target:
     types: [closed]
-    branches: [main]
+    branches: [v1]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -78,7 +78,7 @@ jobs:
         if: steps.check-bot.outputs.skip == 'false' && steps.check-excluded.outputs.skip == 'false'
         uses: actions/checkout@v6
         with:
-          ref: main
+          ref: v1
           token: ${{ steps.generate_token.outputs.token }}
 
       - name: Add contributor to README
@@ -121,7 +121,7 @@ jobs:
           git push origin "$BRANCH"
 
           PR_URL=$(gh pr create \
-            --base main \
+            --base v1 \
             --head "$BRANCH" \
             --title "docs: add $AUTHOR to community contributors" \
             --body "Auto-generated: adds $AUTHOR to the README community contributors section.")

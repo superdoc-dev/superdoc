@@ -13,7 +13,7 @@ export const DocCounter = ({ height = '350px' }) => {
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css';
+    link.href = 'https://cdn.jsdelivr.net/npm/superdoc@1/dist/style.css';
     document.head.appendChild(link);
 
     // Buffer polyfill: required for document hashing
@@ -23,7 +23,7 @@ export const DocCounter = ({ height = '350px' }) => {
       window.Buffer = window.buffer.Buffer;
 
       const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/superdoc@1/dist/superdoc.min.js';
       script.onload = () => setTimeout(() => initializeSuperdoc(), 100);
       document.body.appendChild(script);
     };

@@ -66,6 +66,43 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('recognizes a REF field whose instruction/result runs are w:delInstrText/w:delText (entirely inside a tracked deletion)', () => {
+    // Per ECMA-376 §17.16.13/§17.13.5.15, a field fully inside <w:del> serializes
+    // its instruction/result runs as w:delInstrText/w:delText rather than
+    // w:instrText/w:t. Regression coverage for the bug in plans/TASK.md: this
+    // must still be recognized as a REF field, not fall back to raw XML.
+    const nodes = [
+      {
+        name: 'w:del',
+        attributes: { 'w:id': '901', 'w:author': 'Orbital Copilot', 'w:date': '2026-07-30T12:30:01Z' },
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:delText', elements: [{ type: 'text', text: 'this clause ' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+          {
+            name: 'w:r',
+            elements: [{ name: 'w:delInstrText', elements: [{ type: 'text', text: ' REF _Ref174337828 \\h ' }] }],
+          },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+          { name: 'w:r', elements: [{ name: 'w:delText', elements: [{ type: 'text', text: '10.6' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('w:del');
+    const fieldNode = processedNodes[0].elements.find((n) => n.name === 'sd:crossReference');
+    expect(fieldNode).toBeTruthy();
+    expect(fieldNode.attributes).toMatchObject({ fieldType: 'REF', instruction: 'REF _Ref174337828 \\h' });
+    // The delText result run before the leading text stays outside the field node.
+    const delTextRun = processedNodes[0].elements.find(
+      (n) => n.name === 'w:r' && n.elements?.some((el) => el.name === 'w:delText'),
+    );
+    expect(delTextRun.elements[0].elements[0].text).toBe('this clause ');
+  });
+
   it.each(['page \\* arabic', 'Page', 'PAGE'])(
     'should process PAGE field instructions case-insensitively: %s',
     (instruction) => {
@@ -466,6 +503,34 @@ describe('preProcessNodesForFldChar', () => {
         ],
       },
     ]);
+  });
+
+  it('processes citation fields inside w:sdtContent without emptying the content', () => {
+    const nodes = [
+      {
+        name: 'w:sdt',
+        elements: [
+          { name: 'w:sdtPr', elements: [{ name: 'w:citation' }] },
+          {
+            name: 'w:sdtContent',
+            elements: complexFieldNodes(' CITATION Jam68 \\l 1033 ', '(Austen, 1868)'),
+          },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    const sdtContent = processedNodes[0].elements.find((el) => el.name === 'w:sdtContent');
+
+    expect(sdtContent.elements).toHaveLength(1);
+    expect(sdtContent.elements[0]).toMatchObject({
+      name: 'sd:citation',
+      attributes: {
+        instruction: 'CITATION Jam68 \\l 1033',
+        instructionTokens: [{ type: 'text', text: ' CITATION Jam68 \\l 1033 ' }],
+      },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '(Austen, 1868)' }] }] }],
+    });
   });
 
   it('processes fields that end inside child nodes after starting at the parent level', () => {

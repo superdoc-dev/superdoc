@@ -5,8 +5,10 @@ import {
   findLastContentCursorPosInNode,
 } from '@core/commands/helpers/textPositions.js';
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
+import { collectSDTNodes, checkLockViolation } from './sdt-lock-detection.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
+export const STRUCTURED_CONTENT_WRAPPER_PRESERVING_META = 'structuredContentWrapperPreserving';
 
 /**
  * Lock enforcement plugin for StructuredContent nodes.
@@ -22,56 +24,27 @@ export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock'
  * 2. filterTransaction - Safety net to catch programmatic changes
  */
 
-/**
- * Collect all SDT nodes from the document.
- */
-function collectSDTNodes(doc) {
-  const sdtNodes = [];
-  doc.descendants((node, pos) => {
-    if (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') {
-      sdtNodes.push({
-        type: node.type.name,
-        node,
-        lockMode: node.attrs.lockMode,
-        pos,
-        end: pos + node.nodeSize,
-      });
-    }
-  });
-  return sdtNodes;
-}
+function collectPreservedSDTNodes(previousSdtNodes, nextDoc) {
+  const nextNodesById = new Map();
+  for (const nextSdt of collectSDTNodes(nextDoc)) {
+    const id = nextSdt.node.attrs.id;
+    if (id == null) continue;
+    const key = String(id);
+    const matches = nextNodesById.get(key) ?? [];
+    matches.push(nextSdt.node);
+    nextNodesById.set(key, matches);
+  }
 
-/**
- * Check if a range [from, to] would violate any lock rules
- * Returns { blocked: boolean, reason?: string }
- */
-function checkLockViolation(sdtNodes, from, to) {
-  for (const sdt of sdtNodes) {
-    const overlaps = from < sdt.end && to > sdt.pos;
-    if (!overlaps) continue;
-
-    // Calculate relationship
-    const containsSDT = from <= sdt.pos && to >= sdt.end;
-    const insideSDT = from >= sdt.pos && to <= sdt.end;
-    const crossesStart = from < sdt.pos && to > sdt.pos && to < sdt.end;
-    const crossesEnd = from > sdt.pos && from < sdt.end && to > sdt.end;
-
-    const wouldDamageWrapper = containsSDT || crossesStart || crossesEnd;
-    // Content modification: inside SDT but NOT deleting the entire wrapper
-    const wouldModifyContent = insideSDT && !containsSDT;
-
-    const isSdtLocked = sdt.lockMode === 'sdtLocked' || sdt.lockMode === 'sdtContentLocked';
-    const isContentLocked = sdt.lockMode === 'contentLocked' || sdt.lockMode === 'sdtContentLocked';
-
-    if (isSdtLocked && wouldDamageWrapper) {
-      return { blocked: true, reason: `Cannot delete SDT wrapper (${sdt.lockMode})` };
-    }
-
-    if (isContentLocked && wouldModifyContent) {
-      return { blocked: true, reason: `Cannot modify content (${sdt.lockMode})` };
+  const preserved = new Set();
+  for (const previousSdt of previousSdtNodes) {
+    const id = previousSdt.node.attrs.id;
+    if (id == null) continue;
+    const matches = nextNodesById.get(String(id));
+    if (matches?.length === 1 && matches[0].eq(previousSdt.node)) {
+      preserved.add(previousSdt);
     }
   }
-  return { blocked: false };
+  return preserved;
 }
 
 function isAtBlockSdtWrapperDeletePosition(state, sdt, pos) {
@@ -314,6 +287,10 @@ export function createStructuredContentLockPlugin() {
         return true;
       }
 
+      const preservedSdtNodes = tr.getMeta?.(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META)
+        ? collectPreservedSDTNodes(sdtNodes, tr.doc)
+        : undefined;
+
       for (const step of tr.steps) {
         // Skip steps without from/to (AttrStep, AddNodeMarkStep, RemoveNodeMarkStep) —
         // these change metadata, not content, so they can't violate lock rules.
@@ -321,7 +298,7 @@ export function createStructuredContentLockPlugin() {
           continue;
         }
 
-        const result = checkLockViolation(sdtNodes, step.from, step.to);
+        const result = checkLockViolation(sdtNodes, step.from, step.to, preservedSdtNodes);
 
         if (result.blocked) {
           return false;

@@ -17,6 +17,17 @@ export function translateTableCell(params) {
     tableCell: params.node,
   });
 
+  // A `<w:tc>` must contain at least one block-level element (ECMA-376
+  // CT_Tc); `<w:tcPr>` alone is not valid content and Word offers to repair the
+  // file. A cell can end up with nothing when every child drops out of the
+  // export — which a final-doc export does to a paragraph whose mark was
+  // tracked-deleted. Keep the cell inhabited, matching what accepting that
+  // deletion does in the editor: the collapse refuses to cross a cell
+  // boundary, so a cell's paragraph is emptied, never removed.
+  if (!elements.length) {
+    elements.push({ name: 'w:p', elements: [] });
+  }
+
   const cellProps = generateTableCellProperties(params.node);
   elements.unshift(cellProps);
 

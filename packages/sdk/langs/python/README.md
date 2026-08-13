@@ -420,7 +420,7 @@ pip download superdoc-sdk superdoc-sdk-cli-darwin-arm64
 
 ## Part of SuperDoc
 
-This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
+This SDK is part of [SuperDoc](https://github.com/superdoc/docx-editor) — open-source DOCX editing and tooling. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

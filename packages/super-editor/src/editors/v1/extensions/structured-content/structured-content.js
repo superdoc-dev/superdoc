@@ -124,6 +124,11 @@ export const StructuredContent = Node.create({
         rendered: false,
       },
 
+      referenceSdtType: {
+        default: null,
+        rendered: false,
+      },
+
       sdtPr: {
         rendered: false,
       },

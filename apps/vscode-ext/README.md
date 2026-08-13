@@ -2,7 +2,7 @@
 
 Open, edit, and review Word documents directly in VS Code.
 
-![SuperDoc VS Code Extension Demo](https://raw.githubusercontent.com/superdoc-dev/superdoc/main/apps/vscode-ext/demo.gif)
+![SuperDoc VS Code Extension Demo](https://raw.githubusercontent.com/superdoc/docx-editor/main/apps/vscode-ext/demo.gif)
 
 ## Features
 
@@ -26,11 +26,11 @@ Once installed, click any `.docx` file to open it with SuperDoc.
 
 ## AI Integration
 
-SuperDoc provides an [MCP server](https://github.com/superdoc-dev/superdoc/tree/main/apps/mcp) that lets AI agents read, edit, and comment on Word documents programmatically. Combined with this extension, you get a live preview of AI-suggested changes — tracked changes and comments appear in real time as the agent works.
+SuperDoc provides an [MCP server](https://github.com/superdoc/docx-editor/tree/main/apps/mcp) that lets AI agents read, edit, and comment on Word documents programmatically. Combined with this extension, you get a live preview of AI-suggested changes — tracked changes and comments appear in real time as the agent works.
 
 ## Part of SuperDoc
 
-This extension is powered by [SuperDoc](https://github.com/superdoc-dev/superdoc) — open-source DOCX editing for the browser and server. No server calls — your documents never leave your machine.
+This extension is powered by [SuperDoc](https://github.com/superdoc/docx-editor) — open-source DOCX editing for the browser and server. No server calls — your documents never leave your machine.
 
 ## License
 

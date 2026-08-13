@@ -3,7 +3,14 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @typedef {'paired' | 'independent'} TrackChangesReplacements
- * @typedef {{ type: string, author: string, date: string, internalId?: string }} TrackedChangeEntry
+ * @typedef {{
+ *   type: string,
+ *   author: string,
+ *   date: string,
+ *   internalId?: string,
+ *   chained?: boolean,
+ *   chainable?: boolean,
+ * }} TrackedChangeEntry
  * @typedef {{ beforeLastTrackedChange: TrackedChangeEntry | null, lastTrackedChange: TrackedChangeEntry | null, replacements: TrackChangesReplacements }} WalkContext
  */
 
@@ -42,6 +49,25 @@ const PAIRING_TRANSPARENT_NAMES = new Set([
  */
 function isReplacementPair(previous, current) {
   return previous.type !== current.type && previous.author === current.author && previous.date === current.date;
+}
+
+/**
+ * Word frequently splits a single logical insertion/deletion into several
+ * adjacent same-type `<w:ins>`/`<w:del>` XML elements purely because of run-
+ * boundary mechanics (a formatting change, a `w:noBreakHyphen` atom starting a
+ * new run, etc.) — Word's own UI still shows this as one revision. This is a
+ * distinct concept from `isReplacementPair` (opposite-type pairing per
+ * ECMA-376 §17.13.5) and is intentionally NOT gated by the `replacements`
+ * ('paired' | 'independent') option: that option only governs whether Word
+ * replacement halves are treated as one logical change or two independent
+ * ones, a question that doesn't apply to a same-type run split.
+ *
+ * @param {TrackedChangeEntry} previous
+ * @param {{ type: string, author: string, date: string }} current
+ * @returns {boolean}
+ */
+function isSameTypeChainContinuation(previous, current) {
+  return previous.type === current.type && previous.author === current.author && previous.date === current.date;
 }
 
 /**
@@ -139,30 +165,79 @@ function assignInternalId(element, idMap, context, insideTrackedChange, nextTrac
       nextTrackedChange,
     );
 
-  if (
+  const canPair =
     shouldPair &&
     context.lastTrackedChange &&
+    // A chained tail (the 2nd+ link of a same-type chain) shares its whole
+    // chain's id — pairing it into a NEW opposite-type replacement would
+    // silently fuse every earlier same-type link into that replacement too.
+    // Restrict pairing to a genuinely standalone previous element.
+    !context.lastTrackedChange.chained &&
     !shouldKeepChildSides &&
-    isReplacementPair(context.lastTrackedChange, current)
-  ) {
+    isReplacementPair(context.lastTrackedChange, current);
+
+  const canChain =
+    !canPair &&
+    context.lastTrackedChange &&
+    // Only a still-"chainable" previous link may be extended — see the
+    // `!wasAlreadyMapped` note below for why a poisoned link clears this.
+    context.lastTrackedChange.chainable !== false &&
+    isSameTypeChainContinuation(context.lastTrackedChange, current) &&
+    // A wordId that already has a mapping came from an unrelated, earlier
+    // position in the document (Word reuses tracked-change ids). Chaining it
+    // onto the live chain here would retroactively fuse that unrelated
+    // earlier revision into this one — and, worse, propagate that borrowed
+    // id forward onto later chain links via `context.lastTrackedChange`.
+    !idMap.has(wordId);
+
+  if (canPair) {
     // Second half of a replacement — share the first half's UUID, but only
     // if this w:id hasn't already been mapped. A reused id that was already
     // part of an earlier pair must keep its original mapping.
     if (!idMap.has(wordId)) {
       idMap.set(wordId, context.lastTrackedChange.internalId);
     }
+    // A replacement pair is fully "consumed" by this match — the next
+    // sibling starts a fresh candidate, unlike same-type chaining below.
     context.lastTrackedChange = null;
     context.beforeLastTrackedChange = null;
+  } else if (canChain) {
+    // Another link in the same-type chain — share the chain's UUID and keep
+    // the chain alive (do NOT reset) so a 3rd, 4th, ... sibling can still
+    // extend it.
+    const internalId = context.lastTrackedChange.internalId;
+    idMap.set(wordId, internalId);
+    context.beforeLastTrackedChange = context.lastTrackedChange;
+    context.lastTrackedChange = { ...current, internalId, chained: true, chainable: true };
   } else {
     // Reuse an existing mapping when the same w:id appears more than once
     // (Word reuses tracked-change ids across the document). Minting a fresh
     // UUID here would overwrite the earlier entry and break any replacement
     // pair that was already recorded for this id.
+    const wasAlreadyMapped = idMap.has(wordId);
     const internalId = idMap.get(wordId) ?? uuidv4();
     idMap.set(wordId, internalId);
     context.beforeLastTrackedChange = context.lastTrackedChange;
-    context.lastTrackedChange = { ...current, internalId };
+    // A wordId that was already mapped elsewhere carries a borrowed,
+    // possibly-unrelated identity — mark it non-chainable so it can't drag a
+    // following same-type sibling onto that unrelated id (see `canChain`).
+    context.lastTrackedChange = { ...current, internalId, chainable: !wasAlreadyMapped };
   }
+}
+
+/**
+ * A paragraph break is itself a tracked change when its mark is recorded as
+ * `<w:ins>`/`<w:del>` inside `w:pPr/w:rPr`. Returns that element, or null if
+ * the paragraph's mark isn't tracked.
+ *
+ * @param {object} pElement  A `w:p` XML element
+ * @returns {object | null}
+ */
+function getParagraphMarkTrackedChangeElement(pElement) {
+  if (pElement?.name !== 'w:p') return null;
+  const pPr = pElement.elements?.find((el) => el.name === 'w:pPr');
+  const rPr = pPr?.elements?.find((el) => el.name === 'w:rPr');
+  return rPr?.elements?.find((el) => TRACKED_CHANGE_NAMES.has(el.name)) ?? null;
 }
 
 /**
@@ -193,6 +268,59 @@ function walkElements(elements, idMap, context, insideTrackedChange = false) {
           { beforeLastTrackedChange: null, lastTrackedChange: null, replacements: context.replacements },
           /* insideTrackedChange */ true,
         );
+      }
+    } else if (element.name === 'w:p' && !insideTrackedChange) {
+      // A paragraph boundary normally breaks any live chain (below). But when
+      // the paragraph break itself is a tracked change matching the live
+      // chain (same type/author/date), Word treats it as a continuation, not
+      // a break — nothing "final" separates the two sides. Bridge the chain
+      // across the boundary instead of resetting.
+      const paragraphMarkElement = getParagraphMarkTrackedChangeElement(element);
+      const bridges =
+        paragraphMarkElement &&
+        context.lastTrackedChange &&
+        isSameTypeChainContinuation(context.lastTrackedChange, trackedChangeEntryFromElement(paragraphMarkElement));
+
+      if (!bridges) {
+        context.lastTrackedChange = null;
+        context.beforeLastTrackedChange = null;
+        if (element.elements) walkElements(element.elements, idMap, context, insideTrackedChange);
+      } else {
+        const pPr = element.elements.find((el) => el.name === 'w:pPr');
+        const rPr = pPr?.elements?.find((el) => el.name === 'w:rPr');
+
+        // Fold the paragraph-mark revision into the live chain exactly like
+        // an ordinary same-type sibling.
+        assignInternalId(paragraphMarkElement, idMap, context, /* insideTrackedChange */ false, null);
+
+        // Walk pPr's OTHER properties (numPr, jc, spacing, ...) and rPr's
+        // other run properties in an isolated, throwaway context so they
+        // cannot reset the now-bridged chain — mirrors the existing
+        // nested-tracked-change isolation used when descending into a
+        // w:ins/w:del's own children above.
+        if (pPr?.elements) {
+          const pPrRest = pPr.elements.filter((el) => el !== rPr);
+          walkElements(
+            pPrRest,
+            idMap,
+            { beforeLastTrackedChange: null, lastTrackedChange: null, replacements: context.replacements },
+            insideTrackedChange,
+          );
+          if (rPr?.elements) {
+            const rPrRest = rPr.elements.filter((el) => el !== paragraphMarkElement);
+            walkElements(
+              rPrRest,
+              idMap,
+              { beforeLastTrackedChange: null, lastTrackedChange: null, replacements: context.replacements },
+              insideTrackedChange,
+            );
+          }
+        }
+
+        // Walk the paragraph body (everything except pPr) with the live,
+        // now-bridged context so the paragraph's own runs continue the chain.
+        const bodyElements = element.elements.filter((el) => el !== pPr);
+        walkElements(bodyElements, idMap, context, insideTrackedChange);
       }
     } else {
       // Content-bearing elements break replacement pairing. Only non-content

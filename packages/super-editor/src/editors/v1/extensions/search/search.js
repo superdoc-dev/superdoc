@@ -8,6 +8,7 @@ import { Decoration, DecorationSet } from 'prosemirror-view';
 import { Fragment, Slice } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
 import { SearchIndex } from './SearchIndex.js';
+import { collectSDTNodes, checkLockViolation } from '../structured-content/sdt-lock-detection.js';
 
 /**
  * Plugin key for accessing custom search highlight decorations
@@ -755,6 +756,13 @@ export const Search = Extension.create({
       /**
        * Replace the currently active search match with the given text.
        * Re-runs the search afterwards to update matches and counts.
+       *
+       * Note: not lock-aware. A single-step transaction into a locked SDT is
+       * rejected wholesale by structured-content-lock-plugin's filterTransaction,
+       * which happens to produce the desired "skip this locked match" outcome
+       * for the single-replace case. See IT-1202 — replaceAllSearchMatches had
+       * to be made explicitly lock-aware because its multi-step transaction
+       * doesn't get this for free.
        * @category Command
        * @param {string} replacement - Replacement text
        * @returns {{ matches: SearchMatch[], activeMatchIndex: number }}
@@ -812,26 +820,55 @@ export const Search = Extension.create({
 
       /**
        * Replace all search matches with the given text.
-       * Applies all replacements in a single transaction (back-to-front).
+       * Applies all replacements in a single transaction (back-to-front),
+       * skipping matches inside `contentLocked`/`sdtContentLocked` SDTs so
+       * one locked match doesn't block replacement of the rest.
        * @category Command
        * @param {string} replacement - Replacement text
-       * @returns {{ replacedCount: number }}
+       * @returns {{ replacedCount: number, skippedCount: number }}
        */
       replaceAllSearchMatches:
         (replacement) =>
         ({ state, dispatch, commands }) => {
           const matches = this.storage.searchResults;
           if (!matches || matches.length === 0) {
-            return { replacedCount: 0 };
+            return { replacedCount: 0, skippedCount: 0 };
+          }
+
+          // Partition before touching `tr`. Check the same outer span the
+          // replace step below actually uses — this also correctly catches a
+          // locked SDT sitting in the gap between two ranges of the same
+          // cross-paragraph match, since the gap falls inside [from, to] too.
+          const sdtNodes = collectSDTNodes(state.doc);
+          const unlocked = [];
+          let skippedCount = 0;
+          for (const match of matches) {
+            const from = match.ranges[0].from;
+            const to = match.ranges[match.ranges.length - 1].to;
+            if (checkLockViolation(sdtNodes, from, to).blocked) {
+              skippedCount += 1;
+            } else {
+              unlocked.push(match);
+            }
+          }
+
+          if (!dispatch) {
+            // Dry-run: report outcome without mutating the doc or the session.
+            return { replacedCount: unlocked.length, skippedCount };
+          }
+
+          if (unlocked.length === 0) {
+            // Nothing to replace; leave the session untouched.
+            return { replacedCount: 0, skippedCount };
           }
 
           const { schema } = state;
           const tr = state.tr;
-          const count = matches.length;
 
-          // Apply replacements back-to-front to avoid position shifts
-          for (let i = matches.length - 1; i >= 0; i--) {
-            const match = matches[i];
+          // unlocked is already in ascending doc order (built by iterating
+          // matches forward); apply back-to-front to avoid position shifts.
+          for (let i = unlocked.length - 1; i >= 0; i--) {
+            const match = unlocked[i];
             const from = match.ranges[0].from;
             const to = match.ranges[match.ranges.length - 1].to;
 
@@ -842,12 +879,22 @@ export const Search = Extension.create({
             }
           }
 
-          if (dispatch) dispatch(tr);
+          dispatch(tr);
 
-          // Clear session after replacing all
-          commands.clearSearchSession();
+          if (skippedCount > 0) {
+            // Refresh (not clear) the session so the remaining locked matches
+            // are still tracked/highlighted correctly.
+            commands.setSearchSession(this.storage.query, {
+              caseSensitive: this.storage.caseSensitive,
+              ignoreDiacritics: this.storage.ignoreDiacritics,
+              highlight: this.storage.highlightEnabled,
+              searchModel: this.storage.searchModel,
+            });
+          } else {
+            commands.clearSearchSession();
+          }
 
-          return { replacedCount: count };
+          return { replacedCount: unlocked.length, skippedCount };
         },
     };
   },

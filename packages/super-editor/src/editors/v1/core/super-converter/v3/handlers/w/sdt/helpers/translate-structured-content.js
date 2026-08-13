@@ -10,11 +10,14 @@ export function translateStructuredContent(params) {
 
   const childContent = translateChildNodes({ ...params, node });
   const childElements = Array.isArray(childContent) ? childContent : [childContent];
+  const shouldPreserveSdtWrapper = preserveSdtWrappers || isReferenceSdt(node);
 
   // SDT flattening only applies to UI/editor export paths (isFinalDoc without
   // preserveSdtWrappers). Document API export paths set preserveSdtWrappers=true
-  // to maintain full SDT fidelity in the output DOCX.
-  if (isFinalDoc && !preserveSdtWrappers) {
+  // to maintain full SDT fidelity in the output DOCX. Imported reference SDTs
+  // are also preserved because Word stores the citation/bibliography marker on
+  // the wrapper.
+  if (isFinalDoc && !shouldPreserveSdtWrapper) {
     if (node?.type === 'structuredContent') {
       return convertSdtContentToRuns(childElements);
     }
@@ -35,6 +38,11 @@ export function translateStructuredContent(params) {
   };
 
   return result;
+}
+
+function isReferenceSdt(node) {
+  const type = node?.attrs?.referenceSdtType;
+  return type === 'citation' || type === 'bibliography';
 }
 
 /** Maps control types to their sdtPr element names for OOXML export. */

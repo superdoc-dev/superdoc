@@ -14,7 +14,7 @@
  * Env:
  *   ANTHROPIC_API_KEY  — required
  *   GITHUB_TOKEN       — for fetching PR data via gh CLI
- *   REPO               — owner/repo (default: superdoc-dev/superdoc)
+ *   REPO               — owner/repo (default: superdoc/docx-editor)
  */
 
 import { execSync } from 'node:child_process';
@@ -23,7 +23,7 @@ import { writeFileSync } from 'node:fs';
 // Allow running inside a Claude Code session
 delete process.env.CLAUDECODE;
 
-const REPO = process.env.REPO || 'superdoc-dev/superdoc';
+const REPO = process.env.REPO || 'superdoc/docx-editor';
 
 /** Extract the first valid JSON object containing "level" from text. */
 function extractJSON(text) {

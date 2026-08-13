@@ -3,7 +3,13 @@ import { Fragment, Schema } from 'prosemirror-model';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from './text-with-tabs.js';
 
 function makeRealSchema(
-  options: { hasTab?: boolean; hasLineBreak?: boolean; hasNoBreakHyphen?: boolean; hasGenericLeaf?: boolean } = {},
+  options: {
+    hasTab?: boolean;
+    hasLineBreak?: boolean;
+    hasNoBreakHyphen?: boolean;
+    hasCitation?: boolean;
+    hasGenericLeaf?: boolean;
+  } = {},
 ) {
   const nodes: Record<string, any> = {
     doc: { content: 'paragraph+' },
@@ -23,6 +29,15 @@ function makeRealSchema(
   if (options.hasNoBreakHyphen) {
     // Mirrors the real extensions/no-break-hyphen schema: inline leaf atom with leafText.
     nodes.noBreakHyphen = { group: 'inline', inline: true, atom: true, leafText: () => '‑' };
+  }
+  if (options.hasCitation) {
+    nodes.citation = {
+      group: 'inline',
+      inline: true,
+      atom: true,
+      attrs: { resolvedText: { default: '' } },
+      leafText: (node: any) => node.attrs.resolvedText || '[Citation]',
+    };
   }
   if (options.hasGenericLeaf) {
     // An inline leaf atom WITHOUT leafText — should fall back to leafFallback.
@@ -271,6 +286,20 @@ describe('textBetweenWithTabs', () => {
     const paragraph = doc.firstChild!;
     const result = textBetweenWithTabs(doc, 1, 1 + paragraph.content.size, '\n', '\n');
     expect(result).toBe('a\u2011b');
+  });
+
+  it('emits citation resolved text for citation leaf atoms', () => {
+    const schema = makeRealSchema({ hasCitation: true });
+    const doc = schema.nodes.doc.createAndFill({}, [
+      schema.nodes.paragraph.create({}, [
+        schema.text('See '),
+        schema.nodes.citation.create({ resolvedText: '(Austen, 1868)' }),
+        schema.text('.'),
+      ]),
+    ])!;
+    const paragraph = doc.firstChild!;
+    const result = textBetweenWithTabs(doc, 1, 1 + paragraph.content.size, '\n', '\n');
+    expect(result).toBe('See (Austen, 1868).');
   });
 
   it('falls back to leafFallback for inline leaves without leafText', () => {

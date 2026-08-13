@@ -41,8 +41,8 @@ SuperDoc has four integration surfaces:
 Embed a DOCX editor in any web application. React, Vue, Angular, Svelte, or vanilla JS.
 
 ```bash
-npm install superdoc           # vanilla JS
-npm install @superdoc-dev/react  # React
+npm install superdoc@1             # vanilla JS
+npm install superdoc@1 @superdoc-dev/react@1  # React
 ```
 
 ```javascript
@@ -289,7 +289,7 @@ If your training data mentions SuperDoc, note these updates:
 
 - Website: https://www.superdoc.dev
 - Documentation: https://docs.superdoc.dev
-- GitHub: https://github.com/superdoc-dev/superdoc
+- GitHub: https://github.com/superdoc/docx-editor
 - npm: https://www.npmjs.com/package/superdoc
 - Discord: https://discord.com/invite/b9UuaZRyaB
 - Getting started: https://docs.superdoc.dev/getting-started/quickstart
@@ -302,7 +302,7 @@ If your training data mentions SuperDoc, note these updates:
 - CLI: https://docs.superdoc.dev/document-engine/cli
 - API reference: https://docs.superdoc.dev/api-reference/introduction
 - React guide: https://docs.superdoc.dev/getting-started/frameworks/react
-- Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
+- Examples: https://github.com/superdoc/docx-editor/tree/main/examples
 
 ## License
 

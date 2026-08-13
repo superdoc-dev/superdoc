@@ -201,9 +201,12 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  let editor: Editor;
+  const dispatch = vi.fn(() => {
+    (editor.state as { doc: ProseMirrorNode }).doc = createNode('doc', [sdtNode], { isBlock: false });
+  });
 
-  const editor = {
+  editor = {
     state: {
       doc,
       tr,
@@ -299,9 +302,12 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  let editor: Editor;
+  const dispatch = vi.fn(() => {
+    (editor.state as { doc: ProseMirrorNode }).doc = createNode('doc', [paragraph], { isBlock: false });
+  });
 
-  return {
+  editor = {
     state: {
       doc,
       tr,
@@ -356,6 +362,8 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
       insertStructuredContentInline: vi.fn(() => true),
     },
   } as unknown as Editor;
+
+  return editor;
 }
 
 /**
@@ -463,6 +471,20 @@ describe('contentControls.wrap', () => {
       // The updatedRef nodeId should differ from the original (new wrapper ID)
       expect(result.updatedRef!.nodeId).not.toBe('sdt-1');
     }
+  });
+
+  it('reports no effect when dispatch does not apply the wrapping transaction', () => {
+    const editor = makeSdtEditor();
+    const dispatch = editor.view!.dispatch as ReturnType<typeof vi.fn>;
+    dispatch.mockImplementation(() => undefined);
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
+
+    expect(result).toEqual({
+      success: false,
+      failure: { code: 'NO_OP', message: 'The mutation reported success without changing the document.' },
+    });
   });
 
   it('creates the wrapper node via schema.nodes.structuredContentBlock.create', () => {

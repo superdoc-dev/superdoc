@@ -10,7 +10,7 @@ export const SuperDocEditor = ({
   const editorRef = useRef(null);
   const containerIdRef = useRef(`editor-${Math.random().toString(36).substr(2, 9)}`);
   const DEV_DIST_URL = 'http://localhost:9094/dist';
-  const UNPKG_DIST_URL = 'https://unpkg.com/superdoc@latest/dist';
+  const UNPKG_DIST_URL = 'https://unpkg.com/superdoc@1/dist';
 
   const getBaseUrl = async () => {
     const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';

@@ -14,6 +14,7 @@
 
 import { Fragment, type Node as ProseMirrorNode, type Schema } from 'prosemirror-model';
 import { TextSelection } from 'prosemirror-state';
+import { STRUCTURED_CONTENT_WRAPPER_PRESERVING_META } from '../../extensions/structured-content/structured-content-lock-plugin.js';
 import type { Editor } from '../../core/Editor.js';
 import type { ProseMirrorJSON } from '../../core/types/EditorTypes.js';
 import type {
@@ -224,6 +225,22 @@ function executeSdtMutation(
   }
 
   return buildMutationSuccess(target, updatedRef);
+}
+
+function executeSdtWrappingMutation(
+  editor: Editor,
+  target: ContentControlTarget,
+  options: MutationOptions | undefined,
+  handler: () => boolean | ContentControlTarget,
+): ContentControlMutationResult {
+  const documentBefore = editor.state.doc;
+  const result = executeSdtMutation(editor, target, options, handler);
+
+  if (!options?.dryRun && result.success && editor.state.doc === documentBefore) {
+    return buildMutationFailure('NO_OP', 'The mutation reported success without changing the document.');
+  }
+
+  return result;
 }
 
 /**
@@ -470,7 +487,10 @@ function getParentWrapper(editor: Editor, input: ContentControlsGetParentInput):
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   const $pos = editor.state.doc.resolve(sdt.pos);
 
-  for (let depth = $pos.depth - 1; depth >= 0; depth--) {
+  // `sdt.pos` points immediately before the target node. At that boundary,
+  // `$pos.depth` is already the depth of the containing node, so skipping it
+  // misses the direct parent for nested SDTs.
+  for (let depth = $pos.depth; depth >= 0; depth--) {
     const ancestor = $pos.node(depth);
     if (isSdtNode(ancestor)) {
       return buildContentControlInfoFromNode({
@@ -499,7 +519,7 @@ function wrapWrapper(
   const id = generateSdtId();
   const wrapperTarget: ContentControlTarget = { kind: input.kind, nodeType: 'sdt', nodeId: id };
 
-  return executeSdtMutation(editor, input.target, options, () => {
+  return executeSdtWrappingMutation(editor, input.target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const nodeTypeName = input.kind === 'block' ? SDT_BLOCK_NAME : 'structuredContent';
     const nodeType = editor.schema.nodes[nodeTypeName];
@@ -521,6 +541,7 @@ function wrapWrapper(
     );
     const { tr } = editor.state;
     tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, wrapperNode);
+    tr.setMeta(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META, true);
     dispatchTransaction(editor, tr);
     return wrapperTarget;
   });
@@ -1776,7 +1797,7 @@ function groupWrapWrapper(
   resolveSdtByTarget(editor.state.doc, input.target);
   const target = input.target;
 
-  return executeSdtMutation(editor, target, options, () => {
+  return executeSdtWrappingMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const groupNodeType = editor.schema.nodes[SDT_BLOCK_NAME];
     if (!groupNodeType) return false;
@@ -1786,6 +1807,7 @@ function groupWrapWrapper(
 
     const { tr } = editor.state;
     tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, groupNode);
+    tr.setMeta(STRUCTURED_CONTENT_WRAPPER_PRESERVING_META, true);
     dispatchTransaction(editor, tr);
     return { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: groupId };
   });

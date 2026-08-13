@@ -5,12 +5,12 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "url": "git+https://github.com/superdoc/docx-editor.git",
     "directory": "packages/superdoc"
   },
   "homepage": "https://www.superdoc.dev/",
   "bugs": {
-    "url": "https://github.com/superdoc-dev/superdoc/issues"
+    "url": "https://github.com/superdoc/docx-editor/issues"
   },
   "readme": "../../README.md",
   "files": [

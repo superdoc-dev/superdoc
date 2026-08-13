@@ -2,6 +2,7 @@
 import { NodeTranslator } from '@translator';
 import { processOutputMarks } from '../../../../exporter.js';
 import { buildFieldResultRuns, buildInstructionElements } from '../shared/index.js';
+import { translator as wDelTranslator } from '../../w/del/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:crossReference';
@@ -39,11 +40,24 @@ const encode = (params) => {
 
 /**
  * Decode the crossReference node back into OOXML field structure.
+ *
+ * If the field was deleted as a tracked change, delegate to the `w:del`
+ * translator so the whole field (begin/instr/separate/result/end) is wrapped
+ * in one `<w:del>` and its instruction/result text renamed to
+ * `w:delInstrText`/`w:delText`, mirroring the `trackDelete` dispatch already
+ * done in `t-translator.js` for plain text runs.
+ *
  * @param {import('@translator').SCDecoderConfig} params
  * @returns {import('@translator').SCDecoderResult[]}
  */
 const decode = (params) => {
   const { node } = params;
+
+  const trackedMark = node.marks?.find((m) => m.type === 'trackDelete');
+  if (trackedMark) {
+    return wDelTranslator.decode(params);
+  }
+
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
   const contentNodes = buildFieldResultRuns(params, outputMarks);
   const instructionElements = buildInstructionElements(node.attrs?.instruction, node.attrs?.instructionTokens);

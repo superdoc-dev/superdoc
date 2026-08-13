@@ -29,9 +29,9 @@ It provides:
 
 ## Examples
 
-Please see a [quick start example here](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/superdoc-yjs).
+Please see a [quick start example here](https://github.com/superdoc/docx-editor/tree/main/examples/editor/collaboration/providers/superdoc-yjs).
 
-For more collaboration examples, see the [collaboration examples folder](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration).
+For more collaboration examples, see the [collaboration examples folder](https://github.com/superdoc/docx-editor/tree/main/examples/editor/collaboration).
 
 ## Installation
 
@@ -97,7 +97,7 @@ app.get('/collaboration/:documentId', { websocket: true }, (socket, request) => 
 app.listen({ port: 3000 });
 ```
 
-See [examples/editor/collaboration/providers/superdoc-yjs](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/superdoc-yjs) for more details.
+See [examples/editor/collaboration/providers/superdoc-yjs](https://github.com/superdoc/docx-editor/tree/main/examples/editor/collaboration/providers/superdoc-yjs) for more details.
 
 ---
 

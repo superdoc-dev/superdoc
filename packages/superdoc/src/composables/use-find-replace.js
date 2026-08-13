@@ -40,6 +40,13 @@ const DEFAULT_TEXTS = {
  */
 
 /**
+ * @typedef {Object} ReplaceAllResult The shape of `replaceAllSearchMatches`'s
+ *   return value. Distinct from SearchResult — it has no `matches` field.
+ * @property {number} replacedCount
+ * @property {number} skippedCount
+ */
+
+/**
  * @typedef {Object} SearchStorage The Search extension's storage shape.
  *   The Search extension is internal to super-editor; this composable only
  *   needs the fields it reads to detect a live search session and resync
@@ -227,9 +234,18 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
     if (!currentReplaceEnabled) return;
     if (!hasMatches.value || !currentEditor) return;
     try {
-      currentEditor.commands.replaceAllSearchMatches(replaceText.value);
-      matchCount.value = 0;
-      activeMatchIndex.value = -1;
+      const result = /** @type {ReplaceAllResult} */ (
+        currentEditor.commands.replaceAllSearchMatches(replaceText.value)
+      );
+      if (result.skippedCount > 0) {
+        // Some matches were skipped (locked content) — the session was
+        // refreshed to the remaining matches, not cleared. Resync from
+        // storage rather than guessing positions/count here.
+        syncFromEditorStorage();
+      } else {
+        matchCount.value = 0;
+        activeMatchIndex.value = -1;
+      }
     } catch {
       /* destroyed */
     }

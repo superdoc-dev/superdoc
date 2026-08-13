@@ -42,6 +42,7 @@ import { appendFileSync, cpSync, mkdtempSync, readFileSync, readdirSync, rmSync 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getDistTagForVersion } from './release-dist-tags.mjs';
 import { listTags, pruneLocalOnlyReleaseTags, run, runSemanticRelease } from './release-local.mjs';
 import { shouldRecoverPackageRelease } from './release-recovery-state.mjs';
 
@@ -186,10 +187,6 @@ function getPreviousMergedReleaseTag(pattern, currentTag, ref = 'HEAD') {
     : listStableMergedTags(pattern, ref);
   const currentIndex = tags.indexOf(currentTag);
   return currentIndex === -1 ? '' : (tags[currentIndex + 1] ?? '');
-}
-
-function getDistTagForVersion(version) {
-  return version.includes('-next.') ? 'next' : 'latest';
 }
 
 function getVersionFromTag(pkg, tag) {
@@ -824,7 +821,7 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
   }
 
   const version = getVersionFromTag(pkg, latestTag);
-  const distTag = getDistTagForVersion(version);
+  const distTag = getDistTagForVersion(version, pkg);
   const state = await inspectPackageReleaseState(pkg, {
     tag: latestTag,
     version,
@@ -909,6 +906,10 @@ const packages = [
     tagPrefix: 'cli-v',
     tagPattern: 'cli-v*',
     npmPackages: CLI_NPM_PACKAGES,
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeCliPublish,
   },
   {
@@ -918,6 +919,10 @@ const packages = [
     tagPrefix: 'sdk-v',
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeSdkPublish,
     ...(SDK_PYPI_ENABLED
       ? {
@@ -951,6 +956,10 @@ const packages = [
     tagPrefix: 'v',
     tagPattern: 'v[0-9]*',
     npmPackages: SUPERDOC_NPM_PACKAGES,
+    // V1 is the maintenance line for `superdoc`; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in packages/superdoc/.releaserc.cjs so a
+    // recovered publish lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeSuperdocPublish,
   },
   {
@@ -960,6 +969,10 @@ const packages = [
     tagPrefix: 'react-v',
     tagPattern: 'react-v*',
     npmPackages: ['@superdoc-dev/react'],
+    // V1 is the maintenance line for this package; V2 owns `latest` and `next`.
+    // Mirrors the `legacy` channel in its .releaserc.cjs so a recovered publish
+    // lands on the same tag the release itself would use.
+    stableDistTag: 'legacy',
     resumePublish: resumeReactPublish,
   },
   {
@@ -1083,7 +1096,7 @@ for (let index = 0; index < packages.length; index += 1) {
     if (newTags.length > 0) {
       const recoveryTag = newTags[0];
       const recoveryVersion = getVersionFromTag(pkg, recoveryTag);
-      const recoveryDistTag = getDistTagForVersion(recoveryVersion);
+      const recoveryDistTag = getDistTagForVersion(recoveryVersion, pkg);
 
       try {
         console.log(`Attempting recovery for tagged ${pkg.name} release ${recoveryTag}.`);

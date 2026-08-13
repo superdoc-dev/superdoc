@@ -9,13 +9,14 @@
     "title": "Contract templates",
     "description": "Smart fields and versioned reusable clauses driven by Word content controls. Detect stale sections and apply updates in place.",
     "category": "Editor",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/contract-templates",
     "docs": "https://docs.superdoc.dev/document-api/features/content-controls",
     "thumbnail": null,
     "liveUrl": null,
     "homepage": false,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "contract-templates"
   },
   {
     "id": "custom-ui",
@@ -27,7 +28,7 @@
     "title": "Custom UI with source-grounded citations",
     "description": "Source-grounded citations grounded in the document: insert a mock RAG-generated draft, see anchored citation highlights with hover popovers, and navigate from a sources panel. Wrapped in a full editor workspace with a custom toolbar, activity panel, comments, tracked changes, custom commands, import, and export.",
     "category": "Editor",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/editor/custom-ui",
     "docs": "https://docs.superdoc.dev/editor/custom-ui/overview",
     "thumbnail": null,
@@ -45,13 +46,14 @@
     "title": "Grading papers",
     "description": "Review student papers with documents, comments, annotations, and grading workflow UI.",
     "category": "Editor",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/grading-papers",
     "docs": null,
     "thumbnail": "demos/grading-papers/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "grading-papers"
   },
   {
     "id": "slack-redlining",
@@ -63,7 +65,7 @@
     "title": "Slack redlining",
     "description": "Use Slack and AI to insert redlines into a DOCX workflow.",
     "category": "AI",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/slack-redlining",
     "docs": "https://docs.superdoc.dev/ai/overview",
     "thumbnail": "demos/slack-redlining/demo-thumbnail.png",
@@ -81,13 +83,14 @@
     "title": "Chrome extension",
     "description": "Open downloaded documents in a SuperDoc-powered Chrome extension.",
     "category": "Integrations",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/editor/integrations/chrome-extension",
     "docs": null,
     "thumbnail": "demos/chrome-extension/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "chrome-extension"
   },
   {
     "id": "word-addin",
@@ -99,13 +102,14 @@
     "title": "Microsoft Word add-in",
     "description": "Synchronize documents between Microsoft Word and a SuperDoc web editor.",
     "category": "Integrations",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/editor/integrations/word-addin",
     "docs": null,
     "thumbnail": "demos/word-addin/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "word-addin"
   },
   {
     "id": "rag",
@@ -123,7 +127,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/rag",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "doc-rag"
   },
   {
     "id": "esign",
@@ -141,7 +146,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/esign",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "esign"
   },
   {
     "id": "template-builder",
@@ -159,7 +165,8 @@
     "thumbnail": null,
     "liveUrl": "https://demos.superdoc.dev/template-builder",
     "homepage": true,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "template-builder"
   },
   {
     "id": "pdf-sign",
@@ -207,14 +214,15 @@
     "title": "DOCX from HTML",
     "description": "Initialize a document from HTML content.",
     "category": "Document Engine",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/editor/superdoc/docx-from-html",
     "docs": "https://docs.superdoc.dev/editor/superdoc/import-export",
     "thumbnail": "demos/docx-from-html/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": false,
     "stackblitz": true,
-    "review": "Candidate for an import/export or Document Engine example."
+    "review": "Candidate for an import/export or Document Engine example.",
+    "slug": "docx-from-html"
   },
   {
     "id": "fields-source",
@@ -226,7 +234,7 @@
     "title": "Fields source demo",
     "description": "Field annotations, drag and drop fields, and final export behavior.",
     "category": "Solutions",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/fields",
     "docs": "https://docs.superdoc.dev/solutions/template-builder/introduction",
     "thumbnail": "demos/fields/demo-thumbnail.png",
@@ -245,14 +253,15 @@
     "title": "Linked sections",
     "description": "Document section nodes, linked child editors, and section export helpers.",
     "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/linked-sections",
     "docs": "https://docs.superdoc.dev/extensions/document-section",
     "thumbnail": "demos/linked-sections/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": false,
     "stackblitz": true,
-    "review": "Move to Advanced unless document sections become a primary docs surface."
+    "review": "Move to Advanced unless document sections become a primary docs surface.",
+    "slug": "linked-sections"
   },
   {
     "id": "html-editor",
@@ -264,7 +273,7 @@
     "title": "HTML editor",
     "description": "Direct SuperEditor HTML mode.",
     "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/html-editor",
     "docs": "https://docs.superdoc.dev/advanced/supereditor/overview",
     "thumbnail": "demos/html-editor/demo-thumbnail.png",
@@ -283,14 +292,15 @@
     "title": "Next.js SSR",
     "description": "Next.js SSR-safe SuperDoc loading.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/nextjs-ssr",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/nextjs",
     "thumbnail": "demos/nextjs-ssr/demo-thumbnail.png",
     "liveUrl": null,
     "homepage": false,
     "stackblitz": false,
-    "review": "Compare with examples/getting-started/nextjs before keeping."
+    "review": "Compare with examples/getting-started/nextjs before keeping.",
+    "slug": "nextjs-ssr"
   },
   {
     "id": "shim-react",
@@ -302,7 +312,7 @@
     "title": "React starter shim",
     "description": "Compatibility README for the old demo path. Use the React getting-started example.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/react",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/react",
     "thumbnail": "demos/react/demo-thumbnail.png",
@@ -321,7 +331,7 @@
     "title": "Vue starter shim",
     "description": "Compatibility README for the old demo path. Use the Vue getting-started example.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/vue",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/vue",
     "thumbnail": "demos/vue/demo-thumbnail.png",
@@ -340,7 +350,7 @@
     "title": "Vanilla starter shim",
     "description": "Compatibility README for the old demo path. Use the Vanilla JavaScript getting-started example.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/vanilla",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/vanilla-js",
     "thumbnail": "demos/vanilla/demo-thumbnail.png",
@@ -359,7 +369,7 @@
     "title": "CDN starter shim",
     "description": "Compatibility README for the old demo path. Use the CDN getting-started example.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/cdn",
     "docs": "https://docs.superdoc.dev/getting-started/quickstart",
     "thumbnail": "demos/cdn/demo-thumbnail.png",
@@ -378,7 +388,7 @@
     "title": "TypeScript starter shim",
     "description": "Compatibility README for the old demo path. Use the typed React getting-started example.",
     "category": "Getting Started",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/typescript",
     "docs": "https://docs.superdoc.dev/getting-started/frameworks/react",
     "thumbnail": "demos/typescript/demo-thumbnail.png",
@@ -397,7 +407,7 @@
     "title": "Custom mark shim",
     "description": "Compatibility README for the old demo path. Use the advanced custom mark example.",
     "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/custom-mark",
     "docs": "https://docs.superdoc.dev/advanced/custom-extensions",
     "thumbnail": null,
@@ -416,7 +426,7 @@
     "title": "Custom node shim",
     "description": "Compatibility README for the old demo path. Use the advanced custom node example.",
     "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/custom-node",
     "docs": "https://docs.superdoc.dev/advanced/custom-extensions",
     "thumbnail": null,
@@ -435,12 +445,13 @@
     "title": "Collaborative AI agent",
     "description": "Real-time collaborative DOCX editing with an AI agent. Y.js sync between a React client and a server-side OpenAI tool loop.",
     "category": "AI",
-    "sourceRepo": "superdoc-dev/superdoc",
+    "sourceRepo": "superdoc/docx-editor",
     "sourcePath": "demos/collaborative-agent",
     "docs": "https://docs.superdoc.dev/ai/agents/integrations",
     "thumbnail": null,
     "liveUrl": null,
     "homepage": false,
-    "stackblitz": false
+    "stackblitz": false,
+    "slug": "collaborative-agent"
   }
 ]

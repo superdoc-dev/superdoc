@@ -82,6 +82,64 @@ describe('w:ins translator', () => {
       ]);
     });
 
+    it('marks a leading non-text atom (e.g. noBreakHyphen) and the text that follows it', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'noBreakHyphen' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toEqual([
+        { type: 'trackInsert', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackInsert', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
+    it('does not mark a non-whitelisted content child but still marks trailing text', () => {
+      const mockSubNodes = [
+        {
+          content: [{ type: 'tab' }, { type: 'text', text: 'text' }],
+        },
+      ];
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+
+      const result = config.encode(
+        {
+          nodeListHandler: mockNodeListHandler,
+          extraParams: { node: mockNode },
+          path: [],
+        },
+        {
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          id: '123',
+          date: '2025-10-09T12:00:00Z',
+        },
+      );
+
+      expect(result[0].content[0].marks).toBeUndefined();
+      expect(result[0].content[1].marks).toEqual([
+        { type: 'trackInsert', attrs: expect.objectContaining({ author: 'Test' }) },
+      ]);
+    });
+
     it('preserves the original Word ID as sourceId when no map exists', () => {
       const { result } = encodeWith();
 

@@ -96,19 +96,6 @@ describe('buildTrackedChangeIdMap', () => {
       expect(idMap.get('20')).toBe(idMap.get('21'));
     });
 
-    it('does NOT pair adjacent changes of the same type', () => {
-      const docx = createDocx(
-        paragraph(
-          trackedChange('w:del', '30', 'Alice', '2024-01-01T00:00:00Z'),
-          trackedChange('w:del', '31', 'Alice', '2024-01-01T00:00:00Z'),
-        ),
-      );
-
-      const idMap = buildTrackedChangeIdMap(docx);
-
-      expect(idMap.get('30')).not.toBe(idMap.get('31'));
-    });
-
     it('does NOT pair changes with different authors', () => {
       const docx = createDocx(
         paragraph(
@@ -145,6 +132,261 @@ describe('buildTrackedChangeIdMap', () => {
     const idMap = buildTrackedChangeIdMap(docx);
 
     expect(idMap.get('60')).not.toBe(idMap.get('61'));
+  });
+
+  describe('same-type chaining (Word splitting one logical revision into several XML fragments)', () => {
+    it('chains adjacent same-type/author/date changes into one group', () => {
+      // Word frequently emits several adjacent same-type <w:ins>/<w:del>
+      // elements for what its own UI shows as one revision (e.g. a run
+      // boundary forced by a formatting change or a w:noBreakHyphen atom).
+      // This replaces the old "does NOT pair adjacent changes of the same
+      // type" expectation — that assertion was inverted on purpose.
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:del', '30', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:del', '31', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('30')).toBe(idMap.get('31'));
+    });
+
+    it('chains 3+ same-type siblings into a single group, not just a pair', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '2', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '3', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('1')).toBe(idMap.get('2'));
+      expect(idMap.get('2')).toBe(idMap.get('3'));
+    });
+
+    it('does NOT chain same-type changes with different authors', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', '2', 'Bob', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('1')).not.toBe(idMap.get('2'));
+    });
+
+    it('does NOT chain same-type changes separated by a content run', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'Alice', '2024-01-01T00:00:00Z'),
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: 'live text' }] }] },
+          trackedChange('w:ins', '2', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('1')).not.toBe(idMap.get('2'));
+    });
+
+    it('applies same-type chaining regardless of the replacements option', () => {
+      // Same-type chaining is a distinct concept from Word replacement-pair
+      // detection and must not be gated by the 'independent' mode, which only
+      // governs opposite-type pairing.
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', '2', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx, { replacements: 'independent' });
+
+      expect(idMap.get('1')).toBe(idMap.get('2'));
+    });
+
+    it('does NOT let a chained tail drag its whole chain into a new replacement pair', () => {
+      // ins('A') + ins('B') form a same-type chain, then del('C') is adjacent
+      // to the chain's tail (B) with matching author/date — opposite type.
+      // C must pair with, at most, B — it must NOT fuse A (an earlier,
+      // unrelated link of the chain) into the same identity as C.
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', 'A', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', 'B', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:del', 'C', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      // The chain itself stays intact.
+      expect(idMap.get('A')).toBe(idMap.get('B'));
+      // But C must not be fused into the chain's shared id.
+      expect(idMap.get('C')).not.toBe(idMap.get('A'));
+      expect(idMap.get('C')).not.toBe(idMap.get('B'));
+    });
+
+    it('does NOT let a w:id reused elsewhere in the document poison a live chain', () => {
+      // '5' is used once, standalone, earlier in the document. Later, '5' is
+      // reused as the middle element of what would otherwise be a live
+      // same-type chain (10, 5, 11). The existing reused-id mapping for '5'
+      // must be preserved (not overwritten) — but that borrowed identity
+      // must NOT propagate forward and fuse '11' onto it, nor should it
+      // retroactively connect '10' to the unrelated earlier '5'.
+      const docx = createDocx(
+        paragraph(trackedChange('w:ins', '5', 'Alice', '2024-01-01T00:00:00Z')),
+        paragraph(
+          trackedChange('w:ins', '10', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', '5', 'Alice', '2024-01-01T00:00:00Z'),
+          trackedChange('w:ins', '11', 'Alice', '2024-01-01T00:00:00Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('10')).not.toBe(idMap.get('5'));
+      expect(idMap.get('5')).not.toBe(idMap.get('11'));
+      expect(idMap.get('10')).not.toBe(idMap.get('11'));
+    });
+  });
+
+  describe('bridging same-type chains across a tracked paragraph-mark insertion', () => {
+    function paragraphWithTrackedMark(markId, markAuthor, markDate, ...children) {
+      return {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:pPr',
+            elements: [
+              {
+                name: 'w:rPr',
+                elements: [trackedChange('w:ins', markId, markAuthor, markDate)],
+              },
+            ],
+          },
+          ...children,
+        ],
+      };
+    }
+
+    it('bridges a same-type chain across a paragraph boundary when the paragraph mark matches', () => {
+      // Mirrors the real repro shape: paragraph 1 ends with a tracked-inserted
+      // paragraph mark (same author/date as the surrounding runs), so Word
+      // shows the whole thing as one revision, not two.
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '2', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+        paragraphWithTrackedMark(
+          '99',
+          'NBH Repro',
+          '2026-07-24T16:25:39Z',
+          trackedChange('w:ins', '3', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('1')).toBe(idMap.get('2'));
+      expect(idMap.get('2')).toBe(idMap.get('3'));
+    });
+
+    it('does NOT bridge when the paragraph mark has a different author than the preceding chain', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '2', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+        paragraphWithTrackedMark(
+          '99',
+          'Someone Else',
+          '2026-07-24T16:25:39Z',
+          trackedChange('w:ins', '3', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('2')).not.toBe(idMap.get('3'));
+    });
+
+    it('does NOT bridge when there is no tracked paragraph-mark insertion at all', () => {
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '2', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+        paragraph(trackedChange('w:ins', '3', 'NBH Repro', '2026-07-24T16:25:39Z')),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      expect(idMap.get('2')).not.toBe(idMap.get('3'));
+    });
+
+    it('does not extend the bridge into a following change from a different author', () => {
+      // The paragraph mark matches the preceding chain, but the run AFTER it
+      // is a different author's insertion — that run must stand on its own.
+      const docx = createDocx(
+        paragraph(
+          trackedChange('w:ins', '1', 'NBH Repro', '2026-07-24T16:25:39Z'),
+          trackedChange('w:ins', '2', 'NBH Repro', '2026-07-24T16:25:39Z'),
+        ),
+        paragraphWithTrackedMark(
+          '99',
+          'NBH Repro',
+          '2026-07-24T16:25:39Z',
+          trackedChange('w:ins', '3', 'Someone Else', '2026-07-24T16:25:39Z'),
+        ),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      // The bridge element ('99') still joins the preceding chain...
+      expect(idMap.get('2')).toBe(idMap.get('99'));
+      // ...but the differently-authored run after it does not.
+      expect(idMap.get('3')).not.toBe(idMap.get('2'));
+    });
+
+    it('collapses the full repro shape (three paragraphs bridged by tracked paragraph marks) into one id', () => {
+      const AUTHOR = 'NBH Repro';
+      const DATE = '2026-07-24T16:25:39Z';
+      const docx = createDocx(
+        paragraph({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: '15. Untracked paragraph.' }] }] }),
+        paragraphWithTrackedMark(
+          '0',
+          AUTHOR,
+          DATE,
+          trackedChange('w:ins', '1', AUTHOR, DATE),
+          trackedChange('w:ins', '2', AUTHOR, DATE),
+          trackedChange('w:ins', '3', AUTHOR, DATE),
+        ),
+        paragraphWithTrackedMark(
+          '4',
+          AUTHOR,
+          DATE,
+          trackedChange('w:ins', '5', AUTHOR, DATE),
+          trackedChange('w:ins', '6', AUTHOR, DATE),
+          trackedChange('w:ins', '7', AUTHOR, DATE),
+        ),
+        paragraphWithTrackedMark('8', AUTHOR, DATE, trackedChange('w:ins', '9', AUTHOR, DATE)),
+        paragraph({ name: 'w:r', elements: [{ name: 'w:t', elements: [{ text: '17. Untracked paragraph.' }] }] }),
+      );
+
+      const idMap = buildTrackedChangeIdMap(docx);
+
+      const ids = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+      const uuids = new Set(ids.map((id) => idMap.get(id)));
+      expect(uuids.size).toBe(1);
+    });
   });
 
   it('preserves pairing across non-content markers (comment/bookmark ranges)', () => {

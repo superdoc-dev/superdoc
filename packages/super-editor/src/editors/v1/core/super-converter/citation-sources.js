@@ -46,6 +46,8 @@ const OOXML_TO_API_SOURCE_TYPE = Object.freeze({
 });
 
 const SIMPLE_FIELD_TO_XML_TAG = Object.freeze({
+  guid: 'Guid',
+  refOrder: 'RefOrder',
   title: 'Title',
   year: 'Year',
   publisher: 'Publisher',

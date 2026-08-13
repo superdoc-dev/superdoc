@@ -233,6 +233,21 @@ export function translateParagraphNode(params) {
 
   // Insert paragraph properties at the beginning of the elements array
   const pPr = generateParagraphProperties(params);
+  // A final-doc export is the ACCEPTED state, so a block whose paragraph mark
+  // was deleted must not survive it. `del-translator.decode` has already
+  // dropped the struck runs, which leaves nothing but the properties — and
+  // emitting that is precisely the empty numbered item whole-block deletion
+  // exists to remove. Returning nothing drops the paragraph, the same shape
+  // the del translator uses to drop deleted content.
+  //
+  // Only when nothing survives. If some content is still live the accepted
+  // result is a MERGE into the successor, which this per-node translator
+  // cannot express, so the paragraph is kept rather than silently dropping
+  // text that was never deleted.
+  if (params.isFinalDoc && params.node?.attrs?.markTrackChange?.type === 'paragraphMarkDelete' && !elements.length) {
+    return undefined;
+  }
+
   if (pPr) elements.unshift(pPr);
 
   let attributes = {};

@@ -43,6 +43,12 @@
     ]
   },
   "navigation": {
+    "global": {
+      "versions": [
+        { "version": "v2", "href": "https://docs.superdoc.dev" },
+        { "version": "v1", "default": true, "href": "https://docs-v1.superdoc.dev" }
+      ]
+    },
     "tabs": [
       {
         "tab": "SuperDoc",
@@ -291,7 +297,7 @@
     "links": [
       {
         "type": "github",
-        "href": "https://github.com/superdoc-dev/superdoc"
+        "href": "https://github.com/superdoc/docx-editor"
       },
       {
         "type": "discord",
@@ -301,7 +307,7 @@
     ]
   },
   "banner": {
-    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement \u2192](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
+    "content": "**SuperDoc v2 is available.** [Read the v2 docs](https://docs.superdoc.dev/)",
     "dismissible": true
   },
   "redirects": [

@@ -55,7 +55,7 @@ if (shouldPublishGitHubRelease) {
     '@semantic-release/github',
     {
       successComment:
-        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/fonts** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+        ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/fonts** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc/docx-editor/releases/tag/${nextRelease.gitTag})',
     },
   ]);
 }

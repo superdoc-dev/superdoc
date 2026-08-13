@@ -199,7 +199,7 @@ jobs:
       - name: Create .env for cloud providers
         working-directory: examples/editor/collaboration/providers/${{ matrix.example }}
         env:
-          VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}
+          VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ vars.VITE_LIVEBLOCKS_PUBLIC_KEY }}
         run: |
           if [ "${{ matrix.example }}" = "liveblocks" ]; then
             case "$VITE_LIVEBLOCKS_PUBLIC_KEY" in

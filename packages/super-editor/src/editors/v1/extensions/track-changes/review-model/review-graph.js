@@ -29,6 +29,7 @@ import {
 import { BODY_STORY, buildStoryKey } from './story-locator.js';
 import { enumerateStructuralRowChanges } from '../trackChangesHelpers/structuralRowChanges.js';
 import { enumeratePprChanges } from '../trackChangesHelpers/pprChanges.js';
+import { enumerateParagraphMarkDeletions } from '../trackChangesHelpers/paragraphMarkChanges.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +59,8 @@ import { enumeratePprChanges } from '../trackChangesHelpers/pprChanges.js';
  * @property {'parent'|'child'|'standalone'} overlapRole
  * @property {boolean} [structural] True for a whole-table structural segment (no inline mark).
  * @property {boolean} [pprChange] True for a paragraph-property (w:pPrChange) segment (no inline mark).
+ * @property {boolean} [paragraphMarkChange] True for a paragraph-mark deletion (w:pPr/w:rPr/w:del) segment on a block
+ *   whose runs carry no mark of their own (no inline mark).
  * @property {Array<number>} [nodePath] optional diagnostics nodePath.
  */
 
@@ -137,10 +140,12 @@ export const buildReviewGraph = ({ state, story = BODY_STORY, replacementsMode =
   const spans = enumerateTrackedMarkSpans(state);
   const structuralChanges = enumerateStructuralRowChanges(state);
   const pprChanges = enumeratePprChanges(state);
+  const paragraphMarkChanges = enumerateParagraphMarkDeletions(state);
   return buildGraphFromSpans({
     spans,
     structuralChanges,
     pprChanges,
+    paragraphMarkChanges,
     doc: state?.doc ?? null,
     story,
     replacementsMode,
@@ -203,7 +208,15 @@ export const invalidateReviewGraphCache = (editor) => {
 // Internal builder
 // ---------------------------------------------------------------------------
 
-const buildGraphFromSpans = ({ spans, structuralChanges = [], pprChanges = [], doc, story, replacementsMode }) => {
+const buildGraphFromSpans = ({
+  spans,
+  structuralChanges = [],
+  pprChanges = [],
+  paragraphMarkChanges = [],
+  doc,
+  story,
+  replacementsMode,
+}) => {
   /** @type {Array<{ attrs: import('./mark-metadata.js').NormalizedTrackedAttrs, span: import('./segment-index.js').TrackedMarkSpan }>} */
   const normalized = spans.map((span) => ({
     attrs: readTrackedAttrs(span.mark, span.mark.type.name),
@@ -328,6 +341,30 @@ const buildGraphFromSpans = ({ spans, structuralChanges = [], pprChanges = [], d
     const logical = buildPprLogicalChange({ ppr, doc, story });
     if (!logical) continue;
     const internalKey = `pprchange:${ppr.from}`;
+    if (changes.has(internalKey)) continue;
+    changes.set(internalKey, logical);
+    if (logical.id && logical.id !== internalKey && !changes.has(logical.id)) {
+      changes.set(logical.id, logical);
+    }
+    appendToMap(byRevisionGroupId, logical.revisionGroupId, logical.id);
+  }
+
+  // 6d. Paragraph-mark deletions (w:pPr/w:rPr/w:del) that the inline pass did
+  //     NOT already claim. When the deleted block had content, its runs carry
+  //     `trackDelete` under the same id, so the change already exists and the
+  //     mark rides along with it — projecting again would duplicate it. An
+  //     EMPTY block has no runs, so this is the only pass that can surface it;
+  //     without it the deletion is invisible and the empty item survives.
+  //
+  //     Non-positional for the same reason as pPr changes: the synthetic
+  //     segment spans the whole block and is not real text content, so it
+  //     stays off `mergedSegments` / `bySegmentId` and is resolved only
+  //     through the `changes` map.
+  for (const mark of paragraphMarkChanges) {
+    if (changes.has(mark.id)) continue;
+    const logical = buildParagraphMarkLogicalChange({ mark, doc, story });
+    if (!logical) continue;
+    const internalKey = `paragraphmark:${mark.from}`;
     if (changes.has(internalKey)) continue;
     changes.set(internalKey, logical);
     if (logical.id && logical.id !== internalKey && !changes.has(logical.id)) {
@@ -806,6 +843,112 @@ const buildPprLogicalChange = ({ ppr, doc, story }) => {
   // projections that iterate own keys.
   Object.defineProperty(logical, 'pprChange', {
     value: ppr,
+    enumerable: false,
+  });
+
+  return logical;
+};
+
+/**
+ * Project a standalone paragraph-mark deletion (an emptied block whose runs
+ * carry no mark of their own) into a decidable Deletion change.
+ *
+ * Typed Deletion, not Structural: accepting removes the block the same way the
+ * content case does, and the decision engine resolves it through the same
+ * `collapseParagraphMark` / `clearParagraphMark` ops.
+ *
+ * @param {{
+ *   mark: import('../trackChangesHelpers/paragraphMarkChanges.js').ParagraphMarkChange,
+ *   doc: import('prosemirror-model').Node | null,
+ *   story: import('./story-locator.js').StoryLocator,
+ * }} input
+ * @returns {LogicalTrackedChange | null}
+ */
+const buildParagraphMarkLogicalChange = ({ mark, doc, story }) => {
+  const from = mark.from;
+  const to = mark.to;
+  if (!(from < to)) return null;
+  const side = SegmentSide.Deleted;
+
+  /** @type {import('./mark-metadata.js').NormalizedTrackedAttrs} */
+  const attrs = {
+    id: mark.id,
+    revisionGroupId: mark.id,
+    splitFromId: '',
+    changeType: CanonicalChangeType.Deletion,
+    replacementGroupId: '',
+    replacementSideId: '',
+    overlapParentId: '',
+    sourceIds: {},
+    sourceId: '',
+    importedAuthor: '',
+    origin: '',
+    author: mark.author,
+    authorId: '',
+    authorEmail: mark.authorEmail,
+    authorImage: mark.authorImage,
+    date: mark.date,
+    markType: '',
+    side,
+    subtype: mark.subtype,
+    explicitChangeType: CanonicalChangeType.Deletion,
+    hasReviewMetadata: true,
+  };
+
+  /** @type {TrackedSegment} */
+  const segment = {
+    segmentId: `${mark.id}:paragraphmark:${from}:${to}:0`,
+    changeId: mark.id,
+    markType: '',
+    side,
+    from,
+    to,
+    text: '',
+    mark: /** @type {*} */ (null),
+    markRuns: [],
+    attrs,
+    parentId: '',
+    parentSide: '',
+    overlapRole: 'standalone',
+    // Attr-based, like the structural and pPr segments: the block-spanning
+    // range is not real text content, so it must not nest inline changes or
+    // be hit by text-range decides.
+    paragraphMarkChange: true,
+  };
+
+  const segments = [segment];
+  /** @type {LogicalTrackedChange} */
+  const logical = {
+    id: mark.id,
+    type: CanonicalChangeType.Deletion,
+    subtype: mark.subtype,
+    state: 'open',
+    segments,
+    coverageSegments: [...segments],
+    insertedSegments: [],
+    deletedSegments: [...segments],
+    formattingSegments: [],
+    replacement: null,
+    author: mark.author,
+    authorId: '',
+    authorEmail: mark.authorEmail,
+    authorImage: mark.authorImage,
+    date: mark.date,
+    sourceIds: {},
+    revisionGroupId: mark.id,
+    splitFromId: '',
+    sourcePlatform: '',
+    story,
+    parent: null,
+    children: [],
+    before: [],
+    after: [],
+    excerpt: '',
+  };
+  // Payload the decision engine reads. Non-enumerable so it never leaks into
+  // deterministic JSON or contract projections that iterate own keys.
+  Object.defineProperty(logical, 'paragraphMarkChange', {
+    value: mark,
     enumerable: false,
   });
 

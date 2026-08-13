@@ -84,12 +84,25 @@ const scheduleAutoHide = () => {
   }, props.autoHideDuration);
 };
 
+const getElementSize = (element, dimension) => {
+  const styles = window.getComputedStyle(element);
+  const size = parseFloat(styles[dimension]);
+  if (!Number.isFinite(size)) return dimension === 'width' ? element.offsetWidth : element.offsetHeight;
+  if (styles.boxSizing === 'border-box') return size;
+
+  const edges =
+    dimension === 'width'
+      ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+      : ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
+  return edges.reduce((total, property) => total + (parseFloat(styles[property]) || 0), size);
+};
+
 const updatePosition = () => {
   if (!triggerRef.value || !contentRef.value) return;
 
   const triggerRect = triggerRef.value.getBoundingClientRect();
-  const contentWidth = contentRef.value.offsetWidth;
-  const contentHeight = contentRef.value.offsetHeight;
+  const contentWidth = getElementSize(contentRef.value, 'width');
+  const contentHeight = getElementSize(contentRef.value, 'height');
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;

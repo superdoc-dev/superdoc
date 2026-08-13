@@ -57,7 +57,7 @@ describe('SdTooltip', () => {
 
   describe('positioning', () => {
     const TOOLTIP_WIDTH = 120;
-    const TOOLTIP_HEIGHT = 34;
+    const TOOLTIP_HEIGHT = 34.1875;
     const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
 
     const makeRect = ({ top, left, width, height }) => ({
@@ -86,6 +86,22 @@ describe('SdTooltip', () => {
       });
       vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
         return isTooltipContent(this) ? contentRect : triggerRect;
+      });
+      vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+        if (!isTooltipContent(element)) return {};
+        return {
+          boxSizing: 'content-box',
+          width: '92px',
+          height: '18.1875px',
+          paddingLeft: '14px',
+          paddingRight: '14px',
+          paddingTop: '8px',
+          paddingBottom: '8px',
+          borderLeftWidth: '0px',
+          borderRightWidth: '0px',
+          borderTopWidth: '0px',
+          borderBottomWidth: '0px',
+        };
       });
     };
 

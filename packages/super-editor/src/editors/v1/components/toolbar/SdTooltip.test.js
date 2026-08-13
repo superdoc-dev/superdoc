@@ -58,6 +58,7 @@ describe('SdTooltip', () => {
   describe('positioning', () => {
     const TOOLTIP_WIDTH = 120;
     const TOOLTIP_HEIGHT = 34;
+    const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
 
     const makeRect = ({ top, left, width, height }) => ({
       top,
@@ -111,6 +112,10 @@ describe('SdTooltip', () => {
 
     const renderedTop = (content) => parseFloat(content.style.top);
 
+    afterEach(() => {
+      Object.defineProperty(window, 'innerHeight', originalInnerHeight);
+    });
+
     it('renders fully above the trigger when there is room', async () => {
       const triggerRect = makeRect({ top: 200, left: 300, width: 32, height: 32 });
       const content = await mountAndOpen(triggerRect);
@@ -125,6 +130,25 @@ describe('SdTooltip', () => {
 
       expect(renderedTop(content)).toBeGreaterThanOrEqual(0);
       expect(renderedTop(content)).toBeGreaterThanOrEqual(triggerRect.bottom);
+    });
+
+    it('keeps a visible top placement when the bottom placement would be clipped', async () => {
+      Object.defineProperty(window, 'innerHeight', { value: 120, configurable: true });
+      const triggerRect = makeRect({ top: 50, left: 100, width: 32, height: 32 });
+      const content = await mountAndOpen(triggerRect);
+
+      expect(content.dataset.placement).toBe('top');
+      expect(renderedTop(content)).toBeGreaterThanOrEqual(0);
+      expect(renderedTop(content) + TOOLTIP_HEIGHT).toBeLessThanOrEqual(window.innerHeight);
+    });
+
+    it('keeps the tooltip inside the viewport when neither side has enough room', async () => {
+      Object.defineProperty(window, 'innerHeight', { value: 40, configurable: true });
+      const triggerRect = makeRect({ top: 4, left: 100, width: 32, height: 32 });
+      const content = await mountAndOpen(triggerRect);
+
+      expect(renderedTop(content)).toBeGreaterThanOrEqual(0);
+      expect(renderedTop(content) + TOOLTIP_HEIGHT).toBeLessThanOrEqual(window.innerHeight);
     });
 
     // data-placement is the styling contract the component's own CSS uses to orient

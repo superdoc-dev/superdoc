@@ -91,6 +91,7 @@ const updatePosition = () => {
   const contentWidth = contentRef.value.offsetWidth;
   const contentHeight = contentRef.value.offsetHeight;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;
   const offset = 10;
 
@@ -98,10 +99,23 @@ const updatePosition = () => {
   left = Math.max(gutter, Math.min(left, viewportWidth - contentWidth - gutter));
 
   const topAbove = triggerRect.top - contentHeight - offset;
-  placement.value = topAbove < gutter ? 'bottom' : 'top';
+  const topBelow = triggerRect.bottom + offset;
+  const fitsAbove = topAbove >= gutter;
+  const fitsBelow = topBelow + contentHeight <= viewportHeight - gutter;
+  const availableAbove = triggerRect.top - offset;
+  const availableBelow = viewportHeight - triggerRect.bottom - offset;
+
+  if (fitsAbove) placement.value = 'top';
+  else if (fitsBelow) placement.value = 'bottom';
+  else placement.value = availableAbove >= availableBelow ? 'top' : 'bottom';
+
+  const desiredTop = placement.value === 'top' ? topAbove : topBelow;
+  const minTop = Math.min(gutter, Math.max(0, viewportHeight - contentHeight));
+  const maxTop = Math.max(minTop, viewportHeight - contentHeight - gutter);
+  const top = Math.max(minTop, Math.min(desiredTop, maxTop));
 
   position.value = {
-    top: placement.value === 'top' ? `${topAbove}px` : `${triggerRect.bottom + offset}px`,
+    top: `${top}px`,
     left: `${left}px`,
   };
 };

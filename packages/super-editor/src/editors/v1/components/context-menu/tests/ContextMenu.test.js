@@ -187,6 +187,45 @@ describe('ContextMenu.vue', () => {
       expect(wrapper.find('.context-menu').element.style.top).toBe('200px');
     });
 
+    it('keeps the rendered menu inside a clipping ancestor', async () => {
+      const clipper = document.createElement('div');
+      clipper.style.overflowX = 'hidden';
+      clipper.style.overflowY = 'hidden';
+      Object.defineProperties(clipper, {
+        clientWidth: { configurable: true, value: 600 },
+        clientHeight: { configurable: true, value: 760 },
+      });
+      clipper.append(surfaceElementMock);
+      document.body.append(clipper);
+
+      const viewportWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
+      const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.classList.contains('context-menu')) {
+          return { left: 512, top: 200, right: 692, bottom: 306, width: 180, height: 106 };
+        }
+        if (this === clipper) {
+          return { left: 0, top: 0, right: 600, bottom: 760, width: 600, height: 760 };
+        }
+        return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+      });
+
+      const wrapper = mount(ContextMenu, { props: mockProps });
+      try {
+        const onContextMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'contextMenu:open')[1];
+        await onContextMenuOpen({ menuPosition: { left: '512px', top: '200px' } });
+
+        expect(wrapper.find('.context-menu').element.style.left).toBe('412px');
+        expect(wrapper.find('.context-menu').element.style.top).toBe('200px');
+      } finally {
+        wrapper.unmount();
+        rect.mockRestore();
+        viewportWidth.mockRestore();
+        viewportHeight.mockRestore();
+        clipper.remove();
+      }
+    });
+
     it('should not open menu when editor is read-only', async () => {
       mockEditor.isEditable = false;
       const wrapper = mount(ContextMenu, { props: mockProps });

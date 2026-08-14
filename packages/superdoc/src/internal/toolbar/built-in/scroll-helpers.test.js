@@ -27,6 +27,28 @@ function createScrollFixture(scrollPaddingTop) {
   return { container, target };
 }
 
+function createRootScrollFixture({ scrollPaddingTop = '', targetHeight } = {}) {
+  const target = document.createElement('div');
+  document.body.appendChild(target);
+  const container = document.scrollingElement;
+  Object.defineProperties(container, {
+    clientHeight: { configurable: true, value: 300 },
+    scrollHeight: { configurable: true, value: 1_000 },
+    scrollTop: { configurable: true, value: 120 },
+  });
+  if (targetHeight != null) {
+    Object.defineProperty(target, 'offsetHeight', { configurable: true, value: targetHeight });
+  }
+  container.getBoundingClientRect = () => ({ top: -120 });
+  target.getBoundingClientRect = () => ({ top: 500 });
+  container.scrollTo = vi.fn();
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => ({
+    overflowY: 'visible',
+    scrollPaddingTop: element === container ? scrollPaddingTop : '',
+  }));
+  return { container, target };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.replaceChildren();
@@ -47,6 +69,30 @@ describe('scrollToElement', () => {
     scrollToElement(target, { behavior: 'smooth', block: 'start' });
 
     expect(container.scrollTo).toHaveBeenCalledWith({ top: 440, behavior: 'smooth' });
+  });
+
+  it('does not count the document scroll twice when the root is the scroll container', () => {
+    const { container, target } = createRootScrollFixture();
+
+    scrollToElement(target, { behavior: 'smooth', block: 'start' });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({ top: 620, behavior: 'smooth' });
+  });
+
+  it('applies root scroll padding after resolving the absolute target position', () => {
+    const { container, target } = createRootScrollFixture({ scrollPaddingTop: '32px' });
+
+    scrollToElement(target, { behavior: 'auto', block: 'start' });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({ top: 588, behavior: 'auto' });
+  });
+
+  it('aligns a root-scroller target to the viewport end', () => {
+    const { container, target } = createRootScrollFixture({ targetHeight: 40 });
+
+    scrollToElement(target, { behavior: 'smooth', block: 'end' });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({ top: 360, behavior: 'smooth' });
   });
 
   it.each(['10%', 'Infinitypx', '-10px'])(

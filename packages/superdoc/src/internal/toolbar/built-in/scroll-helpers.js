@@ -19,7 +19,9 @@ export function scrollToElement(targetElement, options = { behavior: 'smooth', b
 
   const containerRect = container.getBoundingClientRect();
   const targetRect = targetElement.getBoundingClientRect();
-  const offsetTop = targetRect.top - containerRect.top + container.scrollTop;
+  // SD-4189: The root rect already includes scroll displacement, so using its top double-counts scrollTop.
+  const containerTop = container === (document.scrollingElement || document.documentElement) ? 0 : containerRect.top;
+  const offsetTop = targetRect.top - containerTop + container.scrollTop;
   const scrollPaddingTopValue = window.getComputedStyle(container).scrollPaddingTop?.trim();
   const resolvedScrollPaddingTop = scrollPaddingTopValue?.endsWith('px')
     ? Number(scrollPaddingTopValue.slice(0, -2))

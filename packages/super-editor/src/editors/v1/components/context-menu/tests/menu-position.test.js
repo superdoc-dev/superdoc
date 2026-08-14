@@ -55,6 +55,15 @@ describe('clampMenuPositionToBounds', () => {
       top: '30px',
     });
   });
+
+  it('uses a smaller gutter when the menu only fits within the full bounds', () => {
+    const bounds = { left: 0, top: 0, right: 200, bottom: 300 };
+    const rect = { left: 20, top: 20, right: 205, bottom: 120 };
+    expect(clampMenuPositionToBounds({ left: '20px', top: '20px' }, rect, bounds)).toEqual({
+      left: '7.5px',
+      top: '20px',
+    });
+  });
 });
 
 describe('resolveMenuBounds', () => {

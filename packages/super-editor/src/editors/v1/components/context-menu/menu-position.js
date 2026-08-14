@@ -53,18 +53,23 @@ export const clampMenuPositionToBounds = (position, rect, bounds, gutter = 8) =>
   let left = parseFloat(position.left) || 0;
   let top = parseFloat(position.top) || 0;
 
-  // Clamp an axis only when the menu fits; a larger menu renders as-is (shifting just trades edges).
-  const fitsX = rect.right - rect.left <= bounds.right - bounds.left - 2 * gutter;
-  const fitsY = rect.bottom - rect.top <= bounds.bottom - bounds.top - 2 * gutter;
+  const menuWidth = rect.right - rect.left;
+  const menuHeight = rect.bottom - rect.top;
+  const boundsWidth = bounds.right - bounds.left;
+  const boundsHeight = bounds.bottom - bounds.top;
+  const fitsX = menuWidth <= boundsWidth;
+  const fitsY = menuHeight <= boundsHeight;
+  const gutterX = Math.min(gutter, Math.max(0, (boundsWidth - menuWidth) / 2));
+  const gutterY = Math.min(gutter, Math.max(0, (boundsHeight - menuHeight) / 2));
 
   if (fitsX) {
-    if (rect.right > bounds.right - gutter) left -= rect.right - (bounds.right - gutter);
-    else if (rect.left < bounds.left + gutter) left += bounds.left + gutter - rect.left;
+    if (rect.right > bounds.right - gutterX) left -= rect.right - (bounds.right - gutterX);
+    else if (rect.left < bounds.left + gutterX) left += bounds.left + gutterX - rect.left;
   }
 
   if (fitsY) {
-    if (rect.bottom > bounds.bottom - gutter) top -= rect.bottom - (bounds.bottom - gutter);
-    else if (rect.top < bounds.top + gutter) top += bounds.top + gutter - rect.top;
+    if (rect.bottom > bounds.bottom - gutterY) top -= rect.bottom - (bounds.bottom - gutterY);
+    else if (rect.top < bounds.top + gutterY) top += bounds.top + gutterY - rect.top;
   }
 
   return { left: `${left}px`, top: `${top}px` };

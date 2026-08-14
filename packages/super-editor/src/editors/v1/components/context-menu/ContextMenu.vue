@@ -37,6 +37,24 @@ const sections = ref([]);
 const selectedId = ref(null);
 const currentContext = ref(null); // Store context for action execution
 
+const repositionMenu = () => {
+  const menuRect = menuRef.value?.getBoundingClientRect();
+  if (!menuRect || menuRect.width <= 0 || menuRect.height <= 0) return;
+
+  const bounds = resolveMenuBounds(getEditorSurfaceElement(props.editor), window);
+  menuPosition.value = clampMenuPositionToBounds(menuPosition.value, menuRect, bounds);
+};
+
+let repositionScheduled = false;
+const scheduleMenuReposition = () => {
+  if (repositionScheduled) return;
+  repositionScheduled = true;
+  nextTick(() => {
+    repositionScheduled = false;
+    repositionMenu();
+  });
+};
+
 const TABLE_SURFACE_SELECTOR = '.superdoc-table-fragment, .superdoc-table-cell';
 
 const hasExpandedSelection = (selection) => {
@@ -202,6 +220,7 @@ const renderCustomItem = async (itemId) => {
       element.innerHTML = '';
       element.appendChild(customElement);
       element.hasCustomContent = true;
+      scheduleMenuReposition();
     }
   } catch (error) {
     console.warn(`[ContextMenu] Error rendering custom item ${itemId}:`, error);
@@ -210,6 +229,7 @@ const renderCustomItem = async (itemId) => {
     element.innerHTML = '';
     element.appendChild(fallbackElement);
     element.hasCustomContent = true;
+    scheduleMenuReposition();
   }
 };
 
@@ -586,11 +606,7 @@ onMounted(() => {
     isOpen.value = true;
 
     await nextTick();
-    const menuRect = menuRef.value?.getBoundingClientRect();
-    if (menuRect?.width > 0 && menuRect.height > 0) {
-      const bounds = resolveMenuBounds(getEditorSurfaceElement(props.editor) ?? menuRef.value, window);
-      menuPosition.value = clampMenuPositionToBounds(menuPosition.value, menuRect, bounds);
-    }
+    repositionMenu();
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 

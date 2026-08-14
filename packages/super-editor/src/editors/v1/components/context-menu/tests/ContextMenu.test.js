@@ -202,7 +202,8 @@ describe('ContextMenu.vue', () => {
       const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
       const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
         if (this.classList.contains('context-menu')) {
-          return { left: 512, top: 200, right: 692, bottom: 306, width: 180, height: 106 };
+          const left = Number.parseFloat(this.style.left) || 0;
+          return { left, top: 200, right: left + 180, bottom: 306, width: 180, height: 106 };
         }
         if (this === clipper) {
           return { left: 0, top: 0, right: 600, bottom: 760, width: 600, height: 760 };
@@ -223,6 +224,73 @@ describe('ContextMenu.vue', () => {
         viewportWidth.mockRestore();
         viewportHeight.mockRestore();
         clipper.remove();
+      }
+    });
+
+    it('uses viewport bounds when the editor surface is unavailable', async () => {
+      surfaceElementMock = null;
+      const viewportWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
+      const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
+      const computedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => ({
+        overflowX: element.classList.contains('context-menu') ? 'hidden' : 'visible',
+        overflowY: element.classList.contains('context-menu') ? 'hidden' : 'visible',
+      }));
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.classList.contains('context-menu')) {
+          const left = Number.parseFloat(this.style.left) || 0;
+          return { left, top: 200, right: left + 180, bottom: 306, width: 180, height: 106 };
+        }
+        return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+      });
+
+      const wrapper = mount(ContextMenu, { props: mockProps });
+      try {
+        const onContextMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'contextMenu:open')[1];
+        await onContextMenuOpen({ menuPosition: { left: '900px', top: '200px' } });
+
+        expect(wrapper.find('.context-menu').element.style.left).toBe('812px');
+      } finally {
+        wrapper.unmount();
+        rect.mockRestore();
+        viewportWidth.mockRestore();
+        viewportHeight.mockRestore();
+        computedStyle.mockRestore();
+      }
+    });
+
+    it('repositions after a custom item changes the menu height', async () => {
+      const customRenderItem = createMockRenderItem('custom-item');
+      customRenderItem.render = () => {
+        const element = document.createElement('div');
+        element.dataset.tallCustomItem = '';
+        return element;
+      };
+      mockGetItems.mockReturnValue([{ id: 'custom-section', items: [customRenderItem] }]);
+
+      const viewportWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
+      const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.classList.contains('context-menu')) {
+          const top = Number.parseFloat(this.style.top) || 0;
+          const height = this.querySelector('[data-tall-custom-item]') ? 200 : 100;
+          return { left: 100, top, right: 280, bottom: top + height, width: 180, height };
+        }
+        return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+      });
+
+      const wrapper = mount(ContextMenu, { props: mockProps });
+      try {
+        const onContextMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'contextMenu:open')[1];
+        await onContextMenuOpen({ menuPosition: { left: '100px', top: '650px' } });
+        await nextTick();
+        await nextTick();
+
+        expect(wrapper.find('.context-menu').element.style.top).toBe('552px');
+      } finally {
+        wrapper.unmount();
+        rect.mockRestore();
+        viewportWidth.mockRestore();
+        viewportHeight.mockRestore();
       }
     });
 

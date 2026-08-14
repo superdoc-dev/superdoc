@@ -1,18 +1,8 @@
-const findScrollableAncestor = (element, view) => {
-  let current = element;
-  while (current) {
-    const { overflowX, overflowY } = view.getComputedStyle(current);
-    if (/(auto|scroll)/.test(overflowY) || /(auto|scroll)/.test(overflowX)) return current;
-    current = current.parentElement;
-  }
-  return null;
-};
+const CLIPPING_OVERFLOW = new Set(['auto', 'scroll', 'hidden', 'clip']);
 
 /**
  * Visible bounds (viewport coordinates) a fixed-position menu should stay within: the viewport
- * minus any window scrollbar, intersected with `anchorEl`'s nearest scroll container's content box.
- * Using the container's clientWidth/clientHeight excludes that container's scrollbar, so the menu
- * never renders under the right/bottom scrollbar.
+ * minus any window scrollbar, intersected with every clipping ancestor's client box.
  *
  * @param {Element|null} anchorEl - Element inside the scroll area (e.g. the editor surface).
  * @param {Window} view - Window used for measurements (injectable for tests).
@@ -22,14 +12,30 @@ export const resolveMenuBounds = (anchorEl, view) => {
   const docEl = view.document.documentElement;
   const bounds = { left: 0, top: 0, right: docEl.clientWidth, bottom: docEl.clientHeight };
 
-  const scroller = anchorEl ? findScrollableAncestor(anchorEl, view) : null;
-  if (scroller && scroller.getBoundingClientRect) {
-    const rect = scroller.getBoundingClientRect();
-    bounds.left = Math.max(bounds.left, rect.left);
-    bounds.top = Math.max(bounds.top, rect.top);
-    bounds.right = Math.min(bounds.right, rect.left + scroller.clientWidth);
-    bounds.bottom = Math.min(bounds.bottom, rect.top + scroller.clientHeight);
+  let current = anchorEl;
+  while (current) {
+    const { overflowX, overflowY } = view.getComputedStyle(current);
+    const clipsX = CLIPPING_OVERFLOW.has(overflowX);
+    const clipsY = CLIPPING_OVERFLOW.has(overflowY);
+
+    if ((clipsX || clipsY) && current.getBoundingClientRect) {
+      const rect = current.getBoundingClientRect();
+      const clientLeft = rect.left + current.clientLeft;
+      const clientTop = rect.top + current.clientTop;
+
+      if (clipsX) {
+        bounds.left = Math.max(bounds.left, clientLeft);
+        bounds.right = Math.min(bounds.right, clientLeft + current.clientWidth);
+      }
+      if (clipsY) {
+        bounds.top = Math.max(bounds.top, clientTop);
+        bounds.bottom = Math.min(bounds.bottom, clientTop + current.clientHeight);
+      }
+    }
+
+    current = current.parentElement;
   }
+
   return bounds;
 };
 

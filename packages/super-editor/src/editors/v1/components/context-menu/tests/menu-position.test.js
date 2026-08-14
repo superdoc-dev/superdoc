@@ -63,7 +63,7 @@ describe('resolveMenuBounds', () => {
     getComputedStyle: (el) => computed.get(el) ?? { overflowX: 'visible', overflowY: 'visible' },
   });
 
-  it('returns the viewport when there is no scrollable ancestor', () => {
+  it('returns the viewport when there is no clipping ancestor', () => {
     const el = { parentElement: null };
     const view = makeView(1000, 800, new Map());
     expect(resolveMenuBounds(el, view)).toEqual({ left: 0, top: 0, right: 1000, bottom: 800 });
@@ -74,6 +74,8 @@ describe('resolveMenuBounds', () => {
       parentElement: null,
       clientWidth: 985, // 15px vertical scrollbar
       clientHeight: 445,
+      clientLeft: 0,
+      clientTop: 0,
       getBoundingClientRect: () => ({ left: 0, top: 315 }),
     };
     const anchor = { parentElement: scroller };
@@ -83,5 +85,71 @@ describe('resolveMenuBounds', () => {
     ]);
     const view = makeView(1000, 760, computed);
     expect(resolveMenuBounds(anchor, view)).toEqual({ left: 0, top: 315, right: 985, bottom: 760 });
+  });
+
+  it('intersects every clipping ancestor', () => {
+    const outer = {
+      parentElement: null,
+      clientWidth: 580,
+      clientHeight: 500,
+      clientLeft: 0,
+      clientTop: 0,
+      getBoundingClientRect: () => ({ left: 20, top: 100 }),
+    };
+    const inner = {
+      parentElement: outer,
+      clientWidth: 700,
+      clientHeight: 430,
+      clientLeft: 0,
+      clientTop: 0,
+      getBoundingClientRect: () => ({ left: 80, top: 150 }),
+    };
+    const anchor = { parentElement: inner };
+    const computed = new Map([
+      [anchor, { overflowX: 'visible', overflowY: 'visible' }],
+      [inner, { overflowX: 'auto', overflowY: 'auto' }],
+      [outer, { overflowX: 'hidden', overflowY: 'hidden' }],
+    ]);
+    const view = makeView(1000, 760, computed);
+
+    expect(resolveMenuBounds(anchor, view)).toEqual({ left: 80, top: 150, right: 600, bottom: 580 });
+  });
+
+  it('clips each axis independently', () => {
+    const clipX = {
+      parentElement: null,
+      clientWidth: 500,
+      clientHeight: 300,
+      clientLeft: 0,
+      clientTop: 0,
+      getBoundingClientRect: () => ({ left: 20, top: 100 }),
+    };
+    const anchor = { parentElement: clipX };
+    const computed = new Map([
+      [anchor, { overflowX: 'visible', overflowY: 'visible' }],
+      [clipX, { overflowX: 'hidden', overflowY: 'visible' }],
+    ]);
+    const view = makeView(1000, 760, computed);
+
+    expect(resolveMenuBounds(anchor, view)).toEqual({ left: 20, top: 0, right: 520, bottom: 760 });
+  });
+
+  it('uses the clipping ancestor content box inside its border', () => {
+    const clipper = {
+      parentElement: null,
+      clientWidth: 500,
+      clientHeight: 300,
+      clientLeft: 4,
+      clientTop: 6,
+      getBoundingClientRect: () => ({ left: 20, top: 100 }),
+    };
+    const anchor = { parentElement: clipper };
+    const computed = new Map([
+      [anchor, { overflowX: 'visible', overflowY: 'visible' }],
+      [clipper, { overflowX: 'clip', overflowY: 'clip' }],
+    ]);
+    const view = makeView(1000, 760, computed);
+
+    expect(resolveMenuBounds(anchor, view)).toEqual({ left: 24, top: 106, right: 524, bottom: 406 });
   });
 });

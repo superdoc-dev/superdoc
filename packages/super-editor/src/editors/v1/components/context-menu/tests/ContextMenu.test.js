@@ -231,10 +231,6 @@ describe('ContextMenu.vue', () => {
       surfaceElementMock = null;
       const viewportWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
       const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
-      const computedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => ({
-        overflowX: element.classList.contains('context-menu') ? 'hidden' : 'visible',
-        overflowY: element.classList.contains('context-menu') ? 'hidden' : 'visible',
-      }));
       const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
         if (this.classList.contains('context-menu')) {
           const left = Number.parseFloat(this.style.left) || 0;
@@ -254,7 +250,6 @@ describe('ContextMenu.vue', () => {
         rect.mockRestore();
         viewportWidth.mockRestore();
         viewportHeight.mockRestore();
-        computedStyle.mockRestore();
       }
     });
 
@@ -286,6 +281,46 @@ describe('ContextMenu.vue', () => {
         await nextTick();
 
         expect(wrapper.find('.context-menu').element.style.top).toBe('552px');
+      } finally {
+        wrapper.unmount();
+        rect.mockRestore();
+        viewportWidth.mockRestore();
+        viewportHeight.mockRestore();
+      }
+    });
+
+    it('repositions when the search header grows a full menu', async () => {
+      mockGetItems.mockReturnValue(
+        createMockMenuItems(
+          1,
+          Array.from({ length: 40 }, (_, index) => ({
+            id: `item-${index}`,
+            label: `Item ${index}`,
+            showWhen: () => true,
+          })),
+        ),
+      );
+
+      const viewportWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1000);
+      const viewportHeight = vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(760);
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        if (this.classList.contains('context-menu')) {
+          const top = Number.parseFloat(this.style.top) || 0;
+          const height = this.querySelector('.context-menu-search-header') ? 330 : 300;
+          return { left: 100, top, right: 280, bottom: top + height, width: 180, height };
+        }
+        return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+      });
+
+      const wrapper = mount(ContextMenu, { props: mockProps });
+      try {
+        const onContextMenuOpen = mockEditor.on.mock.calls.find((call) => call[0] === 'contextMenu:open')[1];
+        await onContextMenuOpen({ menuPosition: { left: '100px', top: '452px' } });
+        await wrapper.find('.context-menu-hidden-input').setValue('Item');
+        await nextTick();
+        await nextTick();
+
+        expect(wrapper.find('.context-menu').element.style.top).toBe('422px');
       } finally {
         wrapper.unmount();
         rect.mockRestore();

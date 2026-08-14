@@ -38,6 +38,7 @@ const isOpen = ref(false);
 const triggerRef = ref(null);
 const contentRef = ref(null);
 const position = ref({ top: '0px', left: '0px' });
+const placement = ref('top');
 
 let closeTimeout = null;
 let openTimeout = null;
@@ -83,20 +84,51 @@ const scheduleAutoHide = () => {
   }, props.autoHideDuration);
 };
 
+const getElementSize = (element, dimension) => {
+  const styles = window.getComputedStyle(element);
+  const size = parseFloat(styles[dimension]);
+  if (!Number.isFinite(size)) return dimension === 'width' ? element.offsetWidth : element.offsetHeight;
+  if (styles.boxSizing === 'border-box') return size;
+
+  const edges =
+    dimension === 'width'
+      ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+      : ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
+  return edges.reduce((total, property) => total + (parseFloat(styles[property]) || 0), size);
+};
+
 const updatePosition = () => {
   if (!triggerRef.value || !contentRef.value) return;
 
   const triggerRect = triggerRef.value.getBoundingClientRect();
-  const contentWidth = contentRef.value.offsetWidth;
-  const contentHeight = contentRef.value.offsetHeight;
+  const contentWidth = getElementSize(contentRef.value, 'width');
+  const contentHeight = getElementSize(contentRef.value, 'height');
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const gutter = 8;
+  const offset = 10;
 
   let left = triggerRect.left + triggerRect.width / 2 - contentWidth / 2;
   left = Math.max(gutter, Math.min(left, viewportWidth - contentWidth - gutter));
 
+  const topAbove = triggerRect.top - contentHeight - offset;
+  const topBelow = triggerRect.bottom + offset;
+  const fitsAbove = topAbove >= gutter;
+  const fitsBelow = topBelow + contentHeight <= viewportHeight - gutter;
+  const availableAbove = triggerRect.top - offset;
+  const availableBelow = viewportHeight - triggerRect.bottom - offset;
+
+  if (fitsAbove) placement.value = 'top';
+  else if (fitsBelow) placement.value = 'bottom';
+  else placement.value = availableAbove >= availableBelow ? 'top' : 'bottom';
+
+  const desiredTop = placement.value === 'top' ? topAbove : topBelow;
+  const minTop = Math.min(gutter, Math.max(0, viewportHeight - contentHeight));
+  const maxTop = Math.max(minTop, viewportHeight - contentHeight - gutter);
+  const top = Math.max(minTop, Math.min(desiredTop, maxTop));
+
   position.value = {
-    top: `${triggerRect.top - contentHeight - 10}px`,
+    top: `${top}px`,
     left: `${left}px`,
   };
 };
@@ -218,6 +250,7 @@ onBeforeUnmount(() => {
         ref="contentRef"
         :class="mergedContentClass"
         :style="contentStyle"
+        :data-placement="placement"
         @mouseenter="handleContentMouseEnter"
         @mouseleave="handleContentMouseLeave"
       >
@@ -255,9 +288,19 @@ onBeforeUnmount(() => {
   transform: translateX(-50%) rotate(45deg);
 }
 
+.sd-tooltip-content[data-placement='bottom'] .sd-tooltip-arrow {
+  bottom: auto;
+  top: -5px;
+}
+
 .fade-in-scale-up-transition-enter-active,
 .fade-in-scale-up-transition-leave-active {
   transform-origin: bottom center;
+}
+
+.sd-tooltip-content[data-placement='bottom'].fade-in-scale-up-transition-enter-active,
+.sd-tooltip-content[data-placement='bottom'].fade-in-scale-up-transition-leave-active {
+  transform-origin: top center;
 }
 
 .fade-in-scale-up-transition-enter-active {

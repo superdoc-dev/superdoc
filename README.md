@@ -51,9 +51,9 @@ const superdoc = new SuperDoc({
 ```
 
 `document` accepts a URL, a `File`, or a `Blob`. Omit it to start with a blank
-DOCX. See the [documentation](https://docs.superdoc.dev),
-[React quick start](https://docs.superdoc.dev/editor/frameworks/react) for the
-next step.
+DOCX. See the [documentation](https://docs.superdoc.dev) or the
+[React quick start](https://docs.superdoc.dev/editor/frameworks/react) for next
+steps.
 
 ## What SuperDoc does
 

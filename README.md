@@ -87,7 +87,7 @@ Or use the CDN:
 <script type="module" src="https://unpkg.com/superdoc/dist/superdoc.umd.js"></script>
 ```
 
-For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.js](packages/superdoc/src/core/SuperDoc.js).
+For all available options and events, see the [documentation](https://docs.superdoc.dev) or [SuperDoc.ts](packages/superdoc/src/core/SuperDoc.ts).
 
 ### Using an AI coding agent?
 

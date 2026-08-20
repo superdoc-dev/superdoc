@@ -48,7 +48,7 @@ export const containerStyles: Partial<CSSStyleDeclaration> = {
 };
 
 export const pageStyles = (width: number, height: number, overrides?: PageStyles): Partial<CSSStyleDeclaration> => {
-  const merged = { ...DEFAULT_PAGE_STYLES, ...(overrides || {}) };
+  const merged = { ...DEFAULT_PAGE_STYLES, ...overrides };
 
   return {
     position: 'relative',
@@ -1483,7 +1483,7 @@ menclose[notation~="verticalstrike"] {
 }
 /* Gradient direction is perpendicular to the stripe it produces.
  * "to bottom right" → stripe runs bottom-left → top-right (visually "/") = updiagonalstrike.
- * "to top right"    → stripe runs top-left → bottom-right (visually "\") = downdiagonalstrike.
+ * "to top right"    → stripe runs top-left → bottom-right (visually "") = downdiagonalstrike.
  */
 menclose[notation~="updiagonalstrike"] {
   --sd-menclose-up: linear-gradient(

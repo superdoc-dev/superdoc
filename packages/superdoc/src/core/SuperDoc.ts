@@ -3582,6 +3582,36 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
+   * Best-effort resolution of the active document's raw DOCX bytes, used by PDF
+   * export to recover embedded fonts. Reads whatever was passed as `document`
+   * (File/Blob/ArrayBuffer/typed array/URL/string or a `{ data }`/`{ url }`
+   * wrapper). Returns null if bytes can't be obtained; callers must tolerate that.
+   */
+  async #resolvePdfSourceBytes(): Promise<ArrayBuffer | null> {
+    const source: unknown = (this.config as { document?: unknown; documents?: unknown[] })?.document;
+    const candidate = source ?? (this.config as { documents?: unknown[] })?.documents?.[0] ?? null;
+    if (!candidate) return null;
+    try {
+      if (candidate instanceof ArrayBuffer) return candidate;
+      if (ArrayBuffer.isView(candidate)) {
+        const view = candidate as ArrayBufferView;
+        return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+      }
+      if (typeof Blob !== 'undefined' && candidate instanceof Blob) return await candidate.arrayBuffer();
+      if (typeof URL !== 'undefined' && candidate instanceof URL)
+        return await (await fetch(candidate.href)).arrayBuffer();
+      if (typeof candidate === 'string') return await (await fetch(candidate)).arrayBuffer();
+      const wrapper = candidate as { data?: unknown; url?: unknown };
+      if (wrapper.data instanceof ArrayBuffer) return wrapper.data;
+      if (typeof Blob !== 'undefined' && wrapper.data instanceof Blob) return await wrapper.data.arrayBuffer();
+      if (typeof wrapper.url === 'string') return await (await fetch(wrapper.url)).arrayBuffer();
+    } catch {
+      /* ignore — fall back to substitute fonts */
+    }
+    return null;
+  }
+
+  /**
    * Export the superdoc to a file
    * @param params - Export configuration
    */
@@ -3595,22 +3625,68 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       isFinalDoc = false,
       triggerDownload = true,
       fieldsHighlightColor = null,
+      pdfOptions,
     }: ExportParams = {} as ExportParams,
   ) {
-    // Get the docx files first
     const baseFileName = exportedName ? cleanName(exportedName) : cleanName(this.config.title as string);
-    const docxFiles = await this.exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor });
     const blobsToZip = [...additionalFiles];
     const filenames = [...additionalFileNames];
 
     // If we are exporting docx files, add them to the zip
     if (exportType.includes('docx')) {
+      const docxFiles = await this.exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor });
       docxFiles.forEach((blob) => {
         // exportDocx default overload returns Blob; the wider `string | Blob | null`
         // shows up only when callers opt into other export modes (not used here).
         blobsToZip.push(blob as Blob);
         filenames.push(`${baseFileName}.docx`);
       });
+    }
+
+    // Client-side PDF export: redraw the editor's rendered pages into a PDF with
+    // pdf-lib (no WASM, no server). Lazy-imported so the engine only loads when
+    // a PDF export actually runs. See core/export/pdf-export.ts.
+    if (exportType.includes('pdf')) {
+      const { exportEditorPagesToPdf } = await import('./export/pdf-export');
+
+      // Best effort from the loaded DOCX bytes: (1) extract + deobfuscate the
+      // DOCX's own embedded fonts so the PDF uses them directly, and (2) parse
+      // header/footer PAGE/NUMPAGES fields so real page numbers can be drawn
+      // (SuperDoc's layout omits the field result). Both degrade gracefully.
+      let embeddedFonts = pdfOptions?.embeddedFonts;
+      let fieldTemplates;
+      try {
+        const bytes = await this.#resolvePdfSourceBytes();
+        if (bytes) {
+          if (!embeddedFonts) {
+            const { extractEmbeddedFonts } = await import('./export/font-extract');
+            embeddedFonts = await extractEmbeddedFonts(bytes);
+          }
+          const { parseFieldTemplates } = await import('./export/field-resolve');
+          fieldTemplates = await parseFieldTemplates(bytes);
+        }
+      } catch {
+        /* fall back: substitute fonts, no page numbers */
+      }
+
+      // The exporter measures the DOM, which the editor's zoom scales via a CSS
+      // transform. Reset zoom to 100% for the export so page geometry is correct,
+      // then restore whatever the user had.
+      type PdfZoomController = {
+        getSnapshot?: () => { zoom?: { percent?: number } } | undefined;
+        setZoom?: (percent: number) => void;
+      };
+      const pageMetrics = (this.activeEditor as { pageMetrics?: PdfZoomController } | null)?.pageMetrics;
+      const prevZoomPercent = pageMetrics?.getSnapshot?.()?.zoom?.percent;
+      const mustRestoreZoom = typeof prevZoomPercent === 'number' && prevZoomPercent !== 100 && !!pageMetrics?.setZoom;
+      try {
+        if (mustRestoreZoom) pageMetrics!.setZoom!(100);
+        const pdfBytes = await exportEditorPagesToPdf({ ...pdfOptions, embeddedFonts, fieldTemplates });
+        blobsToZip.push(new Blob([pdfBytes], { type: 'application/pdf' }));
+        filenames.push(`${baseFileName}.pdf`);
+      } finally {
+        if (mustRestoreZoom) pageMetrics!.setZoom!(prevZoomPercent as number);
+      }
     }
 
     // If we only have one blob, just download it. Otherwise, zip them up.

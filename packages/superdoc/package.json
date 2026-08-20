@@ -104,6 +104,7 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@superdoc/docx-engine": "0.6.1-next.8",
     "@types/mdast": "catalog:",
     "@types/ws": "catalog:",
@@ -111,6 +112,7 @@
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
     "konva": "catalog:",
+    "pdf-lib": "^1.17.1",
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
     "uuid": "catalog:",

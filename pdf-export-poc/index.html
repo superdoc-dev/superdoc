@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc V2 — Client-side DOCX → PDF export POC</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f3f4f6; }
+      #toolbar {
+        position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: center;
+        padding: 10px 16px; background: #111827; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+      }
+      #toolbar strong { font-weight: 600; }
+      #toolbar .spacer { flex: 1; }
+      button {
+        font: inherit; padding: 8px 14px; border-radius: 6px; border: 0; cursor: pointer;
+        background: #2563eb; color: #fff;
+      }
+      button:disabled { opacity: .5; cursor: default; }
+      .filebtn { font: inherit; padding: 8px 14px; border-radius: 6px; background: #374151; color: #fff; cursor: pointer; }
+      .filebtn:hover { background: #4b5563; }
+      #status { font-size: 13px; color: #9ca3af; }
+      #editor { padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <strong>SuperDoc V2</strong>
+      <span>client-side DOCX → PDF (pdf-lib)</span>
+      <span style="font-size:11px;color:#6b7280;border:1px solid #374151;border-radius:4px;padding:2px 6px">build: pixel-parity · 100% editor-identical</span>
+      <label for="file" class="filebtn">Open .docx…</label>
+      <input id="file" type="file" accept=".docx" hidden />
+      <span class="spacer"></span>
+      <span id="status">loading…</span>
+      <button id="export-pdf" type="button" disabled>Export PDF</button>
+    </div>
+    <div id="editor"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

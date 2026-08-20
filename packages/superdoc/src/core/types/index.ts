@@ -2692,6 +2692,30 @@ export interface ExportParams {
    * value without a typecheck failure.
    */
   fieldsHighlightColor?: string | null;
+  /**
+   * Options for client-side PDF export (`exportType: ['pdf']`). The exporter
+   * renders the editor's paginated DOM to a PDF with pdf-lib and needs
+   * embeddable font bytes — supply `fontBaseUrl` (a directory of Sans/Serif/Mono
+   * TTFs) or an explicit `fonts` map. See `core/export/pdf-export.ts`.
+   */
+  pdfOptions?: {
+    fontBaseUrl?: string;
+    fonts?: Record<string, ArrayBuffer>;
+    /**
+     * DOCX embedded fonts (family -> variant -> bytes). Normally filled in
+     * automatically by `SuperDoc.export()`; pass explicitly to override.
+     */
+    embeddedFonts?: Record<string, Partial<Record<'regular' | 'bold' | 'italic' | 'bolditalic', Uint8Array>>>;
+    onProgress?: (message: string) => void;
+    /**
+     * Rendering strategy. `'word'` (default) draws vector text at the browser's
+     * measured coordinates — smallest files, crisp at any zoom. `'pixel'`
+     * embeds each page as a raster painted by the browser's own engine —
+     * pixel-identical to the editor (including RTL/Arabic shaping) with an
+     * invisible selectable-text/link overlay, at larger file sizes.
+     */
+    mode?: 'word' | 'pixel';
+  };
 }
 
 /** Surface where the edit originated. */

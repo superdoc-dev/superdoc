@@ -34,7 +34,7 @@ const closeDropdown = (dropdown) => {
  * callers share this one rule so the two cannot drift apart.
  */
 export function withLinkHref(attributes, href) {
-  const next = { ...(attributes ?? {}) };
+  const next = { ...attributes };
   if (href) next.href = href;
   else delete next.href;
   return next;
@@ -1293,7 +1293,7 @@ export const makeDefaultItems = ({
   const devItems = [];
   if (!isDev) {
     if (role === 'viewer') {
-      devItems.push(...[acceptTrackedChangeBySelection, rejectTrackedChangeOnSelection]);
+      devItems.push(acceptTrackedChangeBySelection, rejectTrackedChangeOnSelection);
     }
     toolbarItems = toolbarItems.filter((item) => !devItems.includes(item));
   }

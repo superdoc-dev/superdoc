@@ -9,9 +9,81 @@ export const CUSTOM_XML_PROPS_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps';
 export const CUSTOM_XML_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
 
-const DEFAULT_SELECTED_STYLE = '/APA.XSL';
+const DEFAULT_SELECTED_STYLE = '/APASixthEditionOfficeOnline.xsl';
 const DEFAULT_STYLE_NAME = 'APA';
 const DEFAULT_VERSION = '6';
+
+const WORD_BIBLIOGRAPHY_STYLES = Object.freeze({
+  apa: {
+    selectedStyle: '/APASixthEditionOfficeOnline.xsl',
+    styleName: 'APA',
+    version: '6',
+  },
+  chicago: {
+    selectedStyle: '/CHICAGO.XSL',
+    styleName: 'Chicago',
+    version: '16',
+  },
+  gb7714: {
+    selectedStyle: '/GB.XSL',
+    styleName: 'GB7714',
+    version: '2005',
+  },
+  'gost - name sort': {
+    selectedStyle: '/GostName.XSL',
+    styleName: 'GOST - Name Sort',
+    version: '2003',
+  },
+  'gost - title sort': {
+    selectedStyle: '/GostTitle.XSL',
+    styleName: 'GOST - Title Sort',
+    version: '2003',
+  },
+  'harvard - anglia': {
+    selectedStyle: '/HarvardAnglia2008OfficeOnline.xsl',
+    styleName: 'Harvard - Anglia',
+    version: '2008',
+  },
+  ieee: {
+    selectedStyle: '/IEEE2006OfficeOnline.xsl',
+    styleName: 'IEEE',
+    version: '2006',
+  },
+  'iso 690 - first element and date': {
+    selectedStyle: '/ISO690.XSL',
+    styleName: 'ISO 690 - First Element and Date',
+    version: '1987',
+  },
+  'iso 690 - numerical reference': {
+    selectedStyle: '/ISO690Nmerical.XSL',
+    styleName: 'ISO 690 - Numerical Reference',
+    version: '1987',
+  },
+  mla: {
+    selectedStyle: '/MLASeventhEditionOfficeOnline.xsl',
+    styleName: 'MLA',
+    version: '7',
+  },
+  sist02: {
+    selectedStyle: '/SIST02.XSL',
+    styleName: 'SIST02',
+    version: '2003',
+  },
+  turabian: {
+    selectedStyle: '/TURABIAN.XSL',
+    styleName: 'Turabian',
+    version: '6',
+  },
+});
+
+const WORD_BIBLIOGRAPHY_STYLES_BY_SELECTED_STYLE = Object.freeze(
+  Object.fromEntries(
+    Object.values(WORD_BIBLIOGRAPHY_STYLES).map((metadata) => [
+      normalizeSelectedStyle(metadata.selectedStyle),
+      metadata,
+    ]),
+  ),
+);
 
 const API_TO_OOXML_SOURCE_TYPE = Object.freeze({
   book: 'Book',
@@ -98,6 +170,77 @@ function createXmlDocument(rootElement, declaration) {
       },
     },
     elements: [rootElement],
+  };
+}
+
+function normalizeStyleName(styleName) {
+  return typeof styleName === 'string' ? styleName.trim().replace(/\s+/g, ' ') : '';
+}
+
+function normalizeStyleLookupKey(styleName) {
+  return normalizeStyleName(styleName).toLowerCase();
+}
+
+function normalizeSelectedStyle(selectedStyle) {
+  return typeof selectedStyle === 'string' ? selectedStyle.trim().replace(/\\/g, '/').toLowerCase() : '';
+}
+
+function toSelectedStylePath(styleName) {
+  const normalized = normalizeStyleName(styleName);
+  if (!normalized) return '';
+  if (normalized.startsWith('/') || normalized.toUpperCase().includes('.XSL')) {
+    return normalized;
+  }
+  return `/${normalized}.XSL`;
+}
+
+export function resolveBibliographyStyleMetadata(styleName, fallback = {}) {
+  const fallbackStyleName = normalizeStyleName(fallback.styleName);
+  const fallbackSelectedStyle = normalizeStyleName(fallback.selectedStyle);
+  const fallbackVersion = normalizeStyleName(fallback.version);
+  const explicitStyleName = normalizeStyleName(styleName);
+  const requestedStyleName = explicitStyleName || fallbackStyleName;
+
+  const knownStyle =
+    WORD_BIBLIOGRAPHY_STYLES[normalizeStyleLookupKey(requestedStyleName)] ||
+    WORD_BIBLIOGRAPHY_STYLES_BY_SELECTED_STYLE[normalizeSelectedStyle(requestedStyleName)];
+  const explicitStyleChanged =
+    explicitStyleName && normalizeStyleLookupKey(explicitStyleName) !== normalizeStyleLookupKey(fallbackStyleName);
+
+  if (explicitStyleChanged && knownStyle) return { ...knownStyle };
+  if (explicitStyleChanged) {
+    return {
+      selectedStyle: toSelectedStylePath(requestedStyleName) || fallbackSelectedStyle || DEFAULT_SELECTED_STYLE,
+      styleName: requestedStyleName,
+      version: fallbackVersion || DEFAULT_VERSION,
+    };
+  }
+
+  const knownFallbackSelectedStyle =
+    WORD_BIBLIOGRAPHY_STYLES_BY_SELECTED_STYLE[normalizeSelectedStyle(fallbackSelectedStyle)];
+  if (knownFallbackSelectedStyle) return { ...knownFallbackSelectedStyle };
+
+  const fallbackSelectedStyleIsPath =
+    fallbackSelectedStyle &&
+    (fallbackSelectedStyle.startsWith('/') || fallbackSelectedStyle.toUpperCase().includes('.XSL'));
+  const fallbackSelectedStyleLooksAuthored =
+    fallbackSelectedStyleIsPath &&
+    normalizeSelectedStyle(fallbackSelectedStyle) !== normalizeSelectedStyle(toSelectedStylePath(requestedStyleName));
+  if (fallbackSelectedStyleLooksAuthored) {
+    return {
+      selectedStyle: fallbackSelectedStyle,
+      styleName: requestedStyleName || fallbackStyleName || DEFAULT_STYLE_NAME,
+      version: fallbackVersion || DEFAULT_VERSION,
+    };
+  }
+
+  if (knownStyle) return { ...knownStyle };
+
+  const selectedStyle = fallbackSelectedStyle || toSelectedStylePath(requestedStyleName) || DEFAULT_SELECTED_STYLE;
+  return {
+    selectedStyle,
+    styleName: requestedStyleName || fallbackStyleName || DEFAULT_STYLE_NAME,
+    version: fallbackVersion || DEFAULT_VERSION,
   };
 }
 
@@ -394,9 +537,10 @@ function getNextCustomXmlItemIndex(convertedXml) {
 
 function buildSourcesRootElement(sources, styleMetadata) {
   const sourceElements = sources.map(buildSourceNode).filter(Boolean);
-  const selectedStyle = styleMetadata.selectedStyle || DEFAULT_SELECTED_STYLE;
-  const styleName = styleMetadata.styleName || DEFAULT_STYLE_NAME;
-  const version = styleMetadata.version || DEFAULT_VERSION;
+  const { selectedStyle, styleName, version } = resolveBibliographyStyleMetadata(
+    styleMetadata.styleName,
+    styleMetadata,
+  );
 
   return {
     type: 'element',

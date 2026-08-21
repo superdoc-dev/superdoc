@@ -4240,10 +4240,12 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
       ),
     applyCase: () => {
       refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
-      return bibliographyRebuildWrapper(
-        makeRefEditor(),
-        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
-        { changeMode: 'direct' },
+      return withAppliedReceipt(() =>
+        bibliographyRebuildWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+          { changeMode: 'direct' },
+        ),
       );
     },
   },

@@ -147,10 +147,11 @@ export function citationsInsertWrapper(
     editor,
     (): boolean => {
       const instruction = buildCitationInstruction(input.sourceIds);
+      const resolvedText = buildCitationResolvedText(editor, input.sourceIds);
       const node = citationType.create({
         instruction,
         sourceIds: input.sourceIds,
-        resolvedText: '',
+        resolvedText,
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
@@ -187,6 +188,7 @@ export function citationsUpdateWrapper(
       if (input.patch?.sourceIds) newAttrs.sourceIds = input.patch.sourceIds;
       if (input.patch?.sourceIds) {
         newAttrs.instruction = buildCitationInstruction((newAttrs.sourceIds as string[]) ?? []);
+        newAttrs.resolvedText = buildCitationResolvedText(editor, newAttrs.sourceIds as string[]);
       }
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
       editor.dispatch(tr);
@@ -300,6 +302,9 @@ export function citationSourcesInsertWrapper(
   );
 
   if (payload === 'duplicate') return sourceFailure('NO_OP', `Source with id "${sourceId}" already exists.`);
+  if (!(options?.dryRun ?? false)) {
+    dispatchReferenceDisplayRefresh(editor);
+  }
   return sourceSuccess(address);
 }
 
@@ -323,6 +328,10 @@ export function citationSourcesUpdateWrapper(
     },
     { dryRun: options?.dryRun ?? false, expectedRevision: options?.expectedRevision },
   );
+
+  if (!(options?.dryRun ?? false)) {
+    dispatchReferenceDisplayRefresh(editor);
+  }
 
   return sourceSuccess(address);
 }
@@ -349,6 +358,10 @@ export function citationSourcesRemoveWrapper(
     },
     { dryRun: options?.dryRun ?? false, expectedRevision: options?.expectedRevision },
   );
+
+  if (!(options?.dryRun ?? false)) {
+    dispatchReferenceDisplayRefresh(editor);
+  }
 
   return sourceSuccess(address);
 }
@@ -393,10 +406,13 @@ export function bibliographyInsertWrapper(
           sdBlockId: nodeId,
           ...(input.style !== undefined ? { style: input.style } : {}),
         },
-        editor.schema.nodes.paragraph.create(),
+        buildBibliographyContent(editor, input.style),
       );
       const { tr } = editor.state;
       tr.insert(pos, node);
+      if (input.style !== undefined) {
+        refreshCitationDisplayText(editor, tr, input.style);
+      }
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -430,12 +446,15 @@ export function bibliographyConfigureWrapper(
   const receipt = executeDomainCommand(
     editor,
     () => {
-      if ((resolved.node.attrs.style as string) === input.style) return false;
       const { tr } = editor.state;
-      tr.setNodeMarkup(resolved.pos, undefined, {
+      const bibliographyAttrsByPos = new Map<number, Record<string, unknown>>();
+      bibliographyAttrsByPos.set(resolved.pos, {
         ...resolved.node.attrs,
         style: input.style,
       });
+      let changed = refreshBibliographyContent(editor, tr, input.style, bibliographyAttrsByPos);
+      changed = refreshCitationDisplayText(editor, tr, input.style) || changed;
+      if (!changed) return false;
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -467,7 +486,28 @@ export function bibliographyRebuildWrapper(
   const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId };
 
   if (options?.dryRun) return bibSuccess(address);
-  // Rebuild defers to layout engine
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      const style = resolved.node.attrs.style as string | undefined;
+      const bibliographyAttrsByPos = new Map<number, Record<string, unknown>>();
+      bibliographyAttrsByPos.set(resolved.pos, resolved.node.attrs);
+      const changed = refreshBibliographyContent(editor, tr, style, bibliographyAttrsByPos);
+      if (!changed) return false;
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (!receiptApplied(receipt)) return bibFailure('NO_OP', 'Rebuild produced no change.');
+  const style = resolved.node.attrs.style as string | undefined;
+  if (style !== undefined) {
+    syncBibliographyStyleToConverter(editor, style);
+  }
   return bibSuccess(address);
 }
 
@@ -585,5 +625,234 @@ function buildCitationInstruction(sourceIds: string[]): string {
   for (let i = 1; i < sourceIds.length; i++) {
     parts.push(`\\m ${sourceIds[i]}`);
   }
+  return parts.join(' ');
+}
+
+function buildCitationResolvedText(editor: Editor, sourceIds: string[], styleOverride?: string): string {
+  const sources = getSourcesFromConverter(editor);
+  const styleKind = getCitationStyleKind(editor, styleOverride);
+  const labels = sourceIds
+    .map((sourceId, fallbackIndex) => {
+      const sourceIndex = sources.findIndex((source) => source.tag === sourceId);
+      return {
+        source: sourceIndex >= 0 ? sources[sourceIndex] : undefined,
+        fallbackNumber: sourceIndex >= 0 ? sourceIndex + 1 : fallbackIndex + 1,
+      };
+    })
+    .map(({ source, fallbackNumber }) => formatCitationSourceLabel(source, styleKind, fallbackNumber))
+    .filter((label): label is string => Boolean(label));
+
+  if (labels.length === 0) return '';
+  if (styleKind === 'ieee') return labels.join(', ');
+  return `(${labels.join('; ')})`;
+}
+
+function refreshCitationDisplayText(editor: Editor, tr: typeof editor.state.tr, styleOverride?: string): boolean {
+  if (typeof editor.state.doc.descendants !== 'function') return false;
+
+  let changed = false;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type?.name !== 'citation') return true;
+
+    const sourceIds = Array.isArray(node.attrs?.sourceIds) ? (node.attrs.sourceIds as string[]) : [];
+    const resolvedText = buildCitationResolvedText(editor, sourceIds, styleOverride);
+    if (node.attrs?.resolvedText === resolvedText) return true;
+
+    const mapped = typeof tr.mapping?.mapResult === 'function' ? tr.mapping.mapResult(pos) : undefined;
+    const mappedPos = mapped ? mapped.pos : (tr.mapping?.map(pos) ?? pos);
+    if (mapped?.deleted) return true;
+
+    tr.setNodeMarkup(mappedPos, undefined, {
+      ...node.attrs,
+      resolvedText,
+    });
+    changed = true;
+    return true;
+  });
+  return changed;
+}
+
+function dispatchReferenceDisplayRefresh(editor: Editor): void {
+  const { tr } = editor.state;
+  let changed = refreshCitationDisplayText(editor, tr);
+  changed = refreshBibliographyContent(editor, tr) || changed;
+  if (!changed) return;
+  tr.setMeta('addToHistory', false);
+  editor.dispatch(tr);
+  clearIndexCache(editor);
+}
+
+function refreshBibliographyContent(
+  editor: Editor,
+  tr: typeof editor.state.tr,
+  styleOverride?: string,
+  attrsByPos = new Map<number, Record<string, unknown>>(),
+): boolean {
+  const bibliographies: Array<{ node: import('prosemirror-model').Node; pos: number }> = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type?.name === 'bibliography') {
+      bibliographies.push({ node, pos });
+      return false;
+    }
+    return true;
+  });
+
+  let changed = false;
+  for (const { node, pos } of bibliographies.reverse()) {
+    const baseAttrs = attrsByPos.get(pos) ?? node.attrs;
+    const attrs = styleOverride !== undefined ? { ...baseAttrs, style: styleOverride } : baseAttrs;
+    const content = buildBibliographyContent(editor, styleOverride ?? (attrs.style as string | undefined));
+    const attrsChanged = !areNodeAttrsEqual(node.attrs, attrs);
+    const contentChanged = node.textContent !== getBibliographyContentText(content);
+    if (!attrsChanged && !contentChanged) continue;
+
+    tr.replaceWith(pos, pos + node.nodeSize, node.type.create(attrs, content));
+    changed = true;
+  }
+
+  return changed;
+}
+
+function getBibliographyContentText(content: ReturnType<typeof buildBibliographyContent>): string {
+  if (Array.isArray(content)) return content.map((node) => node.textContent).join('');
+  if (content && typeof content === 'object' && 'textContent' in content) return String(content.textContent);
+  return '';
+}
+
+function areNodeAttrsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
+type CitationStyleKind = 'authorYear' | 'ieee';
+
+function getCitationStyleKind(editor: Editor, styleOverride?: string): CitationStyleKind {
+  const override = normalizeCitationFieldText(styleOverride).toLowerCase();
+  if (override) return override.includes('ieee') ? 'ieee' : 'authorYear';
+
+  const bibliographyPart = (
+    editor as unknown as {
+      converter?: { bibliographyPart?: { styleName?: unknown; selectedStyle?: unknown } };
+    }
+  ).converter?.bibliographyPart;
+  const styleName = normalizeCitationFieldText(bibliographyPart?.styleName).toLowerCase();
+  const selectedStyle = normalizeCitationFieldText(bibliographyPart?.selectedStyle).toLowerCase();
+
+  return styleName === 'ieee' || selectedStyle.includes('ieee') ? 'ieee' : 'authorYear';
+}
+
+function formatCitationSourceLabel(
+  source: CitationSourceRecord | undefined,
+  styleKind: CitationStyleKind,
+  fallbackNumber: number,
+): string {
+  if (!source) return '';
+  if (styleKind === 'ieee') return `[${formatCitationReferenceNumber(source, fallbackNumber)}]`;
+
+  const authorLabel = formatCitationAuthorLabel(source.fields.authors);
+  const year = normalizeCitationFieldText(source.fields.year);
+  if (authorLabel && year) return `${authorLabel}, ${year}`;
+  if (authorLabel) return authorLabel;
+  if (year) return year;
+
+  return (
+    normalizeCitationFieldText(source.fields.shortTitle) ||
+    normalizeCitationFieldText(source.fields.title) ||
+    source.tag
+  );
+}
+
+function formatCitationReferenceNumber(source: CitationSourceRecord, fallbackNumber: number): string {
+  return normalizeCitationFieldText(source.fields.refOrder) || String(fallbackNumber);
+}
+
+function formatCitationAuthorLabel(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return '';
+
+  const lastNames = value
+    .map((author) => {
+      if (!author || typeof author !== 'object') return '';
+      return normalizeCitationFieldText((author as { last?: unknown }).last);
+    })
+    .filter(Boolean);
+
+  if (lastNames.length === 0) return '';
+  if (lastNames.length === 1) return lastNames[0]!;
+  if (lastNames.length === 2) return `${lastNames[0]} & ${lastNames[1]}`;
+  return `${lastNames[0]} et al.`;
+}
+
+function normalizeCitationFieldText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildBibliographyContent(editor: Editor, styleOverride?: string) {
+  const paragraphType = editor.schema.nodes.paragraph;
+  if (!paragraphType) return undefined;
+
+  const styleKind = getCitationStyleKind(editor, styleOverride);
+  const entries = getSourcesFromConverter(editor)
+    .map((source, index) => formatBibliographySourceEntry(source, styleKind, index + 1))
+    .filter(Boolean);
+  if (entries.length === 0 || typeof editor.schema.text !== 'function') return paragraphType.create();
+
+  return entries.map((entry) => {
+    const textNode = editor.schema.text(entry);
+    const runType = editor.schema.nodes.run;
+    const content = runType ? runType.create({}, textNode) : textNode;
+    return paragraphType.create({}, content);
+  });
+}
+
+function formatBibliographySourceEntry(
+  source: CitationSourceRecord,
+  styleKind: CitationStyleKind,
+  fallbackNumber: number,
+): string {
+  if (styleKind === 'ieee') return formatIeeeBibliographySourceEntry(source, fallbackNumber);
+
+  const authorLabel = formatCitationAuthorLabel(source.fields.authors);
+  const year = normalizeCitationFieldText(source.fields.year);
+  const title = normalizeCitationFieldText(source.fields.title);
+  const publisher = normalizeCitationFieldText(source.fields.publisher);
+  const fallback = normalizeCitationFieldText(source.fields.shortTitle) || source.tag;
+
+  const parts: string[] = [];
+  if (authorLabel && year) {
+    parts.push(`${authorLabel} (${year}).`);
+  } else if (authorLabel) {
+    parts.push(`${authorLabel}.`);
+  } else if (year) {
+    parts.push(`(${year}).`);
+  }
+
+  if (title) parts.push(`${title}.`);
+  if (publisher) parts.push(`${publisher}.`);
+  if (parts.length === 0) parts.push(fallback);
+
+  return parts.join(' ');
+}
+
+function formatIeeeBibliographySourceEntry(source: CitationSourceRecord, fallbackNumber: number): string {
+  const authorLabel = formatCitationAuthorLabel(source.fields.authors);
+  const year = normalizeCitationFieldText(source.fields.year);
+  const title = normalizeCitationFieldText(source.fields.title);
+  const publisher = normalizeCitationFieldText(source.fields.publisher);
+  const fallback = normalizeCitationFieldText(source.fields.shortTitle) || source.tag;
+
+  const parts = [`[${formatCitationReferenceNumber(source, fallbackNumber)}]`];
+  if (authorLabel) parts.push(`${authorLabel}.`);
+  if (title) parts.push(`${title}.`);
+  if (publisher && year) {
+    parts.push(`${publisher}, ${year}.`);
+  } else if (publisher) {
+    parts.push(`${publisher}.`);
+  } else if (year) {
+    parts.push(`${year}.`);
+  }
+  if (parts.length === 1) parts.push(fallback);
+
   return parts.join(' ');
 }

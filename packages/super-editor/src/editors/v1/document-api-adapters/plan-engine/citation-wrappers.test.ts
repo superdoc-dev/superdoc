@@ -13,6 +13,8 @@ vi.mock('./plan-wrappers.js', () => ({
 
 vi.mock('./revision-tracker.js', () => ({
   getRevision: vi.fn(() => 'rev-1'),
+  checkRevision: vi.fn(),
+  incrementRevision: vi.fn(),
 }));
 
 vi.mock('../helpers/adapter-utils.js', () => ({
@@ -48,9 +50,13 @@ vi.mock('../helpers/citation-resolver.js', () => ({
   syncBibliographyStyleToConverter: vi.fn(),
 }));
 
-import { citationsInsertWrapper } from './citation-wrappers.js';
+import { citationSourcesUpdateWrapper, citationsInsertWrapper } from './citation-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
-import { resolvePostMutationBibliographyId } from '../helpers/citation-resolver.js';
+import {
+  getSourcesFromConverter,
+  resolvePostMutationBibliographyId,
+  resolveSourceTarget,
+} from '../helpers/citation-resolver.js';
 
 type MockPmNode = {
   type: { name: string };
@@ -80,7 +86,7 @@ function makeEditor(options: {
     attrs: {
       instruction: options.instruction,
       sourceIds: options.sourceIds,
-      resolvedText: '',
+      resolvedText: '(Tester, 2026)',
     },
     nodeSize: 1,
   };
@@ -136,6 +142,16 @@ describe('citationsInsertWrapper', () => {
   it('returns an address for the actual inserted citation position when final position differs from requested position', () => {
     const sourceIds = ['source-1'];
     const instruction = 'CITATION source-1';
+    vi.mocked(getSourcesFromConverter).mockReturnValueOnce([
+      {
+        tag: 'source-1',
+        type: 'book',
+        fields: {
+          authors: [{ first: 'Ava', last: 'Tester' }],
+          year: '2026',
+        },
+      },
+    ]);
     const { editor, tr, dispatch, createCitation } = makeEditor({
       preferredPos: 10,
       insertedPos: 14,
@@ -157,7 +173,7 @@ describe('citationsInsertWrapper', () => {
       expect.objectContaining({
         instruction,
         sourceIds,
-        resolvedText: '',
+        resolvedText: '(Tester, 2026)',
       }),
     );
     expect(tr.insert).toHaveBeenCalledWith(10, expect.any(Object));
@@ -167,6 +183,72 @@ describe('citationsInsertWrapper', () => {
     expect(result.citation.anchor.start.blockId).toBe('p-citations');
     expect(result.citation.anchor.start.offset).toBe(13);
     expect(result.citation.anchor.end.offset).toBe(14);
+  });
+
+  it('builds cached display text for multiple citation sources', () => {
+    const sourceIds = ['source-1', 'source-2'];
+    vi.mocked(getSourcesFromConverter).mockReturnValueOnce([
+      {
+        tag: 'source-1',
+        type: 'book',
+        fields: {
+          authors: [{ first: 'Ava', last: 'Tester' }],
+          year: '2026',
+        },
+      },
+      {
+        tag: 'source-2',
+        type: 'book',
+        fields: {
+          authors: [
+            { first: 'Jane', last: 'Austen' },
+            { first: 'Charlotte', last: 'Bronte' },
+          ],
+          year: '1813',
+        },
+      },
+    ]);
+    const { editor, createCitation } = makeEditor({
+      preferredPos: 10,
+      insertedPos: 10,
+      sourceIds,
+      instruction: 'CITATION source-1 \\m source-2',
+    });
+
+    citationsInsertWrapper(editor, {
+      at: { kind: 'text', segments: [{ blockId: 'p-citations', range: { start: 3, end: 8 } }] },
+      sourceIds,
+    });
+
+    expect(createCitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: 'CITATION source-1 \\m source-2',
+        sourceIds,
+        resolvedText: '(Tester, 2026; Austen & Bronte, 1813)',
+      }),
+    );
+  });
+
+  it('leaves cached display text empty when a citation source is unresolved', () => {
+    const sourceIds = ['missing-source'];
+    vi.mocked(getSourcesFromConverter).mockReturnValueOnce([]);
+    const { editor, createCitation } = makeEditor({
+      preferredPos: 10,
+      insertedPos: 10,
+      sourceIds,
+      instruction: 'CITATION missing-source',
+    });
+
+    citationsInsertWrapper(editor, {
+      at: { kind: 'text', segments: [{ blockId: 'p-citations', range: { start: 3, end: 8 } }] },
+      sourceIds,
+    });
+
+    expect(createCitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolvedText: '',
+      }),
+    );
   });
 });
 
@@ -221,5 +303,77 @@ describe('bibliographyInsertWrapper', () => {
       }),
       expect.anything(),
     );
+  });
+});
+
+describe('citationSourcesUpdateWrapper', () => {
+  it('keeps derived display refresh transactions out of undo history', () => {
+    const source = {
+      tag: 'source-1',
+      type: 'book',
+      fields: {
+        authors: [{ first: 'Ava', last: 'Tester' }],
+        year: '2026',
+      },
+    };
+    vi.mocked(resolveSourceTarget).mockReturnValueOnce(source);
+    vi.mocked(getSourcesFromConverter).mockReturnValueOnce([source]);
+
+    const citationNode = {
+      type: { name: 'citation' },
+      attrs: {
+        instruction: 'CITATION source-1',
+        sourceIds: ['source-1'],
+        resolvedText: '(Tester, 2026)',
+      },
+      nodeSize: 1,
+    };
+    const tr = {
+      mapping: {
+        mapResult: vi.fn((pos: number) => ({ pos, deleted: false })),
+      },
+      setMeta: vi.fn((_key: string, _value: unknown) => tr),
+      setNodeMarkup: vi.fn((_pos: number, _type: unknown, _attrs: Record<string, unknown>) => tr),
+    };
+    const dispatch = vi.fn();
+    const editor = {
+      state: {
+        tr,
+        doc: {
+          descendants: vi.fn((cb: (node: MockPmNode, pos: number) => boolean | void) => {
+            cb(citationNode, 5);
+            return true;
+          }),
+        },
+      },
+      dispatch,
+      converter: {
+        documentModified: false,
+        documentGuid: 'doc-guid',
+      },
+    } as unknown as Editor;
+
+    const result = citationSourcesUpdateWrapper(
+      editor,
+      {
+        target: { kind: 'entity', entityType: 'citationSource', sourceId: 'source-1' },
+        patch: {
+          authors: [{ first: 'Riley', last: 'Reviewer' }],
+          year: '2027',
+        },
+      },
+      { changeMode: 'direct' } as never,
+    );
+
+    expect(result.success).toBe(true);
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      5,
+      undefined,
+      expect.objectContaining({
+        resolvedText: '(Reviewer, 2027)',
+      }),
+    );
+    expect(tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
+    expect(dispatch).toHaveBeenCalledWith(tr);
   });
 });

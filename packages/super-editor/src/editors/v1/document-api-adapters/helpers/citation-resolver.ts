@@ -7,6 +7,7 @@
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
+import { resolveBibliographyStyleMetadata } from '../../core/super-converter/citation-sources.js';
 import type {
   CitationAddress,
   CitationSourceAddress,
@@ -196,6 +197,7 @@ interface BibliographyPartState {
   sources?: CitationSourceRecord[];
   selectedStyle?: string | null;
   styleName?: string | null;
+  version?: string | null;
 }
 
 type ConverterWithBibliography = { converter?: { bibliographyPart?: BibliographyPartState } };
@@ -215,31 +217,16 @@ export function getSourcesFromConverter(editor: Editor): CitationSourceRecord[] 
 }
 
 /**
- * Converts a human-readable style name (e.g. `"MLA"`) into the OOXML
- * `SelectedStyle` path format (e.g. `"/MLA.XSL"`).
- *
- * If the value already looks like a path (starts with `/` or contains `.XSL`),
- * it is returned as-is.
- */
-function toSelectedStylePath(styleName: string): string {
-  if (styleName.startsWith('/') || styleName.toUpperCase().includes('.XSL')) {
-    return styleName;
-  }
-  return `/${styleName}.XSL`;
-}
-
-/**
  * Persists the bibliography style to the converter so DOCX export writes
  * the correct `SelectedStyle` / `StyleName` attributes on the sources root.
- *
- * `SelectedStyle` is an XSL path (e.g. `"/APA.XSL"`); `StyleName` is the
- * human-readable label (e.g. `"APA"`).
  */
 export function syncBibliographyStyleToConverter(editor: Editor, style: string): void {
   const part = getBibliographyPart(editor);
   if (!part) return;
-  part.selectedStyle = toSelectedStylePath(style);
-  part.styleName = style;
+  const metadata = resolveBibliographyStyleMetadata(style, part);
+  part.selectedStyle = metadata.selectedStyle;
+  part.styleName = metadata.styleName;
+  part.version = metadata.version;
 }
 
 export function resolveSourceTarget(editor: Editor, target: CitationSourceAddress): CitationSourceRecord {

@@ -166,7 +166,7 @@ describe('anchored metadata anchors', () => {
   });
 
   it.each([
-    { label: 'inside an existing anchor', target: textTarget(3, 5) },
+    { label: 'inside an existing anchor (SD-4228)', target: textTarget(3, 5) },
     { label: 'around an existing anchor', target: textTarget(1, 8) },
   ])('rejects an attach $label without mutating the existing anchor', ({ target }) => {
     editor = makeEditor();

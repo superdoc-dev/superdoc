@@ -34,7 +34,7 @@ const closeDropdown = (dropdown) => {
  * callers share this one rule so the two cannot drift apart.
  */
 export function withLinkHref(attributes, href) {
-  const next = { ...(attributes ?? {}) };
+  const next = { ...attributes };
   if (href) next.href = href;
   else delete next.href;
   return next;
@@ -273,11 +273,14 @@ export const makeDefaultItems = ({
   });
 
   // separator
-  const separator = useToolbarItem({
-    type: 'separator',
-    name: 'separator',
-    isNarrow: true,
-  });
+  // Each usage below gets its own item -- the toolbar list is keyed on item.id,
+  // and a single shared item collides with itself everywhere it appears.
+  const makeSeparator = () =>
+    useToolbarItem({
+      type: 'separator',
+      name: 'separator',
+      isNarrow: true,
+    });
 
   // italic
   const italic = useToolbarItem({
@@ -1240,31 +1243,31 @@ export const makeDefaultItems = ({
     search,
     zoom,
     fontButton,
-    separator,
+    makeSeparator(),
     fontSize,
-    separator,
+    makeSeparator(),
     bold,
     italic,
     underline,
     strikethrough,
     colorButton,
     highlight,
-    separator,
+    makeSeparator(),
     link,
     image,
     ...(shouldIncludeTableOfContents ? [tableOfContents] : []),
     tableItem,
     tableActionsItem,
-    separator,
+    makeSeparator(),
     alignment,
     bulletedList,
     numberedList,
     indentLeft,
     indentRight,
     lineHeight,
-    separator,
+    makeSeparator(),
     linkedStyles,
-    separator,
+    makeSeparator(),
     ruler,
     measurementUnit,
     ...(shouldIncludeFormattingMarks ? [formattingMarks] : []),
@@ -1293,7 +1296,7 @@ export const makeDefaultItems = ({
   const devItems = [];
   if (!isDev) {
     if (role === 'viewer') {
-      devItems.push(...[acceptTrackedChangeBySelection, rejectTrackedChangeOnSelection]);
+      devItems.push(acceptTrackedChangeBySelection, rejectTrackedChangeOnSelection);
     }
     toolbarItems = toolbarItems.filter((item) => !devItems.includes(item));
   }

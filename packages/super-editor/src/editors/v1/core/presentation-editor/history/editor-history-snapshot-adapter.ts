@@ -72,10 +72,7 @@ export class EditorHistorySnapshotAdapter implements HistorySnapshotAdapter {
   }
 
   getSnapshot(): ParticipantHistorySnapshot {
-    if (isYjsBacked(this.#editor)) {
-      return readYjsDepths(this.#editor);
-    }
-    return readPmDepths(this.#editor);
+    return readEditorHistorySnapshot(this.#editor);
   }
 
   undo(): boolean {

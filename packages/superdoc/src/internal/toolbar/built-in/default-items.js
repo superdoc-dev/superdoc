@@ -273,11 +273,14 @@ export const makeDefaultItems = ({
   });
 
   // separator
-  const separator = useToolbarItem({
-    type: 'separator',
-    name: 'separator',
-    isNarrow: true,
-  });
+  // Each usage below gets its own item -- the toolbar list is keyed on item.id,
+  // and a single shared item collides with itself everywhere it appears.
+  const makeSeparator = () =>
+    useToolbarItem({
+      type: 'separator',
+      name: 'separator',
+      isNarrow: true,
+    });
 
   // italic
   const italic = useToolbarItem({
@@ -1240,31 +1243,31 @@ export const makeDefaultItems = ({
     search,
     zoom,
     fontButton,
-    separator,
+    makeSeparator(),
     fontSize,
-    separator,
+    makeSeparator(),
     bold,
     italic,
     underline,
     strikethrough,
     colorButton,
     highlight,
-    separator,
+    makeSeparator(),
     link,
     image,
     ...(shouldIncludeTableOfContents ? [tableOfContents] : []),
     tableItem,
     tableActionsItem,
-    separator,
+    makeSeparator(),
     alignment,
     bulletedList,
     numberedList,
     indentLeft,
     indentRight,
     lineHeight,
-    separator,
+    makeSeparator(),
     linkedStyles,
-    separator,
+    makeSeparator(),
     ruler,
     measurementUnit,
     ...(shouldIncludeFormattingMarks ? [formattingMarks] : []),

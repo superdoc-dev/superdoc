@@ -35,6 +35,9 @@
         "ContextMenuConfig",
         "ContextMenuContext",
         "ContextMenuItem",
+        "ContextMenuOpenContext",
+        "ContextMenuResolvedItem",
+        "ContextMenuResolvedSection",
         "ContextMenuSection",
         "ContextMenuSelectContext",
         "ContextMenuSelectPayload",
@@ -254,6 +257,9 @@
         "ContextMenuConfig",
         "ContextMenuContext",
         "ContextMenuItem",
+        "ContextMenuOpenContext",
+        "ContextMenuResolvedItem",
+        "ContextMenuResolvedSection",
         "ContextMenuSection",
         "ContextMenuSelectContext",
         "ContextMenuSelectPayload",
@@ -483,11 +489,11 @@
     }
   },
   "counts": {
-    "types.import": 213,
-    "types.require": 213,
+    "types.import": 216,
+    "types.require": 216,
     "import": 10,
     "require": 10,
-    "union": 213
+    "union": 216
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -520,6 +526,9 @@
         "ContextMenuConfig",
         "ContextMenuContext",
         "ContextMenuItem",
+        "ContextMenuOpenContext",
+        "ContextMenuResolvedItem",
+        "ContextMenuResolvedSection",
         "ContextMenuSection",
         "ContextMenuSelectContext",
         "ContextMenuSelectPayload",

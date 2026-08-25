@@ -29,6 +29,10 @@ Open contributions against `main` for the current V2 editor. Target `v1` only
 for fixes that must also ship in the maintained V1 editor. If you are unsure,
 use `main` or ask in the issue before starting implementation.
 
+Maintainers squash-merge contributions to `main`; that reviewed merge is the
+approval signal used to synchronize eligible source, test, and documentation
+changes into SuperDoc's canonical source history.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22, pinned in `.nvmrc`

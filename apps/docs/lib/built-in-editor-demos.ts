@@ -76,7 +76,7 @@ export function renderBuiltInEditorDemoMarkdown(
     return [
       'Context-menu configurations available in the interactive Editor:',
       '',
-      '- **Menu — `ui.contextMenu`:** choose **Default** or **Add action**. Add action keeps SuperDoc’s menu items and appends **Send selection to workflow** when text is selected.',
+      '- **Menu — `ui.contextMenu`:** choose **Default** or **Add action**. Add action keeps SuperDoc’s menu items and appends **Send selection to workflow** when you right-click selected text.',
       '',
       'Changing the menu configuration recreates the Editor from its current DOCX. Document edits remain; transient selection and menu state reset.',
     ].join('\n');

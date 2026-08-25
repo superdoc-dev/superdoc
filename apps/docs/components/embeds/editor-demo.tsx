@@ -434,7 +434,7 @@ export function EditorDemo({ allowLocalFile = false, fixture, preset, title }: E
             {
               id: 'send-selection-to-workflow',
               label: 'Send selection to workflow',
-              showWhen: ({ hasSelection }) => hasSelection,
+              showWhen: ({ hasSelection, trigger }) => trigger === 'click' && hasSelection,
               onSelect: async ({ context }) => {
                 const text = (await context?.selectedTextSettled)?.trim();
                 if (!mountedRef.current) return;

@@ -121,6 +121,28 @@ function withoutCommentPolicy(options) {
 }
 
 /**
+ * Resolve renamed context-menu fields within one config source.
+ *
+ * Normalizing before the legacy/canonical source merge preserves the source
+ * precedence during partial migrations. For example, `ui.contextMenu.customItems`
+ * must beat `modules.contextMenu.sections` even though the former uses the old
+ * field name.
+ *
+ * @param {Record<string, unknown>} options
+ * @returns {Record<string, unknown>}
+ */
+function normalizeContextMenuOptions(options) {
+  const normalized = { ...options };
+  const sections = firstDefined(options.sections, options.customItems);
+  const defaultItems = firstDefined(options.defaultItems, options.includeDefaultItems);
+
+  delete normalized.customItems;
+  delete normalized.includeDefaultItems;
+
+  return mergeDefined(normalized, { sections, defaultItems });
+}
+
+/**
  * Collapse a consumer config into the effective built-in UI profile.
  *
  * @param {Record<string, any>} [config] Raw consumer config.
@@ -295,10 +317,15 @@ export function normalizeUiConfig(config = {}) {
       // starting value that the toggle could flip back. Only an explicit
       // `ui` decision forbids the surface outright.
       suppressed: allDisabled || explicit('contextMenu') === false,
-      // Legacy under canonical, the same precedence the toolbar uses. Both
-      // spellings carry the same shape (`customItems`, `menuProvider`,
-      // `includeDefaultItems`), so a single merged bag is what the menu reads.
-      options: allDisabled ? {} : mergeDefined(legacyContextMenu, options('contextMenu')),
+      // Resolve renamed fields inside each source before putting canonical UI
+      // over legacy modules. This keeps source precedence intact even when an
+      // application migrates the location and field names in separate releases.
+      options: allDisabled
+        ? {}
+        : mergeDefined(
+            normalizeContextMenuOptions(legacyContextMenu),
+            normalizeContextMenuOptions(options('contextMenu')),
+          ),
     },
 
     loading: {

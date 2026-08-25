@@ -1407,6 +1407,18 @@ export interface SearchHandle extends SnapshotSubscribable<SearchSlice> {
 }
 
 // ---------------------------------------------------------------------------
+// Context menu surface
+// ---------------------------------------------------------------------------
+
+/** Runtime control for the built-in context menu. */
+export interface ContextMenuHandle {
+  /** Open the menu at the active selection or caret. */
+  open(): WorkflowActionResult;
+  /** Close the menu when it is open. */
+  close(): void;
+}
+
+// ---------------------------------------------------------------------------
 // Host-like structural contracts (duck-typed)
 // ---------------------------------------------------------------------------
 
@@ -1432,6 +1444,11 @@ export interface SuperDocEditorLike {
   doc?: PartialBrowserDocumentApi | null;
   /** Stable reason the Document API is unavailable. */
   documentApiUnavailableReason?: string | null;
+  /** Runtime control for the built-in context menu. */
+  contextMenu?: {
+    open?(): unknown;
+    close?(): unknown;
+  } | null;
   /** Editor-scoped event subscription. */
   on?(event: string, handler: (...args: unknown[]) => void): unknown;
   /** Editor-scoped event unsubscription. */
@@ -1563,6 +1580,8 @@ export interface SuperDocUI {
   readonly tables: TablesHandle;
   /** Search / find surface (shared search truth). */
   readonly search: SearchHandle;
+  /** Built-in context menu runtime control. */
+  readonly contextMenu: ContextMenuHandle;
   /** Styles surface (read-only catalogue + active paragraph style). */
   readonly styles: StylesHandle;
   /** Format-painter surface (DOM listener coordination). */

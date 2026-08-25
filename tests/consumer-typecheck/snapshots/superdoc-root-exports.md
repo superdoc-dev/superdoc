@@ -7,11 +7,11 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 213 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 213 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 216 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 216 |
 | import | `./dist/superdoc.es.js` | 10 |
 | require | `./dist/superdoc.cjs` | 10 |
-| **union** |  | **213** |
+| **union** |  | **216** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 203
+- typed but no runtime export (phantom risk): 206
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -44,6 +44,9 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `ContextMenuConfig`
 - `ContextMenuContext`
 - `ContextMenuItem`
+- `ContextMenuOpenContext`
+- `ContextMenuResolvedItem`
+- `ContextMenuResolvedSection`
 - `ContextMenuSection`
 - `ContextMenuSelectContext`
 - `ContextMenuSelectPayload`
@@ -253,6 +256,9 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `ContextMenuConfig` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |
 | `ContextMenuContext` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |
 | `ContextMenuItem` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |
+| `ContextMenuOpenContext` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |
+| `ContextMenuResolvedItem` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |
+| `ContextMenuResolvedSection` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |
 | `ContextMenuSection` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |
 | `ContextMenuSelectContext` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |
 | `ContextMenuSelectPayload` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |

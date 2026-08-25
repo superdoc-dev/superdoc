@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-06-23T01:53:02.997Z",
   "summary": {
-    "total": 199,
+    "total": 212,
     "byBucket": {
-      "legacy-root": 6,
-      "supported-root": 193
+      "legacy-root": 3,
+      "supported-root": 209
     },
     "byConfidence": {
-      "high": 147,
-      "medium": 52
+      "high": 164,
+      "medium": 48
     }
   },
   "rows": [
@@ -201,10 +201,10 @@
     },
     {
       "name": "ContextMenuConfig",
-      "bucket": "legacy-root",
-      "rationale": "Configuration type for a feature with legacy surface (paired with a legacy component or older API).",
-      "confidence": "medium",
-      "source": "config-legacy",
+      "bucket": "supported-root",
+      "rationale": "Canonical configuration for the built-in context menu, including application sections, visibility and availability predicates, and final-section transforms.",
+      "confidence": "high",
+      "source": "context-menu",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -223,9 +223,42 @@
     },
     {
       "name": "ContextMenuItem",
-      "bucket": "legacy-root",
-      "rationale": "ContextMenu component-side type. Paired with the ContextMenu component (legacy-root).",
-      "confidence": "medium",
+      "bucket": "supported-root",
+      "rationale": "Canonical application item definition accepted by ContextMenuConfig.sections.",
+      "confidence": "high",
+      "source": "context-menu",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ContextMenuOpenContext",
+      "bucket": "supported-root",
+      "rationale": "Runtime-truthful editor snapshot passed to context-menu visibility, availability, and final-section callbacks.",
+      "confidence": "high",
+      "source": "context-menu",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ContextMenuResolvedItem",
+      "bucket": "supported-root",
+      "rationale": "Resolved menu item supplied to ContextMenuConfig.menuProvider after SuperDoc evaluates availability.",
+      "confidence": "high",
+      "source": "context-menu",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ContextMenuResolvedSection",
+      "bucket": "supported-root",
+      "rationale": "Resolved menu section accepted and returned by ContextMenuConfig.menuProvider.",
+      "confidence": "high",
       "source": "context-menu",
       "inDts": true,
       "inDcts": true,
@@ -234,9 +267,9 @@
     },
     {
       "name": "ContextMenuSection",
-      "bucket": "legacy-root",
-      "rationale": "ContextMenu component-side type. Paired with the ContextMenu component (legacy-root).",
-      "confidence": "medium",
+      "bucket": "supported-root",
+      "rationale": "Canonical section definition accepted by ContextMenuConfig.sections.",
+      "confidence": "high",
       "source": "context-menu",
       "inDts": true,
       "inDcts": true,

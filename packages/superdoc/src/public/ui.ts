@@ -52,6 +52,7 @@ export type {
   SuperDocUIReason,
   CommandsHandle,
   ContextMenuItem,
+  ContextMenuHandle,
   // The argument a custom command receives. Exported so the callback can be
   // extracted into a named function or stored in a typed variable; without it
   // the only way to annotate one is to leave it inline and rely on contextual

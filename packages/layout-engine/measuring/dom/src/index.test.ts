@@ -3081,6 +3081,56 @@ describe('measureBlock', () => {
       }
     });
 
+    it('keeps explicit payment columns on the paragraph grid for hanging list markers', async () => {
+      const twipsPerPx = 15;
+      const indentLeft = 1417 / twipsPerPx;
+      const euroStop = 7943 / twipsPerPx;
+      const atStop = 9026 / twipsPerPx;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'sd-3744-hanging-list-explicit-tabs',
+        runs: [
+          { text: 'de huurprijs', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: '€', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: '@', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          alignment: 'justify',
+          indent: { left: indentLeft, hanging: 347 / twipsPerPx },
+          tabs: [
+            { pos: 1417, val: 'start' },
+            { pos: 7943, val: 'start' },
+            { pos: 9026, val: 'start' },
+          ],
+          wordLayout: {
+            indentLeftPx: indentLeft,
+            hangingPx: 347 / twipsPerPx,
+            tabsPx: [indentLeft, euroStop, atStop],
+            textStartPx: indentLeft,
+            marker: {
+              markerText: '•',
+              markerBoxWidthPx: 347 / twipsPerPx,
+              markerX: (1417 - 347) / twipsPerPx,
+              textStartX: indentLeft,
+              gutterWidthPx: 8,
+              justification: 'left',
+              suffix: 'tab',
+              run: { fontFamily: 'Symbol', fontSize: 14 },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      const euroSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 2);
+      const atSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 4);
+
+      expect((euroSegment?.x ?? Number.NaN) + indentLeft).toBeCloseTo(euroStop, 5);
+      expect((atSegment?.x ?? Number.NaN) + indentLeft).toBeCloseTo(atStop, 5);
+    });
+
     it('keeps literal-tab segment coordinates aligned with authored run boundaries', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

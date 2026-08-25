@@ -2244,6 +2244,57 @@ describe('public facade (ui)', () => {
   });
 });
 
+describe('public ui — context menu runtime control', () => {
+  it('opens and closes through the active editor facade', () => {
+    const open = vi.fn(() => ({ ok: true }));
+    const close = vi.fn();
+    const superdoc = {
+      activeEditor: { editorVersion: 2, contextMenu: { open, close } },
+      config: { documentMode: 'editing' },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.contextMenu.open()).toEqual({ ok: true });
+    expect(open).toHaveBeenCalledOnce();
+
+    ui.contextMenu.close();
+    expect(close).toHaveBeenCalledOnce();
+
+    ui.destroy();
+    expect(ui.contextMenu.open()).toEqual({ ok: false, reason: SUPERDOC_UI_REASONS.notReady });
+    expect(open).toHaveBeenCalledOnce();
+    ui.contextMenu.close();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('preserves stable failure reasons from the editor facade', () => {
+    const superdoc = {
+      activeEditor: {
+        editorVersion: 2,
+        contextMenu: { open: () => ({ ok: false, reason: 'geometry-unavailable' }) },
+      },
+      config: { documentMode: 'editing' },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.contextMenu.open()).toEqual({ ok: false, reason: SUPERDOC_UI_REASONS.geometryUnavailable });
+  });
+
+  it('fails closed before the editor or surface is available', () => {
+    const superdoc = { activeEditor: null, on: vi.fn(), off: vi.fn() };
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.contextMenu.open()).toEqual({ ok: false, reason: SUPERDOC_UI_REASONS.notReady });
+    superdoc.activeEditor = {};
+    expect(ui.contextMenu.open()).toEqual({ ok: false, reason: SUPERDOC_UI_REASONS.operationUnavailable });
+    expect(() => ui.contextMenu.close()).not.toThrow();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Viewport + metadata geometry: routes through the v2 host target-geometry
 // surface, resolves metadata through the Document API, and fails closed.
@@ -10684,6 +10735,28 @@ describe('public ui — block / paragraph / list / link / create routing (row 74
     const ui = createSuperDocUI({ superdoc });
     expect(clearPendingInlineFormat).not.toHaveBeenCalled();
     expect(ui.commands.get('bold').getState().active).toBe(true);
+  });
+
+  it('does not retire a pending explicit-off mark from an empty caret projection (SD-3941)', () => {
+    const store = new Map<string, boolean | string | number | null>([['bold', false]]);
+    const clearPendingInlineFormat = vi.fn((method?: string) =>
+      method === undefined ? store.clear() : store.delete(method),
+    );
+    const host = {
+      getPendingInlineFormat: () => (store.size ? Object.fromEntries(store) : null),
+      setPendingInlineFormat: vi.fn(),
+      clearPendingInlineFormat,
+      getHandles: () => ({ editing: { selection: { subscribe: () => () => {} } } }),
+    };
+    const superdoc = makeBlockSuperdoc(
+      { format: { bold: vi.fn() } },
+      { selectionInfo: COLLAPSED_CARET_INFO, editorExtra: { host } },
+    );
+
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(clearPendingInlineFormat).not.toHaveBeenCalledWith('bold');
+    expect(ui.commands.get('bold').getState().active).toBe(false);
   });
 
   it('does not retire a pending null ("None") value on reconcile (SD-3654)', async () => {

@@ -37,6 +37,35 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 /* For local dev */
 const superdoc = shallowRef(null);
 const activeEditor = shallowRef(null);
+const bulkDecisionToast = ref(null);
+let bulkDecisionToastTimeout = 0;
+
+const dismissBulkDecisionToast = () => {
+  bulkDecisionToast.value = null;
+  window.clearTimeout(bulkDecisionToastTimeout);
+  bulkDecisionToastTimeout = 0;
+};
+
+const pluralizeChanges = (count) => (count === 1 ? 'change' : 'changes');
+
+// Example of how one might handle the bulk tracked change event
+const formatBulkDecisionToast = (event) => {
+  const action = event.decision === 'accept' ? 'Accepted' : 'Rejected';
+  const deniedVerb = event.permissionDeniedCount === 1 ? 'was' : 'were';
+  const successfulChanges = pluralizeChanges(event.successfulCount);
+  const deniedChanges = pluralizeChanges(event.permissionDeniedCount);
+  const successfulSummary = `${action} ${event.successfulCount} ${successfulChanges}.`;
+  const deniedSummary = `${event.permissionDeniedCount} ${deniedChanges} ${deniedVerb} left because you don't have permission.`;
+  return `${successfulSummary} ${deniedSummary}`;
+};
+
+const onTrackedChangesBulkDecision = (event) => {
+  dismissBulkDecisionToast();
+  if (event.permissionDeniedCount === 0) return;
+
+  bulkDecisionToast.value = formatBulkDecisionToast(event);
+  bulkDecisionToastTimeout = window.setTimeout(dismissBulkDecisionToast, 8000);
+};
 
 const currentFile = ref(null);
 const sidebarInstanceKey = ref(0);
@@ -538,6 +567,7 @@ const init = async () => {
   superdoc.value = null;
   activeEditor.value = null;
   baseEditorSignalsReady.value = false;
+  dismissBulkDecisionToast();
   window.superdoc = null;
   window.editor = null;
 
@@ -660,8 +690,8 @@ const init = async () => {
       },
       // Test custom context menu configuration
       contextMenu: {
-        // includeDefaultItems: true, // Include default items
-        // customItems: [
+        // defaultItems: true, // Include default items
+        // sections: [
         //   {
         //     id: 'custom-section',
         //     items: [
@@ -788,6 +818,7 @@ const init = async () => {
         : {}),
     },
     onEditorCreate,
+    onTrackedChangesBulkDecision,
     onCollaborationReady,
     onAwarenessUpdate,
     onSourceSignalsComplete: () => {
@@ -917,6 +948,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   applyDevTheme('default');
+  dismissBulkDecisionToast();
 
   // Ensure SuperDoc tears down global listeners (e.g., DocumentRendererRuntime input bridge)
   superdoc.value?.destroy?.();
@@ -1067,6 +1099,16 @@ if (scrollTestMode.value) {
 
 <template>
   <div class="dev-app" :class="{ 'dev-app--scroll-test': scrollTestMode }">
+    <div
+      v-if="bulkDecisionToast"
+      class="dev-app__bulk-decision-toast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <span>{{ bulkDecisionToast }}</span>
+      <button type="button" aria-label="Dismiss notification" @click="dismissBulkDecisionToast">×</button>
+    </div>
     <div class="dev-app__layout">
       <div v-if="!headerCollapsed" class="dev-app__header">
         <button class="dev-app__header-toggle" title="Hide header" @click="headerCollapsed = true">▲</button>
@@ -1335,6 +1377,37 @@ if (scrollTestMode.value) {
 
   width: 100%;
   height: 100vh;
+}
+
+.dev-app__bulk-decision-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #1355ff;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+  color: #212121;
+  font:
+    14px/20px Inter,
+    sans-serif;
+}
+
+.dev-app__bulk-decision-toast button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
 }
 
 .dev-app__layout {

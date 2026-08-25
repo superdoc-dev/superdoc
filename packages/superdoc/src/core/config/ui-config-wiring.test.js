@@ -387,11 +387,15 @@ describe('uiConfig reaches the runtime', () => {
       const forwarded = (config) => normalizeUiConfig(config).contextMenu.options;
 
       it('carries canonical items on a real instance', async () => {
-        const superdoc = await mountInstance({ ui: { contextMenu: { customItems: [section('app')] } } });
+        const superdoc = await mountInstance({
+          ui: { contextMenu: { openOnSlash: false, defaultItems: false, sections: [section('app')] } },
+        });
 
         // What `editorOptions().contextMenuConfig` forwards to the v2 shell,
         // which passes it to `resolveSections`.
-        expect(superdoc.uiConfig.contextMenu.options.customItems).toEqual([section('app')]);
+        expect(superdoc.uiConfig.contextMenu.options.sections).toEqual([section('app')]);
+        expect(superdoc.uiConfig.contextMenu.options.defaultItems).toBe(false);
+        expect(superdoc.uiConfig.contextMenu.options.openOnSlash).toBe(false);
         cleanup(superdoc);
       });
 
@@ -399,22 +403,45 @@ describe('uiConfig reaches the runtime', () => {
         expect(SuperDocSource).toContain('interaction: proxy.$superdoc.interactionConfig');
       });
 
-      it('still forwards both legacy spellings', () => {
+      it('normalizes deprecated fields from both legacy module locations', () => {
         expect(forwarded({ modules: { contextMenu: { customItems: [section('app')] } } })).toEqual({
-          customItems: [section('app')],
+          sections: [section('app')],
         });
         expect(forwarded({ modules: { slashMenu: { customItems: [section('app')] } } })).toEqual({
-          customItems: [section('app')],
+          sections: [section('app')],
         });
       });
 
-      it('lets canonical items win per key without dropping legacy siblings', () => {
+      it('normalizes deprecated fields from the canonical UI location', () => {
         expect(
           forwarded({
-            modules: { contextMenu: { customItems: [section('old')], includeDefaultItems: false } },
-            ui: { contextMenu: { customItems: [section('new')] } },
+            ui: { contextMenu: { customItems: [section('app')], includeDefaultItems: false } },
           }),
-        ).toEqual({ customItems: [section('new')], includeDefaultItems: false });
+        ).toEqual({ sections: [section('app')], defaultItems: false });
+      });
+
+      it('lets canonical fields win over deprecated fields in one source', () => {
+        expect(
+          forwarded({
+            ui: {
+              contextMenu: {
+                sections: [section('new')],
+                customItems: [section('old')],
+                defaultItems: true,
+                includeDefaultItems: false,
+              },
+            },
+          }),
+        ).toEqual({ sections: [section('new')], defaultItems: true });
+      });
+
+      it('keeps canonical UI precedence during a partial field migration', () => {
+        expect(
+          forwarded({
+            modules: { contextMenu: { sections: [section('old')], defaultItems: false } },
+            ui: { contextMenu: { customItems: [section('new')], includeDefaultItems: true } },
+          }),
+        ).toEqual({ sections: [section('new')], defaultItems: true });
       });
 
       it('carries no items when the surface is off', () => {

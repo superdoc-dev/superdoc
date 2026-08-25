@@ -5065,7 +5065,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         scope: { const: 'docDefaults' },
         channel: { enum: ['run', 'paragraph'] },
-        xmlPart: { const: 'word/styles.xml' },
+        xmlPart: { type: 'string' },
         xmlPath: { enum: ['w:styles/w:docDefaults/w:rPrDefault/w:rPr', 'w:styles/w:docDefaults/w:pPrDefault/w:pPr'] },
       },
       ['scope', 'channel', 'xmlPart', 'xmlPath'],

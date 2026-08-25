@@ -100,7 +100,7 @@ catalog:
   utif2: ^4.1.0
   uuid: ^11.1.1
   verdaccio: ^6.1.6
-  vite: npm:@voidzero-dev/vite-plus-core@0.2.8
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.7
   vite-plugin-dts: ~4.5.4
   vite-plugin-node-polyfills: ^0.28.0
   vitest: 4.1.10
@@ -111,7 +111,7 @@ catalog:
   y-protocols: ^1.0.6
   y-websocket: ^3.0.0
   yjs: ^13.6.19 # range allows consumers to use newer patch versions
-  vite-plus: 0.2.8
+  vite-plus: 0.2.7
 
 onlyBuiltDependencies:
   - '@vscode/vsce-sign'
@@ -186,5 +186,5 @@ overrides:
 # mismatch still surfaces at install time.
 peerDependencyRules:
   allowedVersions:
-    vite: 0.2.8
+    vite: 0.2.7
     vitest: 4.1.10

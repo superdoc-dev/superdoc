@@ -1003,7 +1003,7 @@ const measureTabAlignmentGroupInLine = (
  * @param tabStops - Array of tab stop positions and types (in pixels)
  * @param decimalSeparator - The decimal separator character for decimal tabs
  * @param indentLeft - Left indent value (in pixels)
- * @param rawFirstLineOffset - First line indent offset (may be negative for hanging)
+ * @param firstLineTabOffset - First line offset used to resolve tab positions
  */
 const applyTabLayoutToLines = (
   lines: Line[],
@@ -1011,7 +1011,7 @@ const applyTabLayoutToLines = (
   tabStops: TabStopPx[],
   decimalSeparator: string,
   indentLeft: number,
-  rawFirstLineOffset: number,
+  firstLineTabOffset: number,
 ): void => {
   const totalTabRuns = runs.reduce((count, run) => (run.kind === 'tab' && !isVanishedRun(run) ? count + 1 : count), 0);
   const alignmentTabStopsPx = tabStops
@@ -1082,7 +1082,7 @@ const applyTabLayoutToLines = (
     let pendingTabAlignStartX: PendingTabAlignStart | null = null;
     const segments: NonNullable<Line['segments']> = [];
     const leaders: NonNullable<Line['leaders']> = [];
-    const effectiveIndent = lineIndex === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+    const effectiveIndent = lineIndex === 0 ? indentLeft + firstLineTabOffset : indentLeft;
     const maxAbsWidth =
       typeof line.maxWidth === 'number' && Number.isFinite(line.maxWidth)
         ? line.maxWidth + effectiveIndent
@@ -1753,6 +1753,11 @@ export function remeasureParagraph(
       : Math.max(1, contentWidth - effectiveFirstLineOffset);
   const tabStops = buildTabStopsPx(indent as ParagraphIndent | undefined, attrs?.tabs, attrs?.tabIntervalTwips);
   const decimalSeparator = sanitizeDecimalSeparator(attrs?.decimalSeparator);
+  // Standard Word list markers are painted in the hanging region while first-line
+  // text starts at indentLeft. Applying the negative hanging offset again when
+  // resolving inline tabs shifts every authored stop to the right by that amount.
+  // Positive first-line list layouts still resolve tabs from their in-flow origin.
+  const firstLineTabOffset = wordLayout?.marker && baseFirstLineOffset < 0 ? 0 : baseFirstLineOffset;
 
   let currentRun = 0;
   let currentChar = 0;
@@ -1785,7 +1790,7 @@ export function remeasureParagraph(
       1,
       regionWidth != null && regionWidth > 0 ? Math.min(ordinaryLineWidth, regionWidth) : ordinaryLineWidth,
     );
-    const effectiveIndent = isFirstLine ? indentLeft + baseFirstLineOffset : indentLeft;
+    const effectiveIndent = isFirstLine ? indentLeft + firstLineTabOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -2186,7 +2191,7 @@ export function remeasureParagraph(
     regions.some((region) => Number.isFinite(region.offsetX) && Math.abs(region.offsetX) > 0.01),
   );
   if (hasTabRun || hasTextTab || hasLineRegionOffsets) {
-    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, baseFirstLineOffset);
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, firstLineTabOffset);
   }
 
   if (hasLineRegionOffsets) {

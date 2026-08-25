@@ -2184,6 +2184,10 @@ async function measureParagraphBlock(
   // suppressFirstLineIndent=true for these cases.
   const suppressFirstLine = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
   const rawFirstLineOffset = suppressFirstLine ? 0 : firstLine - hanging;
+  // Standard Word list markers already occupy the hanging region, and their
+  // first-line text is painted from indentLeft. Keep authored inline tab stops on
+  // that same origin instead of applying the negative hanging offset twice.
+  const firstLineTabIndent = indentLeft + (isWordLayoutList && rawFirstLineOffset < 0 ? 0 : rawFirstLineOffset);
   // When wordLayout is present, the hanging region is occupied by the list marker/tab,
   // so keep the same available width as body lines. For normal paragraphs we must honor
   // negative offsets (hanging indent) so the first line can extend into the hanging region.
@@ -2535,7 +2539,7 @@ async function measureParagraphBlock(
       startX = Math.max(0, target);
     }
 
-    const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+    const effectiveIndent = lines.length === 0 ? firstLineTabIndent : indentLeft;
 
     // Update pending leader to end where aligned content begins
     if (pendingLeader) {
@@ -2971,7 +2975,7 @@ async function measureParagraphBlock(
       // Advance to the appropriate tab stop (explicit alignment stops take precedence for trailing tabs)
       const originX = currentLine.width;
       // Use first-line effective indent (accounts for hanging) on first line, body indent otherwise
-      const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+      const effectiveIndent = lines.length === 0 ? firstLineTabIndent : indentLeft;
       const absCurrentX = currentLine.width + effectiveIndent;
       let stop: TabStopPx | undefined;
       let target: number;
@@ -4429,7 +4433,7 @@ async function measureParagraphBlock(
         }
         const originX = currentLine.width;
         // Use first-line effective indent (accounts for hanging) on first line, body indent otherwise
-        const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+        const effectiveIndent = lines.length === 0 ? firstLineTabIndent : indentLeft;
         const absCurrentX = currentLine.width + effectiveIndent;
         const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
         tabStopCursor = nextIndex;

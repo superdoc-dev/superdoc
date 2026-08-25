@@ -1398,7 +1398,10 @@ export interface LinkPopoverConfig {
 // Context menu types
 // ---------------------------------------------------------------------------
 
-/** Context object passed to context menu callbacks (showWhen, render, action, menuProvider). */
+/**
+ * Context supplied to the deprecated `action` and `render` callbacks.
+ * @deprecated replaceWith=`ContextMenuOpenContext` removeIn=v3.0
+ */
 export interface ContextMenuContext {
   /** The editor instance. */
   editor: Editor;
@@ -1411,7 +1414,7 @@ export interface ContextMenuContext {
   /** ProseMirror end position of the selection. */
   selectionEnd: number;
   /** How the menu was opened. */
-  trigger: 'click' | 'slash';
+  trigger: 'click' | 'slash' | 'programmatic';
   /** Whether the cursor is inside a table. */
   isInTable: boolean;
   /** Whether the cursor is inside a list. */
@@ -1442,68 +1445,88 @@ export interface ContextMenuContext {
   cursorPosition: { x: number; y: number } | null;
 }
 
+/** Editor state captured whenever the built-in context menu opens or refreshes. */
+export interface ContextMenuOpenContext {
+  /** Latest selected text; a worker-backed read may initially report an empty string. */
+  readonly selectedText: string;
+  /** Whether the selection is expanded. */
+  readonly hasSelection: boolean;
+  /** How the menu was opened. */
+  readonly trigger: 'click' | 'slash' | 'programmatic';
+  /** Whether the selection is inside a table. */
+  readonly isInTable: boolean;
+  /** Whether exactly one table cell is selected. */
+  readonly isSingleCellSelected: boolean;
+  /** Whether a rectangular range of table cells is selected. */
+  readonly isMultiCellSelected: boolean;
+  /** Whether the selection is inside a list. */
+  readonly isInList: boolean;
+  /** Whether the pointer targeted a rendered list marker. */
+  readonly isOnListMarker: boolean;
+  /** Whether the selection is inside a table of contents. */
+  readonly isInToc: boolean;
+  /** Whether the selection is on a tracked change. */
+  readonly isTrackedChange: boolean;
+  /** ID of the tracked change at the selection, or `null`. */
+  readonly trackedChangeId: string | null;
+  /** Whether Accept is available for the tracked change at the selection. */
+  readonly canAcceptTrackedChange: boolean;
+  /** Whether Reject is available for the tracked change at the selection. */
+  readonly canRejectTrackedChange: boolean;
+  /** Document mode captured when the menu opened. */
+  readonly documentMode: DocumentMode;
+  /** Whether Undo is currently available. */
+  readonly canUndo: boolean;
+  /** Whether Redo is currently available. */
+  readonly canRedo: boolean;
+  /** Whether the captured document mode is not `viewing`. */
+  readonly isEditable: boolean;
+}
+
 /** A single item inside a context menu section. */
 export interface ContextMenuItem {
   /** Unique identifier for the menu item. */
-  id: string;
+  readonly id: string;
   /** Display text. */
-  label: string;
+  readonly label: string;
   /** Icon identifier. */
-  icon?: string;
-  /** Custom Vue component to render this item. */
-  component?: unknown;
+  readonly icon?: string;
   /**
-   * Callback invoked when the item is clicked.
-   *
-   * @deprecated replaceWith=`onSelect` removeIn=v3.0 — V1 only. SuperDoc 2
-   * cannot invoke this: its first argument is a ProseMirror `Editor` the v2
-   * runtime does not have, and `ContextMenuContext` carries fields v2 does not
-   * expose. Items using it render and then do nothing when clicked, and the
-   * runtime warns once naming the replacement.
+   * Custom Vue component used only by the retired v1 menu renderer.
+   * @deprecated replaceWith=`ui: { contextMenu: false }` removeIn=v3.0
    */
-  action?: (editor: Editor, context: ContextMenuContext) => void;
+  readonly component?: unknown;
   /**
-   * Application-owned click handler. Runs after the menu dismisses.
-   *
-   * This is the supported way to attach a product action such as "copy the
-   * selection into our workflow"; the built-in `intent` union covers only what
-   * SuperDoc itself performs.
+   * v1 click callback. SuperDoc 2 cannot supply its ProseMirror `Editor`
+   * argument, so the item remains inert and logs a warning.
+   * @deprecated replaceWith=`onSelect` removeIn=v3.0
    */
-  onSelect?: (payload: ContextMenuSelectPayload) => void | Promise<void>;
+  readonly action?: (editor: Editor, context: ContextMenuContext) => void;
+  /**
+   * Application-owned click handler. Runs after the menu closes.
+   */
+  readonly onSelect?: (payload: ContextMenuSelectPayload) => void | Promise<void>;
   /** Predicate controlling visibility. */
-  showWhen?: (context: ContextMenuContext) => boolean;
-  /** Custom renderer returning an HTML element. */
-  render?: (context: ContextMenuContext) => HTMLElement;
+  readonly showWhen?: (context: ContextMenuOpenContext) => boolean;
+  /** Predicate controlling whether a visible item is enabled. */
+  readonly enabledWhen?: (context: ContextMenuOpenContext) => boolean;
+  /**
+   * Custom renderer used only by the retired v1 menu renderer.
+   * @deprecated replaceWith=`ui: { contextMenu: false }` removeIn=v3.0
+   */
+  readonly render?: (context: ContextMenuContext) => HTMLElement;
   /** Keyboard shortcut label displayed beside the item. */
-  shortcut?: string;
+  readonly shortcut?: string;
 }
 
 /** The menu context a `ContextMenuItem.onSelect` handler receives. */
-export interface ContextMenuSelectContext {
+export interface ContextMenuSelectContext extends ContextMenuOpenContext {
   /**
-   * Text selected when the menu opened. Empty when the caret was collapsed, and
-   * also empty when a worker-backed read had not settled by click time — await
-   * `selectedTextSettled` when accuracy matters more than the gesture.
+   * Resolves the selected text if the worker-backed read was still pending.
+   * Awaiting it spends the click's user activation, so use `selectedText` when
+   * the handler needs to call a gesture-gated browser API immediately.
    */
-  selectedText: string;
-  /**
-   * The settled selection text.
-   *
-   * The handler is invoked synchronously so it keeps the click's user
-   * activation, which gesture-gated APIs such as `navigator.clipboard.write`,
-   * `window.open`, and `showOpenFilePicker` require. Awaiting this resolves the
-   * accurate text but spends that activation, so reach for it only when the
-   * handler does not need a gesture. Resolves to `selectedText` when the read
-   * had already settled or failed.
-   */
-  selectedTextSettled: Promise<string>;
-  hasSelection: boolean;
-  /** How the menu was opened. */
-  trigger: 'click' | 'slash';
-  isInTable: boolean;
-  isInList: boolean;
-  documentMode: 'editing' | 'suggesting' | 'viewing';
-  isEditable: boolean;
+  readonly selectedTextSettled: Promise<string>;
 }
 
 /** Repaint coordination handed alongside the Document API surface. */
@@ -1534,25 +1557,51 @@ export interface ContextMenuSelectPayload {
 /** A section (group) of items in the context menu. */
 export interface ContextMenuSection {
   /** Unique identifier for the section. */
-  id: string;
+  readonly id: string;
   /** Menu items in this section. */
-  items: ContextMenuItem[];
+  readonly items: readonly ContextMenuItem[];
 }
 
-/** Configuration for the context menu module. */
+/** A menu item after SuperDoc has evaluated its visibility and availability. */
+export interface ContextMenuResolvedItem extends ContextMenuItem {
+  /** Whether the item remains visible but cannot be selected. */
+  readonly disabled: boolean;
+}
+
+/** A section supplied to `ContextMenuConfig.menuProvider`. */
+export interface ContextMenuResolvedSection {
+  /** Section identifier from the configured or built-in menu. */
+  readonly id: string;
+  /** Visible items after SuperDoc evaluates each item's availability. */
+  readonly items: readonly ContextMenuResolvedItem[];
+}
+
+/** Configuration for the built-in context menu. */
 export interface ContextMenuConfig {
-  /** Custom menu sections appended (or merged by id) to the default menu. */
-  customItems?: ContextMenuSection[];
+  /** Whether typing `/` after whitespace opens the menu (default: true). */
+  readonly openOnSlash?: boolean;
+  /** Application sections appended to the menu, or merged into a built-in section with the same ID. */
+  readonly sections?: readonly ContextMenuSection[];
+  /** Whether to include SuperDoc's built-in items (default: true). */
+  readonly defaultItems?: boolean;
   /**
-   * Advanced: transform the final section list before render. Return
-   * null/undefined to keep the original sections.
+   * Custom menu sections appended (or merged by id) to the default menu.
+   * @deprecated replaceWith=`sections` removeIn=v3.0
    */
-  menuProvider?: (
-    context: ContextMenuContext,
-    sections: ContextMenuSection[],
-  ) => ContextMenuSection[] | null | undefined;
-  /** Whether to include default menu items (default: true). */
-  includeDefaultItems?: boolean;
+  readonly customItems?: readonly ContextMenuSection[];
+  /**
+   * Filter or reorder the resolved sections before they render. Return `null`
+   * or `undefined` to keep the original list.
+   */
+  readonly menuProvider?: (
+    context: ContextMenuOpenContext,
+    sections: readonly ContextMenuResolvedSection[],
+  ) => readonly ContextMenuResolvedSection[] | null | undefined;
+  /**
+   * Whether to include default menu items (default: true).
+   * @deprecated replaceWith=`defaultItems` removeIn=v3.0
+   */
+  readonly includeDefaultItems?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -2511,10 +2560,16 @@ export interface Modules {
      */
     popoverResolver?: LinkPopoverResolver;
   } & Record<string, unknown>;
-  /** Context menu module configuration. */
+  /**
+   * Context menu configuration under the previous module namespace.
+   * @deprecated replaceWith=`ui.contextMenu` removeIn=v3.0
+   */
   contextMenu?: ContextMenuConfig;
-  /** Deprecated. Use `contextMenu` instead. */
-  slashMenu?: object;
+  /**
+   * Context menu configuration under its previous module name.
+   * @deprecated replaceWith=`ui.contextMenu` removeIn=v3.0
+   */
+  slashMenu?: ContextMenuConfig;
   /** Surface system configuration. */
   surfaces?: SurfacesModuleConfig;
   /** Track changes module configuration. */
@@ -2799,6 +2854,20 @@ export interface SuperDocReadyPayload {
  */
 export interface SuperDocEditorPayload {
   editor: Editor;
+}
+
+/** Result counts from an Accept All or Reject All tracked-change decision. */
+export interface SuperDocTrackedChangesBulkDecisionPayload {
+  /** Document that received the bulk decision. */
+  documentId: string | null;
+  /** Operation requested by the user. */
+  decision: 'accept' | 'reject';
+  /** Unique tracked changes considered by the operation. */
+  requestedCount: number;
+  /** Changes successfully decided by this operation. */
+  successfulCount: number;
+  /** Changes left open because the permission resolver denied them. */
+  permissionDeniedCount: number;
 }
 
 /**
@@ -3707,6 +3776,8 @@ export interface Config {
   onCollaborationReady?: (params: SuperDocEditorPayload) => void;
   /** Callback when document is updated. */
   onEditorUpdate?: (params: EditorUpdateEvent) => void;
+  /** Callback after an Accept All or Reject All tracked-change decision. */
+  onTrackedChangesBulkDecision?: (params: SuperDocTrackedChangesBulkDecisionPayload) => void;
   /**
    * Callback when SuperDoc emits an `exception` event. Check for `stage`,
    * `code`, `itemName`, or `source` before reading producer-specific fields.
@@ -3792,7 +3863,10 @@ export interface Config {
   suppressDefaultDocxStyles?: boolean;
   /** Provided JSON to override content with. */
   jsonOverride?: object;
-  /** Whether to disable slash / right-click custom context menu. */
+  /**
+   * Whether to disable the built-in context menu.
+   * @deprecated replaceWith=`ui.contextMenu` removeIn=v3.0
+   */
   disableContextMenu?: boolean;
   /** HTML content to initialize the editor with. */
   html?: string;

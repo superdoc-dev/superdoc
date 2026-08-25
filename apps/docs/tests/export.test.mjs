@@ -32,7 +32,7 @@ const routes = [
   ['editor/built-in-ui/comments/index.html', 'Add comments to the Editor'],
   ['editor/built-in-ui/search-and-replace/index.html', 'Search and replace document text'],
   ['editor/built-in-ui/hyperlinks/index.html', 'Configure hyperlink behavior'],
-  ['editor/built-in-ui/context-menus/index.html', 'Add actions to the context menu'],
+  ['editor/built-in-ui/context-menus/index.html', 'Configure the context menu'],
   ['editor/built-in-ui/structured-content/index.html', 'Work with structured content'],
   ['editor/built-in-ui/responsive-layout/index.html', 'Build a responsive Editor layout'],
   ['editor/custom-ui/overview/index.html', 'Custom UI overview'],
@@ -674,8 +674,14 @@ test('exports the remaining built-in UI workflows as clean Markdown', async () =
   assert.doesNotMatch(hyperlinks, /linkPopover|popoverResolver|closePopover/);
   assert.match(contextMenu, /context-menu-sample\.docx/);
   assert.match(contextMenu, /satisfies ContextMenuConfig/);
+  assert.match(contextMenu, /openOnSlash: false/);
+  assert.match(contextMenu, /ui\.contextMenu\.open\(\)/);
+  assert.match(contextMenu, /ui\.contextMenu\.close\(\)/);
   assert.match(contextMenu, /Send selection to workflow/);
   assert.match(contextMenu, /ui\.contextMenu/);
+  assert.match(contextMenu, /trigger === 'click' && hasSelection/);
+  assert.match(contextMenu, /context\.selectedTextSettled/);
+  assert.match(contextMenu, /menuProvider\(context, sections\)/);
   assert.match(contextMenu, /\*\*React — `src\/App\.tsx`\*\*/);
   assert.match(structured, /handleImageUpload/);
   assert.match(structured, /object URLs.*browser session/s);

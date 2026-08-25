@@ -66,4 +66,35 @@ Editor modes and client-side review controls are not an authorization boundary. 
 
 Verify the completed workflow by exporting the DOCX and reopening it. Accepted text should remain without a pending review mark. Rejected text should be restored. Unresolved changes should remain available for another reviewer.
 
+## Report permission-filtered bulk decisions
+
+Accept All and Reject All can leave some changes open when the permission resolver allows the decision for only part of the document. SuperDoc does not choose how to present that outcome. Subscribe to `onTrackedChangesBulkDecision` and render a toast, banner, activity entry, or other application-owned UI.
+
+```ts
+const status = document.querySelector<HTMLOutputElement>('#review-status');
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/contract.docx',
+  onTrackedChangesBulkDecision: (result) => {
+    if (!status || result.permissionDeniedCount === 0) return;
+
+    const action = result.decision === 'accept' ? 'Accepted' : 'Rejected';
+    status.value = `${action} ${result.successfulCount} changes. ${result.permissionDeniedCount} changes were left because you do not have permission.`;
+  },
+});
+```
+
+The same payload is available through `superdoc.on('tracked-changes:bulk-decision', listener)` when the listener belongs to a later application lifecycle.
+
+| Field                   | Meaning                                                               |
+| ----------------------- | --------------------------------------------------------------------- |
+| `documentId`            | Document that received the bulk decision                              |
+| `decision`              | Requested operation: `accept` or `reject`                             |
+| `requestedCount`        | Unique tracked changes considered                                     |
+| `successfulCount`       | Changes successfully decided                                          |
+| `permissionDeniedCount` | Changes left open because the permission resolver denied the decision |
+
+`requestedCount` equals `successfulCount + permissionDeniedCount`. A zero `permissionDeniedCount` means the permission resolver allowed every considered change; applications can ignore that outcome when they only need to report leftover changes.
+
 Continue with [Load and save documents](/editor/load-and-save-documents), or build application-owned controls with the [Custom UI overview](/editor/custom-ui/overview).

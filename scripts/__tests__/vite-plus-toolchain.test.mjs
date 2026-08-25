@@ -1445,7 +1445,6 @@ function overridesFor(manifestPath, name) {
  */
 function installs(workspacePath, manifestPath) {
   const relativeDir = toRepositoryPath(relative(dirname(workspacePath), dirname(manifestPath)));
-  if (relativeDir.startsWith('..')) return false;
   // The root manifest sits in the workspace directory itself. pnpm resolves its
   // `catalog:` from that workspace even though no `packages:` pattern names it,
   // and treating an empty relative path as "not owned" let
@@ -2212,6 +2211,26 @@ test('every package that runs vp declares vite-plus, in whichever workspace owns
     [],
     `these packages run \`vp\` but do not declare vite-plus, so their scripts fail from a workspace root ` +
       `that does not hoist it: ${offenders.join(', ')}`,
+  );
+});
+
+test('the protected engine resolves the same vite-plus version from both owning workspaces', () => {
+  if (!IN_ORBIT) return;
+
+  const manifestPath = resolve(SUPERDOC_ROOT, 'v2/package.json');
+  const versions = Object.values(WORKSPACES)
+    .map((root) => resolve(root, 'pnpm-workspace.yaml'))
+    .filter((workspace) => installs(workspace, manifestPath))
+    .map((workspace) => ({
+      workspace: toRepositoryPath(relative(SUPERDOC_ROOT, workspace)),
+      version: sectionEntry(readFileSync(workspace, 'utf8'), 'catalog', 'vite-plus'),
+    }));
+  assert.ok(versions.length > 1, 'superdoc/v2 is no longer owned by overlapping workspaces');
+  assert.equal(
+    new Set(versions.map(({ version }) => version)).size,
+    1,
+    'installing superdoc/v2 from different workspace roots must not change the build tool that ' +
+      `produces protected artifacts: ${versions.map(({ workspace, version }) => `${workspace}=${version}`).join(', ')}`,
   );
 });
 

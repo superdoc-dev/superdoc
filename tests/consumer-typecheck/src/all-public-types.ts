@@ -42,6 +42,9 @@ import type {
   ContextMenuConfig,
   ContextMenuContext,
   ContextMenuItem,
+  ContextMenuOpenContext,
+  ContextMenuResolvedItem,
+  ContextMenuResolvedSection,
   ContextMenuSection,
   ContextMenuSelectContext,
   ContextMenuSelectPayload,
@@ -250,6 +253,9 @@ const _real_ContentControlClickPayload: AssertNotAny<ContentControlClickPayload>
 const _real_ContextMenuConfig: AssertNotAny<ContextMenuConfig> = true;
 const _real_ContextMenuContext: AssertNotAny<ContextMenuContext> = true;
 const _real_ContextMenuItem: AssertNotAny<ContextMenuItem> = true;
+const _real_ContextMenuOpenContext: AssertNotAny<ContextMenuOpenContext> = true;
+const _real_ContextMenuResolvedItem: AssertNotAny<ContextMenuResolvedItem> = true;
+const _real_ContextMenuResolvedSection: AssertNotAny<ContextMenuResolvedSection> = true;
 const _real_ContextMenuSection: AssertNotAny<ContextMenuSection> = true;
 const _real_ContextMenuSelectContext: AssertNotAny<ContextMenuSelectContext> = true;
 const _real_ContextMenuSelectPayload: AssertNotAny<ContextMenuSelectPayload> = true;

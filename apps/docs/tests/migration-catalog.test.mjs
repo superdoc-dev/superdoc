@@ -417,8 +417,8 @@ test('config path resolution rejects paths that do not exist', async () => {
   // chain stopped at `config.ui`, so every path beneath it was unverifiable and
   // the catalog dodged the guard by omitting the `config.` prefix instead.
   assert.ok(
-    resolveConfigPath(configSource, 'config.ui.contextMenu.customItems'),
-    'config.ui.contextMenu.customItems should resolve through the opt-out union',
+    resolveConfigPath(configSource, 'config.ui.contextMenu.sections'),
+    'config.ui.contextMenu.sections should resolve through the opt-out union',
   );
   assert.equal(
     resolveConfigPath(configSource, 'config.ui.contextMenu.notReal'),

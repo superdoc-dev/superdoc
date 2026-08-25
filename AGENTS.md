@@ -8,6 +8,9 @@ Run `pnpm` scripts from this directory, the one holding `pnpm-workspace.yaml`.
 In an Orbit checkout that is `superdoc/public`, not the Orbit root, which does
 not define them.
 
+When extending a built-in UI controller, follow the naming, configuration, and
+runtime-control conventions in `packages/superdoc/src/public/ui/README.md`.
+
 ## Code Review Rules
 
 Report only issues introduced or exposed by this PR that have a concrete failure

@@ -119,7 +119,7 @@ export interface StylesParagraphPatch {
 export interface StylesTargetResolution {
   scope: 'docDefaults';
   channel: StylesChannel;
-  xmlPart: 'word/styles.xml';
+  xmlPart: string;
   xmlPath: string;
 }
 

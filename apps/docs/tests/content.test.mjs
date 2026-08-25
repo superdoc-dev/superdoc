@@ -28,6 +28,8 @@ const reactToolbarExampleUrl = new URL('../snippets/editor/react-custom-toolbar.
 const reactBuiltInCommentsExampleUrl = new URL('../snippets/editor/react-built-in-comments.tsx', import.meta.url);
 const reactBuiltInSearchExampleUrl = new URL('../snippets/editor/react-built-in-find-replace.tsx', import.meta.url);
 const reactBuiltInHyperlinksExampleUrl = new URL('../snippets/editor/react-built-in-hyperlinks.tsx', import.meta.url);
+const builtInContextMenuExampleUrl = new URL('../snippets/editor/built-in-context-menu.ts', import.meta.url);
+const reactBuiltInContextMenuExampleUrl = new URL('../snippets/editor/react-built-in-context-menu.tsx', import.meta.url);
 const documentApiReferenceModelUrl = new URL('../generated/document-api-reference.json', import.meta.url);
 const generatedProofingConfigUrl = new URL('../generated/proofing-config-reference.json', import.meta.url);
 const superdocCoreTypesUrl = new URL('../../../packages/superdoc/src/core/types/index.ts', import.meta.url);
@@ -310,6 +312,17 @@ test('the React hyperlinks example keeps restart-sensitive config identities sta
   assert.match(example, /hyperlinks=\{editorConfig\.hyperlinks\}/u);
   assert.match(example, /ui=\{editorConfig\.ui\}/u);
   assert.doesNotMatch(example, /\b(?:hyperlinks|ui)=\{\{/u);
+});
+
+test('the context menu examples use the canonical composition fields', async () => {
+  const examples = await Promise.all(
+    [builtInContextMenuExampleUrl, reactBuiltInContextMenuExampleUrl].map((url) => readFile(url, 'utf8')),
+  );
+
+  for (const example of examples) {
+    assert.match(example, /\bsections:\s*\[/u);
+    assert.doesNotMatch(example, /\b(?:customItems|includeDefaultItems)\b/u);
+  }
 });
 
 test('the built-in Editor demos keep focused controls and restart-safe configuration changes', async () => {

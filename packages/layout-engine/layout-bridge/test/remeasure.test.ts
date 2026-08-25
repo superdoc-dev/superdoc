@@ -553,6 +553,44 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].hasExplicitTabStops).toBe(true);
     });
 
+    it('keeps explicit payment columns on the paragraph grid for hanging list markers', () => {
+      const indentLeft = 1417 / TWIPS_PER_PX;
+      const euroStop = 7943 / TWIPS_PER_PX;
+      const atStop = 9026 / TWIPS_PER_PX;
+      const block = createBlock([textRun('de huurprijs'), tabRun(), textRun('€'), tabRun(), textRun('@')], {
+        alignment: 'justify',
+        indent: { left: indentLeft, hanging: 347 / TWIPS_PER_PX },
+        tabs: [
+          { pos: 1417, val: 'start' },
+          { pos: 7943, val: 'start' },
+          { pos: 9026, val: 'start' },
+        ],
+        wordLayout: {
+          indentLeftPx: indentLeft,
+          hangingPx: 347 / TWIPS_PER_PX,
+          tabsPx: [indentLeft, euroStop, atStop],
+          textStartPx: indentLeft,
+          marker: {
+            markerText: '•',
+            markerBoxWidthPx: 347 / TWIPS_PER_PX,
+            markerX: (1417 - 347) / TWIPS_PER_PX,
+            textStartX: indentLeft,
+            gutterWidthPx: 8,
+            justification: 'left',
+            suffix: 'tab',
+            run: { fontFamily: 'Symbol', fontSize: 14 },
+          },
+        },
+      });
+
+      const measure = remeasureParagraph(block, 800);
+      const euroSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 2);
+      const atSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 4);
+
+      expect((euroSegment?.x ?? Number.NaN) + indentLeft).toBeCloseTo(euroStop, 5);
+      expect((atSegment?.x ?? Number.NaN) + indentLeft).toBeCloseTo(atStop, 5);
+    });
+
     it('advances cursor for multiple tabs in same line sequentially', () => {
       // Two explicit tab stops at 48px and 96px
       const tabStops: TabStop[] = [

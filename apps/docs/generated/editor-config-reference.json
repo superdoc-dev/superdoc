@@ -367,6 +367,14 @@
       "group": "other"
     },
     {
+      "name": "onTrackedChangesBulkDecision",
+      "type": "(params: {\n  documentId: null | string;\n  decision: \"accept\" | \"reject\";\n  requestedCount: number;\n  successfulCount: number;\n  permissionDeniedCount: number;\n}) => void",
+      "typeName": "(params: SuperDocTrackedChangesBulkDecisionPayload) => void",
+      "required": false,
+      "description": "Callback after an Accept All or Reject All tracked-change decision.",
+      "group": "other"
+    },
+    {
       "name": "onException",
       "type": "(params: SuperDocExceptionPayload) => void",
       "required": false,

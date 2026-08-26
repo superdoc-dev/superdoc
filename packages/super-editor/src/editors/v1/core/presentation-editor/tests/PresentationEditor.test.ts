@@ -254,6 +254,7 @@ vi.mock('../../Editor', () => {
       return {
         setDocumentMode: vi.fn(),
         setOptions: vi.fn(),
+        attachCollaboration: vi.fn(),
         on: vi.fn(),
         off: vi.fn(),
         destroy: vi.fn(),
@@ -553,6 +554,28 @@ describe('PresentationEditor', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(editor.historyCoordinator).toBeNull();
+    });
+
+    it('re-registers body history after switching to the collaboration backend', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-collaboration-upgrade-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      const coordinator = editor.historyCoordinator;
+      if (!coordinator) throw new Error('Expected unified history to be enabled');
+      const purge = vi.spyOn(coordinator, 'purge');
+      const register = vi.spyOn(coordinator, 'register');
+
+      editor.attachCollaboration({
+        ydoc: {} as never,
+        collaborationProvider: { awareness: null } as never,
+      });
+
+      expect(purge).toHaveBeenCalledWith('body', 'external-invalidation');
+      expect(register).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'body' }));
     });
   });
 

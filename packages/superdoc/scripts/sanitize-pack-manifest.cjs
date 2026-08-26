@@ -6,6 +6,8 @@ const path = require('node:path');
 const packageRoot = path.resolve(__dirname, '..');
 const packageJsonPath = path.join(packageRoot, 'package.json');
 const backupPath = path.join(packageRoot, '.package.json.prepack-backup');
+const buildOnlyPackages = new Set(['rollup-plugin-copy']);
+const publishedDependencySections = ['dependencies', 'peerDependencies', 'optionalDependencies'];
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -40,6 +42,16 @@ function isSanitized(packageJson) {
   return !hasAnySourceKey(packageJson.exports);
 }
 
+function assertNoBuildOnlyPublishedDependencies(packageJson) {
+  for (const section of publishedDependencySections) {
+    for (const packageName of buildOnlyPackages) {
+      if (Object.prototype.hasOwnProperty.call(packageJson[section] ?? {}, packageName)) {
+        throw new Error(`package.json ${section}.${packageName} is build-only and must not be published`);
+      }
+    }
+  }
+}
+
 function prepare() {
   const packageJson = readJson(packageJsonPath);
   if (fs.existsSync(backupPath)) {
@@ -61,6 +73,8 @@ function prepare() {
         `Inspect both files and remove the backup once the source manifest is correct.`,
     );
   }
+
+  assertNoBuildOnlyPublishedDependencies(packageJson);
 
   fs.copyFileSync(packageJsonPath, backupPath);
 
@@ -97,4 +111,3 @@ try {
   console.error(`[sanitize-pack-manifest] ${error.message || error}`);
   process.exit(1);
 }
-

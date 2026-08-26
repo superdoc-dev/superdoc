@@ -3214,9 +3214,6 @@ importers:
       react:
         specifier: '>=16.8.0'
         version: 19.2.4
-      rollup-plugin-copy:
-        specifier: 'catalog:'
-        version: 3.5.0
       uuid:
         specifier: 'catalog:'
         version: 11.1.1
@@ -3302,6 +3299,9 @@ importers:
       prosemirror-state:
         specifier: 'catalog:'
         version: 1.4.4
+      rollup-plugin-copy:
+        specifier: 'catalog:'
+        version: 3.5.0
       rollup-plugin-visualizer:
         specifier: 'catalog:'
         version: 5.14.0(rollup@4.60.2)

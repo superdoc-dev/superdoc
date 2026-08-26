@@ -145,7 +145,6 @@
     "jsdom": "catalog:",
     "konva": "catalog:",
     "pinia": "catalog:",
-    "rollup-plugin-copy": "catalog:",
     "uuid": "catalog:",
     "vue": "^3.5.0",
     "y-websocket": "catalog:"
@@ -205,6 +204,7 @@
     "postcss-prefixwrap": "catalog:",
     "prosemirror-model": "catalog:",
     "prosemirror-state": "catalog:",
+    "rollup-plugin-copy": "catalog:",
     "rollup-plugin-visualizer": "catalog:",
     "sirv": "catalog:",
     "tsx": "catalog:",

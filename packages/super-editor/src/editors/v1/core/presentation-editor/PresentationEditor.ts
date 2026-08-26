@@ -235,6 +235,7 @@ import {
   createBodyParticipant,
   createHeaderFooterParticipant,
   createNoteParticipant,
+  BODY_PARTICIPANT_KEY,
   buildHeaderFooterParticipantKey,
   readEditorHistorySnapshot,
   type BatchHistoryRecord,
@@ -1356,6 +1357,12 @@ export class PresentationEditor extends EventEmitter {
         (prevProvider ?? null) as { awareness?: AwarenessWithSetField | null; disconnect?: () => void } | null,
       );
       throw err;
+    }
+
+    const coordinator = this.#historyCoordinator;
+    if (coordinator) {
+      coordinator.purge(BODY_PARTICIPANT_KEY, 'external-invalidation');
+      coordinator.register(createBodyParticipant(this.#editor));
     }
   }
 

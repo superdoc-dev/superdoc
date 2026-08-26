@@ -1929,6 +1929,38 @@ describe('TrackChanges extension commands', () => {
     expect(nextState.doc.textContent).toBe('');
   });
 
+  it('rejectAllTrackedChanges reports false when a denied child makes the allowed structural parent a no-op', () => {
+    const parentChange = {
+      type: 'rowInsert',
+      id: 'allowed-parent',
+      sourceId: 'allowed-parent',
+      author: 'Alice Reviewer',
+      authorEmail: 'alice@example.com',
+      date: '2026-05-20T16:00:00Z',
+    };
+    const deniedChildMark = schema.marks[TrackInsertMarkName].create({
+      id: 'denied-child',
+      author: 'Bob Reviewer',
+      authorEmail: 'bob@example.com',
+      date: '2026-05-20T16:00:00Z',
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('Protected child', [deniedChildMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create({ trackChange: parentChange }, [cell]);
+    const table = schema.nodes.table.create({}, [row]);
+    const doc = schema.nodes.doc.create({}, [table]);
+    const state = createState(doc);
+    const dispatch = vi.fn();
+    editor.options.user = { name: 'Alice Reviewer', email: 'alice@example.com' };
+    editor.options.permissionResolver = ({ permission }) => permission === 'REJECT_OWN';
+
+    const applied = commands.rejectAllTrackedChanges()({ state, dispatch, editor });
+
+    expect(applied).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(editor.storage.trackChanges.lastDecisionFailure?.code).toBe('PERMISSION_DENIED');
+  });
+
   describe('insertTrackedChange', () => {
     it('inserts text as a tracked change with both delete and insert marks', () => {
       const doc = createDoc('Hello world');

@@ -128,6 +128,23 @@ describe('menuItems.js', () => {
       expect(itemIds).not.toContain('track-changes-reject');
     });
 
+    it('shows Accept and hides Reject when only the accept permission is allowed (SD-3845)', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        isTrackedChange: true,
+        trackedChanges: [{ id: 'track-1', attrs: { authorEmail: 'alice@other.test' } }],
+      });
+      mockIsTrackedChangeActionAllowed.mockImplementation(({ action }) => action === 'accept');
+
+      const sections = getItems(mockContext);
+      const trackSection = sections.find((section) => section.id === 'track-changes');
+      const itemIds = trackSection ? trackSection.items.map((item) => item.id) : [];
+
+      expect(itemIds).toContain('track-changes-accept');
+      expect(itemIds).not.toContain('track-changes-reject');
+    });
+
     it('routes tracked-change context-menu actions through selection commands when text is selected', () => {
       const acceptTrackedChangeFromContextMenu = vi.fn();
       const rejectTrackedChangeFromContextMenu = vi.fn();

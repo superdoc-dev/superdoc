@@ -131,12 +131,39 @@ export const decideTrackedChanges = ({ state, editor, decision, target, replacem
     return failure('TARGET_NOT_FOUND', 'no tracked changes match the requested decision target.');
   }
 
-  // Permission preflight — call once per logical change. One denial aborts.
-  const permissionResult = runPermissionPreflight({ editor, decision, selections });
+  // Permission preflight — call once per logical change. Per-id / range
+  // denials abort. Accept All / Reject All skip denied changes and still
+  // apply the allowed subset (SD-3845 option A, same as v2). A fully denied
+  // all-target remains blocked.
+
+  const skipDenied = normalized.value.kind === 'all';
+  const permissionResult = runPermissionPreflight({ editor, decision, selections, skipDenied });
   if (!permissionResult.ok) return permissionResult.failure;
+  // Resolver denied every matching change. Keep Accept All / Reject All
+  // blocked instead of reporting a successful no-op.
+  if (!permissionResult.selections.length) {
+    const deniedChangeIds = (permissionResult.deniedSelections || []).map((selection) => selection.change.id);
+    return failure('PERMISSION_DENIED', `permission denied for ${decision} of every matching tracked change.`, {
+      details: { deniedChangeIds },
+    });
+  }
+  const authorizedSelections = excludeStructuralParentsOfDeniedChanges({
+    selections: permissionResult.selections,
+    deniedSelections: permissionResult.deniedSelections,
+    decision,
+  });
+  // Allowed structural parents can still be blocked when deciding them would
+  // also decide a denied child. Report the blocked outcome instead of a
+  // successful no-op.
+  if (!authorizedSelections.length) {
+    const deniedChangeIds = (permissionResult.deniedSelections || []).map((selection) => selection.change.id);
+    return failure('PERMISSION_DENIED', `permission denied for ${decision} of dependent tracked changes.`, {
+      details: { deniedChangeIds },
+    });
+  }
 
   // Compute the PM mutation plan + comment effects.
-  const planResult = buildMutationPlan({ state, graph, selections, decision });
+  const planResult = buildMutationPlan({ state, graph, selections: authorizedSelections, decision });
   if (!planResult.ok) return planResult.failure;
   const { plan } = planResult;
 
@@ -374,13 +401,15 @@ const rangesCoverChange = (ranges, change) => {
 // Permission preflight
 // ---------------------------------------------------------------------------
 
-const runPermissionPreflight = ({ editor, decision, selections }) => {
+const runPermissionPreflight = ({ editor, decision, selections, skipDenied = false }) => {
   const resolver = editor?.options?.permissionResolver;
-  if (typeof resolver !== 'function') return { ok: true };
+  if (typeof resolver !== 'function') return { ok: true, selections, deniedSelections: [] };
 
   const role = editor.options?.role ?? 'editor';
   const isInternal = Boolean(editor.options?.isInternal);
   const currentIdentity = getCurrentUserIdentity(editor);
+  const authorizedSelections = [];
+  const deniedSelections = [];
 
   for (const selection of selections) {
     const change = selection.change;
@@ -413,6 +442,10 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
       comment: null,
     });
     if (allowed === false) {
+      if (skipDenied) {
+        deniedSelections.push(selection);
+        continue;
+      }
       return {
         ok: false,
         failure: failure('PERMISSION_DENIED', `permission denied for ${decision} of change "${change.id}".`, {
@@ -420,8 +453,30 @@ const runPermissionPreflight = ({ editor, decision, selections }) => {
         }),
       };
     }
+    authorizedSelections.push(selection);
   }
-  return { ok: true };
+  return { ok: true, selections: authorizedSelections, deniedSelections };
+};
+
+const excludeStructuralParentsOfDeniedChanges = ({ selections, deniedSelections, decision }) => {
+  if (!deniedSelections?.length) return selections;
+
+  return selections.filter(({ change }) => {
+    if (change.type !== CanonicalChangeType.Structural) return true;
+    const structural = change.structural;
+    if (!structural?.wholeTable || structural.decidable === false) return true;
+    const removesTable =
+      (structural.side === 'insertion' && decision === 'reject') ||
+      (structural.side === 'deletion' && decision === 'accept');
+
+    return !deniedSelections.some(({ change: deniedChange }) => {
+      if (deniedChange.type === CanonicalChangeType.Structural && !removesTable) return false;
+      if (!deniedChange.segments.length) return false;
+      return deniedChange.segments.every(
+        (segment) => structural.tableFrom <= segment.from && structural.tableTo >= segment.to,
+      );
+    });
+  });
 };
 
 // ---------------------------------------------------------------------------

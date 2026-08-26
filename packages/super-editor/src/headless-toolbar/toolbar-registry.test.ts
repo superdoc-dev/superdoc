@@ -1345,6 +1345,33 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('disables track-changes accept-selection when permissionResolver denies the selected change (SD-3845)', () => {
+    collectTrackedChangesMock.mockReturnValueOnce([{ id: 'tc-1' }]);
+    isTrackedChangeActionAllowedMock.mockReturnValueOnce(false);
+
+    const registry = createToolbarRegistry();
+    const state = registry['track-changes-accept-selection']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {},
+            selection: {
+              from: 1,
+              to: 3,
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: false,
+      disabled: true,
+    });
+  });
+
   it('disables track-changes reject-selection when selection contains no tracked changes', () => {
     collectTrackedChangesMock.mockReturnValueOnce([]);
 

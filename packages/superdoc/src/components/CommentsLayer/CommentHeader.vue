@@ -66,7 +66,38 @@ const isCommentOwnedByCurrentUser = (comment) => {
   const commentName = normalizeActorName(comment?.creatorName);
   return Boolean(currentName && commentName && currentName === commentName);
 };
-const isOwnComment = computed(() => isCommentOwnedByCurrentUser(props.comment));
+const hasImportedAuthorConflict = (comment, currentUser) => {
+  const importedAuthorName = normalizeActorName(comment?.importedAuthor?.name).replace(/\s+\(imported\)$/, '');
+  const currentName = normalizeActorName(currentUser?.name);
+  const changeName = normalizeActorName(comment?.creatorName);
+
+  if (
+    !importedAuthorName ||
+    importedAuthorName === 'undefined' ||
+    importedAuthorName === 'null' ||
+    !currentName ||
+    !changeName
+  ) {
+    return false;
+  }
+  return importedAuthorName !== currentName && changeName !== currentName;
+};
+
+// Accept/Reject must use the same ownership rules as `classifyOwnership` in
+// editor-core tracked-change identity. Imported-author conflicts take priority
+// over otherwise matching ids or emails.
+const isTrackedChangeOwnedByCurrentUser = (comment) => {
+  const currentUser = proxy.$superdoc.config.user;
+  if (hasImportedAuthorConflict(comment, currentUser)) return false;
+  return actorIdentitiesMatch({
+    current: currentUser,
+    other: { id: comment?.creatorId, email: comment?.creatorEmail },
+  });
+};
+const isOwnComment = computed(() => {
+  if (props.comment?.trackedChange) return isTrackedChangeOwnedByCurrentUser(props.comment);
+  return isCommentOwnedByCurrentUser(props.comment);
+});
 
 const { uiFontFamily } = useUiFontFamily();
 
@@ -99,11 +130,10 @@ const allowResolve = computed(() => {
     superdoc: proxy.$superdoc,
   };
 
-  if (isOwnComment.value || props.comment.trackedChange) {
+  if (isOwnComment.value) {
     return isAllowed(PERMISSIONS.RESOLVE_OWN, role, isInternal, context);
-  } else {
-    return isAllowed(PERMISSIONS.RESOLVE_OTHER, role, isInternal, context);
   }
+  return isAllowed(PERMISSIONS.RESOLVE_OTHER, role, isInternal, context);
 });
 
 const allowReject = computed(() => {
@@ -116,11 +146,10 @@ const allowReject = computed(() => {
     superdoc: proxy.$superdoc,
   };
 
-  if (isOwnComment.value || props.comment.trackedChange) {
+  if (isOwnComment.value) {
     return isAllowed(PERMISSIONS.REJECT_OWN, role, isInternal, context);
-  } else {
-    return isAllowed(PERMISSIONS.REJECT_OTHER, role, isInternal, context);
   }
+  return isAllowed(PERMISSIONS.REJECT_OTHER, role, isInternal, context);
 });
 
 const allowOverflow = computed(() => {
@@ -212,6 +241,7 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowResolve"
         class="overflow-menu__icon"
+        data-comment-action="resolve"
         :class="{ 'sd-is-disabled': Boolean(resolveDisabledReason) }"
         :data-disabled-reason="resolveDisabledReason || null"
         :aria-disabled="Boolean(resolveDisabledReason)"
@@ -222,6 +252,7 @@ const getCurrentUser = computed(() => {
       <div
         v-if="allowReject"
         class="overflow-menu__icon"
+        data-comment-action="reject"
         :class="{ 'sd-is-disabled': Boolean(rejectDisabledReason) }"
         :data-disabled-reason="rejectDisabledReason || null"
         :aria-disabled="Boolean(rejectDisabledReason)"

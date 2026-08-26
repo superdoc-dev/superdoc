@@ -9,8 +9,10 @@
 
 import { describe, it, expect } from 'vitest';
 
+import { EditorState } from 'prosemirror-state';
+
 import { decideTrackedChanges } from './decision-engine.js';
-import { buildReviewGraph } from './review-graph.js';
+import { buildReviewGraph, CanonicalChangeType } from './review-graph.js';
 import { createReviewGraphTestSchema, stateFromTrackedSpans, markAttrs } from './test-fixtures.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 
@@ -654,6 +656,168 @@ describe('decideTrackedChanges overlap behavior', () => {
     });
     expect(result.ok).toBe(false);
     expect(result.code).toBe('PERMISSION_DENIED');
+  });
+
+  it('accept all skips denied changes and still applies the allowed subset (SD-3845)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [
+        { text: 'pre ' },
+        { text: 'OWN', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-own', SAME_USER) }] },
+        { text: ' mid ' },
+        { text: 'OTH', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-other', OTHER_USER) }] },
+        { text: ' post' },
+      ],
+    });
+    const editor = editorFor(SAME_USER, {
+      permissionResolver: ({ permission }) => permission === 'RESOLVE_OWN',
+    });
+    const result = decideTrackedChanges({
+      state,
+      editor,
+      decision: 'accept',
+      target: { kind: 'all' },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.receipt.removedChangeIds.map((entry) => entry.id).sort()).toEqual(['ins-own']);
+    expect(state.apply(result.tr).doc.textContent).toBe('pre OWN mid OTH post');
+  });
+
+  it('accept all remains blocked when every change is denied (SD-3845)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [{ text: 'NEW', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-other', OTHER_USER) }] }],
+    });
+    const editor = editorFor(SAME_USER, {
+      permissionResolver: () => false,
+    });
+    const result = decideTrackedChanges({
+      state,
+      editor,
+      decision: 'accept',
+      target: { kind: 'all' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('PERMISSION_DENIED');
+    expect(result.details.deniedChangeIds).toEqual(['ins-other']);
+    expect(state.doc.textContent).toBe('NEW');
+  });
+
+  it('reject all reports a permission failure when an allowed table is skipped to protect a denied child', () => {
+    const schema = createReviewGraphTestSchema();
+    const deniedChildMark = schema.marks[TrackInsertMarkName].create({
+      id: 'denied-child',
+      author: OTHER_USER.name,
+      authorEmail: OTHER_USER.email,
+      date: '2026-05-20T16:00:00Z',
+    });
+    const cellParagraph = schema.nodes.paragraph.create({}, [schema.text('Protected child', [deniedChildMark])]);
+    const cell = schema.nodes.tableCell.create({}, [cellParagraph]);
+    const row = schema.nodes.tableRow.create(
+      {
+        trackChange: {
+          type: 'rowInsert',
+          id: 'allowed-parent',
+          sourceId: 'allowed-parent',
+          author: SAME_USER.name,
+          authorEmail: SAME_USER.email,
+          date: '2026-05-20T16:00:00Z',
+        },
+      },
+      [cell],
+    );
+    const table = schema.nodes.table.create({}, [row]);
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, [schema.text('Before.')]),
+      table,
+      schema.nodes.paragraph.create({}, [schema.text('After.')]),
+    ]);
+    const state = EditorState.create({ schema, doc });
+    const editor = editorFor(SAME_USER, {
+      permissionResolver: ({ permission }) => permission === 'REJECT_OWN',
+    });
+
+    const result = decideTrackedChanges({ state, editor, decision: 'reject', target: { kind: 'all' } });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('PERMISSION_DENIED');
+    expect(result.details.deniedChangeIds).toEqual(['denied-child']);
+    expect(state.doc.child(1).type.name).toBe('table');
+    expect(state.doc.child(1).textContent).toBe('Protected child');
+    const nextGraph = buildReviewGraph({ state });
+    expect(nextGraph.changes.has('denied-child')).toBe(true);
+    expect([...nextGraph.changes.values()].some((change) => change.type === CanonicalChangeType.Structural)).toBe(true);
+  });
+
+  it('reject all does not remove a denied nested table with its allowed structural parent', () => {
+    const schema = createReviewGraphTestSchema();
+    const makeRowChange = (id, user) => ({
+      type: 'rowInsert',
+      id,
+      sourceId: id,
+      author: user.name,
+      authorEmail: user.email,
+      date: '2026-05-20T16:00:00Z',
+    });
+    const innerParagraph = schema.nodes.paragraph.create({}, [schema.text('Denied nested table')]);
+    const innerCell = schema.nodes.tableCell.create({}, [innerParagraph]);
+    const innerRow = schema.nodes.tableRow.create({ trackChange: makeRowChange('denied-inner', OTHER_USER) }, [
+      innerCell,
+    ]);
+    const innerTable = schema.nodes.table.create({}, [innerRow]);
+    const outerCell = schema.nodes.tableCell.create({}, [innerTable]);
+    const outerRow = schema.nodes.tableRow.create({ trackChange: makeRowChange('allowed-outer', SAME_USER) }, [
+      outerCell,
+    ]);
+    const outerTable = schema.nodes.table.create({}, [outerRow]);
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, [schema.text('Before.')]),
+      outerTable,
+      schema.nodes.paragraph.create({}, [schema.text('After.')]),
+    ]);
+    const state = EditorState.create({ schema, doc });
+    const editor = editorFor(SAME_USER, {
+      permissionResolver: ({ permission }) => permission === 'REJECT_OWN',
+    });
+
+    const result = decideTrackedChanges({ state, editor, decision: 'reject', target: { kind: 'all' } });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('PERMISSION_DENIED');
+    expect(state.doc.textContent).toBe('Before.Denied nested tableAfter.');
+    const structuralChanges = new Set(
+      [...buildReviewGraph({ state }).changes.values()].filter(
+        (change) => change.type === CanonicalChangeType.Structural,
+      ),
+    );
+    expect(structuralChanges.size).toBe(2);
+  });
+
+  it('reject all skips denied changes and still applies the allowed subset (SD-3845)', () => {
+    const schema = createReviewGraphTestSchema();
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [
+        { text: 'pre ' },
+        { text: 'OWN', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-own', SAME_USER) }] },
+        { text: ' mid ' },
+        { text: 'OTH', marks: [{ markType: TrackInsertMarkName, attrs: insertAttrs('ins-other', OTHER_USER) }] },
+        { text: ' post' },
+      ],
+    });
+    const editor = editorFor(SAME_USER, {
+      permissionResolver: ({ permission }) => permission === 'REJECT_OWN',
+    });
+    const result = decideTrackedChanges({
+      state,
+      editor,
+      decision: 'reject',
+      target: { kind: 'all' },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.receipt.removedChangeIds.map((entry) => entry.id).sort()).toEqual(['ins-own']);
+    expect(state.apply(result.tr).doc.textContent).toBe('pre  mid OTH post');
   });
 
   it('rejects unknown id with TARGET_NOT_FOUND', () => {

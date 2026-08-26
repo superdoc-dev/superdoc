@@ -101,6 +101,28 @@ describe('permission-helpers', () => {
     expect(mockResolver).toHaveBeenCalledTimes(2);
   });
 
+  it('isTrackedChangeActionAllowed keeps other-user accept enabled when OTHER is allowed (SD-3845)', () => {
+    const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER' || permission === 'REJECT_OTHER');
+    editor.options.permissionResolver = mockResolver;
+    editor.options.user = { id: 'bob-id', email: 'bob@example.com', name: 'Bob' };
+
+    const result = isTrackedChangeActionAllowed({
+      editor,
+      action: 'accept',
+      trackedChanges: [
+        { id: 'tc-1', attrs: { authorId: 'alice-id', authorEmail: 'alice@other.test', author: 'Alice' } },
+      ],
+    });
+
+    expect(result).toBe(true);
+    expect(mockResolver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permission: 'RESOLVE_OTHER',
+        trackedChange: expect.objectContaining({ id: 'tc-1' }),
+      }),
+    );
+  });
+
   it('isTrackedChangeActionAllowed treats missing user email as other change', () => {
     const mockResolver = vi.fn(({ permission }) => permission === 'RESOLVE_OTHER');
     editor.options.permissionResolver = mockResolver;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,10 @@ const WORKFLOW_ROOT = path.join(PUBLIC_ROOT, '.github/workflows');
 
 function readWorkflow(name) {
   return readFileSync(path.join(WORKFLOW_ROOT, name), 'utf8');
+}
+
+function hasWorkflow(name) {
+  return existsSync(path.join(WORKFLOW_ROOT, name));
 }
 
 function jobBlocks(workflow) {
@@ -166,7 +170,12 @@ test('public validation stays read-only and on GitHub-hosted default runners', (
   }
 });
 
-test('SuperDoc CI covers the Windows TypeScript launch paths', () => {
+test('SuperDoc CI covers the Windows TypeScript launch paths', (t) => {
+  if (!hasWorkflow('ci-superdoc.yml')) {
+    t.skip('ci-superdoc.yml is omitted from the standalone OSS projection');
+    return;
+  }
+
   const workflow = readWorkflow('ci-superdoc.yml');
   const blocks = new Map(jobBlocks(workflow).map((block) => [block.id, block.source]));
   const windowsChecks = blocks.get('windows-source-checks');

@@ -1,0 +1,1 @@
+This disposable file verifies that a contributor who already signed CLA version 1.0 is recognized on pull requests targeting v1.

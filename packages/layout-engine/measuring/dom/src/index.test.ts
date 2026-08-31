@@ -5156,6 +5156,34 @@ describe('measureBlock', () => {
       expect(measure.lines[1].fromRun).toBe(2);
     });
 
+    it('hangs a trailing space before a page/column break run too (#3946)', async () => {
+      // The run loop closes the current line for every 'break' kind, so a
+      // space that only precedes a page/column break is line-trailing as well.
+      const probe: FlowBlock = {
+        kind: 'paragraph',
+        id: 'probe3-paragraph',
+        runs: [{ text: 'Lorem ipsum dolor', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const probeMeasure = expectParagraphMeasure(await measureBlock(probe, 1000));
+      const textWidth = probeMeasure.lines[0].width;
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'bug3-paragraph',
+        runs: [
+          { text: 'Lorem ipsum dolor ', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'break' },
+          { text: 'Second line', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {},
+      };
+      const measure = expectParagraphMeasure(await measureBlock(block, textWidth + 2));
+
+      expect(measure.lines.length).toBe(2);
+      expect(measure.lines[1].fromRun).toBe(2);
+    });
+
     it('does not wrap a whole-run trailing space that overflows before a hard break (#3946)', async () => {
       const probe: FlowBlock = {
         kind: 'paragraph',

@@ -235,6 +235,39 @@ describe('w:del translator', () => {
       expect(result.elements[0].elements[0].name).toBe('w:delText');
     });
 
+    it('strips the tracked mark on a copy without mutating the caller node (#3893)', () => {
+      // The header/footer export path hands decode the converter's persistent
+      // import-time tree by reference; an in-place strip makes the second
+      // export lose the tracked change entirely.
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: '123',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t', text: 'deleted text' }] });
+
+      const node = {
+        type: 'text',
+        text: 'deleted text',
+        marks: [mockTrackedMark, { type: 'bold' }],
+      };
+
+      config.decode({ node });
+
+      expect(node.marks).toEqual([mockTrackedMark, { type: 'bold' }]);
+      expect(exportSchemaToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({ marks: [{ type: 'bold' }] }),
+        }),
+      );
+    });
+
     it('renames every <w:t> in a multi-segment run to <w:delText> (newline split)', () => {
       const mockTrackedMark = {
         type: 'trackDelete',

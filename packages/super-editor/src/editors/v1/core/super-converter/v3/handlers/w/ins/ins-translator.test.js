@@ -253,6 +253,39 @@ describe('w:ins translator', () => {
       });
     });
 
+    it('strips the tracked mark on a copy without mutating the caller node (#3893)', () => {
+      // The header/footer export path hands decode the converter's persistent
+      // import-time tree by reference; an in-place strip makes the second
+      // export lose the tracked change entirely.
+      const mockTrackedMark = {
+        type: 'trackInsert',
+        attrs: {
+          id: '123',
+          sourceId: '',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
+
+      const node = {
+        type: 'text',
+        text: 'added text',
+        marks: [mockTrackedMark, { type: 'bold' }],
+      };
+
+      config.decode({ node });
+
+      expect(node.marks).toEqual([mockTrackedMark, { type: 'bold' }]);
+      expect(exportSchemaToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({ marks: [{ type: 'bold' }] }),
+        }),
+      );
+    });
+
     it('writes sourceId to w:id for round-trip fidelity', () => {
       const mockTrackedMark = {
         type: 'trackInsert',

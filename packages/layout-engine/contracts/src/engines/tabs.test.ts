@@ -76,6 +76,29 @@ describe('engines-tabs computeTabStops', () => {
     expect(firstDefault?.source).toBe('default');
   });
 
+  it('generates no default grid and terminates when defaultTabInterval is 0 (#3944)', () => {
+    // Word writes <w:defaultTabStop w:val="0"/> when a user sets the default
+    // tab interval to 0 and opens such documents fine, with no automatic tab
+    // stops. Before the guard this looped forever, freezing the main thread.
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 0,
+      paragraphIndent: { left: 0 },
+    });
+
+    expect(stops).toEqual([]);
+  });
+
+  it('keeps explicit stops but adds no default grid for a negative defaultTabInterval (#3944)', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: 720, leader: 'none' }],
+      defaultTabInterval: -10,
+      paragraphIndent: { left: 0 },
+    });
+
+    expect(stops).toEqual([{ val: 'start', pos: 720, leader: 'none', source: 'explicit' }]);
+  });
+
   it('adds an implicit left-margin stop when hanging indent starts before the margin', () => {
     const stops = computeTabStops({
       explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],

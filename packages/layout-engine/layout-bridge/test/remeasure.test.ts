@@ -1392,6 +1392,27 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[2].toRun).toBe(4);
     });
 
+    it('does not create a spurious empty line when a trailing space overflows before a lineBreak (#3946)', () => {
+      // 'Helloworld' = 100px at CHAR_WIDTH 10; with the trailing space it is
+      // 110px. At maxWidth 105 the space overflows the measure, but because it
+      // only precedes an explicit break it must hang instead of wrapping onto
+      // its own (visually empty) line — Word renders two lines here.
+      const block = createBlock([textRun('Helloworld '), { kind: 'lineBreak' } as Run, textRun('Next')]);
+      const measure = remeasureParagraph(block, 10 * CHAR_WIDTH + 5);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+    });
+
+    it('does not wrap a whole-run trailing space that overflows before a lineBreak (#3946)', () => {
+      const block = createBlock([textRun('Helloworld'), textRun(' '), { kind: 'lineBreak' } as Run, textRun('Next')]);
+      const measure = remeasureParagraph(block, 10 * CHAR_WIDTH + 5);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[1].fromRun).toBe(3);
+    });
+
     it('preserves trailing explicit lineBreak as final empty line', () => {
       const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run]);
       const measure = remeasureParagraph(block, 200);

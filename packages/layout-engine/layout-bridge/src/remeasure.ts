@@ -1821,6 +1821,25 @@ export function remeasureParagraph(
     let previousRunLetterSpacing = 0;
     const lineImageCandidates: RemeasureImageCandidate[] = [];
 
+    /**
+     * Word never wraps a line at a trailing space that only precedes an explicit
+     * break (<w:br/>) or the paragraph end: such spaces are not measured for line
+     * fitting and hang past the text margin instead of opening a new (empty) line.
+     * Mirrors spacesHangBeforeBreak in measuring/dom (issue #3946).
+     */
+    const trailingSpacesHang = (runIdx: number, fromChar: number): boolean => {
+      const current = runs[runIdx];
+      if (isTextRun(current) && !/^[ ]*$/.test(current.text.slice(fromChar))) return false;
+      for (let i = runIdx + 1; i < runs.length; i += 1) {
+        const nextRun = runs[i];
+        if (isLineBreakRun(nextRun)) return true;
+        if (isVanishedRun(nextRun)) continue;
+        if (isTextRun(nextRun) && /^[ ]*$/.test(nextRun.text)) continue;
+        return false;
+      }
+      return true;
+    };
+
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
       if (isLineBreakRun(run)) {
@@ -2030,6 +2049,14 @@ export function remeasureParagraph(
             : effectiveMaxWidth - WIDTH_FUDGE_PX;
         if (width + w > fitThreshold && width > 0) {
           if (ch === ' ') {
+            // A trailing space right before an explicit break (or the paragraph
+            // end) never forces a wrap: consume it at zero charged width and keep
+            // scanning so the break closes this line instead of an empty one.
+            if (trailingSpacesHang(r, chEnd)) {
+              endRun = r;
+              endChar = chEnd;
+              continue;
+            }
             // The space is only a wrap delimiter. Consume it so the next line
             // starts at the following word, but do not charge its width to the
             // completed line.

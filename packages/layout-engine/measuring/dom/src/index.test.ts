@@ -5125,6 +5125,64 @@ describe('measureBlock', () => {
       expect(measure.lines[0].toChar).toBe(5);
     });
 
+    it('does not create a spurious empty line when a trailing space overflows before a hard break (#3946)', async () => {
+      // Measure the text without the trailing space to find its natural width.
+      const probe: FlowBlock = {
+        kind: 'paragraph',
+        id: 'probe-paragraph',
+        runs: [{ text: 'Lorem ipsum dolor', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const probeMeasure = expectParagraphMeasure(await measureBlock(probe, 1000));
+      const textWidth = probeMeasure.lines[0].width;
+
+      // Same text + trailing space + explicit line break + more text, with
+      // maxWidth chosen so the text fits but text+space slightly exceeds it.
+      // Word renders TWO lines here: the trailing space hangs past the measure
+      // instead of wrapping onto its own (visually empty) line.
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'bug-paragraph',
+        runs: [
+          { text: 'Lorem ipsum dolor ', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { text: 'Second line', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: { alignment: 'justify' },
+      };
+      const measure = expectParagraphMeasure(await measureBlock(block, textWidth + 2));
+
+      expect(measure.lines.length).toBe(2);
+      expect(measure.lines[1].fromRun).toBe(2);
+    });
+
+    it('does not wrap a whole-run trailing space that overflows before a hard break (#3946)', async () => {
+      const probe: FlowBlock = {
+        kind: 'paragraph',
+        id: 'probe2-paragraph',
+        runs: [{ text: 'Lorem ipsum dolor', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const probeMeasure = expectParagraphMeasure(await measureBlock(probe, 1000));
+      const textWidth = probeMeasure.lines[0].width;
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'bug2-paragraph',
+        runs: [
+          { text: 'Lorem ipsum dolor', fontFamily: 'Arial', fontSize: 16 },
+          { text: ' ', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { text: 'Second line', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: { alignment: 'justify' },
+      };
+      const measure = expectParagraphMeasure(await measureBlock(block, textWidth + 2));
+
+      expect(measure.lines.length).toBe(2);
+      expect(measure.lines[1].fromRun).toBe(3);
+    });
+
     it('includes space width when mid-line', async () => {
       const blockNoSpace: FlowBlock = {
         kind: 'paragraph',

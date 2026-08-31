@@ -2760,6 +2760,29 @@ async function measureParagraphBlock(
     }
   };
 
+  /**
+   * Word never wraps a line at a trailing space that is immediately followed by an
+   * explicit break (<w:br/>) or the end of the paragraph: trailing spaces are not
+   * measured for line fitting and simply hang past the text margin. Without this,
+   * a space that overflows the measure right before a hard break wraps onto its
+   * own line, and the break then closes that (visually empty) line — producing a
+   * spurious blank line (three lines instead of two). Returns true when every run
+   * after `startRunIndex` up to the next explicit break (or the paragraph end)
+   * contributes no non-space content, i.e. the current space(s) are line-trailing.
+   */
+  const spacesHangBeforeBreak = (startRunIndex: number): boolean => {
+    for (let i = startRunIndex + 1; i < runsToProcess.length; i++) {
+      const nextRun = runsToProcess[i] as Run;
+      if (nextRun.kind === 'lineBreak' || nextRun.kind === 'break') return true;
+      if (isVanishedRun(nextRun)) continue;
+      const isPlainTextRun = !nextRun.kind || nextRun.kind === 'text';
+      const nextText = (nextRun as TextRun).text;
+      if (isPlainTextRun && typeof nextText === 'string' && /^[ ]*$/.test(nextText)) continue;
+      return false;
+    }
+    return true;
+  };
+
   // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
   // segment to the last N alignment stops; segments are delimited by explicit
   // <w:br/> runs because pPr/tabs apply per line, not per paragraph.
@@ -3613,7 +3636,8 @@ async function measureParagraphBlock(
           const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
           if (
             currentLine.width + boundarySpacing + spacesWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-            currentLine.width > 0
+            currentLine.width > 0 &&
+            !(isLastSegment && spacesHangBeforeBreak(runIndex))
           ) {
             trimTrailingWrapSpaces(currentLine);
             const completedLine: Line = closeLineWithMetrics(currentLine);
@@ -3733,7 +3757,8 @@ async function measureParagraphBlock(
             const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
             if (
               currentLine.width + boundarySpacing + singleSpaceWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-              currentLine.width > 0
+              currentLine.width > 0 &&
+              !(isLastSegment && wordIndex > lastNonEmptyWordIndex && spacesHangBeforeBreak(runIndex))
             ) {
               // Space doesn't fit - finish current line and start new one with the space
               trimTrailingWrapSpaces(currentLine);

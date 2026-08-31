@@ -87,9 +87,13 @@ function decode(params) {
     return /** @type {import('@translator').SCDecoderResult} */ (/** @type {unknown} */ (null));
   }
 
-  node.marks = marks.filter((m) => m.type !== 'trackInsert');
+  // Strip the tracked mark on a copy: `node` belongs to the caller, and the
+  // header/footer export path passes the converter's persistent import-time
+  // tree by reference. Mutating it here makes the strip permanent, so the
+  // second export loses the tracked change entirely (issue #3893).
+  const strippedNode = { ...node, marks: marks.filter((m) => m.type !== 'trackInsert') };
 
-  const translatedTextNode = exportSchemaToJson({ ...params, node });
+  const translatedTextNode = exportSchemaToJson({ ...params, node: strippedNode });
 
   if (params.isFinalDoc) {
     return translatedTextNode;

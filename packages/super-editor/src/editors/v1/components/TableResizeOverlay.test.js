@@ -13,6 +13,7 @@ vi.mock('@superdoc/layout-bridge', () => ({
   measureCache: {
     invalidate: vi.fn(),
   },
+  invalidateHeaderFooterMeasureCache: vi.fn(),
 }));
 
 // ============================================================================
@@ -76,6 +77,23 @@ function createMockEditor(overrides = {}) {
     },
     ...overrides,
   };
+}
+
+function createMockRowEditor(overrides = {}) {
+  const editor = createMockEditor(overrides);
+  editor.view.state.doc.nodeAt.mockReturnValue({
+    type: { name: 'table' },
+    forEach: (callback) => {
+      callback(
+        {
+          type: { name: 'tableRow' },
+          attrs: { tableRowProperties: {} },
+        },
+        0,
+      );
+    },
+  });
+  return editor;
 }
 
 /**
@@ -142,6 +160,35 @@ function createMockTableElement(metadata = undefined, overrides = {}) {
   };
 
   return element;
+}
+
+function createHeaderFooterTableElement({ story, refId = null, variant = null, blockId = 'footer-table' } = {}) {
+  const attrs = {
+    'data-layout-story': story,
+    'data-sd-block-id': blockId,
+    'data-table-boundaries': JSON.stringify({
+      columns: [
+        { i: 0, x: 0, w: 100, min: 50, r: 1 },
+        { i: 1, x: 100, w: 150, min: 50, r: 1 },
+        { i: 2, x: 250, w: 100, min: 50, r: 1 },
+      ],
+    }),
+  };
+  if (refId) attrs['data-sd-headerfooter-ref-id'] = refId;
+  if (variant) attrs['data-sd-headerfooter-variant'] = variant;
+
+  const tableElement = createMockTableElement();
+  tableElement.getAttribute = vi.fn((attr) => attrs[attr] ?? null);
+  tableElement.closest = vi.fn((selector) => {
+    const attributeName = typeof selector === 'string' ? selector.replace(/^\[|\]$/g, '') : '';
+    if (attributeName && attrs[attributeName]) {
+      return { getAttribute: (attr) => attrs[attr] ?? null };
+    }
+    return {
+      getBoundingClientRect: () => ({ left: 0, right: 800, top: 0, bottom: 600 }),
+    };
+  });
+  return tableElement;
 }
 
 // ============================================================================
@@ -1073,6 +1120,324 @@ describe('TableResizeOverlay', () => {
       wrapper.unmount();
     });
 
+    it('commits a footer-table drag to the footer editor when a body table is also present (SD-4370)', async () => {
+      const bodyEditor = createMockEditor();
+      const footerEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [{ id: 'rIdFooter', editor: footerEditor }],
+      };
+      const tableElement = createMockTableElement();
+      tableElement.getAttribute = vi.fn((attr) => {
+        if (attr === 'data-layout-story') return 'footer:rIdFooter';
+        if (attr === 'data-table-boundaries') {
+          return JSON.stringify({
+            columns: [
+              { i: 0, x: 0, w: 100, min: 50, r: 1 },
+              { i: 1, x: 100, w: 150, min: 50, r: 1 },
+              { i: 2, x: 250, w: 100, min: 50, r: 1 },
+            ],
+          });
+        }
+        if (attr === 'data-sd-block-id') return 'footer-table';
+        return null;
+      });
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(footerEditor.view.state.tr.setNodeMarkup).toHaveBeenCalled();
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it('commits a footer-table drag when the painted story is variant-only (footer:default)', async () => {
+      const bodyEditor = createMockEditor();
+      const footerEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [{ id: 'rIdFooter', editor: footerEditor }],
+        footerIds: { default: 'rIdFooter' },
+      };
+      bodyEditor.presentationEditor = {
+        ensureHeaderFooterEditor: vi.fn(() => null),
+      };
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement: createHeaderFooterTableElement({ story: 'footer:default', variant: 'default' }),
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(wrapper.emitted('resize-error')).toBeUndefined();
+      expect(bodyEditor.presentationEditor.ensureHeaderFooterEditor).not.toHaveBeenCalled();
+      expect(footerEditor.view.state.tr.setNodeMarkup).toHaveBeenCalled();
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it('commits a footer-table drag when data-layout-story is kind-only and the container has a variant', async () => {
+      const bodyEditor = createMockEditor();
+      const footerEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [{ id: 'rIdFooter', editor: footerEditor }],
+      };
+      bodyEditor.presentationEditor = {
+        ensureHeaderFooterEditor: vi.fn((kind, id) => (kind === 'footer' && id === 'default' ? footerEditor : null)),
+      };
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement: createHeaderFooterTableElement({ story: 'footer', variant: 'default' }),
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(wrapper.emitted('resize-error')).toBeUndefined();
+      expect(bodyEditor.presentationEditor.ensureHeaderFooterEditor).toHaveBeenCalledWith('footer', 'default');
+      expect(footerEditor.view.state.tr.setNodeMarkup).toHaveBeenCalled();
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it('prefers a concrete header/footer ref id on the decoration container over a variant story label', async () => {
+      const bodyEditor = createMockEditor();
+      const footerEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [{ id: 'rIdFooter', editor: footerEditor }],
+      };
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement: createHeaderFooterTableElement({
+            story: 'footer:default',
+            refId: 'rIdFooter',
+            variant: 'default',
+          }),
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(footerEditor.view.state.tr.setNodeMarkup).toHaveBeenCalled();
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it('ensures a footer sub-editor via presentationEditor when none is registered yet (SD-4370)', async () => {
+      const bodyEditor = createMockEditor();
+      const footerEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [],
+      };
+      bodyEditor.presentationEditor = {
+        ensureHeaderFooterEditor: vi.fn(() => footerEditor),
+      };
+      const tableElement = createMockTableElement();
+      tableElement.getAttribute = vi.fn((attr) => {
+        if (attr === 'data-layout-story') return 'footer:rIdFooter';
+        if (attr === 'data-table-boundaries') {
+          return JSON.stringify({
+            columns: [
+              { i: 0, x: 0, w: 100, min: 50, r: 1 },
+              { i: 1, x: 100, w: 150, min: 50, r: 1 },
+              { i: 2, x: 250, w: 100, min: 50, r: 1 },
+            ],
+          });
+        }
+        if (attr === 'data-sd-block-id') return 'footer-table';
+        return null;
+      });
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(bodyEditor.presentationEditor.ensureHeaderFooterEditor).toHaveBeenCalledWith('footer', 'rIdFooter');
+      expect(footerEditor.view.state.tr.setNodeMarkup).toHaveBeenCalled();
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it.each(['header', 'footer'])(
+      'invalidates only the header/footer measure cache after a $kind-table column resize',
+      async (kind) => {
+        const { measureCache, invalidateHeaderFooterMeasureCache } = await import('@superdoc/layout-bridge');
+        measureCache.invalidate.mockClear();
+        invalidateHeaderFooterMeasureCache.mockClear();
+
+        const bodyEditor = createMockEditor();
+        const headerFooterEditor = createMockEditor();
+        const id = `rId${kind}`;
+        const blockId = `hf-${kind}-${id}-5-table`;
+        bodyEditor.converter = {
+          headerEditors: kind === 'header' ? [{ id, editor: headerFooterEditor }] : [],
+          footerEditors: kind === 'footer' ? [{ id, editor: headerFooterEditor }] : [],
+        };
+        const tableElement = createMockTableElement();
+        tableElement.getAttribute = vi.fn((attr) => {
+          if (attr === 'data-layout-story') return `${kind}:${id}`;
+          if (attr === 'data-sd-block-id') return blockId;
+          if (attr === 'data-table-boundaries') {
+            return JSON.stringify({
+              columns: [
+                { i: 0, x: 0, w: 100, min: 50, r: 1 },
+                { i: 1, x: 100, w: 150, min: 50, r: 1 },
+                { i: 2, x: 250, w: 100, min: 50, r: 1 },
+              ],
+            });
+          }
+          return null;
+        });
+        const wrapper = mount(TableResizeOverlay, {
+          props: {
+            editor: bodyEditor,
+            visible: true,
+            tableElement,
+          },
+        });
+
+        await nextTick();
+        wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+        expect(measureCache.invalidate).not.toHaveBeenCalled();
+        expect(invalidateHeaderFooterMeasureCache).toHaveBeenCalledWith([blockId]);
+
+        wrapper.unmount();
+      },
+    );
+
+    it('invalidates only the body measure cache after a body-table column resize', async () => {
+      const { measureCache, invalidateHeaderFooterMeasureCache } = await import('@superdoc/layout-bridge');
+      measureCache.invalidate.mockClear();
+      invalidateHeaderFooterMeasureCache.mockClear();
+
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement: createMockTableElement(),
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(measureCache.invalidate).toHaveBeenCalledWith(['test-block-id']);
+      expect(invalidateHeaderFooterMeasureCache).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it.each(['header', 'footer'])(
+      'emits resize-error when a resolved $kind editor no longer has a view',
+      async (kind) => {
+        const bodyEditor = createMockEditor();
+        const id = `rId${kind}`;
+        bodyEditor.converter = {
+          headerEditors: kind === 'header' ? [{ id, editor: { view: undefined } }] : [],
+          footerEditors: kind === 'footer' ? [{ id, editor: { view: undefined } }] : [],
+        };
+        const tableElement = createMockTableElement(undefined, {
+          getAttribute: vi.fn((attr) => {
+            if (attr === 'data-layout-story') return `${kind}:${id}`;
+            if (attr === 'data-table-boundaries') {
+              return JSON.stringify({ columns: [{ i: 0, x: 0, w: 100, min: 50, r: 1 }] });
+            }
+            if (attr === 'data-sd-block-id') return 'footer-table';
+            return null;
+          }),
+        });
+        const wrapper = mount(TableResizeOverlay, {
+          props: { editor: bodyEditor, visible: true, tableElement },
+        });
+
+        await nextTick();
+        wrapper.vm.dispatchResizeTransaction(0, [140]);
+
+        expect(wrapper.emitted('resize-error')?.[0]?.[0]).toMatchObject({
+          columnIndex: 0,
+          error: expect.stringMatching(/editor view/i),
+        });
+
+        wrapper.unmount();
+      },
+    );
+
+    it('does not fall back to the body editor when a footer sub-editor cannot be resolved (SD-4370)', async () => {
+      const bodyEditor = createMockEditor();
+      bodyEditor.converter = {
+        headerEditors: [],
+        footerEditors: [],
+      };
+      bodyEditor.presentationEditor = {
+        ensureHeaderFooterEditor: vi.fn(() => null),
+      };
+      const tableElement = createMockTableElement();
+      tableElement.getAttribute = vi.fn((attr) => {
+        if (attr === 'data-layout-story') return 'footer:rIdFooter';
+        if (attr === 'data-table-boundaries') {
+          return JSON.stringify({
+            columns: [
+              { i: 0, x: 0, w: 100, min: 50, r: 1 },
+              { i: 1, x: 100, w: 150, min: 50, r: 1 },
+              { i: 2, x: 250, w: 100, min: 50, r: 1 },
+            ],
+          });
+        }
+        if (attr === 'data-sd-block-id') return 'footer-table';
+        return null;
+      });
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: bodyEditor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchResizeTransaction(0, [140, 110, 100]);
+
+      expect(bodyEditor.view.state.tr.setNodeMarkup).not.toHaveBeenCalled();
+      expect(wrapper.emitted('resize-error')?.[0]?.[0]).toMatchObject({
+        columnIndex: 0,
+        error: expect.stringMatching(/header\/footer editor/i),
+      });
+
+      wrapper.unmount();
+    });
+
     it('mirrors the new span width into tableCellProperties.cellWidth so the fixed-layout solver observes the edit', async () => {
       const editor = createMockEditor();
       const tableElement = createMockTableElement();
@@ -1098,6 +1463,109 @@ describe('TableResizeOverlay', () => {
 
       wrapper.unmount();
     });
+  });
+
+  describe('dispatchRowResizeTransaction', () => {
+    it.each(['header', 'footer'])(
+      'invalidates only the header/footer measure cache after a $kind-table row resize',
+      async (kind) => {
+        const { measureCache, invalidateHeaderFooterMeasureCache } = await import('@superdoc/layout-bridge');
+        measureCache.invalidate.mockClear();
+        invalidateHeaderFooterMeasureCache.mockClear();
+
+        const bodyEditor = createMockRowEditor();
+        const headerFooterEditor = createMockRowEditor();
+        const id = `rId${kind}`;
+        const blockId = `hf-${kind}-${id}-0-table`;
+        bodyEditor.converter = {
+          headerEditors: kind === 'header' ? [{ id, editor: headerFooterEditor }] : [],
+          footerEditors: kind === 'footer' ? [{ id, editor: headerFooterEditor }] : [],
+        };
+        const tableElement = createMockTableElement(undefined, {
+          getAttribute: vi.fn((attr) => {
+            if (attr === 'data-layout-story') return `${kind}:${id}`;
+            if (attr === 'data-table-boundaries')
+              return JSON.stringify({ rows: [{ i: 0, y: 0, h: 40, min: 20, r: 1 }] });
+            if (attr === 'data-sd-block-id') return blockId;
+            return null;
+          }),
+        });
+        const wrapper = mount(TableResizeOverlay, {
+          props: { editor: bodyEditor, visible: true, tableElement },
+        });
+
+        await nextTick();
+        wrapper.vm.dispatchRowResizeTransaction(0, 60);
+
+        expect(measureCache.invalidate).not.toHaveBeenCalled();
+        expect(invalidateHeaderFooterMeasureCache).toHaveBeenCalledWith([blockId]);
+
+        wrapper.unmount();
+      },
+    );
+
+    it('invalidates only the body measure cache after a body-table row resize', async () => {
+      const { measureCache, invalidateHeaderFooterMeasureCache } = await import('@superdoc/layout-bridge');
+      measureCache.invalidate.mockClear();
+      invalidateHeaderFooterMeasureCache.mockClear();
+
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockRowEditor(),
+          visible: true,
+          tableElement: createMockTableElement(undefined, {
+            getAttribute: vi.fn((attr) => {
+              if (attr === 'data-table-boundaries')
+                return JSON.stringify({ rows: [{ i: 0, y: 0, h: 40, min: 20, r: 1 }] });
+              if (attr === 'data-sd-block-id') return 'body-table';
+              return null;
+            }),
+          }),
+        },
+      });
+
+      await nextTick();
+      wrapper.vm.dispatchRowResizeTransaction(0, 60);
+
+      expect(measureCache.invalidate).toHaveBeenCalledWith(['body-table']);
+      expect(invalidateHeaderFooterMeasureCache).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it.each(['header', 'footer'])(
+      'emits resize-error when a resolved $kind editor no longer has a view',
+      async (kind) => {
+        const bodyEditor = createMockRowEditor();
+        const id = `rId${kind}`;
+        bodyEditor.converter = {
+          headerEditors: kind === 'header' ? [{ id, editor: { view: undefined } }] : [],
+          footerEditors: kind === 'footer' ? [{ id, editor: { view: undefined } }] : [],
+        };
+        const tableElement = createMockTableElement(undefined, {
+          getAttribute: vi.fn((attr) => {
+            if (attr === 'data-layout-story') return `${kind}:${id}`;
+            if (attr === 'data-table-boundaries')
+              return JSON.stringify({ rows: [{ i: 0, y: 0, h: 40, min: 20, r: 1 }] });
+            if (attr === 'data-sd-block-id') return 'footer-table';
+            return null;
+          }),
+        });
+        const wrapper = mount(TableResizeOverlay, {
+          props: { editor: bodyEditor, visible: true, tableElement },
+        });
+
+        await nextTick();
+        wrapper.vm.dispatchRowResizeTransaction(0, 60);
+
+        expect(wrapper.emitted('resize-error')?.[0]?.[0]).toMatchObject({
+          rowIndex: 0,
+          error: expect.stringMatching(/editor view/i),
+        });
+
+        wrapper.unmount();
+      },
+    );
   });
 
   // ==========================================================================

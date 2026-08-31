@@ -1642,6 +1642,25 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Ensure a persistent header/footer sub-editor exists for `refId` without
+   * entering the visible H/F editing UI. `refId` may be a concrete relationship
+   * id or a painted variant label (`default` / `first` / `even` / `odd`).
+   * Used by table resize (and similar decoration-target mutations) so painted
+   * furniture can commit against the owning story even when
+   * `converter.footerEditors` / `headerEditors` is still empty.
+   */
+  ensureHeaderFooterEditor(kind: 'header' | 'footer', refId: string): Editor | null {
+    if (!refId || (kind !== 'header' && kind !== 'footer')) return null;
+    const manager = this.#headerFooterSession?.manager;
+    if (!manager) return null;
+    const byId = manager.getDescriptorById(refId);
+    const descriptor =
+      byId?.kind === kind ? byId : (manager.getDescriptors(kind).find((entry) => entry.variant === refId) ?? null);
+    if (!descriptor || descriptor.kind !== kind) return null;
+    return manager.ensureEditorSync(descriptor);
+  }
+
+  /**
    * The {@link StoryLocator} for the currently routed editor, or `null`
    * when the body editor is active. Notes (footnote/endnote) flow
    * through the generic story-session manager; headers/footers flow

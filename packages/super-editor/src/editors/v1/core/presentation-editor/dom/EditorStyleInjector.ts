@@ -111,13 +111,16 @@ const MOVABLE_OBJECT_INTERACTION_STYLES = `
   cursor: grabbing;
 }
 
-/* Header/footer decoration containers are pointer-events:none; keep images targetable for hover/resize. */
+/* Header/footer decoration containers are pointer-events:none; keep images and
+ * tables targetable for hover/resize (same pattern as image fragments). */
 .superdoc-layout .superdoc-page-header .superdoc-image-fragment,
 .superdoc-layout .superdoc-page-footer .superdoc-image-fragment,
 .superdoc-layout .superdoc-page-header .superdoc-inline-image-clip-wrapper,
 .superdoc-layout .superdoc-page-footer .superdoc-inline-image-clip-wrapper,
 .superdoc-layout .superdoc-page-header .superdoc-inline-image,
-.superdoc-layout .superdoc-page-footer .superdoc-inline-image {
+.superdoc-layout .superdoc-page-footer .superdoc-inline-image,
+.superdoc-layout .superdoc-page-header .superdoc-table-fragment,
+.superdoc-layout .superdoc-page-footer .superdoc-table-fragment {
   pointer-events: auto;
 }
 

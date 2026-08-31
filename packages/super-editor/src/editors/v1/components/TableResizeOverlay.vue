@@ -53,7 +53,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { pixelsToTwips, twipsToPixels } from '@core/super-converter/helpers.js';
-import { measureCache } from '@superdoc/layout-bridge';
+import { measureCache, invalidateHeaderFooterMeasureCache } from '@superdoc/layout-bridge';
 import { buildWidthAuthoringTableAttrs } from '../document-api-adapters/helpers/table-attr-sync.js';
 
 /**
@@ -1001,13 +1001,88 @@ function onDocumentMouseUp(event) {
  *   column 0 (see resizableBoundaries) so column 1 cells are real
  *   targets and the destructive write would occur.
  */
+/**
+ * Header/footer tables are owned by sub-editors. Their painted `data-pm-start`
+ * values collide with body positions, so resolving against the body doc resizes
+ * the wrong table (SD-4370). Returns null when the story is header/footer but
+ * no matching sub-editor can be resolved — callers must refuse the commit rather
+ * than fall back to the body editor.
+ */
+function resolveEditorForTableElement(editor, tableElement) {
+  if (!editor || !tableElement) return editor;
+  const headerFooterStory = getHeaderFooterStory(tableElement);
+  if (!headerFooterStory) return editor;
+  const { kind, id } = headerFooterStory;
+  if (!id) return null;
+  const converter = editor.converter;
+  const collection = kind === 'header' ? converter?.headerEditors : converter?.footerEditors;
+  const variantIds = kind === 'header' ? converter?.headerIds : converter?.footerIds;
+  const concreteId = typeof variantIds?.[id] === 'string' ? variantIds[id] : id;
+  if (Array.isArray(collection)) {
+    const match = collection.find((item) => item?.id === id || item?.id === concreteId);
+    if (match?.editor) return match.editor;
+  }
+  // Painted H/F tables are targetable before a session registers the sub-editor;
+  // ensure a persistent registry editor so the commit owns the furniture story.
+  return editor.presentationEditor?.ensureHeaderFooterEditor?.(kind, concreteId) ?? null;
+}
+
+function readElementOrClosestAttribute(tableElement, attributeName) {
+  const direct = typeof tableElement.getAttribute === 'function' ? tableElement.getAttribute(attributeName) : null;
+  if (typeof direct === 'string' && direct.length > 0) return direct;
+  if (typeof tableElement.closest !== 'function') return '';
+  return tableElement.closest(`[${attributeName}]`)?.getAttribute?.(attributeName) || '';
+}
+
+function getHeaderFooterStory(tableElement) {
+  const layoutStory = readElementOrClosestAttribute(tableElement, 'data-layout-story');
+  if (!layoutStory || layoutStory === 'body') return null;
+  const separator = layoutStory.indexOf(':');
+  const kind = separator === -1 ? layoutStory : layoutStory.slice(0, separator);
+  const storyId = separator === -1 ? '' : layoutStory.slice(separator + 1);
+  if (kind !== 'header' && kind !== 'footer') return null;
+  // Painter may stamp a concrete rId on the decoration container even when the
+  // fragment story is variant-only (`footer:default`) or kind-only (`footer`).
+  const id =
+    readElementOrClosestAttribute(tableElement, 'data-sd-headerfooter-ref-id') ||
+    storyId ||
+    readElementOrClosestAttribute(tableElement, 'data-sd-headerfooter-variant');
+  return { kind, id };
+}
+
+function invalidateTableMeasureCache(tableElement) {
+  const blockId = tableElement?.getAttribute('data-sd-block-id');
+  if (!blockId || !blockId.trim()) return;
+  if (getHeaderFooterStory(tableElement)) {
+    invalidateHeaderFooterMeasureCache([blockId]);
+    return;
+  }
+  measureCache.invalidate([blockId]);
+}
+
 function dispatchResizeTransaction(columnIndex, newWidths, isRightEdge = false) {
-  if (!props.editor?.view || !props.tableElement) {
+  if (!props.tableElement) {
+    return;
+  }
+  const targetEditor = resolveEditorForTableElement(props.editor, props.tableElement);
+  if (targetEditor === null) {
+    emit('resize-error', {
+      columnIndex,
+      error: 'Header/footer editor not available for table resize',
+    });
+    return;
+  }
+  const view = targetEditor?.view;
+  if (!view) {
+    emit('resize-error', {
+      columnIndex,
+      error: 'Editor view not available for table resize',
+    });
     return;
   }
 
   try {
-    const { state, dispatch } = props.editor.view;
+    const { state, dispatch } = view;
     const tr = state.tr;
 
     // Find table position
@@ -1054,11 +1129,8 @@ function dispatchResizeTransaction(columnIndex, newWidths, isRightEdge = false) 
     // Dispatch transaction
     dispatch(tr);
 
-    // Invalidate the measure cache for this table to force re-measurement with new widths
-    const blockId = props.tableElement?.getAttribute('data-sd-block-id');
-    if (blockId && blockId.trim()) {
-      measureCache.invalidate([blockId]);
-    }
+    // The table block ID is story-local, so only invalidate its owning cache.
+    invalidateTableMeasureCache(props.tableElement);
 
     // Emit success event
     emit('resize-success', { columnIndex, newWidths });
@@ -1286,10 +1358,26 @@ function onRowDocumentMouseUp() {
  * @param {number} newHeightPx - New row height in pixels
  */
 function dispatchRowResizeTransaction(rowIndex, newHeightPx) {
-  if (!props.editor?.view || !props.tableElement) return;
+  if (!props.tableElement) return;
+  const targetEditor = resolveEditorForTableElement(props.editor, props.tableElement);
+  if (targetEditor === null) {
+    emit('resize-error', {
+      rowIndex,
+      error: 'Header/footer editor not available for table resize',
+    });
+    return;
+  }
+  const view = targetEditor?.view;
+  if (!view) {
+    emit('resize-error', {
+      rowIndex,
+      error: 'Editor view not available for table resize',
+    });
+    return;
+  }
 
   try {
-    const { state, dispatch } = props.editor.view;
+    const { state, dispatch } = view;
     const tr = state.tr;
 
     const tablePos = findTablePosition(state, props.tableElement);
@@ -1339,11 +1427,7 @@ function dispatchRowResizeTransaction(rowIndex, newHeightPx) {
     tr.setNodeMarkup(rowPos, null, newAttrs);
     dispatch(tr);
 
-    // Invalidate measure cache
-    const blockId = props.tableElement?.getAttribute('data-sd-block-id');
-    if (blockId && blockId.trim()) {
-      measureCache.invalidate([blockId]);
-    }
+    invalidateTableMeasureCache(props.tableElement);
 
     emit('resize-success', { rowIndex, newHeight: newHeightPx });
   } catch (error) {

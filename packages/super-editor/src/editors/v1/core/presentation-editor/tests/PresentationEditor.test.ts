@@ -3224,6 +3224,28 @@ describe('PresentationEditor', () => {
       boundingSpy.mockRestore();
     });
 
+    it('ensureHeaderFooterEditor resolves a variant label to the owning story editor', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const byVariant = editor.ensureHeaderFooterEditor('footer', 'default');
+      const byRefId = editor.ensureHeaderFooterEditor('footer', 'rId-footer-default');
+      const headerByVariant = editor.ensureHeaderFooterEditor('header', 'default');
+      const headerByRefId = editor.ensureHeaderFooterEditor('header', 'rId-header-default');
+
+      expect(byVariant).toBeTruthy();
+      expect(byRefId).toBe(byVariant);
+      expect(headerByVariant).toBeTruthy();
+      expect(headerByRefId).toBe(headerByVariant);
+    });
+
     it('does not activate a header story for stale tracked-change navigation', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
 

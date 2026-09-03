@@ -4,7 +4,7 @@
 
 import type { BlockId, TableAttrs, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
 import { describe, expect, it } from 'bun:test';
-import { layoutTableBlock } from './layout-table.js';
+import { createAnchoredTableFragment, layoutTableBlock } from './layout-table.js';
 
 /**
  * Creates a dummy table fragment for test scenarios where prior page content is needed.
@@ -4952,5 +4952,47 @@ describe('layoutTableBlock', () => {
       const lastBoundary = boundaries![boundaries!.length - 1];
       expect(lastBoundary.x + lastBoundary.width).toBe(fragment.width);
     });
+  });
+});
+
+describe('createAnchoredTableFragment', () => {
+  const block = createMockTableBlock(1);
+  const measure = createMockTableMeasure([500], [40]);
+
+  it('records the flow column it was given', () => {
+    // An anchored table's `x` does not identify its column. `resolveAnchoredGraphicX` places one
+    // justified to `end` at `col.x + (col.width - width)`, a NEGATIVE offset from its own column
+    // once the table is wider than it — and `end` is the default for any `w:bidiVisual` table — so
+    // an over-wide table BEGINS inside an earlier column without ever having left its own.
+    // Measured on 2 equal columns over a 624px content area (288px each, 48px gutter): a 500px
+    // table owned by column 1 lands at content x 124, inside column 0. Three consumers had to guess
+    // the column from that origin and all three guessed wrong — balancing's fragment ordering,
+    // `determineTableColumn` for hit testing, and the painter's column-separator gate.
+    const fragment = createAnchoredTableFragment(block, measure, 220, 300, 1);
+
+    expect(fragment.columnIndex).toBe(1);
+    expect(fragment.isAnchored).toBe(true);
+    expect(fragment.x).toBe(220);
+  });
+
+  it('omits the record entirely when the caller has no column context', () => {
+    // Absent is NOT column 0. The separator gate reads this field ahead of any geometry, so a
+    // fabricated 0 would be evidence the fragment never carried — and on a page whose text never
+    // left the first column that is exactly the difference between a rule and no rule.
+    const fragment = createAnchoredTableFragment(block, measure, 220, 300);
+
+    expect('columnIndex' in fragment).toBe(false);
+    expect(fragment.columnIndex).toBeUndefined();
+  });
+
+  it('rejects a column that is not a usable ordinal', () => {
+    // Same reasoning as above, one step further out: NaN and Infinity reach here from arithmetic on
+    // a malformed anchor, and writing either would make the field unusable rather than absent.
+    expect(createAnchoredTableFragment(block, measure, 0, 0, Number.NaN).columnIndex).toBeUndefined();
+    expect(createAnchoredTableFragment(block, measure, 0, 0, Number.POSITIVE_INFINITY).columnIndex).toBeUndefined();
+    // A fractional or negative ordinal is floored into range rather than dropped, because it still
+    // names a column the caller meant.
+    expect(createAnchoredTableFragment(block, measure, 0, 0, 1.9).columnIndex).toBe(1);
+    expect(createAnchoredTableFragment(block, measure, 0, 0, -3).columnIndex).toBe(0);
   });
 });

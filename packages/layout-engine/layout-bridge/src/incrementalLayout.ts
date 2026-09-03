@@ -1649,14 +1649,25 @@ const assignFootnotesToColumns = (
       if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
         columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
       } else if (fragment && typeof fragment.x === 'number') {
-        // Geometry-derived midpoint assignment: assign the ref to the column whose right edge plus
-        // half its own gap the fragment falls before. Per-column widths/gaps come from the resolved
+        // Geometry-derived midpoint assignment: assign the ref to the column whose far edge plus
+        // half its own gap the fragment falls short of. Per-column widths/gaps come from the resolved
         // geometry, preserving the prior midpoint rule. The old uniform-stride branch was unreachable
         // for count>1 (normalized columns always carry widths). (SD-2629 4c)
+        //
+        // "Far edge" is direction-relative: in an RTL section column 0 sits on the right, so x
+        // DESCENDS with the index and the fragment must be compared against the column's LEFT edge
+        // minus half its gap instead. Walking the geometry with the LTR test in an RTL section
+        // matched column 0 for every fragment, which collapsed all of a page's footnotes into the
+        // first column's group — the left column's notes printed under the right column and its own
+        // note area stayed empty.
         const geometry = getColumnGeometry(columns);
+        const mirrored = geometry.length > 1 && geometry[1].x < geometry[0].x;
         columnIndex = Math.max(0, geometry.length - 1);
         for (const col of geometry) {
-          if (fragment.x < columns.left + col.x + col.width + col.gapAfter / 2) {
+          const boundary = mirrored
+            ? columns.left + col.x - col.gapAfter / 2
+            : columns.left + col.x + col.width + col.gapAfter / 2;
+          if (mirrored ? fragment.x >= boundary : fragment.x < boundary) {
             columnIndex = col.index;
             break;
           }

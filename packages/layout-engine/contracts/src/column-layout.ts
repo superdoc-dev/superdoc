@@ -1,4 +1,4 @@
-import type { ColumnLayout } from './index.js';
+import type { BaseDirection, ColumnLayout } from './index.js';
 
 /**
  * Resolved geometry for a single column. `x` and `separatorX` are CONTENT-RELATIVE (measured from
@@ -15,7 +15,24 @@ export type ColumnGeometry = {
   separatorX?: number;
 };
 
-export type NormalizedColumnLayout = ColumnLayout & { width: number };
+export type NormalizedColumnLayout = ColumnLayout & {
+  width: number;
+  /**
+   * The content-area width the layout was normalized against, in px.
+   *
+   * Only RTL geometry reads it, and it exists because `width` above is the WIDEST column, not the
+   * strip: explicit widths are deliberately not scaled to fill the content area (Word renders an
+   * authored 2880tw column as 2880tw and leaves the slack), so a strip of explicit columns can be
+   * narrower — or wider — than the area it sits in. Mirroring such a strip about its own span would
+   * keep it pinned to the LEFT margin and only swap the columns inside it, which is not what Word
+   * does: the first column belongs against the RIGHT margin and the slack falls on the left.
+   *
+   * Optional because `getColumnGeometry` also accepts hand-built layouts (column balancing assembles
+   * one directly). When absent, RTL mirrors about the strip's own span, which is exact whenever the
+   * columns fill the area — always true in equal mode.
+   */
+  contentWidth?: number;
+};
 
 export function widthsEqual(a?: number[], b?: number[]): boolean {
   if (!a && !b) return true;
@@ -69,6 +86,7 @@ export function cloneColumnLayout(columns?: ColumnLayout): ColumnLayout {
         ...(Array.isArray(columns.gaps) ? { gaps: [...columns.gaps] } : {}),
         ...(columns.equalWidth !== undefined ? { equalWidth: columns.equalWidth } : {}),
         ...(columns.withSeparator !== undefined ? { withSeparator: columns.withSeparator } : {}),
+        ...(columns.direction !== undefined ? { direction: columns.direction } : {}),
       }
     : { count: 1, gap: 0 };
 }
@@ -116,7 +134,14 @@ export function resolveColumnLayout(input: ColumnLayout): ColumnLayout {
  * own `gaps[i]` when provided (SD-2629 step 4), falling back to the uniform scalar gap; the last
  * column has no following gap. The separator sits at the midpoint of that column's own gap.
  */
-function buildColumnGeometry(widths: number[], gap: number, withSeparator: boolean, gaps?: number[]): ColumnGeometry[] {
+function buildColumnGeometry(
+  widths: number[],
+  gap: number,
+  withSeparator: boolean,
+  gaps?: number[],
+  direction?: BaseDirection,
+  contentWidth?: number,
+): ColumnGeometry[] {
   const geometry: ColumnGeometry[] = [];
   let x = 0;
   for (let i = 0; i < widths.length; i += 1) {
@@ -128,7 +153,29 @@ function buildColumnGeometry(widths: number[], gap: number, withSeparator: boole
     geometry.push(col);
     x += width + gapAfter;
   }
-  return geometry;
+  if (direction !== 'rtl') return geometry;
+
+  // RTL: the FIRST column belongs on the right (ECMA-376 §17.6.1). A single column is mirrored too:
+  // it is a no-op when the column fills the content area, but an explicit column that underfills it
+  // still belongs against the RIGHT margin, by the same axis rule as a multi-column strip.
+  //
+  // Mirror rather than reverse the array: `index` stays the FILL order, so every consumer that
+  // walks columns 0..n-1 keeps filling in document order and only the painted x changes. `x` stays
+  // the LEFT edge of the column, which is what the whole geometry API and its callers mean by `x`.
+  // `gapAfter` is likewise untouched — it is the gap after this column in fill order, and in RTL
+  // that gap lies to its left, exactly where the mirrored x places it.
+  //
+  // The mirror axis is the CONTENT AREA, not the strip: explicit widths are not scaled to fill it
+  // (see normalizeColumnLayout), so a strip that underfills must end up against the RIGHT margin
+  // with the slack on the left — mirroring about the strip's own span would leave it pinned left
+  // and merely swap the columns inside it. Falls back to the span when the area is unknown, which
+  // is exact whenever the columns fill it (always so in equal mode).
+  const span = contentWidth ?? x;
+  return geometry.map((col) => ({
+    ...col,
+    x: span - (col.x + col.width),
+    ...(col.separatorX === undefined ? {} : { separatorX: span - col.separatorX }),
+  }));
 }
 
 export function normalizeColumnLayout(
@@ -165,8 +212,27 @@ export function normalizeColumnLayout(
   }
 
   // Per-column gaps drive geometry in explicit mode (step 4); equal mode uses the uniform gap.
+  //
+  // Clamped to >= 0 like the scalar `gap` above. OOXML cannot express a negative gutter — `w:space`
+  // is ST_TwipsMeasure, unsigned — and letting one through breaks the invariant the geometry API
+  // relies on: that in an LTR layout `x` rises with the column index. Direction-aware consumers read
+  // that monotonicity to tell a mirrored strip from an upright one, so a negative gap wide enough to
+  // pull a column back behind its predecessor would make an LTR layout answer hit tests as if it
+  // were RTL.
+  // A HOLE in the array falls back to the scalar, exactly as `buildColumnGeometry`'s `gaps?.[i] ??
+  // gap` and `effectiveColumnGaps` already do for a SHORT one. `Math.max(0, undefined)` is NaN, and
+  // NaN is not nullish, so the geometry fallback below could not catch it: `{gap: 40, gaps: [30,
+  // undefined]}` normalized to `gaps: [30, NaN]` and painted `col2.x = NaN`, i.e. a column with no
+  // position at all. `gaps?: number[]` forbids a hole under TypeScript and nothing in this repo
+  // constructs a `gaps` array yet, so this is unreachable today — and it stops being unreachable the
+  // day the importer starts projecting `w:cols/w:col/@w:space` per column. A non-finite entry takes
+  // the same fallback, since the reason to distrust it is identical.
   const gaps =
-    explicitWidths.length > 0 && Array.isArray(input?.gaps) ? input.gaps.slice(0, Math.max(0, count - 1)) : undefined;
+    explicitWidths.length > 0 && Array.isArray(input?.gaps)
+      ? input.gaps
+          .slice(0, Math.max(0, count - 1))
+          .map((value) => (Number.isFinite(value) ? Math.max(0, value) : Math.max(0, gap)))
+      : undefined;
 
   const width = widths.reduce((max, value) => Math.max(max, value), 0);
 
@@ -176,6 +242,8 @@ export function normalizeColumnLayout(
       gap: 0,
       width: Math.max(0, contentWidth),
       ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
+      ...(input?.direction !== undefined ? { direction: input.direction } : {}),
+      contentWidth: Math.max(0, contentWidth),
     };
   }
 
@@ -186,7 +254,9 @@ export function normalizeColumnLayout(
     ...(gaps && gaps.length > 0 ? { gaps } : {}),
     ...(input?.equalWidth !== undefined ? { equalWidth: input.equalWidth } : {}),
     ...(input?.withSeparator !== undefined ? { withSeparator: input.withSeparator } : {}),
+    ...(input?.direction !== undefined ? { direction: input.direction } : {}),
     width,
+    contentWidth: Math.max(0, contentWidth),
   };
 }
 
@@ -207,7 +277,14 @@ export function getColumnGeometry(normalized: NormalizedColumnLayout): ColumnGeo
     Array.isArray(normalized.widths) && normalized.widths.length > 0
       ? normalized.widths
       : new Array(count).fill(normalized.width);
-  return buildColumnGeometry(widths, normalized.gap, Boolean(normalized.withSeparator), normalized.gaps);
+  return buildColumnGeometry(
+    widths,
+    normalized.gap,
+    Boolean(normalized.withSeparator),
+    normalized.gaps,
+    normalized.direction,
+    normalized.contentWidth,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,13 +319,63 @@ export function getColumnSeparatorPositions(geometry: ColumnGeometry[], originX 
     .map((col) => originX + (col.separatorX as number));
 }
 
-/** Index of the column containing absolute `x` (clicks in a gap map to the preceding column). */
+/**
+ * Index of the column whose OWN span contains absolute `x`, or `null` when `x` lies in no column at
+ * all — a gutter, the page margins, or something that is not column flow in the first place.
+ *
+ * This is the strict counterpart to `getColumnAtX` below, and the two exist because paint-time and
+ * hit-testing want opposite answers. A click has to select something, so `getColumnAtX` clamps and
+ * hands a gap to its neighbouring column. Asking "is there content in a later column" must not
+ * clamp: `page.items` carries page-anchored objects, and a full-width watermark belongs to no
+ * column, so answering with one makes it evidence for chrome Word does not draw.
+ *
+ * Direction-agnostic by construction. It tests containment in each column's own span instead of
+ * comparing against a boundary, so it does not care whether `x` ascends or descends with the index,
+ * and — unlike an edge test — it is not fooled by a fragment WIDER than its column. An over-wide
+ * table is placed at its column's left edge and overflows rightward in both directions, so its
+ * origin still identifies its column while its trailing edge does not.
+ *
+ * Spans are half-open — `[x, x + width)` — so that adjacent columns authored with no gutter at all
+ * (`w:space="0"`) do not both claim the boundary they share. That boundary is exactly where the
+ * later column's own content is placed, and an inclusive upper bound would hand it to the earlier
+ * column instead. Columns are scanned in fill order and the first containing span wins, which
+ * after that only matters for an overfull explicit strip whose columns genuinely overlap.
+ */
+export function findColumnContaining(geometry: ColumnGeometry[], x: number, originX = 0): number | null {
+  const cx = x - originX;
+  for (const col of geometry) {
+    if (cx >= col.x && cx < col.x + col.width) return col.index;
+  }
+  return null;
+}
+
+/**
+ * Index of the column containing absolute `x` (clicks in a gap map to the preceding column).
+ *
+ * The walk is direction-aware and cannot assume ascending `x`: in an RTL section column 0 sits on
+ * the right, so `x` DESCENDS with the index. The mirrored branch keeps the same rule the LTR branch
+ * states — a point in a gap belongs to the column that precedes it in FILL order — which is what
+ * makes a drag that crosses the gutter keep extending from the column it is leaving instead of
+ * jumping. Direction is read off the geometry rather than taken as an argument, so every existing
+ * caller keeps working unchanged.
+ *
+ * Both branches test a HALF-OPEN span, so this agrees with `findColumnContaining` on every boundary
+ * the two can both answer. The LTR branch gets that from `cx >= col.x`: a point on a shared edge is
+ * the later column's, because that is where the later column's content begins. The mirrored branch
+ * has to say the same thing from the other side — the shared edge is the EARLIER fill column's left
+ * edge there — which is `cx < col.x + col.width`, exclusive. An inclusive bound handed that point to
+ * the later column, contradicting the half-open span the geometry places content in, and it also
+ * pulled in the point one pixel-width past a column's trailing edge, which is gutter and belongs to
+ * the preceding column. With `w:space="0"` the two coincide and every column boundary in an RTL
+ * section resolved one column too far.
+ */
 export function getColumnAtX(geometry: ColumnGeometry[], x: number, originX = 0): number {
   if (geometry.length === 0) return 0;
   const cx = x - originX;
+  const mirrored = geometry.length > 1 && geometry[1].x < geometry[0].x;
   let result = 0;
   for (const col of geometry) {
-    if (cx >= col.x) result = col.index;
+    if (mirrored ? cx < col.x + col.width : cx >= col.x) result = col.index;
     else break;
   }
   return result;
@@ -263,19 +390,29 @@ export function columnLayoutsEqual(a?: ColumnLayout, b?: ColumnLayout): boolean 
     a.gap === b.gap &&
     a.equalWidth === b.equalWidth &&
     Boolean(a.withSeparator) === Boolean(b.withSeparator) &&
+    (a.direction ?? 'ltr') === (b.direction ?? 'ltr') &&
     widthsEqual(a.widths, b.widths) &&
     widthsEqual(a.gaps, b.gaps)
   );
 }
 
 /**
+ * The gutters a layout will actually be drawn with: `gaps[i]` positionally when present, the scalar
+ * gap otherwise, each floored at 0. Mirrors `normalizeColumnLayout` so render equality stays exactly
+ * as discriminating as the geometry it stands in for.
+ */
+function effectiveColumnGaps(columns: ColumnLayout, count: number): number[] {
+  const gap = Math.max(0, columns.gap ?? 0);
+  const authored = Array.isArray(columns.gaps) ? columns.gaps : [];
+  return Array.from({ length: Math.max(0, count - 1) }, (_, i) => Math.max(0, authored[i] ?? gap));
+}
+
+/**
  * Render equality: true when two column configs produce the SAME rendered layout even if their raw
  * fields differ. Compares the canonical render form for today's renderer (resolved mode + count,
- * scalar gap, withSeparator, and in explicit mode the sliced widths) and deliberately ignores raw
- * `equalWidth` and the surplus count/widths that resolution discards. Per-column `gaps` are
- * intentionally ignored until geometry/separators consume them (step 4), so a gaps-only authored
- * delta does not split regions or invalidate the normalized-columns cache before it becomes
- * paint-significant. Use for region/cache change detection so e.g. `{num:4, widths:[a,b]}` vs
+ * scalar gap, withSeparator, and in explicit mode the sliced widths and per-column `gaps`) and
+ * deliberately ignores raw `equalWidth` and the surplus count/widths that resolution discards.
+ * Use for region/cache change detection so e.g. `{num:4, widths:[a,b]}` vs
  * `{num:2, widths:[a,b]}`, or `equalWidth:true` vs an omitted equalWidth, do not split into
  * separate regions. (SD-2629)
  */
@@ -285,12 +422,61 @@ export function columnRenderLayoutsEqual(a?: ColumnLayout, b?: ColumnLayout): bo
   const mode = resolveColumnMode(a);
   if (mode !== resolveColumnMode(b)) return false;
   if (resolveColumnCount(a) !== resolveColumnCount(b)) return false;
-  if ((a.gap ?? 0) !== (b.gap ?? 0)) return false;
   if (Boolean(a.withSeparator) !== Boolean(b.withSeparator)) return false;
+  // Direction IS paint-significant: it decides which side column 0 lands on, so two layouts that
+  // differ only here must split regions and invalidate the normalized-columns cache.
+  if ((a.direction ?? 'ltr') !== (b.direction ?? 'ltr')) return false;
   if (mode === 'explicit') {
     const ra = resolveColumnLayout(a);
     const rb = resolveColumnLayout(b);
+    // Per-column gaps ARE paint-significant. `buildColumnGeometry` reads `gaps[i] ?? gap` for both
+    // the column x and the separator x, so a gaps-only delta moves every column after the first.
+    // This comparison used to skip them, on the note that nothing consumed them yet; SD-2629 step 4
+    // made that false, and while it was skipped two sections differing only in their per-column gaps
+    // compared equal — no region split, no cache invalidation, and the later section laid out with
+    // the earlier one's gutters.
+    //
+    // Compare the gutters that will actually be DRAWN, not the authored arrays. `resolveColumnLayout`
+    // emits `gaps` only when the author supplied them and pads a short array with 0, while geometry
+    // falls back to the scalar gap and floors at 0 — so the authored arrays are equal in cases that
+    // render differently (a short `[20]` vs `[20, 0]`) and differ in cases that render identically
+    // (an omitted array vs one spelling out the scalar gap, or a negative gap vs 0). Deriving the
+    // effective gutters the way `normalizeColumnLayout` does keeps this predicate exactly as
+    // discriminating as the geometry it is standing in for.
+    if (!widthsEqual(effectiveColumnGaps(a, resolveColumnCount(a)), effectiveColumnGaps(b, resolveColumnCount(b)))) {
+      return false;
+    }
     if (!widthsEqual(ra.widths, rb.widths)) return false;
+    // The one way the scalar still reaches explicit WIDTHS: `normalizeColumnLayout` floors a
+    // fabricated width at 1px, and collapses to a single column when the usable width falls to
+    // epsilon — both gated on the sign of `contentWidth - gap * (count - 1)`, which the scalar moves.
+    // It only bites when an authored width is itself sub-pixel (under ~15 twips), because at 1px or
+    // more the floor and the collapse are both no-ops. Rather than model a content-width-dependent
+    // branch in a predicate documented as content-width-INDEPENDENT, refuse to call such a pair equal
+    // at all: `{widths: [0.5, 0.5, 0.5], gaps: [1, 1]}` renders as three 1px columns under one scalar
+    // gap and three 0.5px columns under another, and at 1e-5 the second collapses to one full-width
+    // column. Costs nothing on any real document.
+    const hasSubPixelWidth = (resolved: ColumnLayout): boolean => (resolved.widths ?? []).some((w) => w < 1);
+    if ((hasSubPixelWidth(ra) || hasSubPixelWidth(rb)) && (a.gap ?? 0) !== (b.gap ?? 0)) return false;
+  } else if ((a.gap ?? 0) !== (b.gap ?? 0)) {
+    // Equal mode reads the scalar gap twice over — it IS every gutter, and `normalizeColumnLayout`
+    // subtracts the total from the content area before dividing it, so it sets the column width as
+    // well. Nothing else can stand in for it here.
+    //
+    // Explicit mode deliberately does NOT compare it on its own. There the scalar is only the
+    // fallback for a gutter `gaps` does not supply, and `effectiveColumnGaps` above already folds it
+    // in at exactly that position — so a layout whose `gaps` spell out every gutter renders
+    // identically no matter what the scalar says, and comparing it separately split a region and
+    // invalidated the normalized-columns cache over a value nothing read. The one route by which the
+    // scalar still reaches explicit WIDTHS — normalize's sub-pixel `Math.max(1, …)` floor and its
+    // epsilon collapse, both keyed on the sign of `contentWidth - gap * (count - 1)` — is handled by
+    // the `hasSubPixelWidth` guard in the explicit branch above, not waved off here: a width of 1px
+    // or more makes both no-ops, which is exactly the threshold that guard tests. That guard is
+    // COMPLETE rather than merely in scope — the epsilon collapse needs the MAXIMUM authored width
+    // at or under the epsilon, and both epsilons live in the tree are below 1px (1e-4 in
+    // `layout-engine/src/index.ts`, 1e-2 in `layout-bridge/src/incrementalLayout.ts`), so that route
+    // also implies a sub-pixel width. There is no path the guard misses.
+    return false;
   }
   return true;
 }

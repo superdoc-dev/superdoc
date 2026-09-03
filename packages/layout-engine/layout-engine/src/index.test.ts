@@ -7315,7 +7315,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(right.width).toBeCloseTo(365.4);
     });
 
-    it('keeps the current explicit column after a manual column break when only later per-column gaps differ', () => {
+    it('opens a new region after a manual column break when later per-column gaps differ', () => {
       const toExplicitColumns: FlowBlock = {
         kind: 'sectionBreak',
         id: 'sb-explicit',
@@ -7366,15 +7366,17 @@ describe('requirePageBoundary edge cases', () => {
 
       expect(p2.x).toBeCloseTo(50);
       expect(p3.x).toBeCloseTo(expectedSecondColumnX);
-      expect(p4.x).toBeCloseTo(expectedSecondColumnX);
-      expect(page.columnRegions).toHaveLength(2);
-      expect(page.columnRegions?.[1]?.columns).toEqual({
+      // Per-column gaps drive geometry, so the delta is paint-significant and opens its own region
+      // carrying the NEW gaps. It used to compare equal, and p4 was laid out with the old gutters.
+      expect(page.columnRegions).toHaveLength(3);
+      expect(page.columnRegions?.at(-1)?.columns).toEqual({
         count: 3,
         gap: 48,
         widths: [100, 100, 300],
-        gaps: [48, 48],
+        gaps: [48, 96],
         equalWidth: false,
       });
+      expect(p4.x).toBeCloseTo(50);
     });
 
     it('does not balance the final page for explicit custom-width columns', () => {

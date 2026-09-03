@@ -3920,7 +3920,9 @@ function* layoutDocumentSteps(
       const anchorX = tableBlock.anchor?.offsetH ?? columnX(state);
 
       floatManager.registerTable(tableBlock, tableMeasure, anchorY, state.columnIndex, state.page.number);
-      state.page.fragments.push(createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY));
+      state.page.fragments.push(
+        createAnchoredTableFragment(tableBlock, tableMeasure, anchorX, anchorY, state.columnIndex),
+      );
     }
   }
 
@@ -5193,6 +5195,11 @@ function toBalancingColumns(normalized: NormalizedColumns): SectionColumnLayout 
     ...(Array.isArray(normalized.widths) ? { widths: normalized.widths } : {}),
     ...(Array.isArray(normalized.gaps) ? { gaps: normalized.gaps } : {}),
     ...(normalized.equalWidth !== undefined ? { equalWidth: normalized.equalWidth } : {}),
+    // Direction and the content width it was measured against travel with the widths: balancing
+    // rebuilds the geometry and overwrites fragment x from it, so dropping them here would lay the
+    // balanced page out left-to-right inside an otherwise right-to-left section.
+    ...(normalized.direction !== undefined ? { direction: normalized.direction } : {}),
+    ...(normalized.contentWidth !== undefined ? { contentWidth: normalized.contentWidth } : {}),
   };
 }
 

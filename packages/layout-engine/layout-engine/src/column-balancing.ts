@@ -6,7 +6,14 @@
  * matching Microsoft Word's behavior.
  */
 
-import { getColumnGeometry, getColumnX, hasGenuinelyUnequalExplicitColumnWidths } from '@superdoc/contracts';
+import {
+  findColumnContaining,
+  getColumnAtX,
+  getColumnGeometry,
+  getColumnX,
+  hasGenuinelyUnequalExplicitColumnWidths,
+} from '@superdoc/contracts';
+import type { BaseDirection } from '@superdoc/contracts';
 
 // ============================================================================
 // Types and Interfaces
@@ -657,6 +664,16 @@ export interface SectionColumnLayout {
    */
   gaps?: number[];
   equalWidth?: boolean;
+  /**
+   * Section page direction (`w:sectPr/w:bidi`) and the content width it was normalized against.
+   *
+   * Declared here — and not left to the structural subset above — because balancing REBUILDS the
+   * geometry and then overwrites every fragment's `x` from it. A balanced page that dropped these
+   * would be laid out left-to-right while every earlier page of the same RTL section was laid out
+   * right-to-left, so the last page of a two-column Hebrew section would visibly flip.
+   */
+  direction?: BaseDirection;
+  contentWidth?: number;
 }
 
 export interface BalanceSectionOnPageArgs {
@@ -783,13 +800,123 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     precedingHeight: precedingHeightBeforeTable,
   });
 
-  // Order fragments in document order: by current column (x → left-to-right),
-  // then by y within each column. During unbalanced layout the paginator fills
-  // column 0 top-to-bottom, then column 1, etc. — so (x, y) preserves the
-  // original sequence.
+  // Order fragments in document order: by the column each one occupies, then by y within it. During
+  // unbalanced layout the paginator fills column 0 top-to-bottom, then column 1, etc., so column
+  // ordinal followed by y reproduces the original sequence — and the balanced x/y are written back
+  // onto the fragments in exactly this order, so getting it wrong reorders the page rather than
+  // just laying it out oddly.
+  //
+  // Resolve the ordinal from the fragment rather than sorting on raw `x`. Sorting on x assumes every
+  // fragment in a column shares one origin, which is false for a negative `w:ind`, a float offset,
+  // or a right-aligned over-wide table — and a difference of 1e-7 is enough to swap two paragraphs.
+  // The ordinal is also direction-free: it is the fill order, so it needs no RTL special case, where
+  // an x comparison needs one because column 0 sits on the right and document order descends in x.
+  const preBalanceGeometry = getColumnGeometry({
+    count: columnCount,
+    gap: columnGap,
+    width: columnWidth,
+    ...(Array.isArray(sectionColumns.widths) ? { widths: sectionColumns.widths } : {}),
+    ...(Array.isArray(sectionColumns.gaps) ? { gaps: sectionColumns.gaps } : {}),
+    ...(sectionColumns.direction !== undefined ? { direction: sectionColumns.direction } : {}),
+    ...(sectionColumns.contentWidth !== undefined ? { contentWidth: sectionColumns.contentWidth } : {}),
+  });
+  const originX = args.margins.left;
+  const clampOrdinal = (value: number): number => Math.max(0, Math.min(columnCount - 1, Math.floor(value)));
+  // Tolerance for "this box is no wider than that column". Widths reach fragments as the column
+  // width itself, so the slack only absorbs float drift (measured worst case ~5e-13px across
+  // awkward page/margin/count combinations). One twip is 96/1440 = 0.067px, so this stays well
+  // under the smallest width difference a document can express.
+  const WIDTH_EPSILON = 0.01;
+
+  /**
+   * Which column a fragment occupies, as a fill-order ordinal. ALWAYS a number: the result is a sort
+   * key, and a key that is sometimes absent would leave the comparator mixing two different metrics,
+   * which is not a total order — `Array.prototype.sort` is then free to return different orders for
+   * the same input, and it does differ between engines.
+   *
+   * Geometry alone CANNOT settle this for a box wider than its column, and it is worth being exact
+   * about why, because every plausible repair trades one wrong answer for another. `resolveTableFrame`
+   * places an over-wide table that justifies to `end` at `col.x + (col.width - width)`, so the box
+   * runs from an earlier column's left edge to its OWN column's right edge — and the owner is the
+   * LATER column. A box of identical shape centred in column 0, an anchored graphic sized to the
+   * content area, runs between exactly those same two edges — and the owner is the EARLIER column.
+   * Same span, same per-column overlaps, opposite owners. The origin, the trailing edge and the
+   * overlap vote are each provably unable to tell those two apart, so the only thing that can is
+   * what the engine recorded: `columnIndex` is asked first, and is now written for anchored tables
+   * as well as in-flow ones.
+   *
+   * For everything else the question is only whether the origin can be trusted, and the test that
+   * answers it is the box's WIDTH, not its edges. A box no wider than the column its origin sits in
+   * was placed inside that column, wherever in it the origin ended up — ordinary content, a
+   * `w:ind` indent, and a `floatAlignment` right/centre paragraph, which `layout-paragraph.ts`
+   * re-points at `columnX + (columnWidth - maxLineWidth)` while leaving its width at the full column
+   * width. A box WIDER than that column may instead have been pulled left out of its own column: a
+   * negative `w:ind` widens the fragment by the outdent, so an outdent bigger than the gutter lands
+   * the origin inside the PREVIOUS column and containment names that one.
+   *
+   * Gating on the box's right EDGE staying inside the column instead of on its width was tried and
+   * was worse: it rejects the right-aligned float too, and the overlap vote then hands a short
+   * right-aligned line to whichever neighbour its overhang covers more of, reordering the page.
+   */
+  const ordinalOf = (fragment: BalancingFragment): number => {
+    // The engine's own record, where it kept one. Only a few fragment kinds do: tables
+    // (`layout-table.ts`, five sites, plus `createAnchoredTableFragment` now), footnote bodies, and a
+    // paragraph ONLY when it is a collapsed split-line-break anchor carrier (`layout-paragraph.ts`,
+    // under `collapseSplitLineBreakCarrier`) — a narrow document shape, not the ordinary paragraph.
+    // The rule below therefore still carries almost every fragment.
+    const recorded = (fragment as { columnIndex?: number }).columnIndex;
+    if (typeof recorded === 'number' && Number.isFinite(recorded)) return clampOrdinal(recorded);
+
+    const span = Number.isFinite(fragment.width) && fragment.width > 0 ? fragment.width : 0;
+    const left = fragment.x - originX;
+
+    // The column the origin sits in, so long as the box is narrow enough to have been placed there.
+    const byOrigin = findColumnContaining(preBalanceGeometry, fragment.x, originX);
+    if (byOrigin !== null) {
+      const originColumn = preBalanceGeometry.find((col) => col.index === byOrigin);
+      if (originColumn && span <= originColumn.width + WIDTH_EPSILON) return byOrigin;
+    }
+
+    // Either the origin sits in no column at all — an outdent or float offset smaller than the
+    // gutter hung it in there — or the box is too wide for the column the origin landed in, so that
+    // origin is not evidence of ownership. It still lies mostly in the column that owns it. Ties go
+    // to the earliest column in fill order, but only approximately: two mathematically equal
+    // overlaps derived from a content width that does not divide evenly can differ in their last
+    // bits and settle either way.
+    let best: number | null = null;
+    let bestOverlap = 0;
+    for (const col of preBalanceGeometry) {
+      const overlap = Math.min(left + span, col.x + col.width) - Math.max(left, col.x);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        best = col.index;
+      }
+    }
+    // Touching no column at all (zero width, wholly inside a gutter, or off the strip): fall back to
+    // the hit-testing walk, which clamps and therefore always names one.
+    return best ?? clampOrdinal(getColumnAtX(preBalanceGeometry, fragment.x, originX));
+  };
+
+  // Order fragments in document order: by the column each one occupies, then by y within it. During
+  // unbalanced layout the paginator fills column 0 top-to-bottom, then column 1, etc., so column
+  // ordinal followed by y reproduces the original sequence — and the balanced x/y are written back
+  // onto the fragments in exactly this order, so getting it wrong REORDERS the page rather than
+  // merely laying it out oddly.
+  //
+  // Sorting on raw x, as this did, assumes every fragment in a column shares one origin. A negative
+  // `w:ind`, a float offset, or a right-aligned over-wide table each break that, and a difference of
+  // 1e-7 was enough to swap two paragraphs. The ordinal is also direction-free — it IS the fill
+  // order — where an x comparison needed an RTL special case because column 0 sits on the right.
+  const ordinals = new Map<BalancingFragment, number>();
+  sectionFragments.forEach((fragment) => ordinals.set(fragment, ordinalOf(fragment)));
+  const inputOrder = new Map<BalancingFragment, number>();
+  sectionFragments.forEach((fragment, index) => inputOrder.set(fragment, index));
   const ordered = [...sectionFragments].sort((a, b) => {
-    if (a.x !== b.x) return a.x - b.x;
-    return a.y - b.y;
+    const byColumn = (ordinals.get(a) ?? 0) - (ordinals.get(b) ?? 0);
+    if (byColumn !== 0) return byColumn;
+    if (a.y !== b.y) return a.y - b.y;
+    // Same column, same y: keep the order they arrived in, so the sort is total and stable.
+    return (inputOrder.get(a) ?? 0) - (inputOrder.get(b) ?? 0);
   });
 
   // Treat each fragment as its own block for binary-search balancing. Grouping
@@ -864,6 +991,8 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     width: columnWidth,
     ...(Array.isArray(sectionColumns.widths) ? { widths: sectionColumns.widths } : {}),
     ...(Array.isArray(sectionColumns.gaps) ? { gaps: sectionColumns.gaps } : {}),
+    ...(sectionColumns.direction !== undefined ? { direction: sectionColumns.direction } : {}),
+    ...(sectionColumns.contentWidth !== undefined ? { contentWidth: sectionColumns.contentWidth } : {}),
   });
   const columnX = (columnIndex: number): number => getColumnX(balancedGeometry, columnIndex, args.margins.left);
 
@@ -876,6 +1005,18 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     f.x = columnX(col);
     f.y = colCursors[col];
     f.width = columnWidth;
+    // Balancing MOVES fragments between columns, so a `columnIndex` the paginator wrote before the
+    // move now names the column the fragment left. Three consumers trust that record ahead of any
+    // geometry — `ordinalOf` above, the painter's separator gate, and `determineTableColumn` for hit
+    // testing — so a stale one is worse than none: an in-flow table balanced out of column 0 kept
+    // reporting column 0, which left its new column reading as empty and suppressed a rule Word
+    // draws. Rewrite it where the fragment had one; do not invent one where it did not, for the same
+    // reason the split branch below does not — an invented value is evidence the fragment never
+    // carried, and the gate would act on it.
+    const recordedColumn = (f as { columnIndex?: number }).columnIndex;
+    if (typeof recordedColumn === 'number' && Number.isFinite(recordedColumn)) {
+      (f as { columnIndex?: number }).columnIndex = col;
+    }
     // SD-3359: apply a line-boundary split chosen by the balancer. The first
     // half keeps the leading lines in this column; a cloned second half carries
     // the remaining lines to the top of the next column — the same
@@ -900,6 +1041,15 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
         continuesFromPrev: true,
         continuesOnNext: originalContinuesOnNext,
       } as BalancingFragment;
+      // The half lands in the NEXT column, so a `columnIndex` carried over by the spread would still
+      // name the FIRST half's column — and column ordering trusts that record ahead of any geometry,
+      // so a later balancing pass would sort this half back into the column it left. Rewrite it
+      // where the source had one; do not invent one where it did not, because the separator gate
+      // reads the same field and an invented value is evidence it never had.
+      const carriedColumn = (f as { columnIndex?: number }).columnIndex;
+      if (typeof carriedColumn === 'number' && Number.isFinite(carriedColumn)) {
+        (secondHalf as { columnIndex?: number }).columnIndex = col + 1;
+      }
       // Remeasured fragments render their own `lines` wholesale (fromLine/toLine are
       // ignored by the resolve stage then), so the halves must each carry ONLY their
       // slice or both columns render the entire paragraph.

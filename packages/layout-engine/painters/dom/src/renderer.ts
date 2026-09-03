@@ -1,6 +1,7 @@
 import type {
   ChartDrawing,
   CellBorders,
+  ColumnGeometry,
   ColumnLayout,
   CustomGeometryData,
   DrawingBlock,
@@ -54,8 +55,8 @@ import {
   expandRunsForInlineNewlines,
   formatPageNumber,
   formatSectionPageNumberText,
+  findColumnContaining,
   getColumnGeometry,
-  getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
   isPositionedParagraphFrame,
   normalizeColumnLayout,
   resolveColumnMode,
@@ -1053,6 +1054,146 @@ function svgEffectColor(value: TextEffectColor): string | undefined {
  * - Incremental re-rendering when only specific blocks change
  * - Hyperlink rendering with security sanitization and accessibility
  */
+/**
+ * The column that owns a fragment spanning `[x, x + width)` in content-relative coordinates, or
+ * `null` when it belongs to no column.
+ *
+ * Four rules after the width bound, in this order, because each is wrong for the case the next one
+ * answers. `balanceSectionOnPage`'s `ordinalOf` asks the same four for the same reasons; the two
+ * differ only at the end, where a sort key must name a column and this may answer `null`.
+ *
+ * 0. WIDTH BOUND. Anything at least as wide as the area it would have to be content OF belongs to no
+ *    column. That is what keeps page-anchored objects out of the gate: `page.items` carries them,
+ *    and a full-width watermark overlaps every column without being content of any. It comes first,
+ *    before every rule below: in a mirrored RTL strip the LAST column reaches furthest left, so a
+ *    watermark at x = 0 sits on that column's leading edge and would be read as content of it.
+ *
+ *    The area has two bounds and the threshold is the smaller, because either alone leaks. The
+ *    strip's own span, since explicit widths are not scaled to fill the page (see
+ *    `normalizeColumnLayout`) and an underfilling strip is narrower than the content area. And the
+ *    page content area, since those widths are not CAPPED either — nothing clamps their sum — so an
+ *    authored `w:num="2"` with two over-wide `w:col/@w` produces a strip WIDER than the page, and
+ *    against the strip bound alone a page-wide graphic measures as merely partial.
+ *
+ * 1. LEADING EDGE. A box that starts on a column's own edge is that column's, fit or no fit. That is
+ *    ordinary content, and it is also content WIDER than its column, which overflows from that same
+ *    edge. Asked before any overlap test, because an over-wide box can cover more of a wide
+ *    neighbour than of the narrow column it came from: `widths: [100, 400]` puts a 500px box that
+ *    starts at column 0's edge 100px into column 0 and 352px into column 1.
+ *
+ * 2. TRAILING EDGE — a different question, not a mirror of the first. An indent moves only the
+ *    leading edge, so a paragraph outdented FURTHER than the gutter has its origin inside the
+ *    PREVIOUS column while still ending exactly at its own column's trailing edge. And
+ *    `resolveTableFrame` places an over-wide table justified to `end` at a negative offset from its
+ *    own column, which likewise begins in an earlier column without ever having left its own.
+ *
+ * 3. THE ORIGIN, while the box still FITS the column it starts in. The fit is what makes the origin
+ *    evidence: a smaller indent leaves the origin inside its own column and the box inside it too. A
+ *    centred over-wide table also begins inside an earlier column, and there the origin is no
+ *    evidence at all — which is what the fit test rejects.
+ *
+ * 4. OVERLAP, for a box whose origin sits in no column: hung into a gutter by a negative `w:ind` or
+ *    a float offset. Ties go to the earliest column in fill order, which arises only for an overfull
+ *    strip whose columns genuinely overlap.
+ *
+ * `null` at the end is the safe answer here, unlike in `ordinalOf`, which must clamp because a sort
+ * key that is sometimes absent is not a total order. The question here is "does a LATER column hold
+ * content", so `null` can only ever suppress a separator, never invent one.
+ */
+/**
+ * Sub-pixel slack for "this edge IS that column's edge". Column x values reach fragments through
+ * `getColumnX`, so unindented content matches exactly and this only absorbs float drift — it stays
+ * two orders of magnitude below the smallest indent a document can author (1 twip = 1/1440in).
+ */
+const COLUMN_EDGE_EPSILON = 0.01;
+
+function columnOwningSpan(geometry: ColumnGeometry[], x: number, width: number, contentWidth: number): number | null {
+  if (geometry.length === 0) return null;
+
+  const span = Number.isFinite(width) && width > 0 ? width : 0;
+  // Folded rather than spread into `Math.min`/`Math.max`: `w:num` is bounded at 45 by the schema but
+  // nothing in the pipeline enforces it, and a host-built layout with a six-figure count overflows
+  // the argument stack — a paint-time crash, from a function whose whole job is to answer
+  // conservatively.
+  let stripStart = Infinity;
+  let stripEnd = -Infinity;
+  for (const col of geometry) {
+    if (col.x < stripStart) stripStart = col.x;
+    if (col.x + col.width > stripEnd) stripEnd = col.x + col.width;
+  }
+  // The page bound applies only when the page reports a usable content width. A malformed page can
+  // report zero or a negative one, and letting that become the threshold would reject every fragment
+  // and blank out separators that belong on the page.
+  const pageSpan = Number.isFinite(contentWidth) && contentWidth > 0 ? contentWidth : Infinity;
+  if (span >= Math.min(stripEnd - stripStart, pageSpan)) return null;
+
+  // A box on a column's LEADING edge is that column's, fit or no fit. That covers ordinary content,
+  // and it covers content WIDER than its column, which overflows rightward from that same edge in
+  // either direction. Asked before any overlap test, because an over-wide box can cover more of a
+  // wide neighbour than of the narrow column it came from: `widths: [100, 400]` puts a 500px box
+  // that starts at column 0's edge 100px into column 0 and 352px into column 1.
+  for (const col of geometry) {
+    if (Math.abs(x - col.x) <= COLUMN_EDGE_EPSILON) return col.index;
+  }
+
+  // A box on a column's TRAILING edge is that column's too, and it is a different question rather
+  // than a mirror of the one above. An indent moves only the leading edge, so a paragraph outdented
+  // FURTHER than the gutter has its origin inside the previous column while still ending exactly at
+  // its own column's trailing edge — measured on equal 2-col geometry over 624px (col0 [0,288),
+  // col1 [336,624)): a column-1 paragraph outdented 72px is the box [264, 624]. And
+  // `resolveTableFrame` places an over-wide table justified to `end` at a NEGATIVE offset from its
+  // own column, which likewise begins inside an earlier column without ever having left its own.
+  for (const col of geometry) {
+    if (Math.abs(x + span - (col.x + col.width)) <= COLUMN_EDGE_EPSILON) return col.index;
+  }
+
+  // Containment of the origin, gated on the box being no WIDER than the column it starts in — not on
+  // its right edge landing inside that column. The distinction is the whole content of this step.
+  //
+  // A box that fits its column was placed in that column wherever the origin ended up: ordinary
+  // content, a `w:ind` indent, and — the case that makes this step load-bearing — a paragraph
+  // carrying `attrs.floatAlignment` of `right` or `center`. `layout-paragraph.ts` re-points such a
+  // fragment at `columnX + (effectiveColumnWidth - maxLineWidth)` and never reduces
+  // `fragment.width`, so a 50px line in a 288px column is recorded as x = columnX + 238 with width
+  // still 288: origin inside its own column, right edge 238px past it. An edge gate rejects that,
+  // and the overlap vote below then sees 50px of column 0 against 190px of column 1 and moves it —
+  // so a page whose text never left column 0 drew a separator, with no anchored object involved at
+  // all. (Nothing in this repo's production code sets `floatAlignment`; it arrives from the
+  // adapter outside the layout engine, so the OOXML feature behind it is deliberately not named.)
+  //
+  // A box WIDER than its column may instead have been pulled OUT of it, and there the origin is no
+  // evidence at all. `resolveTableFrame` centres an over-wide table inside its column, placing it at
+  // `col.x + (col.width - width) / 2` — a NEGATIVE offset once the table is wider than the column —
+  // so it begins inside an EARLIER column without ever having left its own. Measured on equal 2-col
+  // geometry over 624px (col0 [0,288), col1 [336,624)): a 400px box centred in column 1 is
+  // [280, 680], whose origin is in column 0 and whose overlap correctly answers 1, 288px against
+  // 8px. Width is what separates the two shapes; the right edge overhangs in both.
+  //
+  // An outdented paragraph is NOT this case, though it looks like it and was written here as the
+  // justification once. A negative `w:ind` widens the fragment by exactly the outdent it shifts by,
+  // so `x + width` lands on its own column's trailing edge for EVERY outdent — the rule above has
+  // already answered and this step never sees it. That mistake is worth recording rather than just
+  // deleting: it was also the fixture guarding this gate, so the gate had no test at all. Replacing
+  // the width comparison with unconditional origin trust left all 39 tests in
+  // `renderer-column-separators.test.ts` passing.
+  const byOrigin = findColumnContaining(geometry, x);
+  if (byOrigin !== null) {
+    const originColumn = geometry.find((col) => col.index === byOrigin);
+    if (originColumn && span <= originColumn.width + COLUMN_EDGE_EPSILON) return byOrigin;
+  }
+
+  let best: number | null = null;
+  let bestOverlap = 0;
+  for (const col of geometry) {
+    const overlap = Math.min(x + span, col.x + col.width) - Math.max(x, col.x);
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = col.index;
+    }
+  }
+  return best;
+}
+
 export class DomPainter {
   private readonly options: PainterOptions;
   private mount: HTMLElement | null = null;
@@ -1782,20 +1923,79 @@ export class DomPainter {
       const regionHeight = yEnd - yStart;
       if (regionHeight <= 0) continue;
 
-      const separatorPositions = this.getColumnSeparatorPositions(columns, leftMargin, contentWidth);
-      if (separatorPositions.length === 0) continue;
+      const geometry = this.resolveSeparatorColumnGeometry(columns, contentWidth);
+      if (!geometry) continue;
 
       // Word only renders the column separator between columns that both have
       // content. For a 2-col page where col 1 is empty (e.g. the last page of
       // a multi-column section that fits in col 0, or a `nextPage` section
       // where Word fills col 0 first without balancing), Word draws no line
       // even when the section's `w:cols` declared `w:sep="1"`. Gate each
-      // separator on whether any fragment sits past it within the region.
+      // separator on whether any LATER column in fill order holds content.
       const fragmentsInRegion = page.items.filter((item) => item.y >= yStart - 0.5 && item.y < yEnd + 0.5);
 
-      for (const separatorX of separatorPositions) {
-        const hasContentPastSeparator = fragmentsInRegion.some((f) => f.x >= separatorX);
+      // Ask which column OWNS each fragment rather than comparing an edge against the separator.
+      // An edge test has to pick which edge trails in the fill direction, and no choice is right:
+      // content wider than its column does not sit inside it. `resolveTableFrame` places a
+      // right-aligned or centred over-wide table at a NEGATIVE offset from its column — and `end`
+      // is the default justification for any bidiVisual table — so in an RTL section such a table
+      // starts left of its own column and ends past the separator, while never having left the
+      // later column at all.
+      //
+      // `fragment.columnIndex` is the engine's own record of the owning column, and it is the
+      // first thing consulted. It reaches only a few fragment kinds: tables (`layout-table.ts`,
+      // five sites), the three footnote body kinds in `incrementalLayout.ts`, and a paragraph ONLY
+      // when it is a collapsed split-line-break anchor carrier (`layout-paragraph.ts`, under
+      // `collapseSplitLineBreakCarrier`) — a narrow document shape, not the ordinary paragraph. So
+      // the geometry fallback below carries almost every fragment on the page and has to be right
+      // on its own; the record is a shortcut for the cases that keep one, not the main path.
+      const lastColumnIndex = geometry.length - 1;
+      const occupiedColumns = new Set<number>();
+      for (const item of fragmentsInRegion) {
+        // `page.items` are paint items; the engine`s record of the owning column lives on the
+        // source fragment they point back to.
+        const source = (item as { fragment?: { columnIndex?: number; isAnchored?: boolean } }).fragment;
+
+        // A FLOAT is not column content, and the width threshold below cannot recognise one. That
+        // threshold catches a full-width watermark, which is the case it was written for, but
+        // `page.items` is `page.fragments.map(...)` with no anchor filtering, and an anchored object
+        // carries its own `measure.width` — so a narrow one is the ordinary case, not the exception.
+        // A 200px logo placed at page x 500 on a 2-column page whose text never leaves column 0 has
+        // its origin inside column 1 and lit this gate, drawing a rule Word does not draw. The same
+        // logo 84px further left lands in the gutter and wins column 1 on overlap instead.
+        //
+        // Every float is excluded, not only the page-relative ones. `hRelativeFrom` is consumed at
+        // layout time and never reaches the fragment, so telling a page-anchored float from a
+        // column-anchored one here means reaching back through `item.block`, and I have no evidence
+        // about the case that would distinguish them: whether Word draws a rule beside a column
+        // holding a floating object and no text. Word's rule tracks text, and the gate is
+        // deliberately asymmetric — excluding an item can only ever suppress a rule, never invent
+        // one — so the conservative reading is also the simpler one. If a document turns up where
+        // Word draws that rule, the fix is to admit column-anchored floats specifically.
+        if (source?.isAnchored === true) continue;
+
+        // An out-of-range record is REJECTED, not clamped. Clamping turned any stale or corrupt value
+        // into a real column index — `columnIndex: 5` on a two-column page became 1 — which is
+        // exactly the "a later column holds content" this gate asks about, invented out of a number
+        // that describes no column on this page. Falling through to geometry answers from the
+        // fragment's actual position instead. Flooring first, so ordinary float drift on a valid
+        // index still resolves rather than being thrown away as out of range.
+        const owned = source?.columnIndex;
+        const recorded = typeof owned === 'number' && Number.isFinite(owned) ? Math.floor(owned) : null;
+        const columnIndex =
+          recorded !== null && recorded >= 0 && recorded <= lastColumnIndex
+            ? recorded
+            : columnOwningSpan(geometry, item.x - leftMargin, item.width, contentWidth);
+        if (columnIndex !== null) occupiedColumns.add(columnIndex);
+      }
+
+      // Iterating the geometry (rather than a positions array) keeps each separator paired with the
+      // column it follows, which is what "a later column" is measured against.
+      for (const column of geometry) {
+        if (column.separatorX === undefined) continue;
+        const hasContentPastSeparator = [...occupiedColumns].some((index) => index > column.index);
         if (!hasContentPastSeparator) continue;
+        const separatorX = leftMargin + column.separatorX;
 
         const separatorEl = this.doc.createElement('div');
         separatorEl.dataset.superdocColumnSeparator = 'true';
@@ -1812,7 +2012,12 @@ export class DomPainter {
     }
   }
 
-  private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
+  /**
+   * The resolved column geometry this region's separators are drawn from, or null when the region
+   * draws none. Returns the geometry rather than bare x positions because the gate needs to know
+   * WHICH column each separator follows, not only where it sits.
+   */
+  private resolveSeparatorColumnGeometry(columns: ColumnLayout, contentWidth: number): ColumnGeometry[] | null {
     // SD-2629: separator positions come from the one resolved column geometry (the same source as
     // fill count and column widths), not a re-derivation here. The caller has already gated on
     // withSeparator and count > 1.
@@ -1824,12 +2029,12 @@ export class DomPainter {
     // raw equalWidth:true config carrying stray widths still takes the equal-mode guard. Legacy guard.
     if (resolveColumnMode(columns) === 'equal') {
       const equalWidth = (contentWidth - columns.gap * (normalized.count - 1)) / normalized.count;
-      if (equalWidth <= 1) return [];
+      if (equalWidth <= 1) return null;
     }
     const geometry = getColumnGeometry(normalized);
-    if (geometry.length <= 1) return [];
-    if (geometry.some((column) => column.width <= 1)) return [];
-    return getColumnSeparatorPositionsFromGeometry(geometry, leftMargin);
+    if (geometry.length <= 1) return null;
+    if (geometry.some((column) => column.width <= 1)) return null;
+    return geometry;
   }
   private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;

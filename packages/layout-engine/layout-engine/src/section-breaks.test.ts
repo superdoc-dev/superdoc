@@ -141,7 +141,7 @@ describe('scheduleSectionBreak', () => {
         expect(result.state.pendingColumns).toEqual({ count: 2, gap: 48 });
       });
 
-      it('does not trigger mid-page region change for explicit gaps-only changes before geometry uses gaps', () => {
+      it('triggers a mid-page region change for an explicit gaps-only delta', () => {
         const state = createSectionState({
           activeColumns: { count: 3, gap: 48, widths: [100, 100, 300], gaps: [48, 48], equalWidth: false },
         });
@@ -152,7 +152,10 @@ describe('scheduleSectionBreak', () => {
 
         const result = scheduleSectionBreak(block, state, BASE_MARGINS);
 
-        expect(result.decision.forceMidPageRegion).toBe(false);
+        // Per-column gaps drive geometry, so a gaps-only delta moves every column after the first
+        // and needs its own region. It used to compare equal, and the new section was then laid out
+        // with the previous one's gutters.
+        expect(result.decision.forceMidPageRegion).toBe(true);
         expect(result.state.pendingColumns).toEqual({
           count: 3,
           gap: 48,

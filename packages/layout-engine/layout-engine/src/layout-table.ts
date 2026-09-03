@@ -1946,12 +1946,23 @@ export function layoutTableBlock(context: TableLayoutContext): void {
 /**
  * Create a table fragment for an anchored/floating table at its computed position.
  * Called by the layout engine after the float manager computes the table's position.
+ *
+ * `columnIndex` is the flow column the table belongs to, which for an anchored table is NOT
+ * recoverable from `x`. `resolveAnchoredGraphicX` places one that justifies to `end` at
+ * `col.x + (col.width - width)`, a negative offset from its own column whenever the table is wider
+ * than it — and `end` is the default for any `w:bidiVisual` table — so an over-wide table BEGINS
+ * inside an earlier column without ever having left its own. Every consumer that has to infer the
+ * column from coordinates gets that wrong: it reorders a balanced page, it answers the wrong column
+ * for a click, and it decides whether a column separator is drawn. The in-flow table paths have
+ * always recorded the field for exactly this reason; the anchored ones did not, which is why the
+ * inference existed at all.
  */
 export function createAnchoredTableFragment(
   block: TableBlock,
   measure: TableMeasure,
   x: number,
   y: number,
+  columnIndex?: number,
 ): TableFragment {
   const metadata = generateFragmentMetadata(measure, block, 0, block.rows.length, 0);
 
@@ -1967,6 +1978,11 @@ export function createAnchoredTableFragment(
     height: measure.totalHeight ?? 0,
     metadata,
     sourceAnchor: block.sourceAnchor,
+    // Optional so a caller with no column context omits it rather than asserting column 0, which
+    // the separator gate would read as content the page does not have.
+    ...(typeof columnIndex === 'number' && Number.isFinite(columnIndex)
+      ? { columnIndex: Math.max(0, Math.floor(columnIndex)) }
+      : {}),
   };
   applyTableFragmentPmRange(fragment, block, measure);
   return fragment;

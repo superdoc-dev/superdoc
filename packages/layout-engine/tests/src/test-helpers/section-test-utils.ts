@@ -21,6 +21,16 @@ export type TestSectionProps = {
   orientation?: 'portrait' | 'landscape';
   pageSize?: { w: number; h: number };
   columns?: { count: number; gap: number };
+  /**
+   * Section page direction (`w:sectPr/w:bidi`). RTL puts the FIRST column against the right margin
+   * and fills right to left, the way Word lays out a Hebrew or Arabic multi-column section.
+   */
+  bidi?: boolean;
+  /**
+   * Number of columns the FOOTNOTE band uses (`w15:footnoteColumns`), independent of `columns`.
+   * `0` is the schema's "match the body"; `1` under a two-column body is Word's one-strip band.
+   */
+  footnoteColumns?: number;
   margins?: { header?: number; footer?: number };
   /** Vertical alignment of content within the section's pages */
   vAlign?: 'top' | 'center' | 'bottom' | 'both';
@@ -189,6 +199,30 @@ function createSectPrElements(sectionProps: TestSectionProps): Array<Record<stri
     });
   }
 
+  // Add w15:footnoteColumns (footnote band column count). It lives in the Word 2012 extension
+  // namespace, so the reader has to accept a prefix it does not otherwise see. Word writes it last
+  // in the sectPr; emitting it BEFORE w:bidi here keeps the reader honest about not depending on
+  // element order.
+  if (sectionProps.footnoteColumns !== undefined) {
+    elements.push({
+      type: 'element',
+      name: 'w15:footnoteColumns',
+      attributes: {
+        'w:val': sectionProps.footnoteColumns.toString(),
+      },
+    });
+  }
+
+  // Add w:bidi element (section page direction). Emitted after w:cols on purpose: the two are
+  // siblings in any order, and the reader must not depend on seeing the direction first.
+  if (sectionProps.bidi !== undefined) {
+    elements.push({
+      type: 'element',
+      name: 'w:bidi',
+      attributes: sectionProps.bidi ? {} : { 'w:val': '0' },
+    });
+  }
+
   // Add w:vAlign element (vertical alignment)
   if (sectionProps.vAlign) {
     elements.push({
@@ -348,7 +382,11 @@ export function createSectionBreak(props: TestSectionProps): SectionBreakBlock {
   }
 
   if (props.columns) {
-    block.columns = { count: props.columns.count, gap: props.columns.gap };
+    block.columns = {
+      count: props.columns.count,
+      gap: props.columns.gap,
+      ...(props.bidi ? { direction: 'rtl' as const } : {}),
+    };
   }
 
   if (props.margins) {

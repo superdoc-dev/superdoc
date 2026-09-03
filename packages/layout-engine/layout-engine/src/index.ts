@@ -557,6 +557,12 @@ export type LayoutOptions = {
   margins?: Margins;
   documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
+  /**
+   * `w15:footnoteColumns/@w:val` for the FIRST section, the companion to `columns` above. Later
+   * sections carry their own value on their `sectionBreak` block. `0` or absent means "match the
+   * body", which is Word's default.
+   */
+  footnoteColumns?: number;
   flowMode?: FlowMode;
   semantic?: {
     contentWidth?: number;
@@ -5193,6 +5199,11 @@ function toBalancingColumns(normalized: NormalizedColumns): SectionColumnLayout 
     ...(Array.isArray(normalized.widths) ? { widths: normalized.widths } : {}),
     ...(Array.isArray(normalized.gaps) ? { gaps: normalized.gaps } : {}),
     ...(normalized.equalWidth !== undefined ? { equalWidth: normalized.equalWidth } : {}),
+    // Direction and the content width it was measured against travel with the widths: balancing
+    // rebuilds the geometry and overwrites fragment x from it, so dropping them here would lay the
+    // balanced page out left-to-right inside an otherwise right-to-left section.
+    ...(normalized.direction !== undefined ? { direction: normalized.direction } : {}),
+    ...(normalized.contentWidth !== undefined ? { contentWidth: normalized.contentWidth } : {}),
   };
 }
 

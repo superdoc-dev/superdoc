@@ -10,9 +10,12 @@ import {
   getColumnX,
   isValidNonFlowingPageRelativeAnchorDependencyProof,
   isPageRelativeAnchor,
+  mapBodyColumnToFootnoteColumn,
   normalizeColumnLayout,
   rescaleColumnWidths,
   resolveColumnCount,
+  resolveFootnoteBandColumns,
+  resolveFootnoteSeparatorX,
 } from '@superdoc/contracts';
 import type {
   NonFlowingPageRelativeAnchorDependencyProof,
@@ -26,6 +29,7 @@ import type {
   Page,
   HeaderFooterLayout,
   SectionMetadata,
+  ParagraphAttrs,
   ParagraphBlock,
   ParagraphMeasure,
   TableMeasure,
@@ -187,6 +191,12 @@ export type FootnoteReserveSeed = {
   footnoteMeasurementWidth?: number;
   /** Section-column inputs used to derive the retained note measurement width. */
   sectionColumnsByIndex?: Map<number, ColumnLayout>;
+  /**
+   * Footnote-band columns per section, retained alongside the body columns above. Held separately
+   * rather than re-derived because the band depends on `w15:footnoteColumns`, which the body
+   * layout does not carry.
+   */
+  sectionFootnoteColumnsByIndex?: Map<number, ColumnLayout>;
   /** Exact note block objects retained by the host's authoritative note-bundle proof. */
   noteBlocksByBlockId?: Map<string, FlowBlock>;
   /** Measures paired with `noteBlocksByBlockId`; object identity is revalidated before reuse. */
@@ -1336,6 +1346,27 @@ type FootnotesLayoutInput = {
   topPadding?: number;
   dividerHeight?: number;
   separatorSpacingBefore?: number;
+  /**
+   * Resolved `w:pPr` of the separator paragraph in footnotes.xml — the paragraph that holds the
+   * `<w:separator/>` run (`w:footnote w:type="separator"`, id -1).
+   *
+   * The mark is a run, so its horizontal placement is that paragraph's own inline direction, `w:jc`
+   * and `w:ind`, never the section's `w:bidi`; see `resolveFootnoteSeparatorX`. Only the host can
+   * resolve it (it owns the style chain, and the paragraph inherits from `w:docDefaults/w:pPrDefault`
+   * when it declares nothing of its own, which is the usual case). Omitted means "no evidence": the
+   * mark keeps the LTR start edge.
+   *
+   * Paint-only: it never enters the note plan, which is why it is absent from the plan-input
+   * comparisons that gate band reuse (`separatorSpacingBefore` and friends, which do change
+   * heights). Reuse safety rests instead on the host's `renderInputsUnchanged` proof, which
+   * `retainedFootnotePlaneBaseAdoptable` requires before it adopts a previous page's band
+   * fragments -- an adopted band keeps the rule's old x. A host that starts populating this field
+   * MUST therefore include it in that proof, or a change to the separator paragraph alone will
+   * paint stale.
+   */
+  separatorParagraph?: ParagraphAttrs;
+  /** The same, for the `<w:continuationSeparator/>` paragraph (`w:type="continuationSeparator"`, id 0). */
+  continuationSeparatorParagraph?: ParagraphAttrs;
 };
 
 type FootnoteGrowConvergenceState = {
@@ -1521,6 +1552,41 @@ const resolveSectionColumnsByIndex = (options: LayoutOptions, blocks?: FlowBlock
   return result;
 };
 
+/**
+ * Footnote BAND columns per section index — the note-plane twin of `resolveSectionColumnsByIndex`.
+ *
+ * The band is its own column strip, not the body's: `w15:footnoteColumns` lets a section print one
+ * note strip across the whole content area under a two-column body, which is what Word draws and
+ * what every note-plane stage (measurement width, reference-to-column assignment, the per-column
+ * planner and its reserve, and the painted x/width) has to agree on. Deriving it once here, keyed
+ * the same way as the body map, keeps those stages reading a single layout instead of each
+ * re-deriving one from `w:cols`.
+ */
+const resolveSectionFootnoteColumnsByIndex = (
+  options: LayoutOptions,
+  blocks?: FlowBlock[],
+): Map<number, ColumnLayout> => {
+  const result = new Map<number, ColumnLayout>();
+  let activeColumns: ColumnLayout = resolveFootnoteBandColumns(options.columns, options.footnoteColumns);
+
+  if (blocks && blocks.length > 0) {
+    for (const block of blocks) {
+      if (block.kind !== 'sectionBreak') continue;
+      const sectionIndexRaw = (block.attrs as { sectionIndex?: number } | undefined)?.sectionIndex;
+      const sectionIndex =
+        typeof sectionIndexRaw === 'number' && Number.isFinite(sectionIndexRaw) ? sectionIndexRaw : result.size;
+      activeColumns = resolveFootnoteBandColumns(ooXmlSectionColumns(block.columns), block.footnoteColumns);
+      result.set(sectionIndex, cloneColumnLayout(activeColumns));
+    }
+  }
+
+  if (result.size === 0) {
+    result.set(0, cloneColumnLayout(activeColumns));
+  }
+
+  return result;
+};
+
 const resolvePageColumns = (
   layout: Layout,
   options: LayoutOptions,
@@ -1567,10 +1633,24 @@ const findFragmentForPos = (
   return null;
 };
 
+/**
+ * Group a page's footnote references by the BAND column that will hold them.
+ *
+ * Two column planes meet here. A reference lives in a BODY column, which is what the geometry walk
+ * below reads off the anchor fragment; the note it owns is stacked in a FOOTNOTE BAND column, which
+ * is what the planner and the painter key on. The two coincide only while the band matches the
+ * body — with `w15:footnoteColumns` smaller than `w:cols` several body columns feed one band stack,
+ * and the returned keys must already be in band space or the planner would stack notes into columns
+ * the band does not have.
+ *
+ * References arrive in document order and are appended in that order, so a merged stack comes out
+ * in ascending note order for free (`mapBodyColumnToFootnoteColumn` is monotone in the body index).
+ */
 const assignFootnotesToColumns = (
   layout: Layout,
   refs: FootnoteReference[],
   pageColumns: Map<number, PageColumns>,
+  footnotePageColumns: Map<number, PageColumns>,
   paragraphMeasuresByBlockId: Map<string, ParagraphMeasure>,
   lineIndexByReference?: ReadonlyMap<FootnoteReference, number | null>,
   work?: { pagesIndexed: number; fragmentsIndexed: number },
@@ -1643,26 +1723,42 @@ const assignFootnotesToColumns = (
     if (pageIndex == null) continue;
     const columns = pageColumns.get(pageIndex);
     const page = layout.pages[pageIndex];
+    const bandColumnCount = Math.max(1, Math.floor(footnotePageColumns.get(pageIndex)?.count ?? columns?.count ?? 1));
     let columnIndex = 0;
 
-    if (columns && columns.count > 1 && page) {
+    // A single-column band owns every reference on the page whatever body column it sits in, so the
+    // geometry walk is skipped outright rather than resolved and then discarded.
+    if (bandColumnCount > 1 && columns && columns.count > 1 && page) {
       if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
         columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
       } else if (fragment && typeof fragment.x === 'number') {
-        // Geometry-derived midpoint assignment: assign the ref to the column whose right edge plus
-        // half its own gap the fragment falls before. Per-column widths/gaps come from the resolved
+        // Geometry-derived midpoint assignment: assign the ref to the column whose far edge plus
+        // half its own gap the fragment falls short of. Per-column widths/gaps come from the resolved
         // geometry, preserving the prior midpoint rule. The old uniform-stride branch was unreachable
         // for count>1 (normalized columns always carry widths). (SD-2629 4c)
+        //
+        // "Far edge" is direction-relative: in an RTL section column 0 sits on the right, so x
+        // DESCENDS with the index and the fragment must be compared against the column's LEFT edge
+        // minus half its gap instead. Walking the geometry with the LTR test in an RTL section
+        // matched column 0 for every fragment, which collapsed all of a page's footnotes into the
+        // first column's group — the left column's notes printed under the right column and its own
+        // note area stayed empty.
         const geometry = getColumnGeometry(columns);
+        const mirrored = geometry.length > 1 && geometry[1].x < geometry[0].x;
         columnIndex = Math.max(0, geometry.length - 1);
         for (const col of geometry) {
-          if (fragment.x < columns.left + col.x + col.width + col.gapAfter / 2) {
+          const boundary = mirrored
+            ? columns.left + col.x - col.gapAfter / 2
+            : columns.left + col.x + col.width + col.gapAfter / 2;
+          if (mirrored ? fragment.x >= boundary : fragment.x < boundary) {
             columnIndex = col.index;
             break;
           }
         }
       }
     }
+
+    columnIndex = mapBodyColumnToFootnoteColumn(columnIndex, columns?.count ?? 1, bandColumnCount);
 
     const key = footnoteColumnKey(pageIndex, columnIndex);
     let seen = seenByColumn.get(key);
@@ -1691,12 +1787,17 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
   };
   let width = pageSize.w - (margins.left + margins.right);
   let activeColumns: ColumnLayout = cloneColumnLayout(options.columns);
+  let activeFootnoteColumns: number | undefined = options.footnoteColumns;
   let activePageSize = pageSize;
   let activeMargins = { ...margins };
 
+  // The band's own column width, NOT the body's: a section whose `w15:footnoteColumns` is 1 under a
+  // two-column body wraps its notes across the full content area, and measuring them at a body
+  // column's width would break every line at half the width they are painted at.
   const resolveColumnWidth = (): number => {
     const contentWidth = activePageSize.w - (activeMargins.left + activeMargins.right);
-    const normalized = normalizeColumnsForFootnotes(activeColumns, contentWidth);
+    const band = resolveFootnoteBandColumns(activeColumns, activeFootnoteColumns);
+    const normalized = normalizeColumnsForFootnotes(band, contentWidth);
     return normalized.width;
   };
 
@@ -1711,6 +1812,14 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
         left: normalizeMargin(block.margins?.left, activeMargins.left),
       };
       activeColumns = ooXmlSectionColumns(block.columns);
+      activeFootnoteColumns = block.footnoteColumns;
+      // One measurement pass serves the whole document (`footnoteConstraints` is a single object,
+      // and a note's section is only known after the body is paginated), so the narrowest band in
+      // the document is the only width every note can be measured at without overflowing the one it
+      // lands in. Painting clamps to `min(bandColumnWidth, this width)`, so measurement and paint
+      // agree; a document that mixes band widths therefore under-fills its wider bands rather than
+      // spilling out of its narrower ones. Per-section note measurement is the follow-up that
+      // removes the compromise.
       const w = resolveColumnWidth();
       if (w > 0 && w < width) width = w;
     }
@@ -3319,10 +3428,13 @@ export async function incrementalLayout(
     Number.isFinite(warmSeed.footnoteMeasurementWidth) &&
     warmSeed.footnoteMeasurementWidth > 0 &&
     warmSeed.sectionColumnsByIndex instanceof Map &&
-    warmSeed.sectionColumnsByIndex.size > 0
+    warmSeed.sectionColumnsByIndex.size > 0 &&
+    warmSeed.sectionFootnoteColumnsByIndex instanceof Map &&
+    warmSeed.sectionFootnoteColumnsByIndex.size > 0
       ? {
           measurementWidth: warmSeed.footnoteMeasurementWidth,
           sectionColumnsByIndex: warmSeed.sectionColumnsByIndex,
+          sectionFootnoteColumnsByIndex: warmSeed.sectionFootnoteColumnsByIndex,
         }
       : null;
   const preparedWarmCoupled: PreparedCoupledFootnoteLayout | null = (() => {
@@ -3866,6 +3978,11 @@ export async function incrementalLayout(
     if (footnoteWidth > 0) {
       const footnoteSectionColumnsByIndex =
         retainedFootnoteGeometry?.sectionColumnsByIndex ?? resolveSectionColumnsByIndex(options, currentBlocks);
+      // The note band's own strip per section. Every note-plane stage below reads this map, and the
+      // body map above only to place a reference in the body column it was anchored in.
+      const footnoteSectionBandColumnsByIndex =
+        retainedFootnoteGeometry?.sectionFootnoteColumnsByIndex ??
+        resolveSectionFootnoteColumnsByIndex(options, currentBlocks);
       const footnoteConstraints = { maxWidth: footnoteWidth, maxHeight: measurementHeight };
       Object.defineProperty(footnoteConstraints, V2_RENDER_DIAGNOSTIC_POST_BODY_LAYOUT_MEASUREMENT, {
         configurable: true,
@@ -4188,7 +4305,7 @@ export async function incrementalLayout(
           );
           const pageContentWidth = pageSize.w - (marginLeft + marginRight);
           const fallbackColumns = normalizeColumnsForFootnotes(
-            options.columns ?? SINGLE_COLUMN_DEFAULT,
+            resolveFootnoteBandColumns(options.columns ?? SINGLE_COLUMN_DEFAULT, options.footnoteColumns),
             pageContentWidth,
           );
           const columns = pageColumns.get(pageIndex) ?? {
@@ -4283,7 +4400,18 @@ export async function incrementalLayout(
                 kind: 'drawing',
                 blockId: separatorId,
                 drawingKind: 'vectorShape',
-                x: columnX,
+                // The mark is a run in its own paragraph in footnotes.xml, so it sits at that
+                // paragraph's start edge — the RIGHT of the note column when that paragraph resolves
+                // RTL. A full-width continuation mark fills the extent and lands on columnX either
+                // way; the short `w:separator` is the one this moves.
+                x: resolveFootnoteSeparatorX({
+                  columnX,
+                  columnWidth: contentWidth,
+                  separatorWidth,
+                  attrs: isContinuation
+                    ? footnotesInput.continuationSeparatorParagraph
+                    : footnotesInput.separatorParagraph,
+                }),
                 y: cursorY,
                 width: separatorWidth,
                 height: separatorHeight,
@@ -4437,7 +4565,11 @@ export async function incrementalLayout(
       let cachedFootnoteParagraphMeasures: Map<string, ParagraphMeasure> | null = null;
       let cachedFootnoteLineIndexes: Map<FootnoteReference, number | null> | null = null;
       const resolveFootnoteAssignments = (layoutForPages: Layout) => {
-        const columns = resolvePageColumns(layoutForPages, options, undefined, footnoteSectionColumnsByIndex);
+        // `columns` is the BAND geometry, which is what every caller of this function consumes
+        // (planner column count, reserve, painted x/width). The body geometry is needed only to
+        // read which body column each reference was anchored in.
+        const bodyColumns = resolvePageColumns(layoutForPages, options, undefined, footnoteSectionColumnsByIndex);
+        const columns = resolvePageColumns(layoutForPages, options, undefined, footnoteSectionBandColumnsByIndex);
         if (!cachedFootnoteParagraphMeasures) {
           cachedFootnoteParagraphMeasures = new Map<string, ParagraphMeasure>();
           const currentBlockIndexById = effectiveMeasureReuseProof?.currentBlockIndexById;
@@ -4488,6 +4620,7 @@ export async function incrementalLayout(
         const idsByColumn = assignFootnotesToColumns(
           layoutForPages,
           footnotesInput.refs,
+          bodyColumns,
           columns,
           cachedFootnoteParagraphMeasures,
           cachedFootnoteLineIndexes ?? undefined,
@@ -4888,6 +5021,12 @@ export async function incrementalLayout(
                 cloneColumnLayout(columns),
               ]),
             ),
+            sectionFootnoteColumnsByIndex: new Map(
+              [...footnoteSectionBandColumnsByIndex].map(([sectionIndex, columns]) => [
+                sectionIndex,
+                cloneColumnLayout(columns),
+              ]),
+            ),
             noteBlocksByBlockId: new Map(finalBlocks.map((block) => [block.id, block])),
             noteMeasuresByBlockId: new Map(finalMeasuresById),
             noteBodyHeightById: new Map(bodyHeightById),
@@ -4907,7 +5046,7 @@ export async function incrementalLayout(
           const prepared = retained.prepared;
           // Only the accepted interval is injected. Candidate/probe pages and
           // their provisional continuation slices never escape to paint.
-          const columns = resolvePageColumns(layout, options, undefined, footnoteSectionColumnsByIndex, indexes);
+          const columns = resolvePageColumns(layout, options, undefined, footnoteSectionBandColumnsByIndex, indexes);
           const injected = injectFragments(
             layout,
             initialCoupled.plan,
@@ -5227,7 +5366,7 @@ export async function incrementalLayout(
             footnoteCoupledRelayouts += 1;
             footnoteCoupledPages += layout.pages.length;
             bodyHeightById = fullHeightById;
-            const finalColumns = resolvePageColumns(layout, options, undefined, footnoteSectionColumnsByIndex);
+            const finalColumns = resolvePageColumns(layout, options, undefined, footnoteSectionBandColumnsByIndex);
             const finalIds = new Map(
               [...coupled.plan.ledgersByPage].map(([index, ledger]) => [index, new Map([[0, ledger.anchorIds]])]),
             );

@@ -21,6 +21,7 @@ export type {
 } from './direction-context.js';
 export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
 import type {
+  BaseDirection,
   ParagraphDirectionContext,
   RunBidiContext,
   RunScriptContext,
@@ -162,6 +163,7 @@ export {
   cloneColumnLayout,
   columnLayoutsEqual,
   columnRenderLayoutsEqual,
+  findColumnContaining,
   getColumnAtX,
   getColumnGapAfter,
   getColumnGeometry,
@@ -175,6 +177,14 @@ export {
   widthsEqual,
 } from './column-layout.js';
 export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
+export { resolveFootnoteSeparatorX } from './footnote-separator-placement.js';
+export type { FootnoteSeparatorPlacement } from './footnote-separator-placement.js';
+export {
+  FOOTNOTE_COLUMNS_MATCH_BODY,
+  mapBodyColumnToFootnoteColumn,
+  resolveFootnoteBandColumns,
+  resolveFootnoteColumnCount,
+} from './footnote-band-columns.js';
 export {
   authorFromTrackedChangeMeta,
   authorIdentityKey,
@@ -2034,6 +2044,14 @@ export type SectionBreakBlock = {
     equalWidth?: boolean;
   };
   /**
+   * `w15:footnoteColumns/@w:val` — how many columns the section's FOOTNOTE BAND uses, independent
+   * of the body's `w:cols`. `0` or absent means "match the body", which is Word's default; `1`
+   * under a multi-column body is the authored value that puts one note strip across the whole
+   * content area. Resolve it through `resolveFootnoteBandColumns` rather than reading it raw — the
+   * count is clamped to the body's, and only the band layout that helper returns is supported.
+   */
+  footnoteColumns?: number;
+  /**
    * Vertical alignment of content within the section's pages.
    * - 'top': Content starts at top margin (default behavior)
    * - 'center': Content is vertically centered between margins
@@ -2886,6 +2904,20 @@ export type ColumnLayout = {
    * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
    */
   gaps?: number[];
+  /**
+   * Section page direction, from `w:sectPr/w:bidi`. Decides which side the FIRST column sits on:
+   * `'ltr'` (default) fills left to right, `'rtl'` fills right to left, matching Word.
+   *
+   * Per ECMA-376 §17.6.1 a section's `w:bidi` governs section-level chrome — page numbers, gutters
+   * and columns — and is independent of the paragraph inline direction (§17.3.1.6). It is carried
+   * here, on the column layout itself, because `getColumnGeometry` is the single source every
+   * column consumer reads for positioning (fill, hit testing, separators, balancing, floating
+   * anchors, footnotes); threading the axis alongside the widths keeps those consumers from having
+   * to re-derive it, and keeps them from disagreeing.
+   *
+   * Absent means `'ltr'`. Every existing producer therefore keeps its current geometry unchanged.
+   */
+  direction?: BaseDirection;
 };
 
 /**

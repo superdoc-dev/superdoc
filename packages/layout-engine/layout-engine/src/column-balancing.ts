@@ -7,6 +7,7 @@
  */
 
 import { getColumnGeometry, getColumnX, hasGenuinelyUnequalExplicitColumnWidths } from '@superdoc/contracts';
+import type { BaseDirection } from '@superdoc/contracts';
 
 // ============================================================================
 // Types and Interfaces
@@ -657,6 +658,16 @@ export interface SectionColumnLayout {
    */
   gaps?: number[];
   equalWidth?: boolean;
+  /**
+   * Section page direction (`w:sectPr/w:bidi`) and the content width it was normalized against.
+   *
+   * Declared here — and not left to the structural subset above — because balancing REBUILDS the
+   * geometry and then overwrites every fragment's `x` from it. A balanced page that dropped these
+   * would be laid out left-to-right while every earlier page of the same RTL section was laid out
+   * right-to-left, so the last page of a two-column Hebrew section would visibly flip.
+   */
+  direction?: BaseDirection;
+  contentWidth?: number;
 }
 
 export interface BalanceSectionOnPageArgs {
@@ -783,12 +794,18 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     precedingHeight: precedingHeightBeforeTable,
   });
 
-  // Order fragments in document order: by current column (x → left-to-right),
-  // then by y within each column. During unbalanced layout the paginator fills
-  // column 0 top-to-bottom, then column 1, etc. — so (x, y) preserves the
-  // original sequence.
+  // Order fragments in document order: by current column, then by y within each column. During
+  // unbalanced layout the paginator fills column 0 top-to-bottom, then column 1, etc. — so column
+  // order followed by y preserves the original sequence.
+  //
+  // Which way "column order" runs across the page is direction-relative. In an RTL section column 0
+  // is the RIGHT one, so document order DESCENDS in x; sorting ascending there would feed the
+  // balancer the trailing column first and silently scramble the balanced page's reading order,
+  // since the balanced x/y are then written back onto the fragments in this order.
+  const columnOrder =
+    sectionColumns.direction === 'rtl' ? (a: number, b: number) => b - a : (a: number, b: number) => a - b;
   const ordered = [...sectionFragments].sort((a, b) => {
-    if (a.x !== b.x) return a.x - b.x;
+    if (a.x !== b.x) return columnOrder(a.x, b.x);
     return a.y - b.y;
   });
 
@@ -864,6 +881,8 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     width: columnWidth,
     ...(Array.isArray(sectionColumns.widths) ? { widths: sectionColumns.widths } : {}),
     ...(Array.isArray(sectionColumns.gaps) ? { gaps: sectionColumns.gaps } : {}),
+    ...(sectionColumns.direction !== undefined ? { direction: sectionColumns.direction } : {}),
+    ...(sectionColumns.contentWidth !== undefined ? { contentWidth: sectionColumns.contentWidth } : {}),
   });
   const columnX = (columnIndex: number): number => getColumnX(balancedGeometry, columnIndex, args.margins.left);
 

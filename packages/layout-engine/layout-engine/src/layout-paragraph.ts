@@ -19,6 +19,7 @@ import type {
   TableAnchor,
   TableWrap,
   ParagraphLineRegion,
+  ColumnLayoutForAnchor,
 } from '@superdoc/contracts';
 import {
   computeFragmentPmRange,
@@ -469,7 +470,9 @@ export type ParagraphAnchorsContext = {
   columnWidth: number;
   pageWidth: number;
   pageMargins: PageMargins;
-  columns: { width: number; gap: number; count: number };
+  // Carries the resolved column layout through to resolveAnchoredGraphicX, direction included: a
+  // column-relative anchor in an RTL section resolves against the mirrored geometry.
+  columns: ColumnLayoutForAnchor;
   placedAnchoredIds: Set<string>;
 };
 

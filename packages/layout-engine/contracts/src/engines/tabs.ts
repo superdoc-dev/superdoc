@@ -186,28 +186,35 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),
   //   seed defaults from the origin so numbering/content still lands on the default grid.
   // - Otherwise, preserve legacy behavior: defaults start after the rightmost explicit or left indent.
-  const seedDefaultsFromZero = !hasStartAlignedExplicit;
-  const defaultStart = seedDefaultsFromZero ? 0 : Math.max(maxExplicit, leftIndent);
-  let pos = defaultStart;
-  const targetLimit = Math.max(defaultStart, leftIndent, maxExplicit) + 14400; // 14400 twips = 10 inches
+  // w:defaultTabStop may be 0 or negative — Word writes 0 when a user sets the
+  // default tab interval to 0, opens such documents fine, and simply generates
+  // no automatic tab-stop grid. Without this guard the grid loop below never
+  // advances and freezes the main thread forever (issue #3944).
+  const hasUsableDefaultInterval = Number.isFinite(defaultTabInterval) && defaultTabInterval > 0;
+  if (hasUsableDefaultInterval) {
+    const seedDefaultsFromZero = !hasStartAlignedExplicit;
+    const defaultStart = seedDefaultsFromZero ? 0 : Math.max(maxExplicit, leftIndent);
+    let pos = defaultStart;
+    const targetLimit = Math.max(defaultStart, leftIndent, maxExplicit) + 14400; // 14400 twips = 10 inches
 
-  while (pos < targetLimit) {
-    pos += defaultTabInterval;
+    while (pos < targetLimit) {
+      pos += defaultTabInterval;
 
-    // Don't add if there's already a stop OR a cleared position at this position
-    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
-    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
+      // Don't add if there's already a stop OR a cleared position at this position
+      const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
+      const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
 
-    // Default stops must be >= leftIndent (for body text alignment)
-    const isValidDefault = pos >= leftIndent;
+      // Default stops must be >= leftIndent (for body text alignment)
+      const isValidDefault = pos >= leftIndent;
 
-    if (!hasExistingStop && !hasClearStop && isValidDefault) {
-      stops.push({
-        val: 'start',
-        pos,
-        leader: 'none',
-        source: 'default',
-      });
+      if (!hasExistingStop && !hasClearStop && isValidDefault) {
+        stops.push({
+          val: 'start',
+          pos,
+          leader: 'none',
+          source: 'default',
+        });
+      }
     }
   }
 

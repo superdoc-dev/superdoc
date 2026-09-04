@@ -1333,7 +1333,8 @@ function createHeadingResultSchemaFor(operationId: OperationId): JsonSchema {
     oneOf: [createHeadingSuccessSchema, createHeadingFailureSchemaFor(operationId)],
   };
 }
-const headingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 6 };
+const createHeadingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 6 };
+const semanticHeadingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 9 };
 const listsInsertSuccessSchema = objectSchema(
   {
     success: { const: true },
@@ -4198,7 +4199,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
                   ['text'],
                 ),
               },
-              headingLevel: { type: 'integer', description: 'Heading level (1-6). Only present for headings.' },
+              headingLevel: {
+                ...semanticHeadingLevelSchema,
+                description: 'Heading level (1-9). Only present for headings.',
+              },
               tableContext: objectSchema(
                 {
                   tableOrdinal: {
@@ -4499,7 +4503,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               bold: { type: 'boolean', description: 'True if text is bold.' },
               color: { type: 'string', description: "Text color when explicitly set (e.g. '#000000')." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
-              headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+              headingLevel: { ...semanticHeadingLevelSchema, description: 'Heading level (1-9).' },
               paragraphNumbering: {
                 type: 'object',
                 description:
@@ -5414,7 +5418,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         in: storyLocatorSchema,
-        level: { ...headingLevelSchema, description: 'Heading level (1-6).' },
+        level: { ...createHeadingLevelSchema, description: 'Heading level (1-6).' },
         at: {
           description:
             "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",

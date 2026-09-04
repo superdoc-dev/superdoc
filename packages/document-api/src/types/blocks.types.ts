@@ -35,7 +35,7 @@ export interface BlockListEntry {
   color?: string;
   /** Paragraph alignment. */
   alignment?: string;
-  /** Heading level (1-6). Only for headings. */
+  /** Heading level (1-9). Only for headings. */
   headingLevel?: number;
   /**
    * Numbering reference (`numId` + `level`) for numbered blocks, sourced from the

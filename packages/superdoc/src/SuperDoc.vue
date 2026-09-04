@@ -3275,6 +3275,7 @@ const shouldShowV2Ruler = (doc) => {
 // `syncRulerOffset` but anchors to the active v2 page instead of a
 // v1-specific viewport class.
 const v2RulerHostStyle = ref({});
+const v2RulerPageRect = ref(null);
 let v2RulerEditorObserver = null;
 let v2RulerContainerObserver = null;
 let v2RulerActivePageIndex = 0;
@@ -3322,16 +3323,19 @@ const getV2ActivePageRect = () => {
 const syncV2RulerOffset = () => {
   if (!isV2Mode.value) {
     v2RulerHostStyle.value = {};
+    v2RulerPageRect.value = null;
     return;
   }
   const alignmentContainer = resolveV2RulerAlignmentContainer();
   if (!alignmentContainer) {
     v2RulerHostStyle.value = {};
+    v2RulerPageRect.value = null;
     return;
   }
   const pageRect = getV2ActivePageRect();
   if (!pageRect) {
     v2RulerHostStyle.value = {};
+    v2RulerPageRect.value = null;
     return;
   }
   const containerRect = alignmentContainer.getBoundingClientRect();
@@ -3340,6 +3344,12 @@ const syncV2RulerOffset = () => {
   v2RulerHostStyle.value = {
     paddingLeft: `${paddingLeft}px`,
     paddingRight: `${paddingRight}px`,
+  };
+  v2RulerPageRect.value = {
+    left: pageRect.left,
+    top: pageRect.top,
+    width: pageRect.width,
+    height: pageRect.height,
   };
 };
 
@@ -3398,6 +3408,7 @@ const syncV2RulerActiveEditor = () => {
 };
 
 const cleanupV2RulerObservers = () => {
+  if (typeof window !== 'undefined') window.removeEventListener('scroll', syncV2RulerOffset, true);
   try {
     v2RulerEditorObserver?.disconnect();
   } catch {
@@ -3414,6 +3425,7 @@ const cleanupV2RulerObservers = () => {
 
 const setupV2RulerObservers = () => {
   cleanupV2RulerObservers();
+  if (typeof window !== 'undefined') window.addEventListener('scroll', syncV2RulerOffset, true);
   if (typeof ResizeObserver === 'undefined') return;
   const layersEl = layers.value;
   const alignmentContainer = resolveV2RulerAlignmentContainer();
@@ -3658,6 +3670,7 @@ const whiteboardInteractive = computed(() => whiteboardEnabled.value);
                 <V2Ruler
                   :page-layout="proxy.$superdoc.activeEditor.pageLayout"
                   :measurement-unit="measurementUnit"
+                  :active-page-rect="v2RulerPageRect"
                   @page-margins-change="(event) => handleV2PageMarginsChange(doc, event)"
                 />
               </div>
@@ -3666,6 +3679,7 @@ const whiteboardInteractive = computed(() => whiteboardEnabled.value);
               <V2Ruler
                 :page-layout="proxy.$superdoc.activeEditor.pageLayout"
                 :measurement-unit="measurementUnit"
+                :active-page-rect="v2RulerPageRect"
                 @page-margins-change="(event) => handleV2PageMarginsChange(doc, event)"
               />
             </div>

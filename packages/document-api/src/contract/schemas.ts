@@ -3194,6 +3194,7 @@ const contentControlTargetSchema = objectSchema(
     kind: { enum: ['block', 'inline'] },
     nodeType: { const: 'sdt' },
     nodeId: { type: 'string' },
+    story: storyLocatorSchema,
   },
   ['kind', 'nodeType', 'nodeId'],
 );

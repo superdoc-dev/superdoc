@@ -1800,6 +1800,55 @@ export function remeasureParagraph(
   }
   let lastMeasuredFontSize = firstRunFontSize ?? 16;
 
+  /**
+   * Word never wraps a line at a trailing space that only precedes an explicit
+   * break (<w:br/>) or the paragraph end: such spaces are not measured for line
+   * fitting and hang past the text margin instead of opening a new (empty) line.
+   * Mirrors spacesHangBeforeBreak in measuring/dom (issue #3946).
+   *
+   * Only true line breaks qualify here (unlike the primary measurer's mirror):
+   * remeasurement treats page/column 'break' runs as zero-width passthroughs
+   * that do not close the line, so a space before one is mid-line and must keep
+   * counting toward the fit. Computed lazily in one backward pass —
+   * suffixHangs[i] answers "do runs i.. contribute no non-space content before
+   * a line break or the paragraph end?", and tailAllSpaceFrom[i] is the first
+   * index after run i's last non-space character — so repeated per-character
+   * lookups stay O(1) regardless of how many trailing-space runs there are.
+   */
+  let trailingSpacesHangCache: { suffixHangs: boolean[]; tailAllSpaceFrom: number[] } | null = null;
+  const computeTrailingSpacesHangCache = (): { suffixHangs: boolean[]; tailAllSpaceFrom: number[] } => {
+    const suffixHangs: boolean[] = new Array(runs.length + 1);
+    const tailAllSpaceFrom: number[] = new Array(runs.length);
+    suffixHangs[runs.length] = true;
+    for (let i = runs.length - 1; i >= 0; i -= 1) {
+      const run = runs[i];
+      if (isTextRun(run)) {
+        let lastNonSpace = run.text.length - 1;
+        while (lastNonSpace >= 0 && run.text[lastNonSpace] === ' ') lastNonSpace -= 1;
+        tailAllSpaceFrom[i] = lastNonSpace + 1;
+      } else {
+        tailAllSpaceFrom[i] = 0;
+      }
+      if (isLineBreakRun(run)) {
+        suffixHangs[i] = true;
+        continue;
+      }
+      if (isVanishedRun(run)) {
+        suffixHangs[i] = suffixHangs[i + 1];
+        continue;
+      }
+      suffixHangs[i] = isTextRun(run) && tailAllSpaceFrom[i] === 0 ? suffixHangs[i + 1] : false;
+    }
+    return { suffixHangs, tailAllSpaceFrom };
+  };
+  const trailingSpacesHang = (runIdx: number, fromChar: number): boolean => {
+    trailingSpacesHangCache ??= computeTrailingSpacesHangCache();
+    const { suffixHangs, tailAllSpaceFrom } = trailingSpacesHangCache;
+    const current = runs[runIdx];
+    if (isTextRun(current) && fromChar < tailAllSpaceFrom[runIdx]) return false;
+    return suffixHangs[runIdx + 1];
+  };
+
   while (currentRun < runs.length) {
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
@@ -2049,6 +2098,14 @@ export function remeasureParagraph(
             : effectiveMaxWidth - WIDTH_FUDGE_PX;
         if (width + w > fitThreshold && width > 0) {
           if (ch === ' ') {
+            // A trailing space right before an explicit break (or the paragraph
+            // end) never forces a wrap: consume it at zero charged width and keep
+            // scanning so the break closes this line instead of an empty one.
+            if (trailingSpacesHang(r, chEnd)) {
+              endRun = r;
+              endChar = chEnd;
+              continue;
+            }
             // The space is only a wrap delimiter. Consume it so the next line
             // starts at the following word, but do not charge its width to the
             // completed line.

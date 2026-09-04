@@ -2799,6 +2799,47 @@ async function measureParagraphBlock(
     }
   };
 
+  /**
+   * Word never wraps a line at a trailing space that is immediately followed by an
+   * explicit break (<w:br/>) or the end of the paragraph: trailing spaces are not
+   * measured for line fitting and simply hang past the text margin. Without this,
+   * a space that overflows the measure right before a hard break wraps onto its
+   * own line, and the break then closes that (visually empty) line — producing a
+   * spurious blank line (three lines instead of two). Returns true when every run
+   * after `startRunIndex` up to the next explicit break (or the paragraph end)
+   * contributes no non-space content, i.e. the current space(s) are line-trailing.
+   */
+  // Any 'break' kind counts, not just breakType 'line': the run loop below
+  // closes the current line for every break run, so a space that only precedes
+  // a page/column break is line-trailing here too. Computed lazily in one
+  // backward pass (suffixHangs[i] answers "do runs i.. contribute no non-space
+  // content before a line-closing break or the paragraph end?"), so repeated
+  // lookups stay O(1) even with many trailing-space runs.
+  let spacesHangCache: boolean[] | null = null;
+  const computeSpacesHangCache = (): boolean[] => {
+    const suffixHangs: boolean[] = new Array(runsToProcess.length + 1);
+    suffixHangs[runsToProcess.length] = true;
+    for (let i = runsToProcess.length - 1; i >= 0; i--) {
+      const run = runsToProcess[i] as Run;
+      if (run.kind === 'lineBreak' || run.kind === 'break') {
+        suffixHangs[i] = true;
+        continue;
+      }
+      if (isVanishedRun(run)) {
+        suffixHangs[i] = suffixHangs[i + 1];
+        continue;
+      }
+      const isPlainTextRun = !run.kind || run.kind === 'text';
+      const text = (run as TextRun).text;
+      suffixHangs[i] = isPlainTextRun && typeof text === 'string' && /^[ ]*$/.test(text) ? suffixHangs[i + 1] : false;
+    }
+    return suffixHangs;
+  };
+  const spacesHangBeforeBreak = (startRunIndex: number): boolean => {
+    spacesHangCache ??= computeSpacesHangCache();
+    return spacesHangCache[startRunIndex + 1];
+  };
+
   // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
   // segment to the last N alignment stops; segments are delimited by explicit
   // <w:br/> runs because pPr/tabs apply per line, not per paragraph.
@@ -3653,7 +3694,8 @@ async function measureParagraphBlock(
           const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
           if (
             currentLine.width + boundarySpacing + spacesWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-            currentLine.width > 0
+            currentLine.width > 0 &&
+            !(isLastSegment && spacesHangBeforeBreak(runIndex))
           ) {
             trimTrailingWrapSpaces(currentLine);
             const completedLine: Line = closeLineWithMetrics(currentLine);
@@ -3777,7 +3819,8 @@ async function measureParagraphBlock(
             const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
             if (
               currentLine.width + boundarySpacing + singleSpaceWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-              currentLine.width > 0
+              currentLine.width > 0 &&
+              !(isLastSegment && wordIndex > lastNonEmptyWordIndex && spacesHangBeforeBreak(runIndex))
             ) {
               // Space doesn't fit - finish current line and start new one with the space
               trimTrailingWrapSpaces(currentLine);

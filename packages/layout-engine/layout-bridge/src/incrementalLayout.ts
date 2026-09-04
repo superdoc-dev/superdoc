@@ -217,6 +217,7 @@ type CoupledFootnoteRetainedState = {
   readonly notePageIndexes: readonly number[];
   readonly refs: readonly FootnoteReference[];
   readonly referencePlaneIdentity: FootnotesLayoutInput['refs'];
+  readonly noteBlocksPlaneIdentity: FootnotesLayoutInput['blocksById'];
   readonly referenceTopologyRevision: string | undefined;
   readonly refIndexesByBlock: ReadonlyMap<string, readonly number[]>;
   readonly refIndexById: ReadonlyMap<string, number>;
@@ -230,6 +231,36 @@ const issueCoupledFootnoteState = (state: CoupledFootnoteRetainedState): Coupled
   issuedCoupledFootnoteStates.add(state);
   return Object.freeze(state);
 };
+
+function readExactCoupledNotePlane(
+  retained: CoupledFootnoteRetainedState | null | undefined,
+  blocksByNoteId: FootnotesLayoutInput['blocksById'],
+): {
+  blocksByBlockId: Map<string, FlowBlock>;
+  measuresByBlockId: Map<string, Measure>;
+  totalMap: Map<string, number>;
+  firstLineMap: Map<string, number>;
+} | null {
+  if (
+    !retained ||
+    !issuedCoupledFootnoteStates.has(retained) ||
+    retained.noteBlocksPlaneIdentity !== blocksByNoteId ||
+    !(retained.prepared.measuresById instanceof Map) ||
+    !(retained.prepared.fullHeightById instanceof Map) ||
+    !(retained.prepared.firstLineHeightById instanceof Map) ||
+    retained.blocksById.size === 0 ||
+    retained.blocksById.size !== retained.prepared.measuresById.size ||
+    retained.refIndexById.size !== retained.prepared.fullHeightById.size ||
+    retained.refIndexById.size !== retained.prepared.firstLineHeightById.size
+  )
+    return null;
+  return {
+    blocksByBlockId: retained.blocksById,
+    measuresByBlockId: retained.prepared.measuresById,
+    totalMap: retained.prepared.fullHeightById,
+    firstLineMap: retained.prepared.firstLineHeightById,
+  };
+}
 type PreparedCoupledFootnoteLayout = {
   retained: CoupledFootnoteRetainedState;
   footnotes: FootnotesLayoutInput;
@@ -507,6 +538,7 @@ function rebaseCoupledFootnoteReferences(input: {
     prepared,
     refs: Object.freeze(refs),
     referencePlaneIdentity: footnotes.refs,
+    noteBlocksPlaneIdentity: footnotes.blocksById,
     referenceTopologyRevision: footnotes.referenceTopologyRevision,
     refIndexesByBlock,
     refIndexById,
@@ -2188,6 +2220,7 @@ function prepareFreshDocumentCoupledFootnotes(input: {
       notePageIndexes: Object.freeze([]),
       refs,
       referencePlaneIdentity: input.footnotes.refs,
+      noteBlocksPlaneIdentity: input.footnotes.blocksById,
       referenceTopologyRevision: input.footnotes.referenceTopologyRevision,
       refIndexesByBlock,
       refIndexById,
@@ -3284,12 +3317,16 @@ export async function incrementalLayout(
     }
     return assignment;
   })();
-  const retainedNoteMeasures = warmSeedBaseUsable
-    ? validateRetainedNoteMeasurePlane(earlyFootnotesInput!.blocksById, warmSeed!)
-    : null;
-  const retainedCurrentNotePlane = warmSeedBaseUsable
-    ? readRetainedNoteMeasureSubset(earlyFootnotesInput!.blocksById, warmSeed!)
-    : null;
+  const retainedCoupledNotePlane =
+    warmSeedBaseUsable && warmStart?.noteMeasurePlaneRetainedExact === true
+      ? readExactCoupledNotePlane(warmSeed?.coupled, earlyFootnotesInput!.blocksById)
+      : null;
+  const retainedNoteMeasures =
+    retainedCoupledNotePlane?.measuresByBlockId ??
+    (warmSeedBaseUsable ? validateRetainedNoteMeasurePlane(earlyFootnotesInput!.blocksById, warmSeed!) : null);
+  const retainedCurrentNotePlane =
+    retainedCoupledNotePlane ??
+    (warmSeedBaseUsable ? readRetainedNoteMeasureSubset(earlyFootnotesInput!.blocksById, warmSeed!) : null);
   // SD-4692: footnote convergence may request the same immutable note story
   // dozens of times during one incrementalLayout call. Keep that invocation's
   // exact measure plane independently of the bounded cross-call LRU, whose
@@ -3307,15 +3344,19 @@ export async function incrementalLayout(
     warmSeedBaseUsable &&
     (warmSeed!.measurementHeight === measurementHeight ||
       (provedDirtyMeasureCandidate && retainedNoteMeasurePlaneExact));
-  const retainedNoteHeights =
-    retainedNoteMeasurePlaneExact &&
-    warmSeed?.noteBodyHeightById instanceof Map &&
-    warmSeed.noteFirstLineHeightById instanceof Map &&
-    new Set(earlyFootnotesInput?.refs.map((reference) => reference.id) ?? []).size ===
-      warmSeed.noteBodyHeightById.size &&
-    [...new Set(earlyFootnotesInput?.refs.map((reference) => reference.id) ?? [])].every(
-      (id) => warmSeed.noteBodyHeightById!.has(id) && warmSeed.noteFirstLineHeightById!.has(id),
-    )
+  const retainedNoteHeights = retainedCoupledNotePlane
+    ? {
+        totalMap: retainedCoupledNotePlane.totalMap,
+        firstLineMap: retainedCoupledNotePlane.firstLineMap,
+      }
+    : retainedNoteMeasurePlaneExact &&
+        warmSeed?.noteBodyHeightById instanceof Map &&
+        warmSeed.noteFirstLineHeightById instanceof Map &&
+        new Set(earlyFootnotesInput?.refs.map((reference) => reference.id) ?? []).size ===
+          warmSeed.noteBodyHeightById.size &&
+        [...new Set(earlyFootnotesInput?.refs.map((reference) => reference.id) ?? [])].every(
+          (id) => warmSeed.noteBodyHeightById!.has(id) && warmSeed.noteFirstLineHeightById!.has(id),
+        )
       ? {
           totalMap: warmSeed.noteBodyHeightById,
           firstLineMap: warmSeed.noteFirstLineHeightById,
@@ -4953,34 +4994,36 @@ export async function incrementalLayout(
           }
           extraBlocks = nextExtras;
           extraMeasures = nextExtraMeasures;
-          const currentNoteMeasures = new Map<string, Measure>();
-          for (const blockId of retained.blocksById.keys()) {
-            const measure = prepared.measuresById.get(blockId);
-            if (!measure) {
-              throw new CoupledFootnotePaginationError(
-                'missing-anchor',
-                start,
-                `Retained measure is unavailable for current note block ${blockId}`,
-              );
+          const exactNotePlane = readExactCoupledNotePlane(retained, footnotesInput.blocksById);
+          const currentNoteMeasures = exactNotePlane?.measuresByBlockId ?? new Map<string, Measure>();
+          const currentNoteBodyHeights = exactNotePlane?.totalMap ?? new Map<string, number>();
+          const currentNoteFirstLineHeights = exactNotePlane?.firstLineMap ?? new Map<string, number>();
+          if (!exactNotePlane) {
+            for (const blockId of retained.blocksById.keys()) {
+              const measure = prepared.measuresById.get(blockId);
+              if (!measure) {
+                throw new CoupledFootnotePaginationError(
+                  'missing-anchor',
+                  start,
+                  `Retained measure is unavailable for current note block ${blockId}`,
+                );
+              }
+              currentNoteMeasures.set(blockId, measure);
             }
-            currentNoteMeasures.set(blockId, measure);
-          }
-          const currentNoteIds = new Set(footnotesInput.refs.map((reference) => reference.id));
-          const currentNoteBodyHeights = new Map<string, number>();
-          const currentNoteFirstLineHeights = new Map<string, number>();
-          for (const noteId of currentNoteIds) {
-            const total = prepared.fullHeightById.get(noteId);
-            const first = prepared.firstLineHeightById.get(noteId);
-            if (total == null || first == null) {
-              throw new CoupledFootnotePaginationError(
-                'missing-anchor',
-                start,
-                `Retained geometry is unavailable for current footnote ${noteId}`,
-                noteId,
-              );
+            for (const noteId of retained.refIndexById.keys()) {
+              const total = prepared.fullHeightById.get(noteId);
+              const first = prepared.firstLineHeightById.get(noteId);
+              if (total == null || first == null) {
+                throw new CoupledFootnotePaginationError(
+                  'missing-anchor',
+                  start,
+                  `Retained geometry is unavailable for current footnote ${noteId}`,
+                  noteId,
+                );
+              }
+              currentNoteBodyHeights.set(noteId, total);
+              currentNoteFirstLineHeights.set(noteId, first);
             }
-            currentNoteBodyHeights.set(noteId, total);
-            currentNoteFirstLineHeights.set(noteId, first);
           }
           const reserves = retained.reserves.slice(0, layout.pages.length);
           const notePages = new Set(retained.notePageIndexes.filter((index) => index < layout.pages.length));
@@ -4995,13 +5038,14 @@ export async function incrementalLayout(
             reserves,
             notePageIndexes,
             footnoteAssignment: undefined,
-            noteBlocksByBlockId: new Map(retained.blocksById),
+            noteBlocksByBlockId: exactNotePlane?.blocksByBlockId ?? new Map(retained.blocksById),
             noteMeasuresByBlockId: currentNoteMeasures,
             noteBodyHeightById: currentNoteBodyHeights,
             noteFirstLineHeightById: currentNoteFirstLineHeights,
             coupled: issueCoupledFootnoteState({
               ...retained,
               referencePlaneIdentity: footnotesInput.refs,
+              noteBlocksPlaneIdentity: footnotesInput.blocksById,
               reserves: Object.freeze(reserves.slice()),
               notePageIndexes: Object.freeze(notePageIndexes.slice()),
               extraBlocks: nextExtras,
@@ -5269,6 +5313,7 @@ export async function incrementalLayout(
                 notePageIndexes: Object.freeze(publishedSeed.notePageIndexes!.slice()),
                 refs: Object.freeze(footnotesInput.refs.map((ref) => Object.freeze({ ...ref }))),
                 referencePlaneIdentity: footnotesInput.refs,
+                noteBlocksPlaneIdentity: footnotesInput.blocksById,
                 referenceTopologyRevision: footnotesInput.referenceTopologyRevision,
                 refIndexesByBlock,
                 refIndexById,

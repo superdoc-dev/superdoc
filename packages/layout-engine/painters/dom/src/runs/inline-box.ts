@@ -166,8 +166,16 @@ const applyInlineBoxStyle = (
  * Paints measured inline-box slices on the canonical text leaves.
  *
  * Direction-agnostic: every edge is written on a logical axis, so the same call
- * is correct for an LTR and an RTL line. Ranges whose leaves do not form one
- * visual run are filtered out during measurement, before they reach here.
+ * is correct for an LTR and an RTL line.
+ *
+ * Known limitation, not a guarantee: nothing filters out a range that straddles
+ * a direction change. Such a range maps to more than one visual segment, and
+ * `isFirstLeaf`/`isLastLeaf` can only mark one start and one end, so the box
+ * gets its edges on the wrong fragments. That predates the logical properties —
+ * the Unicode Bidi Algorithm reorders a Hebrew phrase inside a Latin paragraph
+ * whether or not anything declares `w:rtl`, and such a paragraph was never
+ * gated. Fixing it means painting per visual segment, which is a change to
+ * `Line.segments` rather than to this file.
  */
 export const paintInlineBoxes = (boxes: readonly LineInlineBox[] | undefined, lineElement: HTMLElement): void => {
   if (!boxes?.length) return;

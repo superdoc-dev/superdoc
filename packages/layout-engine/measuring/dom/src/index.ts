@@ -1803,10 +1803,13 @@ async function measureParagraphBlock(
    *
    * Dropping them also removes an asymmetry rather than adding one. A logical
    * range that straddles a direction change maps to more than one visual
-   * segment, and the painter's first/last-leaf edges cannot express that — but
-   * that is equally reachable today in an LTR paragraph containing a Hebrew
-   * phrase, which ships. Gating only the RTL side held RTL to a stricter
-   * standard than LTR while leaving the shared limitation in place.
+   * segment, and the painter's first/last-leaf edges cannot express that. The
+   * clause removed here did not target that case: it keyed on the declaration
+   * (`run.bidi?.rtl`), while the Unicode Bidi Algorithm reorders a Hebrew phrase
+   * inside a Latin paragraph whether or not anything declares it. So the same
+   * defect was already reachable, undeclared, and shipped. Keeping the clause
+   * would have bought consistency with LTR, not correctness — while holding
+   * uniform RTL, which has no such ambiguity, to a stricter standard than LTR.
    */
   const inlineBoxes = block.inlineBoxes?.filter(
     (box) =>

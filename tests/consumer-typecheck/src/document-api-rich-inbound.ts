@@ -45,7 +45,11 @@ const mutationInput: Parameters<DocumentApi['mutations']['apply']>[0] = {
   ],
 };
 const mutationResult: ReturnType<DocumentApi['mutations']['apply']> = doc.mutations.apply(mutationInput);
-const invalidatedRefs = mutationResult.invalidatedRefs;
+const inspectMutationResult = async () => {
+  const invalidatedRefs = (await mutationResult).invalidatedRefs;
+  void invalidatedRefs;
+};
+void inspectMutationResult;
 
 for (const diagnostic of htmlResult.diagnostics) {
   const format: 'html' | 'markdown' = diagnostic.source.format;
@@ -172,5 +176,4 @@ void [
   oldReplace,
   oldMarkdown,
   parsedClipboard,
-  invalidatedRefs,
 ];

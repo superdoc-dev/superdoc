@@ -2178,6 +2178,16 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   #toV2CollaborationConfig(target: NormalizedV2CollaborationTarget): V2CollaborationConfig {
+    if (target.providerFamily === 'extension') {
+      return {
+        providerType: 'extension',
+        adapterId: target.adapterId as string,
+        documentId: target.documentId,
+        roomMode: target.roomMode,
+        ...(target.providerOptions !== undefined ? { providerOptions: target.providerOptions } : {}),
+        ...(target.token ? { token: target.token } : {}),
+      };
+    }
     if (target.providerFamily === 'liveblocks') {
       return {
         providerType: 'liveblocks',

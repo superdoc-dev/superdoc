@@ -843,8 +843,10 @@ export function findInstalledEngineRoot(packageRoot) {
 const INSTALLED_REQUIRED_FILES = Object.freeze([
   'dist/docx-engine.es.js',
   'dist/collaboration-upgrade-engine.js',
+  'dist/collaboration-worker.js',
   'dist/style.css',
   'dist/docx-engine.d.ts',
+  'dist/collaboration-worker.d.ts',
   'dist/DOCX-ENGINE-LICENSE.md',
   'dist/NOTICE.md',
 ]);

@@ -1333,7 +1333,8 @@ function createHeadingResultSchemaFor(operationId: OperationId): JsonSchema {
     oneOf: [createHeadingSuccessSchema, createHeadingFailureSchemaFor(operationId)],
   };
 }
-const headingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 6 };
+const createHeadingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 6 };
+const semanticHeadingLevelSchema: JsonSchema = { type: 'integer', minimum: 1, maximum: 9 };
 const listsInsertSuccessSchema = objectSchema(
   {
     success: { const: true },
@@ -1449,26 +1450,7 @@ const textSelectorSchema = objectSchema(
   },
   ['type', 'pattern'],
 );
-// Intentionally omits includeDeletedText — plan engine (apply/preview) still
-// resolves only visible-text selectors.
-const planTextSelectorSchema = objectSchema(
-  {
-    type: { const: 'text', description: "Must be 'text' for text pattern search." },
-    pattern: {
-      type: 'string',
-      description:
-        'Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.',
-    },
-    mode: {
-      enum: ['contains', 'regex'],
-      description:
-        "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
-    },
-    caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
-    wholeWord: { type: 'boolean', description: 'Require word-boundary matches. Default: false.' },
-  },
-  ['type', 'pattern'],
-);
+const planTextSelectorSchema = textSelectorSchema;
 const nodeSelectorSchema = objectSchema(
   {
     type: { const: 'node', description: "Must be 'node' for node type search." },
@@ -3193,6 +3175,7 @@ const contentControlTargetSchema = objectSchema(
     kind: { enum: ['block', 'inline'] },
     nodeType: { const: 'sdt' },
     nodeId: { type: 'string' },
+    story: storyLocatorSchema,
   },
   ['kind', 'nodeType', 'nodeId'],
 );
@@ -4198,7 +4181,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
                   ['text'],
                 ),
               },
-              headingLevel: { type: 'integer', description: 'Heading level (1-6). Only present for headings.' },
+              headingLevel: {
+                ...semanticHeadingLevelSchema,
+                description: 'Heading level (1-9). Only present for headings.',
+              },
               tableContext: objectSchema(
                 {
                   tableOrdinal: {
@@ -4499,7 +4485,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               bold: { type: 'boolean', description: 'True if text is bold.' },
               color: { type: 'string', description: "Text color when explicitly set (e.g. '#000000')." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
-              headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+              headingLevel: { ...semanticHeadingLevelSchema, description: 'Heading level (1-9).' },
               paragraphNumbering: {
                 type: 'object',
                 description:
@@ -5414,7 +5400,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         in: storyLocatorSchema,
-        level: { ...headingLevelSchema, description: 'Heading level (1-6).' },
+        level: { ...createHeadingLevelSchema, description: 'Heading level (1-6).' },
         at: {
           description:
             "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
@@ -7100,6 +7086,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         args: objectSchema(
           {
             replacement: replacementPayloadSchema,
+            replacementMode: { enum: ['literal', 'regex-template'], type: 'string' },
+            caseHandling: { enum: ['exact', 'preserve-match'], type: 'string' },
             style: stylePolicySchema,
           },
           ['replacement'],
@@ -7184,29 +7172,40 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         assertStepSchema,
       ],
     };
-    const mutationsInputSchema = objectSchema(
+    const mutationsInputProperties = {
+      in: storyLocatorSchema,
+      expectedRevision: {
+        type: 'string',
+        description:
+          'Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.',
+      },
+      atomic: {
+        const: true,
+        type: 'boolean',
+        description: 'Must be true. All steps execute as one atomic transaction.',
+      },
+      changeMode: {
+        enum: ['direct', 'tracked'],
+        description:
+          "Required. Use 'direct' for immediate edits or 'tracked' for suggestions. Must always be provided.",
+      },
+      steps: {
+        ...arraySchema(mutationStepSchema),
+        description:
+          "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
+      },
+    };
+    const mutationsInputSchema = objectSchema(mutationsInputProperties, ['atomic', 'changeMode', 'steps']);
+    const mutationsPreviewInputSchema = objectSchema(
       {
-        in: storyLocatorSchema,
-        expectedRevision: {
-          type: 'string',
-          description:
-            'Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.',
-        },
-        atomic: {
-          const: true,
-          type: 'boolean',
-          description: 'Must be true. All steps execute as one atomic transaction.',
-        },
-        changeMode: {
-          enum: ['direct', 'tracked'],
-          description:
-            "Required. Use 'direct' for immediate edits or 'tracked' for suggestions. Must always be provided.",
-        },
-        steps: {
-          ...arraySchema(mutationStepSchema),
-          description:
-            "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
-        },
+        ...mutationsInputProperties,
+        detail: objectSchema(
+          {
+            offset: { type: 'number', minimum: 0 },
+            limit: { type: 'number', minimum: 0, maximum: 1000 },
+          },
+          [],
+        ),
       },
       ['atomic', 'changeMode', 'steps'],
     );
@@ -7304,7 +7303,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ),
       },
       'mutations.preview': {
-        input: mutationsInputSchema,
+        input: mutationsPreviewInputSchema,
         output: objectSchema(
           {
             evaluatedRevision: { type: 'string' },

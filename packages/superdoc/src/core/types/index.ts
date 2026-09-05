@@ -636,6 +636,8 @@ export interface CollaborationProvider {
   off?: (...args: unknown[]) => unknown;
   disconnect?: () => unknown;
   destroy?: () => unknown;
+  /** Send a provider-specific stateless string payload. */
+  sendStateless?: (message: string) => unknown;
   [key: string]: unknown;
 }
 
@@ -650,21 +652,21 @@ export interface CollaborationProvider {
  * single-doc provider internally. One `documentId` maps to exactly one
  * room/provider/root identity.
  *
- * SuperDoc v2 supports three first-class provider families through this field:
- * y-websocket, Hocuspocus, and Liveblocks. The provider is selected with
- * `providerType`; omitting it preserves the original y-websocket-only shape
- * (`{ documentId, serverUrl, params? }`) for backward compatibility.
+ * SuperDoc v2 includes y-websocket, Hocuspocus, and Liveblocks adapters and can
+ * route a named provider extension through a configured collaboration Worker.
+ * The provider is selected with `providerType`; omitting it preserves the
+ * original y-websocket-only shape (`{ documentId, serverUrl, params? }`).
  *
  * This is intentionally distinct from the legacy provider-agnostic
- * {@link CollaborationConfig} (`Config.modules.collaboration`): v2 owns its
- * provider internally and does **not** accept an external Yjs `provider`/`ydoc`
- * through this field. External `{ ydoc, provider }` remains a v1 /
- * provider-compat concern only and is rejected as a v2 content driver.
+ * {@link CollaborationConfig} (`Config.modules.collaboration`): v2 owns the
+ * Y.Doc. Provider extensions receive that document inside the collaboration
+ * Worker instead of replacing it.
  */
 export type V2CollaborationConfig =
   | V2YWebsocketCollaborationConfig
   | V2HocuspocusCollaborationConfig
-  | V2LiveblocksCollaborationConfig;
+  | V2LiveblocksCollaborationConfig
+  | V2ProviderExtensionCollaborationConfig;
 
 /**
  * y-websocket single-doc provider config.
@@ -704,8 +706,8 @@ export interface V2HocuspocusCollaborationConfig {
   url?: string;
   /** Optional connection params forwarded to the backend. */
   params?: Record<string, string> | null;
-  /** Auth-message token forwarded to the Hocuspocus backend. */
-  token?: string;
+  /** Static auth token or resolver invoked for every Hocuspocus connection. */
+  token?: string | (() => string | Promise<string>);
   /** Explicit room operation. Defaults to `'join'`; `'create'` never joins an existing room. */
   roomMode?: 'join' | 'create';
 }
@@ -730,6 +732,21 @@ export interface V2LiveblocksCollaborationConfig {
    * page; non-browser SDK/CLI callers must use an absolute HTTP(S) URL.
    */
   authEndpoint?: string;
+  /** Explicit room operation. Defaults to `'join'`; `'create'` never joins an existing room. */
+  roomMode?: 'join' | 'create';
+}
+
+/** Named provider adapter implemented by the configured collaboration Worker. */
+export interface V2ProviderExtensionCollaborationConfig {
+  providerType: 'extension';
+  /** Adapter registration key understood by the collaboration Worker. */
+  adapterId: string;
+  /** Stable shared document identity. */
+  documentId: string;
+  /** Structured-clone-safe options passed to the registered adapter factory. */
+  providerOptions?: unknown;
+  /** Optional host-owned credential resolver available to the adapter. */
+  token?: string | (() => string | Promise<string>);
   /** Explicit room operation. Defaults to `'join'`; `'create'` never joins an existing room. */
   roomMode?: 'join' | 'create';
 }

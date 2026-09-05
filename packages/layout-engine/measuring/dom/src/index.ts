@@ -2451,6 +2451,8 @@ async function measureParagraphBlock(
     tabWidths?: Record<number, number>;
     /** Internal marker for an empty line seeded by an explicit line break. */
     isLineBreakPlaceholder?: boolean;
+    /** Internal marker: a terminal wrap space was already collapsed onto this line. */
+    collapsedWrapSpaces?: true;
     /** Inline image runs on this line, tracked for measured baseline-vs-top resolution. */
     imageRunCandidates?: InlineImageCandidate[];
   } | null = null;
@@ -2482,7 +2484,12 @@ async function measureParagraphBlock(
     }
     const metrics = finalizeLineMetrics(lineState, spacing, fontContext, emptyParagraphLineMetrics);
     const { textLineHeight, ...lineMetrics } = metrics;
-    const { imageRunCandidates, fontMetricEnvelope: _fontMetricEnvelope, ...rest } = lineState;
+    const {
+      imageRunCandidates,
+      fontMetricEnvelope: _fontMetricEnvelope,
+      collapsedWrapSpaces: _collapsedWrapSpaces,
+      ...rest
+    } = lineState;
     const completedLine: Line = { ...rest, ...lineMetrics };
     // A small inline image on an otherwise textless OOXML run still composes
     // against that run's font baseline. Callers that do not provide run
@@ -2765,6 +2772,16 @@ async function measureParagraphBlock(
     runsToProcess.length >= 2 &&
     isLineBreakRun(runsToProcess[runsToProcess.length - 1]) &&
     isTabRun(runsToProcess[runsToProcess.length - 2]);
+  const endsAtLineBoundary = (runIndex: number): boolean => {
+    for (let nextRunIndex = runIndex + 1; nextRunIndex < runsToProcess.length; nextRunIndex += 1) {
+      const nextRun = runsToProcess[nextRunIndex];
+      // Vanished and empty runs paint nothing, so they do not make the space non-terminal.
+      if (isVanishedRun(nextRun)) continue;
+      if (isTextRun(nextRun) && /^[ ]*$/.test(nextRun.text)) continue;
+      return isLineBreakRun(nextRun) || nextRun.kind === 'break';
+    }
+    return true;
+  };
 
   /**
    * Trims trailing regular spaces from a line when it is finalized.
@@ -2810,6 +2827,28 @@ async function measureParagraphBlock(
     if (lineToTrim.naturalWidth != null) {
       lineToTrim.naturalWidth = roundValue(Math.max(0, lineToTrim.naturalWidth - delta));
     }
+  };
+
+  /**
+   * Collapses an overflowing terminal wrap space onto the line it overflowed from.
+   *
+   * Like `trimTrailingWrapSpaces`, the characters stay in the line's source range and
+   * only width and `spaceCount` are dropped. Sibling spaces of the same terminal cluster
+   * that an earlier run or word token already committed are trimmed exactly once.
+   */
+  const collapseTerminalWrapSpaces = (
+    lineToExtend: NonNullable<typeof currentLine>,
+    runIndex: number,
+    fromChar: number,
+    toChar: number,
+  ): void => {
+    if (!lineToExtend.collapsedWrapSpaces) {
+      trimTrailingWrapSpaces(lineToExtend);
+      lineToExtend.collapsedWrapSpaces = true;
+    }
+    lineToExtend.toRun = runIndex;
+    lineToExtend.toChar = toChar;
+    appendSegment(lineToExtend.segments, runIndex, fromChar, toChar, 0);
   };
 
   // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
@@ -3644,6 +3683,7 @@ async function measureParagraphBlock(
       const isLastSegment = segmentIndex === tabSegments.length - 1;
       if (/^[ ]+$/.test(segment)) {
         const isRunStart = charPosInRun === 0 && segmentIndex === 0;
+        const isTerminalWrapSpace = isLastSegment && endsAtLineBoundary(runIndex);
         const spacesLength = segment.length;
         const spacesStartChar = charPosInRun;
         const spacesEndChar = charPosInRun + spacesLength;
@@ -3664,10 +3704,17 @@ async function measureParagraphBlock(
           };
         } else {
           const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
-          if (
+          const spaceOverflows =
             currentLine.width + boundarySpacing + spacesWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-            currentLine.width > 0
-          ) {
+            currentLine.width > 0;
+          // Once part of a terminal cluster has collapsed, the rest must collapse too, even
+          // though each later space now fits against the trimmed width.
+          if (isTerminalWrapSpace && (spaceOverflows || currentLine.collapsedWrapSpaces)) {
+            collapseTerminalWrapSpaces(currentLine, runIndex, spacesStartChar, spacesEndChar);
+            charPosInRun = spacesEndChar;
+            continue;
+          }
+          if (spaceOverflows) {
             trimTrailingWrapSpaces(currentLine);
             const completedLine: Line = closeLineWithMetrics(currentLine);
             lines.push(completedLine);
@@ -3769,6 +3816,8 @@ async function measureParagraphBlock(
           const spaceEndChar = charPosInRun + 1;
           const singleSpaceWidth = resolveParagraphRunWidth(' ', font, ctx, run, spaceStartChar);
           const isRunStart = charPosInRun === 0 && segmentIndex === 0 && wordIndex === 0;
+          const isTerminalWrapSpace =
+            isLastSegment && wordIndex > lastNonEmptyWordIndex && endsAtLineBoundary(runIndex);
 
           if (!currentLine) {
             // Start a new line with just the space
@@ -3788,10 +3837,15 @@ async function measureParagraphBlock(
             // Add space to existing line
             // Safe cast: only TextRuns produce word segments from split(), other run types are handled earlier
             const boundarySpacing = resolveBoundarySpacing(currentLine.width, isRunStart, run as TextRun);
-            if (
+            const spaceOverflows =
               currentLine.width + boundarySpacing + singleSpaceWidth > currentLine.maxWidth - WIDTH_FUDGE_PX &&
-              currentLine.width > 0
-            ) {
+              currentLine.width > 0;
+            if (isTerminalWrapSpace && (spaceOverflows || currentLine.collapsedWrapSpaces)) {
+              collapseTerminalWrapSpaces(currentLine, runIndex, spaceStartChar, spaceEndChar);
+              charPosInRun = spaceEndChar;
+              continue;
+            }
+            if (spaceOverflows) {
               // Space doesn't fit - finish current line and start new one with the space
               trimTrailingWrapSpaces(currentLine);
               const completedLine: Line = closeLineWithMetrics(currentLine);

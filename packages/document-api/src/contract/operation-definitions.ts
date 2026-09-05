@@ -1264,6 +1264,34 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'styles/apply.mdx',
     referenceGroup: 'styles',
   },
+  'styles.create': {
+    memberPath: 'styles.create',
+    description:
+      'Define or redefine a named paragraph or character style in the Style Definitions part. Replaces the definition rather than merging into it, and decides conflicts on both styleId and name, because Word keys its Styles gallery on the name. Linked style pairs and table/numbering styles are out of scope.',
+    expectedResult:
+      'Returns a StylesCreateReceipt reporting whether the style was created or redefined, with per-channel before/after state for the paragraph and run properties.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      // Conditional, not idempotent: under the default conflictPolicy 'fail' a
+      // second identical call fails, and only 'replace' makes it repeatable.
+      // Publishing 'idempotent' would invite an orchestrator to replay the call
+      // after a transport timeout and take a hard conflict, or clobber a style
+      // edited in between.
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      // No receipt failures are declared: this contract ships without an
+      // adapter, so there is no code the host can currently produce. Codes move
+      // here from `throws` when the engine side lands.
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'REVISION_MISMATCH'],
+      // Writes word/styles.xml outside the document history, exactly as
+      // styles.apply does.
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'styles/create.mdx',
+    referenceGroup: 'styles',
+  },
   'styles.getCatalog': {
     memberPath: 'styles.getCatalog',
     description:

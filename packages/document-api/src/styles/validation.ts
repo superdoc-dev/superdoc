@@ -7,8 +7,18 @@
 
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord } from '../validation-primitives.js';
-import type { ValueSchema, StylesChannel } from './registry.js';
-import { ALLOWED_KEYS_BY_CHANNEL, EXCLUDED_KEYS, getPropertyDefinition } from './registry.js';
+import type { ValueSchema, StylesChannel, StylesScope } from './registry.js';
+import { ALLOWED_KEYS_BY_CHANNEL, EXCLUDED_KEYS_BY_SCOPE, SCOPE_LABEL, getPropertyDefinition } from './registry.js';
+
+/**
+ * Error-detail code per scope. `docDefaults` keeps the code it has always
+ * emitted; callers switching on it must not have to learn a new one because a
+ * second scope appeared.
+ */
+const EXCLUSION_REASON_CODE: Record<StylesScope, string> = {
+  docDefaults: 'excluded_docdefaults_key',
+  style: 'excluded_style_key',
+};
 
 // ---------------------------------------------------------------------------
 // Recursive ValueSchema validation
@@ -197,41 +207,7 @@ export function validateStylesApplyInput(input: unknown): asserts input is Style
     throw new DocumentApiValidationError('INVALID_INPUT', 'patch must include at least one property.');
   }
 
-  const allowedKeys = ALLOWED_KEYS_BY_CHANNEL[channel];
-
-  for (const key of patchKeys) {
-    const classification = classifyPatchKey(key, channel);
-
-    switch (classification.status) {
-      case 'valid':
-        break;
-
-      case 'excluded':
-        throw new DocumentApiValidationError(
-          'INVALID_INPUT',
-          `patch key '${key}' is not valid in Word docDefaults (${classification.reason}). This is an intentional restriction per MS-OI29500.`,
-          { field: 'patch', key, reason: 'excluded_docdefaults_key' },
-        );
-
-      case 'cross_channel':
-        throw new DocumentApiValidationError(
-          'INVALID_INPUT',
-          `Unknown patch key "${key}" for channel "${channel}". "${key}" is a ${classification.ownerChannel}-channel property. Allowed keys: ${[...allowedKeys].join(', ')}.`,
-          { field: 'patch', key },
-        );
-
-      case 'unknown':
-        throw new DocumentApiValidationError(
-          'INVALID_INPUT',
-          `Unknown patch key "${key}" for channel "${channel}". Allowed keys: ${[...allowedKeys].join(', ')}.`,
-          { field: 'patch', key },
-        );
-    }
-
-    // Validate the value against the registry schema
-    const def = getPropertyDefinition(key, channel);
-    if (def) validateValue(`patch.${key}`, patch[key], def.schema);
-  }
+  validatePatchObject(patch, channel, 'docDefaults', 'patch');
 }
 
 export function validateStylesApplyOptions(options: unknown): void {
@@ -284,9 +260,15 @@ export type PatchKeyClassification =
  * nesting conditionals across excluded-key maps, allowed-key sets, and
  * cross-channel lookups.
  */
-export function classifyPatchKey(key: string, channel: StylesChannel): PatchKeyClassification {
+export function classifyPatchKey(
+  key: string,
+  channel: StylesChannel,
+  scope: StylesScope = 'docDefaults',
+): PatchKeyClassification {
+  const excluded = EXCLUDED_KEYS_BY_SCOPE[scope];
+
   // 1. Excluded on the requested channel
-  const excludedReason = EXCLUDED_KEYS[channel].get(key);
+  const excludedReason = excluded[channel].get(key);
   if (excludedReason !== undefined) {
     return { status: 'excluded', reason: excludedReason };
   }
@@ -296,20 +278,76 @@ export function classifyPatchKey(key: string, channel: StylesChannel): PatchKeyC
     return { status: 'valid' };
   }
 
-  // 3. Belongs to the other channel
+  // 3. Belongs to the other channel — and is reachable there in this scope.
+  //    The scope test is what keeps the ordering honest: `highlight` is a run
+  //    property, but in docDefaults it is excluded from the run channel too, so
+  //    "you sent a run property to the paragraph channel" would be the wrong
+  //    answer. It is excluded outright, and step 4 says so with a reason.
   const otherChannel: StylesChannel = channel === 'run' ? 'paragraph' : 'run';
-  if (ALLOWED_KEYS_BY_CHANNEL[otherChannel].has(key)) {
+  if (ALLOWED_KEYS_BY_CHANNEL[otherChannel].has(key) && !excluded[otherChannel].has(key)) {
     return { status: 'cross_channel', ownerChannel: otherChannel };
   }
 
   // 4. Excluded on the other channel (still an exclusion, not "unknown")
-  const otherExcludedReason = EXCLUDED_KEYS[otherChannel].get(key);
+  const otherExcludedReason = excluded[otherChannel].get(key);
   if (otherExcludedReason !== undefined) {
     return { status: 'excluded', reason: otherExcludedReason };
   }
 
   // 5. Not in any registry
   return { status: 'unknown' };
+}
+
+/**
+ * Validates the keys and values of a patch object against one channel.
+ *
+ * Shared by `styles.apply` (scope `docDefaults`) and `styles.create` (scope
+ * `style`); `field` names the caller's own input path so the error points at
+ * `patch` or at `run` / `paragraph` rather than at whichever one happened to
+ * write this code.
+ */
+export function validatePatchObject(
+  patch: Record<string, unknown>,
+  channel: StylesChannel,
+  scope: StylesScope,
+  field: string,
+): void {
+  const allowedKeys = [...ALLOWED_KEYS_BY_CHANNEL[channel]].filter(
+    (key) => !EXCLUDED_KEYS_BY_SCOPE[scope][channel].has(key),
+  );
+
+  for (const key of Object.keys(patch)) {
+    const classification = classifyPatchKey(key, channel, scope);
+
+    switch (classification.status) {
+      case 'valid':
+        break;
+
+      case 'excluded':
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `${field} key '${key}' is not valid in ${SCOPE_LABEL[scope]} (${classification.reason}). This is an intentional restriction per MS-OI29500.`,
+          { field, key, reason: EXCLUSION_REASON_CODE[scope] },
+        );
+
+      case 'cross_channel':
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `Unknown ${field} key "${key}" for channel "${channel}". "${key}" is a ${classification.ownerChannel}-channel property. Allowed keys: ${allowedKeys.join(', ')}.`,
+          { field, key },
+        );
+
+      case 'unknown':
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `Unknown ${field} key "${key}" for channel "${channel}". Allowed keys: ${allowedKeys.join(', ')}.`,
+          { field, key },
+        );
+    }
+
+    const def = getPropertyDefinition(key, channel);
+    if (def) validateValue(`${field}.${key}`, patch[key], def.schema);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -5,11 +5,14 @@
  */
 
 // Registry: types, constants, and property definitions
-export type { ValueSchema, StylesChannel, MergeStrategy, PropertyDefinition } from './registry.js';
+export type { ValueSchema, StylesChannel, StylesScope, MergeStrategy, PropertyDefinition } from './registry.js';
 export {
   PROPERTY_REGISTRY,
   ALLOWED_KEYS_BY_CHANNEL,
   EXCLUDED_KEYS,
+  STYLE_EXCLUDED_KEYS,
+  EXCLUDED_KEYS_BY_SCOPE,
+  SCOPE_LABEL,
   XML_PATH_BY_CHANNEL,
   getPropertyDefinition,
   ST_VERTICAL_ALIGN_RUN,
@@ -48,6 +51,30 @@ export type {
 } from './apply.js';
 export { executeStylesApply } from './apply.js';
 
+// Create: define or redefine a named style (`styles.create`)
+export type {
+  StyleRunPatch,
+  StyleConflictPolicy,
+  StyleChannelState,
+  StylesCreateParagraphInput,
+  StylesCreateCharacterInput,
+  StylesCreateInput,
+  StylesCreateOptions,
+  NormalizedStylesCreateOptions,
+  StylesCreateResolution,
+  StylesCreateReceiptSuccess,
+  StylesCreateReceiptFailure,
+  StylesCreateReceipt,
+  StylesCreateAdapter,
+  StylesCreateApi,
+} from './create.js';
+export {
+  STYLE_XML_PATH,
+  executeStylesCreate,
+  validateStylesCreateInput,
+  validateStylesCreateOptions,
+} from './create.js';
+
 // Catalog: read-only style catalogue projection (`styles.getCatalog`)
 export type {
   StyleCatalogView,
@@ -79,4 +106,4 @@ export {
 
 // Validation: exported for adapter use (excluded-key checking, patch key classification)
 export type { PatchKeyClassification } from './validation.js';
-export { validateValue, classifyPatchKey } from './validation.js';
+export { validateValue, classifyPatchKey, validatePatchObject } from './validation.js';

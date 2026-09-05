@@ -53,6 +53,9 @@ import type {
   StylesApplyInput,
   StylesApplyOptions,
   StylesApplyReceipt,
+  StylesCreateInput,
+  StylesCreateOptions,
+  StylesCreateReceipt,
   StylesGetCatalogInput,
   StylesGetCatalogResult,
 } from '../styles/index.js';
@@ -748,6 +751,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   };
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
+  'styles.create': { input: StylesCreateInput; options: StylesCreateOptions; output: StylesCreateReceipt };
   'styles.getCatalog': {
     input: StylesGetCatalogInput | undefined;
     options: never;

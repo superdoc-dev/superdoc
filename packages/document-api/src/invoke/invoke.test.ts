@@ -6,7 +6,7 @@ import type { FindAdapter } from '../find/find.js';
 import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
-import type { StylesAdapter } from '../styles/index.js';
+import type { StylesAdapter, StylesCreateAdapter } from '../styles/index.js';
 import type { TemplatesAdapter, TemplatesApplyReceipt } from '../templates/index.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
@@ -122,7 +122,22 @@ function makeAdapters() {
   const selectionMutationAdapter: SelectionMutationAdapter = {
     execute: mock(selectionMutationReceipt),
   };
-  const stylesAdapter: StylesAdapter = {
+  const stylesAdapter: StylesAdapter & Partial<StylesCreateAdapter> = {
+    create: mock(() => ({
+      success: true as const,
+      changed: true,
+      created: true,
+      resolution: {
+        scope: 'style' as const,
+        id: 'Kushya',
+        type: 'paragraph' as const,
+        xmlPart: 'word/styles.xml' as const,
+        xmlPath: 'w:styles/w:style' as const,
+      },
+      dryRun: false,
+      before: null,
+      after: { paragraph: {}, run: { bold: 'on' as const } },
+    })),
     apply: mock(() => ({
       success: true as const,
       changed: true,
@@ -379,6 +394,15 @@ describe('invoke', () => {
       const query = { nodeType: 'paragraph' as const };
       const direct = api.find(query);
       const invoked = api.invoke({ operationId: 'find', input: query });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('styles.create: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { id: 'Kushya', name: 'Kushya', type: 'paragraph' as const, run: { rtl: true } };
+      const direct = api.styles.create(input);
+      const invoked = api.invoke({ operationId: 'styles.create', input });
       expect(invoked).toEqual(direct);
     });
 

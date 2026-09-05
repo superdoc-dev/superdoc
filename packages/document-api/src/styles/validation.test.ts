@@ -4,6 +4,7 @@ import {
   executeStylesGetCatalog,
   PROPERTY_REGISTRY,
   EXCLUDED_KEYS,
+  classifyPatchKey,
   type StylesAdapter,
   type StylesApplyReceipt,
   type ValueSchema,
@@ -126,7 +127,10 @@ function invalidValueForSchema(schema: ValueSchema): unknown {
 // ---------------------------------------------------------------------------
 
 describe('styles.apply validation: registry-driven property acceptance', () => {
-  for (const def of PROPERTY_REGISTRY) {
+  // Skips the registry entries docDefaults excludes: since the registry also
+  // backs the `style` scope, "in the registry" no longer implies "accepted by
+  // styles.apply". The excluded-key suite below covers those.
+  for (const def of PROPERTY_REGISTRY.filter((d) => !EXCLUDED_KEYS[d.channel].has(d.key))) {
     it(`accepts valid ${def.channel}.${def.key} (${def.schema.kind})`, () => {
       const adapter = makeAdapter();
       const value = validValueForSchema(def.schema);
@@ -180,7 +184,7 @@ describe('styles.getCatalog validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('styles.apply validation: registry-driven type rejection', () => {
-  for (const def of PROPERTY_REGISTRY) {
+  for (const def of PROPERTY_REGISTRY.filter((d) => !EXCLUDED_KEYS[d.channel].has(d.key))) {
     it(`rejects invalid ${def.channel}.${def.key} type`, () => {
       const adapter = makeAdapter();
       const value = invalidValueForSchema(def.schema);
@@ -192,6 +196,107 @@ describe('styles.apply validation: registry-driven type rejection', () => {
           }),
         'INVALID_INPUT',
       );
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// classifyPatchKey — public export, reachable without a scope argument
+// ---------------------------------------------------------------------------
+
+describe('classifyPatchKey scope default', () => {
+  // Exported from the package root, so an external caller can reach the
+  // no-scope overload that no internal caller uses: validatePatchObject always
+  // passes a scope. If the default ever flipped to 'style', styles.apply would
+  // silently widen for every consumer that classifies keys itself.
+  it('classifies against docDefaults when no scope is given', () => {
+    expect(classifyPatchKey('rtl', 'run')).toEqual({ status: 'excluded', reason: 'w:rtl' });
+    expect(classifyPatchKey('rtl', 'run', 'docDefaults')).toEqual({ status: 'excluded', reason: 'w:rtl' });
+  });
+
+  it('classifies the same key as valid under the style scope', () => {
+    expect(classifyPatchKey('rtl', 'run', 'style')).toEqual({ status: 'valid' });
+    expect(classifyPatchKey('highlight', 'run', 'style')).toEqual({ status: 'valid' });
+  });
+
+  it('keeps the other three statuses stable across scopes', () => {
+    expect(classifyPatchKey('bold', 'run', 'style')).toEqual({ status: 'valid' });
+    expect(classifyPatchKey('keepNext', 'run', 'style')).toEqual({
+      status: 'cross_channel',
+      ownerChannel: 'paragraph',
+    });
+    expect(classifyPatchKey('nope', 'run', 'style')).toEqual({ status: 'unknown' });
+  });
+
+  it('never offers a docDefaults-excluded key in the styles.apply "Allowed keys" list', () => {
+    // The registry now also backs the style scope, so the list has to be
+    // filtered: unfiltered, styles.apply would answer an unknown key by
+    // offering rtl, cs, highlight and oMath as valid ones — and then reject
+    // every one of them.
+    const adapter = makeAdapter();
+    try {
+      executeStylesApply(adapter, {
+        target: { scope: 'docDefaults', channel: 'run' },
+        patch: { nope: true } as never,
+      });
+      throw new Error('Expected a validation error.');
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('Allowed keys:');
+      for (const key of EXCLUDED_KEYS.run.keys()) {
+        expect(message).not.toContain(`${key},`);
+      }
+    }
+  });
+
+  it('calls a key excluded on both channels excluded, not cross-channel', () => {
+    // `highlight` is a run property, but docDefaults excludes it from the run
+    // channel too. Answering "you sent a run property to the paragraph
+    // channel" would be technically true and useless: the key is not usable on
+    // either channel here, and only the excluded branch carries a reason.
+    for (const key of ['highlight', 'rtl', 'cs', 'oMath']) {
+      expect(classifyPatchKey(key, 'paragraph', 'docDefaults')).toEqual({
+        status: 'excluded',
+        reason: EXCLUDED_KEYS.run.get(key)!,
+      });
+    }
+  });
+
+  it('calls the same keys cross-channel under the style scope, where they are usable', () => {
+    for (const key of ['highlight', 'rtl', 'cs', 'oMath']) {
+      expect(classifyPatchKey(key, 'paragraph', 'style')).toEqual({ status: 'cross_channel', ownerChannel: 'run' });
+    }
+  });
+
+  it('reports a key excluded on the other channel as excluded, not unknown', () => {
+    // Step 4 of the classification. Degrading it to 'unknown' would drop the
+    // reason a caller needs to understand the rejection.
+    expect(classifyPatchKey('sectPr', 'run', 'docDefaults')).toEqual({ status: 'excluded', reason: 'w:sectPr' });
+  });
+
+  it('still excludes revision tracking and self-reference under the style scope', () => {
+    expect(classifyPatchKey('rPrChange', 'run', 'style').status).toBe('excluded');
+    expect(classifyPatchKey('rStyle', 'run', 'style').status).toBe('excluded');
+    expect(classifyPatchKey('pStyle', 'paragraph', 'style').status).toBe('excluded');
+  });
+});
+
+describe('styles.apply: cross-channel rejection keeps its reason code', () => {
+  for (const key of ['highlight', 'rtl', 'cs', 'oMath']) {
+    it(`rejects run-only "${key}" on the paragraph channel with excluded_docdefaults_key`, () => {
+      const adapter = makeAdapter();
+      try {
+        executeStylesApply(adapter, {
+          target: { scope: 'docDefaults', channel: 'paragraph' },
+          patch: { [key]: true } as never,
+        });
+        throw new Error('Expected a validation error.');
+      } catch (err) {
+        const e = err as DocumentApiValidationError;
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.message).toContain('docDefaults');
+        expect((e as unknown as { details: Record<string, unknown> }).details?.reason).toBe('excluded_docdefaults_key');
+      }
     });
   }
 });

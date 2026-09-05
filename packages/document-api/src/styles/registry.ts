@@ -6,7 +6,7 @@
  * from here.
  */
 
-import { ST_UNDERLINE_VALUES } from '../inline-semantics/token-sets.js';
+import { ST_HIGHLIGHT_VALUES, ST_UNDERLINE_VALUES } from '../inline-semantics/token-sets.js';
 
 // ---------------------------------------------------------------------------
 // OOXML Token Constants
@@ -19,7 +19,7 @@ export const ST_TEXT_DIRECTION = ['lrTb', 'tbRl', 'btLr', 'lrTbV', 'tbRlV', 'tbL
 export const ST_TEXTBOX_TIGHT_WRAP = ['none', 'allLines', 'firstAndLastLine', 'firstLineOnly', 'lastLineOnly'] as const;
 export const ST_TEXT_TRANSFORM = ['uppercase', 'none'] as const;
 export const ST_JUSTIFICATION = ['left', 'center', 'right', 'justify', 'distribute'] as const;
-export { ST_UNDERLINE_VALUES };
+export { ST_HIGHLIGHT_VALUES, ST_UNDERLINE_VALUES };
 
 // ---------------------------------------------------------------------------
 // Value Schema AST
@@ -301,6 +301,18 @@ export const PROPERTY_REGISTRY: PropertyDefinition[] = [
   { key: 'eastAsianLayout', channel: 'run', schema: EAST_ASIAN_LAYOUT_SCHEMA, mergeStrategy: 'shallowMerge' },
   { key: 'fitText', channel: 'run', schema: FIT_TEXT_SCHEMA, mergeStrategy: 'shallowMerge' },
 
+  // Authored on named styles, not on docDefaults. `EXCLUDED_KEYS.run` keeps
+  // all four out of the `docDefaults` scope, so `styles.apply` is unchanged;
+  // they are reachable only through `EXCLUDED_KEYS_BY_SCOPE.style`. Each one
+  // is a property the style model already reads back off a `w:style`
+  // (`StyleDefinition.runProperties` → `RunProperties.cs | highlight | oMath
+  // | rtl` in @superdoc/style-engine), so a style the engine can load was
+  // until now a style this API could not express.
+  { key: 'cs', channel: 'run', schema: { kind: 'boolean' }, mergeStrategy: 'replace' },
+  { key: 'oMath', channel: 'run', schema: { kind: 'boolean' }, mergeStrategy: 'replace' },
+  { key: 'rtl', channel: 'run', schema: { kind: 'boolean' }, mergeStrategy: 'replace' },
+  { key: 'highlight', channel: 'run', schema: { kind: 'enum', values: ST_HIGHLIGHT_VALUES }, mergeStrategy: 'replace' },
+
   // -------------------------------------------------------------------------
   // Paragraph channel
   // -------------------------------------------------------------------------
@@ -421,4 +433,56 @@ export const EXCLUDED_KEYS: Record<StylesChannel, Map<string, string>> = {
 export const XML_PATH_BY_CHANNEL: Record<StylesChannel, string> = {
   run: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr',
   paragraph: 'w:styles/w:docDefaults/w:pPrDefault/w:pPr',
+};
+
+// ---------------------------------------------------------------------------
+// Scopes
+// ---------------------------------------------------------------------------
+
+/**
+ * Where in `word/styles.xml` a patch is being written.
+ *
+ * The exclusion list is a property of the *destination*, not of the property:
+ * `w:rtl` is disallowed in `w:docDefaults` and perfectly legal on a named
+ * `w:style`. Before this split, `EXCLUDED_KEYS` was the docDefaults list and
+ * the only list, so every caller inherited a restriction that only one of
+ * them was subject to.
+ *
+ * `docDefaults` is unchanged and remains what `styles.apply` uses.
+ */
+export type StylesScope = 'docDefaults' | 'style';
+
+/**
+ * Keys excluded from a named `w:style`.
+ *
+ * Narrower than the docDefaults list on the run channel by exactly the four
+ * properties the style model reads back off a `w:style` (see the registry
+ * entries). `w:rPrChange` stays out because it is a revision-tracking wrapper
+ * around document content, and `w:rStyle` because the style model does not
+ * carry it on `StyleDefinition.runProperties`.
+ *
+ * The paragraph channel is unchanged: every key it excludes — `w:cnfStyle`,
+ * `w:divId`, `w:pPrChange`, `w:pStyle`, `w:pPr/w:rPr`, `w:sectPr` — is as
+ * out of place inside `w:style/w:pPr` as it is inside docDefaults. Run
+ * properties on a style live in `w:style/w:rPr`, which is the `run` channel
+ * here, not in `w:pPr/w:rPr`.
+ */
+export const STYLE_EXCLUDED_KEYS: Record<StylesChannel, Map<string, string>> = {
+  run: new Map([
+    ['rPrChange', 'w:rPrChange'],
+    ['rStyle', 'w:rStyle'],
+  ]),
+  paragraph: EXCLUDED_KEYS.paragraph,
+};
+
+/** Exclusion lists by destination. Defaults everywhere are `docDefaults`. */
+export const EXCLUDED_KEYS_BY_SCOPE: Record<StylesScope, Record<StylesChannel, Map<string, string>>> = {
+  docDefaults: EXCLUDED_KEYS,
+  style: STYLE_EXCLUDED_KEYS,
+};
+
+/** Human-readable destination, for validation messages. */
+export const SCOPE_LABEL: Record<StylesScope, string> = {
+  docDefaults: 'Word docDefaults',
+  style: 'a named Word style',
 };

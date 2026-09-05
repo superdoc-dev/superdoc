@@ -1491,11 +1491,13 @@ describe('document-api contract catalog', () => {
 
     // styles.apply + all sections.set* / sections.clear* mutations
     expect(historyUnsafeOps).toContain('styles.apply');
+    expect(historyUnsafeOps).toContain('styles.create');
     for (const id of historyUnsafeOps) {
       expect(
         id.startsWith('sections.') ||
           id.startsWith('headerFooters.') ||
           id === 'styles.apply' ||
+          id === 'styles.create' ||
           id === 'templates.apply' ||
           id === 'tables.setDefaultStyle' ||
           id === 'tables.clearDefaultStyle' ||

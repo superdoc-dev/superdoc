@@ -5108,6 +5108,101 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       failure: stylesFailureSchema,
     };
   })(),
+  'styles.create': (() => {
+    // Derived from PROPERTY_REGISTRY under the `style` scope: the run channel
+    // carries four properties Word allows on a named style and forbids in
+    // docDefaults, so this schema is deliberately wider than styles.apply's.
+    const commonProperties = {
+      id: { type: 'string', minLength: 1 },
+      name: { type: 'string', minLength: 1 },
+      basedOn: { type: ['string', 'null'], minLength: 1 },
+      // `pattern` mirrors the validator: w:aliases is one comma-delimited
+      // value, so an alias with a comma reads back as two.
+      aliases: { ...arraySchema({ type: 'string', minLength: 1, pattern: '^[^,]+$' }), uniqueItems: true },
+      priority: { type: ['integer', 'null'] },
+      qFormat: { type: 'boolean' },
+      hidden: { type: 'boolean' },
+      semiHidden: { type: 'boolean' },
+      unhideWhenUsed: { type: 'boolean' },
+      locked: { type: 'boolean' },
+      custom: { type: 'boolean' },
+      conflictPolicy: { enum: ['fail', 'replace'] },
+    };
+    const paragraphInputSchema = objectSchema(
+      {
+        ...commonProperties,
+        type: { const: 'paragraph' },
+        next: { type: ['string', 'null'], minLength: 1 },
+        paragraph: buildPatchSchema('paragraph', 'style'),
+        run: buildPatchSchema('run', 'style'),
+      },
+      ['id', 'name', 'type'],
+    );
+    const characterInputSchema = objectSchema(
+      {
+        ...commonProperties,
+        type: { const: 'character' },
+        run: buildPatchSchema('run', 'style'),
+      },
+      ['id', 'name', 'type'],
+    );
+    const resolutionSchema = objectSchema(
+      {
+        scope: { const: 'style' },
+        id: { type: 'string', minLength: 1 },
+        type: { enum: ['paragraph', 'character'] },
+        xmlPart: { type: 'string' },
+        xmlPath: { const: 'w:styles/w:style' },
+      },
+      ['scope', 'id', 'type', 'xmlPart', 'xmlPath'],
+    );
+    // Per channel, unlike styles.apply: one w:style carries both, and
+    // `borders` means a different shape on each.
+    const channelStateSchema = objectSchema(
+      {
+        paragraph: { oneOf: [buildStateSchema('style', 'paragraph'), { type: 'null' }] },
+        run: { oneOf: [buildStateSchema('style', 'run'), { type: 'null' }] },
+      },
+      ['paragraph', 'run'],
+    );
+    const successSchema = objectSchema(
+      {
+        success: { const: true },
+        changed: { type: 'boolean' },
+        created: { type: 'boolean' },
+        resolution: resolutionSchema,
+        dryRun: { type: 'boolean' },
+        before: { oneOf: [channelStateSchema, { type: 'null' }] },
+        after: channelStateSchema,
+      },
+      ['success', 'changed', 'created', 'resolution', 'dryRun', 'before', 'after'],
+    );
+    const failureSchema = objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema(
+          {
+            // Not an enum derived from possibleFailureCodes: that list is empty
+            // while the operation ships without an adapter, and `enum: []`
+            // fails to compile in Ajv — taking the whole `output` oneOf with
+            // it, so a consumer could not validate even a success receipt.
+            // styles.apply publishes the same open shape.
+            code: { type: 'string' },
+            message: { type: 'string' },
+            details: {},
+          },
+          ['code', 'message'],
+        ),
+      },
+      ['success', 'failure'],
+    );
+    return {
+      input: { oneOf: [paragraphInputSchema, characterInputSchema] },
+      output: { oneOf: [successSchema, failureSchema] },
+      success: successSchema,
+      failure: failureSchema,
+    };
+  })(),
   'styles.getCatalog': (() => {
     const catalogViews = ['quickGallery', 'recommended', 'currentDocument', 'all', 'inUse'];
     const catalogFilterTypes = ['paragraph', 'character', 'linked', 'table', 'numbering'];

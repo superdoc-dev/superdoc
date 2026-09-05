@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'bun:test';
-import { PROPERTY_REGISTRY, EXCLUDED_KEYS } from './registry.js';
+import { PROPERTY_REGISTRY, EXCLUDED_KEYS, STYLE_EXCLUDED_KEYS } from './registry.js';
 
 // ---------------------------------------------------------------------------
 // SD-2018 coverage gate — machine-checked completeness assertion
 // ---------------------------------------------------------------------------
 
 describe('SD-2018 coverage gate', () => {
-  const registryKeys = (channel: string) =>
-    PROPERTY_REGISTRY.filter((d) => d.channel === channel)
+  // SD-2018 enumerated what docDefaults accepts. The registry now also backs
+  // the `style` scope, which reaches four run properties Word forbids in
+  // docDefaults, so the gate filters to what this scope can actually reach —
+  // the set it was written to pin — and the style-only additions are pinned
+  // separately below.
+  const registryKeys = (channel: 'run' | 'paragraph') =>
+    PROPERTY_REGISTRY.filter((d) => d.channel === channel && !EXCLUDED_KEYS[channel].has(d.key))
       .map((d) => d.key)
       .sort();
 
@@ -50,6 +55,19 @@ describe('SD-2018 coverage gate', () => {
         'webHidden',
       ].sort(),
     );
+  });
+
+  it('run channel reaches exactly four more properties under the style scope', () => {
+    const styleScopeKeys = PROPERTY_REGISTRY.filter(
+      (d) => d.channel === 'run' && !STYLE_EXCLUDED_KEYS.run.has(d.key),
+    ).map((d) => d.key);
+    expect(styleScopeKeys.filter((key) => EXCLUDED_KEYS.run.has(key)).sort()).toEqual(
+      ['cs', 'highlight', 'oMath', 'rtl'].sort(),
+    );
+  });
+
+  it('the paragraph channel is the same set in both scopes', () => {
+    expect([...STYLE_EXCLUDED_KEYS.paragraph.keys()].sort()).toEqual([...EXCLUDED_KEYS.paragraph.keys()].sort());
   });
 
   it('paragraph channel contains exactly the SD-2018 property set', () => {

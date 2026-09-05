@@ -91,3 +91,38 @@ export type StThemeColorValue = (typeof ST_THEME_COLOR_VALUES)[number];
 
 /** Runtime set for O(1) ST_ThemeColor validation. */
 export const ST_THEME_COLOR_VALUE_SET: ReadonlySet<string> = new Set(ST_THEME_COLOR_VALUES);
+
+// ---------------------------------------------------------------------------
+// ST_HighlightColor (w:highlight)
+// ---------------------------------------------------------------------------
+
+/**
+ * Accepted `w:val` values for `w:highlight`. A closed enumeration, unlike a
+ * colour value: anything outside it produces a document Word offers to repair.
+ *
+ * No `StHighlightValue` alias beside it, unlike the sets above:
+ * {@link SDHighlightColor} in `types/sd-props.ts` is already derived from this
+ * list, and a second name for one union is a second thing to keep in step.
+ */
+export const ST_HIGHLIGHT_VALUES = [
+  'black',
+  'blue',
+  'cyan',
+  'green',
+  'magenta',
+  'red',
+  'yellow',
+  'white',
+  'darkBlue',
+  'darkCyan',
+  'darkGreen',
+  'darkMagenta',
+  'darkRed',
+  'darkYellow',
+  'darkGray',
+  'lightGray',
+  'none',
+] as const;
+
+/** Runtime set for O(1) ST_HighlightColor validation. */
+export const ST_HIGHLIGHT_VALUE_SET: ReadonlySet<string> = new Set(ST_HIGHLIGHT_VALUES);

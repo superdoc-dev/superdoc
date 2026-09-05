@@ -113,6 +113,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.setNumbering': (input, options) => api.format.paragraph.setNumbering(input, options),
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
+    'styles.create': (input, options) => api.styles.create(input, options),
     'styles.getCatalog': (input) => api.styles.getCatalog(input),
     // --- templates.* ---
     'templates.apply': (input, options) => api.templates.apply(input, options),

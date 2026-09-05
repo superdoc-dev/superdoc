@@ -414,6 +414,7 @@
     "/document-api/reference/selection/current/",
     "/document-api/reference/styles/",
     "/document-api/reference/styles/apply/",
+    "/document-api/reference/styles/create/",
     "/document-api/reference/styles/get-catalog/",
     "/document-api/reference/styles/paragraph/",
     "/document-api/reference/styles/paragraph/clear-style/",

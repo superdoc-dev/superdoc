@@ -1579,6 +1579,83 @@ describe('createDocumentApi', () => {
     expect(capturedCode).toBe('CAPABILITY_UNAVAILABLE');
   });
 
+  /**
+   * The namespace gate above cannot reach `styles.create`: `adapters.styles` is
+   * present, only its optional `create` hook is not. Without the second gate a
+   * caller reading the snapshot selects an operation whose only possible answer
+   * is `CAPABILITY_UNAVAILABLE`.
+   */
+  describe('hook-gated capabilities', () => {
+    // A fresh adapter per API: capFn mutates the snapshot in place, and the
+    // helper hands out the same `operations` object on every call.
+    function makeStylesApi(styles: unknown) {
+      return createDocumentApi({
+        capabilities: makeCapabilitiesAdapter({
+          operations: {
+            'styles.apply': { available: true, tracked: false, dryRun: true },
+            'styles.create': { available: true, tracked: false, dryRun: true },
+          } as unknown as DocumentApiCapabilities['operations'],
+        }),
+        styles,
+      } as unknown as DocumentApiAdapters);
+    }
+
+    it('masks styles.create when the styles adapter has no create hook', () => {
+      const capabilities = makeStylesApi({ apply: () => undefined }).capabilities();
+
+      expect(capabilities.operations['styles.create']).toMatchObject({
+        available: false,
+        tracked: false,
+        dryRun: false,
+        reasons: ['OPERATION_UNAVAILABLE'],
+      });
+    });
+
+    it('leaves the sibling operation, whose hook is present, untouched', () => {
+      const capabilities = makeStylesApi({ apply: () => undefined }).capabilities();
+
+      expect(capabilities.operations['styles.apply']).toMatchObject({ available: true, dryRun: true });
+      expect(capabilities.operations['styles.apply'].reasons).toBeUndefined();
+    });
+
+    it('reports styles.create as the engine did once the hook is supplied', () => {
+      const capabilities = makeStylesApi({ apply: () => undefined, create: () => undefined }).capabilities();
+
+      expect(capabilities.operations['styles.create']).toMatchObject({ available: true, dryRun: true });
+      expect(capabilities.operations['styles.create'].reasons).toBeUndefined();
+    });
+
+    it('adds no entry for an engine whose snapshot predates the operation', () => {
+      const api = createDocumentApi({
+        capabilities: makeCapabilitiesAdapter({
+          operations: {
+            'styles.apply': { available: true, tracked: false, dryRun: true },
+          } as unknown as DocumentApiCapabilities['operations'],
+        }),
+        styles: { apply: () => undefined },
+      } as unknown as DocumentApiAdapters);
+
+      // An absent entry already says unavailable; inventing one would claim the
+      // engine reported something it did not.
+      expect(api.capabilities().operations['styles.create']).toBeUndefined();
+    });
+
+    it('survives a host that omits the styles adapter entirely', () => {
+      const api = createDocumentApi({
+        capabilities: makeCapabilitiesAdapter({
+          operations: {
+            'styles.create': { available: true, tracked: false, dryRun: true },
+          } as unknown as DocumentApiCapabilities['operations'],
+        }),
+      } as unknown as DocumentApiAdapters);
+
+      expect(api.capabilities().operations['styles.create']).toMatchObject({
+        available: false,
+        reasons: ['OPERATION_UNAVAILABLE'],
+      });
+    });
+  });
+
   describe('insert target validation', () => {
     function makeApi() {
       return createDocumentApi({

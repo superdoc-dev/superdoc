@@ -10,6 +10,8 @@
 // Color and font primitives
 // ---------------------------------------------------------------------------
 
+import type { ST_HIGHLIGHT_VALUES } from '../inline-semantics/token-sets.js';
+
 export type SDThemeFontRef =
   | 'majorAscii'
   | 'majorHAnsi'
@@ -61,24 +63,7 @@ export type SDColorRef =
 // Inline formatting primitives
 // ---------------------------------------------------------------------------
 
-export type SDHighlightColor =
-  | 'black'
-  | 'blue'
-  | 'cyan'
-  | 'green'
-  | 'magenta'
-  | 'red'
-  | 'yellow'
-  | 'white'
-  | 'darkBlue'
-  | 'darkCyan'
-  | 'darkGreen'
-  | 'darkMagenta'
-  | 'darkRed'
-  | 'darkYellow'
-  | 'darkGray'
-  | 'lightGray'
-  | 'none';
+export type SDHighlightColor = (typeof ST_HIGHLIGHT_VALUES)[number];
 
 export type SDUnderlineStyle =
   | 'none'

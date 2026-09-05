@@ -131,7 +131,14 @@ describe('paintInlineBoxes', () => {
 
     paintInlineBoxes([makeBox({ from: 0, to: 5 })], line);
 
-    for (const property of ['padding-left', 'padding-right', 'margin-left', 'margin-right', 'border-left', 'border-right']) {
+    for (const property of [
+      'padding-left',
+      'padding-right',
+      'margin-left',
+      'margin-right',
+      'border-left',
+      'border-right',
+    ]) {
       expect(leaf.getAttribute('style')).not.toContain(property);
     }
   });

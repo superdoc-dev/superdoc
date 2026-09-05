@@ -81,6 +81,10 @@ export function buildSourceModeAliases({ v2Root, layoutEngineRoot }) {
       find: '@superdoc/docx-engine/collaboration-upgrade-engine',
       replacement: path.resolve(v2Root, 'src/collaboration-upgrade-engine.ts'),
     },
+    {
+      find: '@superdoc/docx-engine/collaboration-worker',
+      replacement: path.resolve(v2Root, 'src/collaboration-worker.ts'),
+    },
     // Default-integration entry consumed by core/v2-integration.
     { find: '@superdoc/v2-browser-shell/superdoc', replacement: path.resolve(v2Root, 'v2-browser-shell/src/superdoc/index.ts') },
     { find: '@superdoc/v2-browser-shell/vue', replacement: path.resolve(v2Root, 'v2-browser-shell/src/vue/index.ts') },
@@ -169,6 +173,10 @@ export function buildPackageModeDistAliases(v2Dist) {
     {
       find: /^@superdoc\/docx-engine\/collaboration-upgrade-engine$/,
       replacement: path.join(v2Dist, 'collaboration-upgrade-engine.js'),
+    },
+    {
+      find: /^@superdoc\/docx-engine\/collaboration-worker$/,
+      replacement: path.join(v2Dist, 'collaboration-worker.js'),
     },
     { find: '@superdoc/docx-engine/style.css', replacement: path.join(v2Dist, 'style.css') },
     { find: /^@superdoc\/docx-engine$/, replacement: path.join(v2Dist, 'docx-engine.es.js') },

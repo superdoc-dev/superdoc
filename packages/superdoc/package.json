@@ -63,6 +63,14 @@
         "require": "./dist/collaboration-upgrade-engine.cjs"
       }
     },
+    "./collaboration-worker": {
+      "types": {
+        "import": "./dist/superdoc/src/public/collaboration-worker.d.ts",
+        "require": "./dist/superdoc/src/public/collaboration-worker.d.cts"
+      },
+      "import": "./dist/public/collaboration-worker.es.js",
+      "require": "./dist/public/collaboration-worker.cjs"
+    },
     "./style.css": "./dist/style.css",
     "./style.layered.css": "./dist/style.layered.css"
   },
@@ -80,6 +88,9 @@
       ],
       "collaboration-upgrade-engine": [
         "./dist/superdoc/src/public/collaboration-upgrade-engine.d.ts"
+      ],
+      "collaboration-worker": [
+        "./dist/superdoc/src/public/collaboration-worker.d.ts"
       ]
     }
   },

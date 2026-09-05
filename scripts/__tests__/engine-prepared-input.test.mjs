@@ -398,8 +398,10 @@ test('installed contract verifies packaged manifest hashes when present', () => 
     const files = {
       'docx-engine.es.js': 'export {};\n',
       'collaboration-upgrade-engine.js': 'export {};\n',
+      'collaboration-worker.js': 'export {};\n',
       'style.css': '',
       'docx-engine.d.ts': 'export {};\n',
+      'collaboration-worker.d.ts': 'export {};\n',
       'DOCX-ENGINE-LICENSE.md': 'license\n',
       'NOTICE.md': 'notice\n',
     };

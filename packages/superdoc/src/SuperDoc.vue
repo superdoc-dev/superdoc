@@ -607,6 +607,14 @@ const setSubDocumentRoot = (doc, el) => {
 const clearV2RuntimeRegistration = (documentId) => {
   clearV2CommandShortcutBinding(documentId);
   clearV2SessionShortcutBinding(documentId);
+  const document = getDocument(documentId);
+  const provider = document?.provider ?? null;
+  if (provider && proxy.$superdoc.provider === provider) {
+    proxy.$superdoc.provider = undefined;
+  }
+  if (document && provider?.sendStateless) {
+    document.provider = null;
+  }
   const entry = v2Runtimes.get(documentId);
   if (!entry) return;
   proxy.$superdoc.unregisterEditorRuntime(entry.runtimeId);
@@ -883,6 +891,7 @@ const onV2EditorReady = (payload) => {
     pageFurniture,
     presence,
     lock,
+    collaborationProvider,
     fonts,
     replaceFile,
     upgradeToCollaboration,
@@ -1268,6 +1277,7 @@ const onV2EditorReady = (payload) => {
     // v2 collaboration lock metadata facade. Backed by the same single-doc
     // collaborative root Y.Doc as document content/presence.
     lock: lock ?? null,
+    provider: collaborationProvider ?? null,
     // Read-only review sidecar facet. The snapshot contains only rows from the
     // currently committed page window; custom UI consumes it without starting
     // an independent whole-document comments/track-changes catalog read.
@@ -1306,6 +1316,11 @@ const onV2EditorReady = (payload) => {
   if (!runtimeRegistered) {
     proxy.$superdoc.setActiveEditor(facade);
     syncV2EditRejectedActiveDocument();
+  }
+  if (collaborationProvider) {
+    const provider = markRaw(collaborationProvider);
+    proxy.$superdoc.provider = provider;
+    if (doc) doc.provider = provider;
   }
   proxy.$superdoc.broadcastEditorCreate(facade);
   installV2CommandShortcutBinding({ documentId, bindEditShortcuts });

@@ -488,11 +488,6 @@ function isV2ActiveEditorFacade(editor: unknown): editor is V2ActiveEditorFacade
   return Boolean(editor && typeof editor === 'object' && (editor as { editorVersion?: unknown }).editorVersion === 2);
 }
 
-function isV2FailClosedExportError(error: unknown): boolean {
-  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : null;
-  return code === 'comment-export-missing-story-reference' || code === 'v2-worker-comment-export-mode-unsupported';
-}
-
 function normalizeActiveEditorDocumentId(documentId: unknown): string | null {
   return typeof documentId === 'string' && documentId.length > 0 ? documentId : null;
 }
@@ -4159,7 +4154,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
             if (!error || typeof error !== 'object' || !bridgedExportErrors.has(error)) {
               this.emit('exception', { error, document: doc });
             }
-            if (isV2Editor && (commentsType === 'clean' || isV2FailClosedExportError(error))) {
+            if (isV2Editor) {
               throw error;
             }
           }

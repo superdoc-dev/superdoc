@@ -74,6 +74,53 @@ const retainedMetadata = (layout: Layout, blocks: FlowBlock[]) => {
   };
 };
 
+const localBodyReuse = (
+  layout: Layout,
+  blocks: FlowBlock[],
+  changedIndex: number,
+): NonNullable<Parameters<typeof incrementalLayout>[9]> => {
+  const changedId = blocks[changedIndex].id;
+  return {
+    ...retainedMetadata(layout, blocks),
+    dirtyBlockIds: [changedId],
+    provedDirtyRegion: {
+      firstDirtyIndex: changedIndex,
+      lastStableIndex: changedIndex - 1,
+      changedBlockIds: [changedId],
+      insertedBlockIds: [],
+      deletedBlockIds: [],
+      stableBlockIds: new Set(blocks.filter((_, index) => index !== changedIndex).map((block) => block.id)),
+    },
+    provedDirtyMeasureConstraints: new Map([[changedId, { maxWidth: 220, maxHeight: 200 }]]),
+    dependencyProof: {
+      profile: 'page-checkpoint-local-text',
+      blockIdsUnchanged: true,
+      blockIdsUnique: true,
+      globalDependenciesAbsent: false,
+      globalDependenciesFencedByPageCheckpoint: true,
+      admittedDependencyClasses: ['footnotes'],
+      renderInputsUnchanged: true,
+      pageReferencesAbsent: true,
+      multiColumnSectionsProvedNonBalanceable: true,
+    },
+    maxRelaidPages: 3,
+  };
+};
+
+const editBodyText = (blocks: FlowBlock[], changedIndex: number, text: string): FlowBlock[] => {
+  const next = blocks.map((block, index) =>
+    index === changedIndex ? paragraph(block.id, { ...(block as ParagraphBlock).attrs }) : block,
+  );
+  (next[changedIndex] as ParagraphBlock).runs[0] = {
+    text,
+    fontFamily: 'Arial',
+    fontSize: 12,
+    pmStart: 0,
+    pmEnd: text.length,
+  };
+  return next;
+};
+
 const geometry = (layout: Layout) =>
   layout.pages.map((page) => ({
     number: page.number,
@@ -90,6 +137,14 @@ const geometry = (layout: Layout) =>
       to: 'toLine' in fragment ? fragment.toLine : undefined,
     })),
   }));
+
+const expectPublishedExactNotePlane = (result: Awaited<ReturnType<typeof incrementalLayout>>) => {
+  const coupled = result.footnoteReserveSeed?.coupled;
+  expect(result.footnoteReserveSeed?.noteBlocksByBlockId).toBe(coupled?.blocksById);
+  expect(result.footnoteReserveSeed?.noteMeasuresByBlockId).toBe(coupled?.prepared.measuresById);
+  expect(result.footnoteReserveSeed?.noteBodyHeightById).toBe(coupled?.prepared.fullHeightById);
+  expect(result.footnoteReserveSeed?.noteFirstLineHeightById).toBe(coupled?.prepared.firstLineHeightById);
+};
 
 const assertCoverageAndBounds = (
   result: Awaited<ReturnType<typeof incrementalLayout>>,
@@ -122,7 +177,7 @@ const assertCoverageAndBounds = (
 };
 
 describe('native coupled footnote pagination', () => {
-  it('repaginates only a proved local window and ignores stale numeric reserves', async () => {
+  it('repaginates consecutive proved local windows without rescanning retained notes', async () => {
     clearIncrementalModuleState();
     const input = scenario(256);
     const options = {
@@ -131,18 +186,13 @@ describe('native coupled footnote pagination', () => {
     };
     const cold = await incrementalLayout([], null, input.blocks, options, input.measureBlock);
     const changedIndex = 12;
-    const changedId = input.blocks[changedIndex].id;
-    const nextBlocks = input.blocks.map((block, index) =>
-      index === changedIndex ? paragraph(block.id, { ...(block as ParagraphBlock).attrs }) : block,
-    );
-    (nextBlocks[changedIndex] as ParagraphBlock).runs[0] = {
-      text: 'abcd',
-      fontFamily: 'Arial',
-      fontSize: 12,
-      pmStart: 0,
-      pmEnd: 4,
-    };
+    const nextBlocks = editBodyText(input.blocks, changedIndex, 'abcd');
     let observingWarmWork = true;
+    const noteValues = input.notes.values.bind(input.notes);
+    input.notes.values = () => {
+      if (observingWarmWork) throw new Error('coupled warm pass scanned the retained note plane');
+      return noteValues();
+    };
     const guarded = new Proxy(nextBlocks, {
       get(target, property, receiver) {
         if (observingWarmWork && typeof property === 'string' && /^\d+$/.test(property) && Number(property) > 64) {
@@ -165,38 +215,106 @@ describe('native coupled footnote pagination', () => {
         noteMeasurePlaneRetainedExact: true,
         retainedFootnoteExtras: { blocks: cold.extraBlocks!, measures: cold.extraMeasures! },
       },
-      {
-        ...retainedMetadata(cold.layout, input.blocks),
-        dirtyBlockIds: [changedId],
-        provedDirtyRegion: {
-          firstDirtyIndex: changedIndex,
-          lastStableIndex: changedIndex - 1,
-          changedBlockIds: [changedId],
-          insertedBlockIds: [],
-          deletedBlockIds: [],
-          stableBlockIds: new Set(input.blocks.filter((_, index) => index !== changedIndex).map((block) => block.id)),
-        },
-        provedDirtyMeasureConstraints: new Map([[changedId, { maxWidth: 220, maxHeight: 200 }]]),
-        dependencyProof: {
-          profile: 'page-checkpoint-local-text',
-          blockIdsUnchanged: true,
-          blockIdsUnique: true,
-          globalDependenciesAbsent: false,
-          globalDependenciesFencedByPageCheckpoint: true,
-          admittedDependencyClasses: ['footnotes'],
-          renderInputsUnchanged: true,
-          pageReferencesAbsent: true,
-          multiColumnSectionsProvedNonBalanceable: true,
-        },
-        maxRelaidPages: 3,
+      localBodyReuse(cold.layout, input.blocks, changedIndex),
+    );
+    const secondBlocks = editBodyText(nextBlocks, changedIndex, 'abcde');
+    const secondGuarded = new Proxy(secondBlocks, {
+      get(target, property, receiver) {
+        if (observingWarmWork && typeof property === 'string' && /^\d+$/.test(property) && Number(property) > 64) {
+          throw new Error(`second coupled warm pass scanned untouched body block ${property}`);
+        }
+        return Reflect.get(target, property, receiver);
       },
+    });
+    const second = await incrementalLayout(
+      nextBlocks,
+      result.layout,
+      secondGuarded,
+      options,
+      input.measureBlock,
+      undefined,
+      result.measures,
+      undefined,
+      {
+        footnoteReserveSeed: result.footnoteReserveSeed!,
+        noteMeasurePlaneRetainedExact: true,
+        retainedFootnoteExtras: { blocks: result.extraBlocks!, measures: result.extraMeasures! },
+      },
+      localBodyReuse(result.layout, nextBlocks, changedIndex),
     );
     observingWarmWork = false; // The independent whole-document oracle deliberately visits every block.
     const fresh = await incrementalLayout([], null, nextBlocks, options, input.measureBlock);
+    const secondFresh = await incrementalLayout([], null, secondBlocks, options, input.measureBlock);
     expect(geometry(result.layout)).toEqual(geometry(fresh.layout));
+    expect(geometry(second.layout)).toEqual(geometry(secondFresh.layout));
     expect(result.layoutReuse?.mode).toBe('tail-splice');
+    expect(second.layoutReuse?.mode).toBe('tail-splice');
     expect(result.bridgeTiming.counters.footnoteCoupledPages).toBeLessThan(12);
+    expect(second.bridgeTiming.counters.footnoteCoupledPages).toBeLessThan(12);
+    expectPublishedExactNotePlane(result);
+    expectPublishedExactNotePlane(second);
     assertCoverageAndBounds(result, { ...input, blocks: nextBlocks });
+    assertCoverageAndBounds(second, { ...input, blocks: secondBlocks });
+  });
+
+  it('rejects exact-plane reuse when a note block changes', async () => {
+    clearIncrementalModuleState();
+    const input = scenario();
+    const options = {
+      ...input.options,
+      footnotes: { ...input.options.footnotes, referenceTopologyRevision: 'native-refs-1' },
+    };
+    const cold = await incrementalLayout([], null, input.blocks, options, input.measureBlock);
+    const changedIndex = 12;
+    const nextBlocks = editBodyText(input.blocks, changedIndex, 'abcd');
+    const changedNote = paragraph('footnote-0');
+    changedNote.runs[0] = {
+      text: 'a taller changed note',
+      fontFamily: 'Arial',
+      fontSize: 12,
+      pmStart: 0,
+      pmEnd: 21,
+    };
+    const changedNotes = new Map(input.notes);
+    changedNotes.set('0', [changedNote]);
+    const changedOptions = {
+      ...options,
+      footnotes: { ...options.footnotes, blocksById: changedNotes },
+    };
+    const changedMeasureBlock = async (block: FlowBlock): Promise<Measure> =>
+      block === changedNote ? measure(10, 14) : input.measureBlock(block);
+
+    const result = await incrementalLayout(
+      input.blocks,
+      cold.layout,
+      nextBlocks,
+      changedOptions,
+      changedMeasureBlock,
+      undefined,
+      cold.measures,
+      undefined,
+      {
+        footnoteReserveSeed: cold.footnoteReserveSeed!,
+        noteMeasurePlaneRetainedExact: true,
+        retainedFootnoteExtras: { blocks: cold.extraBlocks!, measures: cold.extraMeasures! },
+      },
+      localBodyReuse(cold.layout, input.blocks, changedIndex),
+    );
+    const fresh = await incrementalLayout([], null, nextBlocks, changedOptions, changedMeasureBlock);
+
+    expect(geometry(result.layout)).toEqual(geometry(fresh.layout));
+    expect(result.footnoteReserveSeed?.noteBlocksByBlockId).not.toBe(cold.footnoteReserveSeed?.noteBlocksByBlockId);
+    expect(result.footnoteReserveSeed?.noteBlocksByBlockId?.get(changedNote.id)).toBe(changedNote);
+    expect(result.footnoteReserveSeed?.noteBodyHeightById?.get('0')).toBeGreaterThan(
+      cold.footnoteReserveSeed?.noteBodyHeightById?.get('0') ?? 0,
+    );
+    assertCoverageAndBounds(result, {
+      ...input,
+      blocks: nextBlocks,
+      notes: changedNotes,
+      measureBlock: changedMeasureBlock,
+      options: changedOptions,
+    });
   });
 
   it('is seed-independent, preserves every source line, and settles in one forward pass', async () => {

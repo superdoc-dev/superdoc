@@ -97,7 +97,7 @@ export interface ExtractBlock {
    * tracked change. When concatenated, span text equals `text`.
    */
   textSpans?: ExtractTextSpan[];
-  /** Heading level (1-6). Only present for headings. */
+  /** Heading level (1-9). Only present for headings. */
   headingLevel?: number;
   /** Table coordinates. Only present for blocks inside a table cell. */
   tableContext?: ExtractTableContext;

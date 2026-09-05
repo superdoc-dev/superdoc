@@ -398,6 +398,53 @@ describe('resolveV2CollaborationTarget', () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.target.params).toEqual({ token: 'abc' });
   });
+
+  describe('provider extension contract', () => {
+    it('preserves a Hocuspocus token resolver for the browser-to-worker callback bridge', () => {
+      const resolveToken = async () => 'jwt-current';
+      const result = resolveV2CollaborationTarget({
+        v2Collaboration: {
+          providerType: 'hocuspocus',
+          documentId: 'fieldguide-report',
+          serverUrl: 'wss://collaboration.example.test',
+          token: resolveToken,
+        },
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        target: {
+          providerFamily: 'hocuspocus',
+          documentId: 'fieldguide-report',
+          roomMode: 'join',
+          serverUrl: 'wss://collaboration.example.test',
+          token: resolveToken,
+        },
+      });
+    });
+
+    it('accepts a customer adapter id and structured-clone-safe provider options', () => {
+      const result = resolveV2CollaborationTarget({
+        v2Collaboration: {
+          providerType: 'extension',
+          adapterId: 'fieldguide-hocuspocus',
+          documentId: 'fieldguide-report',
+          providerOptions: { tenant: 'acme', reconnect: true },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        target: {
+          providerFamily: 'extension',
+          adapterId: 'fieldguide-hocuspocus',
+          documentId: 'fieldguide-report',
+          providerOptions: { tenant: 'acme', reconnect: true },
+          roomMode: 'join',
+        },
+      });
+    });
+  });
 });
 
 describe('redactCollaborationUrl', () => {

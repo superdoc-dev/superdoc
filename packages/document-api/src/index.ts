@@ -402,7 +402,7 @@ import type {
 import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
-import { createPlanApi, type PlanApi } from './plan/plan.js';
+import { createPlanApi, type PlanApi, type PlanExecuteResult } from './plan/plan.js';
 export {
   createPlanApi,
   type PlanApi,
@@ -1823,8 +1823,8 @@ export interface QueryApi {
   match(input: QueryMatchInput | TextSelector | NodeSelector): QueryMatchOutput;
 }
 export interface MutationsApi {
-  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
-  apply(input: MutationsApplyInput): PlanReceipt;
+  preview(input: MutationsPreviewInput): Promise<MutationsPreviewOutput>;
+  apply(input: MutationsApplyInput): Promise<PlanReceipt>;
 }
 export interface RangesApi {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
@@ -1836,8 +1836,8 @@ export interface QueryAdapter {
   match(input: QueryMatchInput): QueryMatchOutput;
 }
 export interface MutationsAdapter {
-  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
-  apply(input: MutationsApplyInput): PlanReceipt;
+  preview(input: MutationsPreviewInput): Promise<MutationsPreviewOutput>;
+  apply(input: MutationsApplyInput): Promise<PlanReceipt>;
 }
 /**
  * The Document API interface for querying and inspecting document nodes.
@@ -2037,7 +2037,7 @@ export interface DocumentApi {
   /**
    * Throughput-oriented batch executor with stepwise operation semantics.
    */
-  plan: PlanApi;
+  plan: PlanApi<PlanExecuteResult | Promise<PlanExecuteResult>>;
   /**
    * Snapshot-based document comparison and replay.
    */
@@ -3702,10 +3702,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     mutations: {
-      preview(input: MutationsPreviewInput): MutationsPreviewOutput {
+      preview(input: MutationsPreviewInput): Promise<MutationsPreviewOutput> {
         return adapters.mutations.preview(input);
       },
-      apply(input: MutationsApplyInput): PlanReceipt {
+      apply(input: MutationsApplyInput): Promise<PlanReceipt> {
         return adapters.mutations.apply(input);
       },
     },

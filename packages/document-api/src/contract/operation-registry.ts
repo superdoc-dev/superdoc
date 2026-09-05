@@ -1710,7 +1710,11 @@ export type InvokeRequest<T extends OperationId> = OperationRegistry[T]['options
 /**
  * Typed invoke result, narrowed by operationId.
  */
-export type InvokeResult<T extends OperationId> = OperationRegistry[T]['output'];
+export type InvokeResult<T extends OperationId> = T extends 'mutations.preview' | 'mutations.apply'
+  ? Promise<OperationRegistry[T]['output']>
+  : T extends 'plan.execute'
+    ? OperationRegistry[T]['output'] | Promise<OperationRegistry[T]['output']>
+    : OperationRegistry[T]['output'];
 /**
  * Loose invoke request for dynamic callers who don't know the operation at compile time.
  * Invalid inputs will produce adapter-level errors, not input-validation errors.

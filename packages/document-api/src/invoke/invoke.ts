@@ -11,9 +11,14 @@ import { INLINE_PROPERTY_REGISTRY } from '../format/inline-run-patch.js';
 // ---------------------------------------------------------------------------
 // TypedDispatchTable: compile-time contract between registry and dispatch
 // ---------------------------------------------------------------------------
+type DispatchOutput<K extends OperationId> = K extends 'mutations.preview' | 'mutations.apply'
+  ? Promise<OperationRegistry[K]['output']>
+  : K extends 'plan.execute'
+    ? OperationRegistry[K]['output'] | Promise<OperationRegistry[K]['output']>
+    : OperationRegistry[K]['output'];
 type TypedDispatchHandler<K extends OperationId> = OperationRegistry[K]['options'] extends never
-  ? (input: OperationRegistry[K]['input']) => OperationRegistry[K]['output']
-  : (input: OperationRegistry[K]['input'], options?: OperationRegistry[K]['options']) => OperationRegistry[K]['output'];
+  ? (input: OperationRegistry[K]['input']) => DispatchOutput<K>
+  : (input: OperationRegistry[K]['input'], options?: OperationRegistry[K]['options']) => DispatchOutput<K>;
 export type TypedDispatchTable = {
   [K in OperationId]: TypedDispatchHandler<K>;
 };

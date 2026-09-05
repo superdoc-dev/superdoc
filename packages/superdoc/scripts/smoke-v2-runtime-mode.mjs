@@ -89,8 +89,10 @@ function sealFixture(tmpV2, { version = DECLARED_ENGINE_VERSION } = {}) {
   const distFiles = {
     'docx-engine.es.js': 'export {};\n',
     'collaboration-upgrade-engine.js': 'export {};\n',
+    'collaboration-worker.js': 'export {};\n',
     'style.css': '',
     'docx-engine.d.ts': 'export {};\n',
+    'collaboration-worker.d.ts': 'export {};\n',
   };
   for (const [name, contents] of Object.entries(distFiles)) {
     writeFileSync(path.join(dist, name), contents);
@@ -204,6 +206,8 @@ check('sealed dist-only prepared engine resolves (public-topology equivalent) an
     if (!hasSuperdocEntry) throw new Error('package mode did not map @superdoc/docx-engine onto the dist entry');
     const hasUpgradeEngine = aliasReplacements(r).some((rep) => rep.endsWith('collaboration-upgrade-engine.js'));
     if (!hasUpgradeEngine) throw new Error('package mode did not map the collaboration upgrade engine build input');
+    const hasCollaborationWorker = aliasReplacements(r).some((rep) => rep.endsWith('collaboration-worker.js'));
+    if (!hasCollaborationWorker) throw new Error('package mode did not map the collaboration worker build input');
     const hasHeadless = r.aliases.some((alias) => String(alias.find).includes('headless'));
     if (hasHeadless) throw new Error('package mode must not alias @superdoc/headless');
 

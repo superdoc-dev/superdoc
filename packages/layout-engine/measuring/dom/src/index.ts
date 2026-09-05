@@ -1793,15 +1793,28 @@ async function measureParagraphBlock(
   emptyParagraphLineMetrics?: MeasureConstraints['emptyParagraphLineMetrics'],
 ): Promise<ParagraphMeasure> {
   const visibleTextLength = block.runs.reduce((length, run) => length + (isTextRun(run) ? run.text.length : 1), 0);
+  /*
+   * The range checks are the whole filter. Direction is deliberately not part
+   * of it: box advances are widths, and a width does not depend on which way
+   * the line runs. The two direction clauses that used to sit here existed
+   * because `paintInlineBoxes` wrote physical left/right edges and therefore
+   * could not render an RTL line; it now writes logical ones, so the guard has
+   * nothing left to protect.
+   *
+   * Dropping them also removes an asymmetry rather than adding one. A logical
+   * range that straddles a direction change maps to more than one visual
+   * segment, and the painter's first/last-leaf edges cannot express that — but
+   * that is equally reachable today in an LTR paragraph containing a Hebrew
+   * phrase, which ships. Gating only the RTL side held RTL to a stricter
+   * standard than LTR while leaving the shared limitation in place.
+   */
   const inlineBoxes = block.inlineBoxes?.filter(
     (box) =>
       Number.isFinite(box.from) &&
       Number.isFinite(box.to) &&
       box.from >= 0 &&
       box.to > box.from &&
-      box.to <= visibleTextLength &&
-      block.attrs?.directionContext?.inlineDirection !== 'rtl' &&
-      block.runs.every((run) => !isTextRun(run) || run.bidi?.rtl !== true),
+      box.to <= visibleTextLength,
   );
   if (inlineBoxes?.length && inlineLineBudgets === undefined) {
     const unboxedBlock = { ...block, inlineBoxes: undefined };

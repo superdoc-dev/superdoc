@@ -11,6 +11,7 @@ import { ContentControlLocksDemo } from '@/components/embeds/content-control-loc
 import { ContentControlPatterns } from '@/components/embeds/content-control-patterns';
 import { CustomBoldDemo, CustomToolbarDemo } from '@/components/embeds/custom-bold-demo';
 import { CustomCommentsDemo } from '@/components/embeds/custom-comments-demo';
+import { CustomCommandDemo } from '@/components/embeds/custom-command-demo';
 import { CustomContentControlsDemo } from '@/components/embeds/custom-content-controls-demo';
 import { CustomDocumentControlsDemo } from '@/components/embeds/custom-document-controls-demo';
 import { CustomSearchDemo } from '@/components/embeds/custom-search-demo';
@@ -78,6 +79,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     ContentControlPatterns,
     CustomBoldDemo,
     CustomCommentsDemo,
+    CustomCommandDemo,
     CustomContentControlsDemo,
     CustomDocumentControlsDemo,
     CustomReviewFindingsDemo,

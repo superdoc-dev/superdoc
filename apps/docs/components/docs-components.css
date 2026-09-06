@@ -3433,6 +3433,84 @@
   }
 }
 
+.sd-custom-command-demo-built-in-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sd-custom-command-demo-built-in-header .sd-editor-demo-view-controls {
+  margin-left: auto;
+}
+
+.sd-custom-command-demo-workspace {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.sd-custom-command-demo-controls {
+  background: var(--sd-surface);
+}
+
+.sd-custom-command-demo-controls button:not(:disabled) {
+  border-color: var(--sd-blue);
+  background: var(--sd-blue);
+  color: #fff;
+}
+
+.sd-custom-command-demo-controls button:hover:not(:disabled) {
+  border-color: var(--sd-blue-600);
+  background: var(--sd-blue-600);
+}
+
+.sd-custom-command-demo-controls kbd {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-sm);
+  background: var(--sd-surface-muted);
+  color: var(--sd-custom-ui-text-secondary);
+  font: 600 0.6875rem/1.2 var(--font-mono);
+}
+
+.sd-custom-command-demo-controls output {
+  min-width: 12rem;
+  flex: 1 1 16rem;
+  color: var(--sd-custom-ui-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.sd-custom-command-demo-canvas {
+  height: min(34rem, 68vh);
+  min-height: 28rem;
+}
+
+.sd-custom-command-demo-canvas.sd-custom-bold-demo-canvas:not(:empty) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.sd-custom-command-demo:fullscreen .sd-custom-command-demo-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.sd-custom-command-demo:fullscreen .sd-custom-command-demo-canvas {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 32rem) {
+  .sd-custom-command-demo-controls output {
+    flex-basis: 100%;
+  }
+}
+
 .sd-custom-selection-demo-built-in-header {
   display: flex;
   min-width: 0;

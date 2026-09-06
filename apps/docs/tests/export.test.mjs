@@ -44,7 +44,7 @@ const routes = [
   ['editor/custom-ui/overview/index.html', 'Build a custom UI'],
   ['editor/custom-ui/controller-setup/index.html', 'Build your first custom control'],
   ['editor/custom-ui/commands-and-state/index.html', 'Keep custom controls in sync'],
-  ['editor/custom-ui/custom-commands/index.html', 'Register custom commands'],
+  ['editor/custom-ui/custom-commands/index.html', 'Register an application command'],
   ['editor/custom-ui/formatting-controls/index.html', 'Build a custom toolbar'],
   ['editor/custom-ui/comments/index.html', 'Build a custom comments panel'],
   ['editor/custom-ui/tracked-changes/index.html', 'Build a custom review panel'],
@@ -783,12 +783,19 @@ test('exports custom document controls as clean Markdown', async () => {
 });
 
 test('exports custom command registration as clean Markdown', async () => {
+  const article = await readFile(new URL('../out/editor/custom-ui/custom-commands/index.html', import.meta.url), 'utf8');
   const markdown = await readFile(new URL('../out/md/editor/custom-ui/custom-commands.md', import.meta.url), 'utf8');
 
-  assert.match(markdown, /ui\.commands\.register<\{ text: string \}>/);
+  assert.match(article, /data-custom-command-demo="true"/);
+  assert.match(markdown, /> \*\*Live example: run one application command from two controls\*\*/);
+  assert.match(markdown, /ui\.commands\.register<InsertClausePayload>/);
   assert.match(markdown, /shortcut.*application still owns the keyboard listener/s);
   assert.match(markdown, /registration\.unregister/);
-  assert.match(markdown, /Custom commands do not create an authorization boundary/);
+  assert.match(markdown, /getState\(\).*does not block custom-command execution/s);
+  assert.match(markdown, /event\.composedPath\(\)\.includes\(commandDemo\)/);
+  assert.match(markdown, /Move focus outside the\s+Editor experience/s);
+  assert.doesNotMatch(markdown, /contextMenu:/);
+  assert.doesNotMatch(markdown, /<CustomCommandDemo\b/);
   assert.doesNotMatch(markdown, /<include>/);
 });
 

@@ -24,6 +24,11 @@ const customDocumentControlsDemoUrl = new URL(
   '../components/embeds/custom-document-controls-demo.tsx',
   import.meta.url,
 );
+const customCommandDemoUrl = new URL('../components/embeds/custom-command-demo.tsx', import.meta.url);
+const customCommandShortcutUrl = new URL('../components/embeds/custom-command-shortcut.ts', import.meta.url);
+const customCommandPageUrl = new URL('../content/docs/editor/custom-ui/custom-commands.mdx', import.meta.url);
+const customCommandExampleUrl = new URL('../snippets/editor/custom-command.ts', import.meta.url);
+const customCommandMarkupUrl = new URL('../snippets/editor/custom-command.html', import.meta.url);
 const customUiMetaUrl = new URL('../content/docs/editor/custom-ui/meta.json', import.meta.url);
 const customUiSetupPageUrl = new URL('../content/docs/editor/custom-ui/controller-setup.mdx', import.meta.url);
 const customToolbarPageUrl = new URL('../content/docs/editor/custom-ui/formatting-controls.mdx', import.meta.url);
@@ -269,6 +274,7 @@ const registeredComponents = new Set([
   'ContextMenuConfigReference',
   'CustomBoldDemo',
   'CustomCommentsDemo',
+  'CustomCommandDemo',
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
   'CustomReviewFindingsDemo',
@@ -1157,6 +1163,97 @@ test('the custom document controls demo shows a partial ownership handoff', asyn
   assert.match(demo, />\s*SuperDoc UI\s*</u);
 });
 
+test('the custom commands guide shares one application action across two controls', async () => {
+  const [page, demo, example, markup] = await Promise.all(
+    [customCommandPageUrl, customCommandDemoUrl, customCommandExampleUrl, customCommandMarkupUrl].map((url) =>
+      readFile(url, 'utf8'),
+    ),
+  );
+
+  assert.match(page, /title: Register an application command/u);
+  assert.match(page, /A normal function is enough when one control owns an action/u);
+  assert.match(page, /<CustomCommandDemo \/>/u);
+  assert.match(page, /Both controls execute `application\.insertClause`/u);
+  assert.match(page, /press \*\*Control-Shift-Y\*\*/u);
+  assert.match(page, /`getState\(\)` describes availability; it does not block custom-command execution/u);
+  assert.match(page, /Move focus outside the\s+Editor experience/u);
+
+  assert.match(demo, /DEMO_DOCUMENT = '\/fixtures\/getting-started\.docx'/u);
+  assert.match(demo, /CUSTOM_COMMAND_SHORTCUT/u);
+  assert.match(demo, /value: 80/u);
+  assert.match(demo, /commands\.register<InsertClausePayload>/u);
+  assert.match(demo, /id: COMMAND_ID/u);
+  assert.match(demo, /registration\.handle\.getState\(\)/u);
+  assert.match(demo, /registration\.handle\.observe/u);
+  assert.match(demo, /command\.getState\(\)/u);
+  assert.match(demo, /command\.executeAsync\(\{ text: CLAUSE_TEXT, trigger \}\)/u);
+  assert.match(demo, /event\.composedPath\(\)\.includes\(rootRef\.current\)/u);
+  assert.match(demo, /if \(event\.repeat\) return/u);
+  assert.match(demo, /matchesCustomCommandShortcut\(event\)/u);
+  assert.match(demo, /shortcut: CUSTOM_COMMAND_SHORTCUT/u);
+  assert.match(demo, /aria-keyshortcuts='Control\+Shift\+Y'/u);
+  assert.match(demo, /window\.addEventListener\('keydown', runShortcut, true\)/u);
+  assert.match(demo, /window\.removeEventListener\('keydown', runShortcut, true\)/u);
+  assert.match(demo, /registration\.unregister\(\)/u);
+  assert.match(demo, /onMouseDown=\{preserveSelection\}/u);
+  assert.match(demo, /disabled=\{!controlsReady \|\| isPending \|\| !commandState\.enabled\}/u);
+  assert.match(demo, /EditorDemoViewControls/u);
+  assert.match(demo, /contentClassName='sd-custom-command-demo-workspace'/u);
+
+  assert.match(markup, /id="command-demo"/u);
+  assert.match(markup, /id="toolbar"/u);
+  assert.match(markup, /aria-keyshortcuts="Control\+Shift\+Y"/u);
+  assert.match(example, /document: '\/sample\.docx'/u);
+  assert.match(example, /ui: \{ toolbar: \{ container: '#toolbar' \} \}/u);
+  assert.match(example, /CustomCommandHandle<InsertClausePayload>/u);
+  assert.match(example, /commands\.register<InsertClausePayload>/u);
+  assert.match(example, /id: 'application\.insertClause'/u);
+  assert.match(example, /shortcut: 'Ctrl-Shift-Y'/u);
+  assert.match(example, /onReady:[\s\S]*stopCommandState\?\.\(\);[\s\S]*unregisterCommand\?\.\(\);/u);
+  assert.match(example, /if \(!command\.getState\(\)\.enabled\)/u);
+  assert.match(example, /command\.executeAsync\(\{ text: clauseText, trigger \}\)/u);
+  assert.match(example, /event\.composedPath\(\)\.includes\(commandDemo\)/u);
+  assert.match(example, /if \(event\.repeat\) return/u);
+  assert.match(example, /event\.key\.toLowerCase\(\) !== 'y'/u);
+  // An IME keydown must not fire the command mid-composition.
+  assert.match(example, /if \(event\.isComposing\) return;/u);
+  assert.match(example, /insertClause\.addEventListener\('mousedown', preserveSelection\)/u);
+  assert.match(example, /selection\.selectionTarget \?\? selection\.target/u);
+  assert.match(example, /'selection-required'/u);
+  // Insert degrades to replace at a non-collapsed range, so the command needs a caret.
+  assert.match(example, /&& selection\.empty/u);
+  assert.match(demo, /&& selection\.empty/u);
+  // onContentError also covers update failures, so a post-ready error must not destroy the
+  // session and the reader's edits with it.
+  assert.match(demo, /if \(readyRef\.current\) \{[\s\S]*?Your edits are still here/u);
+  assert.match(demo, /selection\.selectionTarget \?\? selection\.target/u);
+  assert.match(page, /Custom commands do not create an authorization boundary/u);
+  assert.match(page, /backend must still enforce document access/u);
+  assert.match(example, /unregisterCommand\?\.\(\)/u);
+
+  const { matchesCustomCommandShortcut } = await import(customCommandShortcutUrl.href);
+  assert.equal(
+    matchesCustomCommandShortcut({ altKey: false, ctrlKey: true, key: 'Y', metaKey: false, shiftKey: true }),
+    true,
+  );
+  // An IME keydown during composition must not fire the command.
+  assert.equal(
+    matchesCustomCommandShortcut({
+      altKey: false,
+      ctrlKey: true,
+      isComposing: true,
+      key: 'y',
+      metaKey: false,
+      shiftKey: true,
+    }),
+    false,
+  );
+  assert.equal(
+    matchesCustomCommandShortcut({ altKey: true, ctrlKey: true, key: 'c', metaKey: false, shiftKey: false }),
+    false,
+  );
+});
+
 test('the custom selection examples preserve identity and remeasure geometry', async () => {
   const [markup, vanilla, react] = await Promise.all(
     [customSelectionMarkupUrl, customSelectionExampleUrl, reactCustomSelectionExampleUrl].map((url) =>
@@ -1486,7 +1583,7 @@ test('the review findings guide turns an AI finding into a tracked suggestion', 
   assert.match(page, /does not cancel a write already sent to the Editor/u);
   assert.match(page, /Set `user` to the identity that should author tracked suggestions/u);
   assert.match(page, /Track changes[\s\S]*owns navigation and accept\/reject controls/u);
-  assert.match(page, /Continue with \[Custom commands\]/u);
+  assert.match(page, /If the same application action[\s\S]*\[Custom commands\]/u);
   assert.match(page, /onFindingsChanged: renderFindingPanel/u);
   assert.match(page, /refuses a selection that the reader edited while the model request was in flight/u);
   assert.match(page, /Only the newest `refresh\(\)` publishes/u);

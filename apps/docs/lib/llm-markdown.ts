@@ -38,6 +38,7 @@ export const llmPlaceholderComponents = [
   'ContextMenuConfigReference',
   'CustomBoldDemo',
   'CustomCommentsDemo',
+  'CustomCommandDemo',
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
   'CustomReviewFindingsDemo',
@@ -187,6 +188,14 @@ export function renderLLMMarkdown(markdown: string) {
         '> **Live example: replace the comments panel**',
         '>',
         '> SuperDoc renders the toolbar and a three-page DOCX while the application renders the comments panel. Existing threads on the first and final pages make `setActive()` and `scrollTo()` visible; the middle page provides text for `createFromCapture()`. The panel observes `ui.comments` and reports resolve or reopen receipts. Setting `ui.comments` to `false` removes the built-in comments panel without removing comments from the document.',
+        '',
+      ].join('\n');
+    },
+    CustomCommandDemo() {
+      return [
+        '> **Live example: run one application command from two controls**',
+        '>',
+        '> Place the caret in the real DOCX. Insert clause and Control-Shift-Y execute the same registered `application.insertClause` command. The button observes the command handle for its enabled state, and the result identifies which trigger ran and whether the clause was inserted.',
         '',
       ].join('\n');
     },

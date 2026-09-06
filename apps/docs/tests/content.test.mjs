@@ -626,6 +626,21 @@ test('the custom UI navigation has no internal section separators', async () => 
   );
 });
 
+test('the custom UI tutorial links follow the sidebar order into document controls', async () => {
+  const { pages } = JSON.parse(await readFile(customUiMetaUrl, 'utf8'));
+  const [toolbar, documentControls] = await Promise.all(
+    [customToolbarPageUrl, customDocumentControlsPageUrl].map((url) => readFile(url, 'utf8')),
+  );
+
+  // Readers follow the written continuation link, not the sidebar, so a reorder
+  // that leaves those links behind silently skips a guide.
+  const start = pages.indexOf('formatting-controls');
+  assert.deepEqual(pages.slice(start, start + 3), ['formatting-controls', 'zoom-and-document-state', 'comments']);
+
+  assert.match(toolbar, /Next, \[[^\]]+\]\(\/editor\/custom-ui\/zoom-and-document-state\)/u);
+  assert.match(documentControls, /Next, \[[^\]]+\]\(\/editor\/custom-ui\/comments\)/u);
+});
+
 test('the custom toolbar demo proves toggle, picker, and mixed selection state', async () => {
   const [page, demo] = await Promise.all(
     [customToolbarPageUrl, customBoldDemoUrl].map((url) => readFile(url, 'utf8')),

@@ -130,6 +130,17 @@ const customDocumentControlsPageUrl = new URL(
   '../content/docs/editor/custom-ui/zoom-and-document-state.mdx',
   import.meta.url,
 );
+const customSelectionPageUrl = new URL(
+  '../content/docs/editor/custom-ui/selection-and-viewport.mdx',
+  import.meta.url,
+);
+const customSelectionDemoUrl = new URL('../components/embeds/custom-selection-demo.tsx', import.meta.url);
+const customSelectionMarkupUrl = new URL('../snippets/editor/selection-and-viewport.html', import.meta.url);
+const customSelectionExampleUrl = new URL('../snippets/editor/selection-and-viewport.ts', import.meta.url);
+const reactCustomSelectionExampleUrl = new URL(
+  '../snippets/editor/react-selection-and-viewport.tsx',
+  import.meta.url,
+);
 const documentApiReferenceModelUrl = new URL('../generated/document-api-reference.json', import.meta.url);
 const generatedProofingConfigUrl = new URL('../generated/proofing-config-reference.json', import.meta.url);
 const generatedSearchConfigUrl = new URL('../generated/search-config-reference.json', import.meta.url);
@@ -199,6 +210,7 @@ const registeredComponents = new Set([
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
   'CustomSearchDemo',
+  'CustomSelectionDemo',
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
   'CustomUiArchitecture',
@@ -1080,6 +1092,317 @@ test('the custom document controls demo shows a partial ownership handoff', asyn
   assert.match(demo, /if \(readyRef\.current\) \{\s+setRuntimeError\(/u);
   assert.match(demo, />\s*Your application\s*</u);
   assert.match(demo, />\s*SuperDoc UI\s*</u);
+});
+
+test('the custom selection examples preserve identity and remeasure geometry', async () => {
+  const [markup, vanilla, react] = await Promise.all(
+    [customSelectionMarkupUrl, customSelectionExampleUrl, reactCustomSelectionExampleUrl].map((url) =>
+      readFile(url, 'utf8'),
+    ),
+  );
+
+  for (const example of [vanilla, react]) {
+    assert.match(example, /document(?:=|:)\s*['"]\/contract\.docx['"]/u);
+    // The observer must ignore unsettled and collapsed snapshots: a capture is
+    // kept on purpose while focus sits in the prompt, so only a ready non-empty
+    // selection replaces it.
+    assert.match(example, /selection\.status !== 'ready' \|\| selection\.empty/u);
+    assert.match(example, /selection\.capture\(\)/u);
+    assert.match(example, /viewport\.getRect\(\{ target, relativeTo:/u);
+    assert.match(example, /viewport\.observe\(positionPrompt\)/u);
+    assert.match(example, /selection\.restore\(capture|selection\.restore\(currentCapture/u);
+    assert.match(example, /selectionTarget \?\? .*\.target/u);
+    assert.match(example, /context: currentCapture\.quotedText/u);
+    assert.match(example, /fetch\('\/api\/selection-prompt'/u);
+    assert.match(example, /typeof value\.answer !== 'string'/u);
+    assert.doesNotMatch(example, /getSelection\(|querySelector\([^\n]*superdoc-/u);
+  }
+
+  assert.match(markup, /id="prompt-card" hidden/u);
+  assert.match(markup, /aria-label="Actions for selected text"/u);
+  assert.match(markup, /id="open-selection-prompt"/u);
+  assert.match(markup, /id="selection-composer" hidden/u);
+  assert.match(markup, /id="close-selection-prompt"/u);
+  assert.match(markup, /id="selection-question"/u);
+  assert.match(markup, /id="prompt-response" hidden/u);
+  assert.match(vanilla, /stopSelection\?\.\(\)/u);
+  assert.match(vanilla, /stopViewport\?\.\(\)/u);
+  assert.match(vanilla, /setComposerOpen\(true\)/u);
+  assert.match(vanilla, /resetComposer\(\)/u);
+  assert.match(vanilla, /question\.focus\(\)/u);
+  assert.match(vanilla, /openPromptButton\.focus\(\)/u);
+  assert.match(vanilla, /openPromptButton\.removeEventListener/u);
+  assert.match(vanilla, /status\.textContent = interactionStatus/u);
+  assert.match(vanilla, /requestId !== promptRequestId/u);
+  assert.match(react, /useSuperDocSelection\(\)/u);
+  assert.match(react, /useEffect\(\(\) => ui\?\.viewport\.observe\(positionPrompt\)/u);
+  assert.match(react, /const host = ui\.viewport\.getHost\(\)/u);
+  assert.match(react, /Math\.min\(preferredTop, maxTop\)/u);
+  assert.match(react, /requestId !== promptRequestIdRef\.current/u);
+  assert.match(react, /setIsComposerOpen\(false\)/u);
+  assert.match(react, /questionRef\.current\?\.focus\(\)/u);
+  assert.match(react, /actionButtonRef\.current\?\.focus\(\)/u);
+  assert.match(react, /geometryStatus \?\? status/u);
+});
+
+test('selection prompt identity changes when text changes at the same offsets', async () => {
+  for (const url of [customSelectionExampleUrl, reactCustomSelectionExampleUrl, customSelectionDemoUrl]) {
+    const source = await readFile(url, 'utf8');
+    const expression = source.match(/JSON\.stringify\([^;]*(?:nextCapture|capture)\.[^;]*\)/u)?.[0];
+    assert.ok(expression, `Missing capture identity in ${url.pathname}`);
+    const keyFor = Function('nextCapture', 'capture', `return ${expression};`);
+    const key = (capture) => keyFor(capture, capture);
+    const target = { from: 10, to: 20 };
+
+    for (const address of [{ selectionTarget: target }, { target }]) {
+      const original = { ...address, quotedText: 'thirty days', capturedAt: 1 };
+      const recaptured = { ...original, capturedAt: 2 };
+      const edited = { ...recaptured, quotedText: 'ninety days' };
+      assert.equal(key(original), key(recaptured), 'recapturing unchanged context preserves the prompt');
+      assert.notEqual(key(original), key(edited), `${url.pathname}: edited context must reset the prompt`);
+    }
+  }
+});
+
+test('selection prompts hide only when their range is outside the viewport', async () => {
+  const rect = (left, top, width = 20, height = 20) => ({ left, top, right: left + width, bottom: top + height, width, height });
+  const cases = [
+    ['inside', [rect(200, 200)], true],
+    ['clipped left', [rect(-30, 200)], false],
+    ['clipped right', [rect(810, 200)], false],
+    ['clipped above', [rect(200, -30)], false],
+    ['clipped below', [rect(200, 610)], false],
+    ['partly visible left', [rect(-10, 200)], true],
+    ['partly visible right', [rect(790, 200)], true],
+    ['later line visible', [rect(200, -30), rect(400, 200)], true],
+    ['later page visible', [rect(200, -900), rect(400, 200)], true],
+    ['all fragments clipped', [rect(200, -30), rect(200, 610)], false],
+  ];
+  for (const url of [customSelectionExampleUrl, reactCustomSelectionExampleUrl, customSelectionDemoUrl]) {
+    const source = await readFile(url, 'utf8');
+    const vanilla = url === customSelectionExampleUrl;
+    const start = source.indexOf('const geometry =');
+    const end = source.indexOf(vanilla ? '\n    };' : '\n  },', start);
+    assert.ok(start > 0 && end > start, `Missing positionPrompt in ${url.pathname}`);
+    const body = source.slice(start, end);
+    for (const [name, rects, visible] of cases) {
+      const element = { getBoundingClientRect: () => rect(0, 0, 800, 600), clientWidth: 800 };
+      const promptCard = { offsetWidth: 100, offsetHeight: 40, hidden: true, style: {}, contains: () => false };
+      const focused = [];
+      let position = null;
+      const ui = { viewport: { getRect: () => ({ found: true, rect: rects[0], rects }), getHost: () => element } };
+      const context = {
+        ui, instance: { ui }, target: {}, documentElement: element, editorElement: element,
+        editorShell: element, editor: element, shell: element, promptCard,
+        promptRef: { current: promptCard }, composerOpenRef: { current: false }, isComposerOpen: false,
+        status: { textContent: '' }, interactionStatus: '', PROMPT_EDGE: 8, PROMPT_GAP: 12,
+        setPromptPosition: (value) => { position = value; }, setPosition: (value) => { position = value; },
+        setGeometryMessage: () => {}, setGeometryStatus: () => {},
+        // Unhiding the Vanilla card must restore focus, so the body now reads these.
+        composer: { hidden: true }, question: { focus: () => focused.push('question') },
+        openPromptButton: { focus: () => focused.push('openPrompt') },
+        document: { activeElement: null }, restorePromptFocus: false,
+        focusIsUnclaimed: () => true,
+      };
+      Function(...Object.keys(context), body)(...Object.values(context));
+      assert.equal(vanilla ? !promptCard.hidden : position !== null, visible, `${url.pathname}: ${name}`);
+      if (vanilla) {
+        // The card must not steal focus from the Editor on first appearance; only a card that
+        // owned focus when it was hidden gets it back.
+        assert.deepEqual(focused, [], `${url.pathname}: ${name} does not steal focus`);
+      }
+      if (name.startsWith('later')) {
+        assert.equal(vanilla ? parseFloat(promptCard.style.left) : position.left, 360, 'anchor to the visible fragment');
+        assert.equal(vanilla ? parseFloat(promptCard.style.top) : position.top, 148, 'position above the visible fragment');
+      }
+    }
+  }
+});
+
+test('React selection prompts remeasure when their card remounts', async () => {
+  for (const url of [reactCustomSelectionExampleUrl, customSelectionDemoUrl]) {
+    const source = await readFile(url, 'utf8');
+    assert.match(source, /const isPromptVisible = (?:position|promptPosition) !== null;/u);
+    // The card unmounts while the range is out of view, so focus restoration must also
+    // depend on visibility or a keyboard user loses the prompt on the way back.
+    assert.match(source, /\}, \[isComposerOpen, isPromptVisible\]\);/u);
+    // Neither branch may steal focus: opening the composer refocuses it, a scroll-back only
+    // restores focus the prompt already owned.
+    assert.match(source, /composerJustOpened/u);
+    assert.match(source, /restoreComposerFocusRef\.current = promptControlName\(promptRef\.current\);/u);
+    const effect = source.match(/useLayoutEffect\(positionPrompt, \[[^\]]+\]\);/u)?.[0]
+      ?? source.match(/useEffect\(\(\) => \{\n    if \(!capture\) return;[\s\S]*?\}, \[[^\]]+\]\);/u)?.[0];
+    assert.ok(effect, `Missing positioning effect in ${url.pathname}`);
+    let previous;
+    let measured = 0;
+    const runEffect = (callback, dependencies) => {
+      if (!previous || dependencies.some((value, index) => !Object.is(value, previous[index]))) callback();
+      previous = dependencies;
+    };
+    const positionPrompt = () => { measured++; };
+    const capture = {};
+    for (const isPromptVisible of [false, true, false, true]) {
+      const before = measured;
+      const scope = {
+        useLayoutEffect: runEffect, useEffect: runEffect, positionPrompt, capture,
+        answer: '', isComposerOpen: true, isPromptVisible,
+        requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {},
+      };
+      Function(...Object.keys(scope), effect)(...Object.values(scope));
+      if (isPromptVisible) assert.equal(measured, before + 1, `${url.pathname}: measure the newly mounted card`);
+      Function(...Object.keys(scope), effect)(...Object.values(scope));
+      assert.equal(measured, before + 1, 'unchanged visibility must not trigger a render loop');
+    }
+  }
+});
+
+test('the selection guide separates SelectionTarget from the geometry fallback', async () => {
+  // apply() takes SelectionTarget; SelectionSlice.target is a TextTarget that only getRect()
+  // accepts, so the `selectionTarget ?? target` fallback must not be copied into apply().
+  const page = await readFile(customSelectionPageUrl, 'utf8');
+  assert.match(page, /`selection\.apply\(\)` takes a `SelectionTarget`/u);
+  assert.match(page, /only `selectionTarget` is accepted by\n`apply\(\)`/u);
+  assert.doesNotMatch(page, /`selection\.apply\(target\)`/u);
+});
+
+test('the selection guide still answers the entityAt migration paths that link to it', async () => {
+  // The v1 catalog sends both posAtCoords and fieldAnnotationClicked here for
+  // superdoc.ui.viewport.entityAt, so this page has to carry the runnable guidance.
+  const catalog = JSON.parse(await readFile(new URL('../public/migration/v1-to-v2.json', import.meta.url), 'utf8'));
+  const entries = [];
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (!node || typeof node !== 'object') return;
+    if (node.v2 === 'superdoc.ui.viewport.entityAt') entries.push(node);
+    Object.values(node).forEach(walk);
+  };
+  walk(catalog);
+  assert.ok(entries.length >= 2, 'the catalog still routes entityAt migrations');
+
+  const page = await readFile(customSelectionPageUrl, 'utf8');
+  for (const entry of entries) {
+    assert.equal(
+      entry.docsPath,
+      '/editor/custom-ui/selection-and-viewport',
+      `${entry.id} must point at the page that documents entityAt`,
+    );
+  }
+  // A runnable handler, not just the summary table row.
+  assert.match(page, /ui\.viewport\.entityAt\(\{ x: event\.clientX, y: event\.clientY \}\)/u);
+  assert.match(page, /ui\.viewport\.getHost\(\)/u);
+  assert.match(page, /removeEventListener/u, 'the citation listener shows its cleanup');
+  // The caveats are the reason this guidance cannot be reduced to the table row.
+  assert.match(page, /doc\.metadata\.resolve\(\{ id: hit\.tag \}\)/u);
+  assert.match(page, /painted ids are unique only within that part/u);
+  assert.match(page, /Only tracked-change hits carry it/u);
+});
+
+test('prompt focus restoration yields to a deliberate focus move', async () => {
+  // A card that owned focus when it scrolled away reclaims it on the way back only if nobody
+  // else took it, and returns the reader to the exact control they were using. Closing the
+  // composer is deliberate and always lands focus on the compact action button.
+  const stripTypes = (code) => code.replace(/:\s*(HTMLElement \| null|string \| null|boolean|string)(?=[,)\s{])/gu, '');
+  for (const url of [reactCustomSelectionExampleUrl, customSelectionDemoUrl]) {
+    const source = await readFile(url, 'utf8');
+    const helpers = ['focusIsUnclaimed', 'promptControlName', 'focusPromptControl']
+      .map((name) => {
+        const found = source.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`, 'u'));
+        assert.ok(found, `Missing ${name} in ${url.pathname}`);
+        return found[0];
+      })
+      .join('\n');
+    const marker = source.indexOf('const composerJustOpened');
+    const start = source.lastIndexOf('useEffect(() => {', marker);
+    const tail = '}, [isComposerOpen, isPromptVisible]);';
+    const end = source.indexOf(tail, marker) + tail.length;
+    assert.ok(marker > 0 && start > 0 && end > start, `Missing focus effect in ${url.pathname}`);
+    const program = stripTypes(`${helpers}\n${source.slice(start, end)}`);
+
+    const cases = [
+      ['a reader who moved on keeps focus', 'close', false, 'elsewhere', []],
+      ['the exact control returns', 'close', false, 'body', ['close']],
+      ['an unknown control falls back', 'gone', false, 'body', ['fallback']],
+      ['closing the composer always lands focus', null, true, 'elsewhere', ['fallback']],
+    ];
+    for (const [name, restoreTarget, closedComposer, activeKind, expected] of cases) {
+      const focused = [];
+      class FakeElement {
+        constructor(label) {
+          this.label = label;
+        }
+        focus() {
+          focused.push(this.label);
+        }
+        closest() {
+          return this;
+        }
+        getAttribute() {
+          return this.label;
+        }
+      }
+      const body = new FakeElement('body');
+      const controls = { close: new FakeElement('close') };
+      const card = { querySelector: (selector) => controls[selector.match(/"([^"]+)"/u)[1]] ?? null };
+      const fallback = { current: new FakeElement('fallback') };
+      const scope = {
+        HTMLElement: FakeElement,
+        useEffect: (callback) => callback(),
+        isComposerOpen: false,
+        isPromptVisible: true,
+        wasComposerOpenRef: { current: false },
+        restoreComposerFocusRef: { current: restoreTarget },
+        restoreActionFocusRef: { current: closedComposer },
+        actionButtonRef: fallback,
+        questionRef: fallback,
+        promptInputRef: fallback,
+        promptRef: { current: card },
+        document: { activeElement: activeKind === 'body' ? body : new FakeElement('elsewhere'), body },
+      };
+      Function(...Object.keys(scope), program)(...Object.values(scope));
+      assert.deepEqual(focused, expected, `${url.pathname}: ${name}`);
+    }
+  }
+
+  // The Vanilla card is hidden rather than unmounted, so it keeps the control element itself.
+  const vanilla = await readFile(customSelectionExampleUrl, 'utf8');
+  assert.match(vanilla, /restorePromptFocus = focusedPromptControl\(promptCard\);/u);
+  assert.match(vanilla, /control\.isConnected \? control : composer\.hidden \? openPromptButton : question/u);
+});
+
+test('the custom selection demo keeps the real editor and AI prompt in one frame', async () => {
+  const [page, demo] = await Promise.all(
+    [customSelectionPageUrl, customSelectionDemoUrl].map((url) => readFile(url, 'utf8')),
+  );
+
+  assert.match(page, /<CustomSelectionDemo \/>/u);
+  assert.match(page, /creates its response locally and sends no text to a model/u);
+  assert.match(page, /POST \/api\/selection-prompt/u);
+  assert.match(page, /captured `quotedText`/u);
+  assert.match(page, /keeps the quickstart `index\.html`/u);
+  assert.match(page, /If you use Vanilla, replace `index\.html` with:/u);
+  assert.doesNotMatch(page, /\b(?:posAtCoords|coordsAtPos|editor\.view)\b/u);
+  assert.match(demo, /data-custom-selection-demo/u);
+  assert.match(demo, /custom-selection-workflow\.docx/u);
+  assert.match(demo, /EditorDemoViewControls/u);
+  assert.match(demo, /fitRuntimeEditorToWidth/u);
+  assert.match(demo, /ui\.selection\.observe\(handleSelection\)/u);
+  assert.match(demo, /selection\.status !== 'ready' \|\| selection\.empty/u);
+  assert.match(demo, /ui\.viewport\.observe\(\(\) => positionPrompt\(\)\)/u);
+  // The prompt card unmounts when the captured range scrolls out of view, so focus
+  // restoration has to depend on visibility, not only on the composer flag.
+  assert.match(demo, /\}, \[isComposerOpen, isPromptVisible\]\);/u);
+  assert.match(demo, /selection\.restore\(currentCapture\)/u);
+  assert.match(demo, /setGeometryMessage\(null\);\n\n    const composerOpen/u);
+  assert.match(demo, /geometryMessage \?\? interactionMessage/u);
+  assert.match(demo, /data-mode=\{isComposerOpen \? 'composer' : 'actions'\}/u);
+  assert.match(demo, /setIsComposerOpen\(true\)/u);
+  assert.match(demo, /promptInputRef\.current\?\.focus\(\)/u);
+  assert.match(demo, /actionButtonRef\.current\?\.focus\(\)/u);
+  assert.match(demo, /fitRuntimeEditorToWidth\(superdoc\)/u);
+  assert.match(demo, /createDemoAnswer\(currentCapture\.quotedText\)/u);
+  assert.match(demo, />\s*Simulated response\s*</u);
+  assert.match(demo, /disabled=\{!prompt\.trim\(\)\}/u);
+  assert.match(demo, /<CollapsibleEditorPreview[\s\S]*sd-custom-selection-demo-document/u);
 });
 
 test('the built-in Editor demos keep focused controls and restart-safe configuration changes', async () => {

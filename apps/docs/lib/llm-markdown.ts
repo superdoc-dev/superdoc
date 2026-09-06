@@ -41,6 +41,7 @@ export const llmPlaceholderComponents = [
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
   'CustomSearchDemo',
+  'CustomSelectionDemo',
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
   'CustomUiArchitecture',
@@ -209,6 +210,14 @@ export function renderLLMMarkdown(markdown: string) {
         '> **Live example: drive Search from application-owned controls**',
         '>',
         '> SuperDoc renders its toolbar and a three-page DOCX while the application renders Find, Match case, Previous, Next, and Replace controls. The example starts with eight case-insensitive `Client` matches. `ui.search` paints and navigates the matches, while the panel observes the same session for its active index, total, and `canReplace` state. The document starts at 80% on wide layouts and fits to width on narrow layouts.',
+        '',
+      ].join('\n');
+    },
+    CustomSelectionDemo() {
+      return [
+        '> **Live example: ask AI about selected document text**',
+        '>',
+        '> Select text in the two-page DOCX. A compact Ask AI action appears first, then expands into a question field. The application captures the text and document target before focus moves. The demo response is local: no text is sent to a model. Scrolling or zooming resolves the same target again, and Show selection reapplies it in the Editor.',
         '',
       ].join('\n');
     },

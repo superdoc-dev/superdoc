@@ -376,6 +376,35 @@ test('the custom content-controls fixture makes typed field navigation visible a
   }
 });
 
+test('the custom selection fixture provides two clean geometry targets', async () => {
+  const { bytes, zip, contentTypes, document, styles, core, app } = await openFixture(
+    'custom-selection-workflow.docx',
+  );
+  const visibleText = [...document.matchAll(/<w:t(?:\s[^>]*)?>(.*?)<\/w:t>/g)]
+    .map((match) => match[1])
+    .join(' ');
+
+  assert.equal(firstArchiveEntry(bytes), '[Content_Types].xml');
+  assert.equal(document.match(/<w:br w:type="page"\/>/g)?.length, 1, 'must contain two explicit pages');
+  assert.match(document, /fees Customer paid in the twelve months before the claim/);
+  assert.match(document, /sixty days’ written notice/);
+  assert.match(document, /Select the cap and choose Ask AI/);
+  assert.match(document, /Select the notice to move the prompt/);
+  assert.match(styles, /<w:sz w:val="24"\/>/);
+  assert.ok(visibleText.length < 300, `custom selection fixture must stay concise, got ${visibleText.length} characters`);
+  assert.ok(bytes.length < 8_000, `must stay a small package, got ${bytes.length} bytes`);
+  assert.equal(zip.file('word/comments.xml'), null, 'must not ship comments');
+  assert.doesNotMatch(contentTypes, /comments\.xml/);
+  assert.match(core, /<dc:creator><\/dc:creator>/);
+  assert.match(core, /<cp:lastModifiedBy><\/cp:lastModifiedBy>/);
+  assert.match(app, /<Company><\/Company>/);
+  assert.match(app, /<Manager><\/Manager>/);
+
+  for (const element of REVISION_ELEMENTS) {
+    assert.ok(!new RegExp(`<${element}\\b`).test(document), `must not contain <${element}>`);
+  }
+});
+
 test('the search fixture provides three short pages with deliberate query results', async () => {
   const { bytes, zip, document, styles, core, app } = await openFixture('search-sample.docx');
   const visibleText = [...document.matchAll(/<w:t[^>]*>(.*?)<\/w:t>/g)].map((match) => match[1]).join(' ');

@@ -7,6 +7,7 @@
  * - `public/fixtures/custom-comments-workflow.docx`
  * - `public/fixtures/custom-track-changes-workflow.docx`
  * - `public/fixtures/custom-content-controls-workflow.docx`
+ * - `public/fixtures/custom-selection-workflow.docx`
  * - `public/fixtures/search-sample.docx`
  * - `public/fixtures/hyperlinks-sample.docx`
  * - `public/fixtures/context-menu-sample.docx`
@@ -26,10 +27,13 @@
  * tracked-changes fixture puts three review decisions on separate pages for the
  * same reason. The custom content-controls fixture puts a text field and a
  * checkbox on separate pages so its application panel can demonstrate field
- * navigation as well as typed mutations. The search fixture follows the same rule: three large-type
- * paragraphs across three short pages, with enough repeated terms to show the
- * real search surface moving between results and one pending deletion for the
- * tracked-deletion search option. The hyperlinks fixture contains one real
+ * navigation as well as typed mutations. The custom selection fixture puts
+ * selectable text on two pages so a floating prompt can follow painted
+ * geometry through scroll and zoom changes. The search fixture follows the
+ * same rule:
+ * three large-type paragraphs across three short pages, with enough repeated
+ * terms to show the real search surface moving between results and one pending
+ * deletion for the tracked-deletion search option. The hyperlinks fixture contains one real
  * external hyperlink. The context-menu fixture keeps one selectable instruction
  * sentence in view. The content-controls fixture has one text control and one
  * checkbox so readers can inspect the built-in chrome and the metadata reported
@@ -217,6 +221,17 @@ const CUSTOM_CONTENT_CONTROLS_DOCUMENT = `<?xml version="1.0" encoding="UTF-8" s
   'Use Show in document to move between fields.',
 )}<w:sectPr><w:pgSz w:w="12240" w:h="6480"/><w:pgMar w:top="720" w:right="1080" w:bottom="720" w:left="1080" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 
+const CUSTOM_SELECTION_DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${heading(
+  'Limitation of liability',
+)}${paragraph('Neither party’s aggregate liability may exceed the fees Customer paid in the twelve months before the claim.')}${paragraph(
+  'Select the cap and choose Ask AI.',
+)}${pageBreak}${heading('Term and renewal')}${paragraph(
+  'This Agreement renews unless either party gives sixty days’ written notice.',
+)}${paragraph(
+  'Select the notice to move the prompt.',
+)}<w:sectPr><w:pgSz w:w="12240" w:h="6480"/><w:pgMar w:top="720" w:right="1080" w:bottom="720" w:left="1080" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+
 const SEARCH_PARAGRAPHS = [
   'The Client team opens the project brief and checks every Client name before review begins.',
   'During review, the Client owner compares each client request with the source file. The Client team then replaces outdated terms.',
@@ -325,6 +340,16 @@ await writeDocx('custom-content-controls-workflow.docx', [
   ['[Content_Types].xml', CONTENT_TYPES],
   ['_rels/.rels', ROOT_RELS],
   ['word/document.xml', CUSTOM_CONTENT_CONTROLS_DOCUMENT],
+  ['word/_rels/document.xml.rels', DOCUMENT_RELS],
+  ['word/styles.xml', COMPACT_WORKFLOW_STYLES],
+  ['docProps/core.xml', CORE_PROPERTIES],
+  ['docProps/app.xml', appProperties(7)],
+]);
+
+await writeDocx('custom-selection-workflow.docx', [
+  ['[Content_Types].xml', CONTENT_TYPES],
+  ['_rels/.rels', ROOT_RELS],
+  ['word/document.xml', CUSTOM_SELECTION_DOCUMENT],
   ['word/_rels/document.xml.rels', DOCUMENT_RELS],
   ['word/styles.xml', COMPACT_WORKFLOW_STYLES],
   ['docProps/core.xml', CORE_PROPERTIES],

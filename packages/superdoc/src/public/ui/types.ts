@@ -883,7 +883,10 @@ export interface StylesHandle extends SnapshotSubscribable<StylesSlice> {
 // Viewport geometry
 // ---------------------------------------------------------------------------
 
-/** A painted rectangle in viewport coordinates. */
+/**
+ * A painted document rectangle. Coordinates use browser client space by
+ * default, or the element-relative space requested through `relativeTo`.
+ */
 export interface ViewportRect {
   /** Zero-based page index the rect belongs to. */
   pageIndex: number;
@@ -912,7 +915,7 @@ export type ViewportGetRectTarget = SelectionTarget | TextAddress | TextTarget |
 export interface ViewportGetRectInput {
   /** Target to resolve to painted geometry. */
   target: ViewportGetRectTarget;
-  /** Optional element to anchor returned coordinates against. */
+  /** Return coordinates relative to this element instead of browser client space. */
   relativeTo?: HTMLElement;
 }
 
@@ -947,7 +950,7 @@ export interface SelectionHandle extends SnapshotSubscribable<SelectionSlice> {
    * Returns `null` before the first async browser read settles.
    */
   current(): SelectionInfo | null;
-  /** Freeze the current selection for later comment/format actions. */
+  /** Preserve the current non-empty selection for work that moves focus into application UI. */
   capture(): SelectionCapture | null;
   /**
    * Restore a previously captured selection, best-effort. Never throws;
@@ -973,7 +976,9 @@ export interface SelectionHandle extends SnapshotSubscribable<SelectionSlice> {
   getRects(input?: { relativeTo?: HTMLElement }): readonly ViewportRect[];
 }
 
+/** A non-empty selection snapshot preserved independently of browser focus. */
 export interface SelectionCapture extends SelectionSlice {
+  /** Unix time in milliseconds when the selection was captured. */
   capturedAt: number;
 }
 
@@ -1274,9 +1279,12 @@ export interface DocumentHandle extends SnapshotSubscribable<DocumentSlice> {
 
 /** Viewport handle. */
 export interface ViewportHandle {
-  /** Resolve painted geometry for an entity / content-control address. */
+  /** Resolve current painted geometry for a selection, text target, or supported entity address. */
   getRect(input: ViewportGetRectInput): ViewportRectResult;
-  /** Subscribe to viewport/geometry invalidation. */
+  /**
+   * Subscribe to geometry invalidation after selection, zoom, scroll, resize,
+   * layout, or repaint changes. The callback is coalesced to one per frame.
+   */
   observe(listener: () => void): () => void;
   /** Painted editor host element, when available. */
   getHost(): HTMLElement | null;

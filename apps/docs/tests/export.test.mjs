@@ -53,7 +53,7 @@ const routes = [
   ['editor/custom-ui/context-menus/index.html', 'Build an application-owned context menu'],
   ['editor/custom-ui/search/index.html', 'Build custom find and replace controls'],
   ['editor/custom-ui/zoom-and-document-state/index.html', 'Build application document controls'],
-  ['editor/custom-ui/selection-and-viewport/index.html', 'Preserve selections and position UI'],
+  ['editor/custom-ui/selection-and-viewport/index.html', 'Build an AI prompt menu for selected text'],
   ['editor/custom-ui/review-highlights/index.html', 'Build durable review highlights'],
   ['editor/dialogs-and-surfaces/index.html', 'Open dialogs and floating surfaces'],
   ['editor/themes-and-fonts/index.html', 'Theme UI and resolve document fonts'],
@@ -359,6 +359,11 @@ test('exports the custom tracked-changes workflow document', async () => {
 
 test('exports the custom content-controls workflow document', async () => {
   const fixture = await stat(new URL('../out/fixtures/custom-content-controls-workflow.docx', import.meta.url));
+  assert.ok(fixture.size > 0);
+});
+
+test('exports the custom selection workflow document', async () => {
+  const fixture = await stat(new URL('../out/fixtures/custom-selection-workflow.docx', import.meta.url));
   assert.ok(fixture.size > 0);
 });
 
@@ -834,12 +839,17 @@ test('exports the custom selection and viewport workflow as clean Markdown', asy
     'utf8',
   );
 
-  assert.match(markdown, /capture = ui\.selection\.capture\(\)/);
+  assert.match(markdown, /nextCapture = ui\.selection\.capture\(\)/);
   assert.match(markdown, /ui\.viewport\.getRect\(\{ target, relativeTo: editorShell \}\)/);
-  assert.match(markdown, /ui\.viewport\.observe\(positionOverlay\)/);
+  assert.match(markdown, /ui\.viewport\.observe\(positionPrompt\)/);
   assert.match(markdown, /ui\.selection\.restore\(capture\)/);
+  assert.match(markdown, /context: currentCapture\.quotedText/);
+  assert.match(markdown, /POST \/api\/selection-prompt/);
   assert.match(markdown, /Do not cache rectangle coordinates as document identity/);
+  assert.match(markdown, /Live example: ask AI about selected document text/);
+  assert.match(markdown, /demo response is local: no text is sent to a model/i);
   assert.doesNotMatch(markdown, /<include>/);
+  assert.doesNotMatch(markdown, /<CustomSelectionDemo\b/);
 });
 
 test('exports built-in and custom search without duplicating Document API queries', async () => {

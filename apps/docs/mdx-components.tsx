@@ -14,6 +14,7 @@ import { CustomCommentsDemo } from '@/components/embeds/custom-comments-demo';
 import { CustomContentControlsDemo } from '@/components/embeds/custom-content-controls-demo';
 import { CustomDocumentControlsDemo } from '@/components/embeds/custom-document-controls-demo';
 import { CustomSearchDemo } from '@/components/embeds/custom-search-demo';
+import { CustomSelectionDemo } from '@/components/embeds/custom-selection-demo';
 import { CustomTrackChangesDemo } from '@/components/embeds/custom-track-changes-demo';
 import { CustomUiArchitecture } from '@/components/embeds/custom-ui-architecture';
 import { CollaborationOverview } from '@/components/embeds/collaboration-overview';
@@ -80,6 +81,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     CustomContentControlsDemo,
     CustomDocumentControlsDemo,
     CustomSearchDemo,
+    CustomSelectionDemo,
     CustomTrackChangesDemo,
     CustomToolbarDemo,
     CustomUiArchitecture,

@@ -2492,6 +2492,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       null;
 
     const resolution = resolveV2CollaborationTarget({
+      collaboration: options.collaboration,
       v2Collaboration,
       legacyCollaboration,
       documentType: DOCX,

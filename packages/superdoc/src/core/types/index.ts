@@ -642,7 +642,7 @@ export interface CollaborationProvider {
 }
 
 /**
- * Document-level v2 collaboration handoff.
+ * Connection settings for one shared document, used at startup and during an upgrade.
  *
  * This is the public surface for SuperDoc v2's shipped real-time collaboration
  * model. v2 collaboration is always single-doc: one `Y.Doc`, one provider
@@ -662,11 +662,14 @@ export interface CollaborationProvider {
  * Y.Doc. Provider extensions receive that document inside the collaboration
  * Worker instead of replacing it.
  */
-export type V2CollaborationConfig =
+export type DocumentCollaborationConfig =
   | V2YWebsocketCollaborationConfig
   | V2HocuspocusCollaborationConfig
   | V2LiveblocksCollaborationConfig
   | V2ProviderExtensionCollaborationConfig;
+
+/** @deprecated replaceWith=`DocumentCollaborationConfig` compat-indefinitely: existing v2 integrations import this type. */
+export type V2CollaborationConfig = DocumentCollaborationConfig;
 
 /**
  * y-websocket single-doc provider config.
@@ -1021,29 +1024,21 @@ export interface AwarenessUser extends User {
 
 /**
  * One entry in the `states` array delivered to
- * {@link Config.onAwarenessUpdate}. SuperDoc emits an entry per remote
- * client, derived from the underlying Yjs awareness states.
+ * {@link Config.onAwarenessUpdate}. In V2, `states` includes the current
+ * user and remote participants. Do not append the current user again.
  *
- * The runtime helper `awarenessStatesToArray` spreads each remote user
- * onto the top of the entry (`{ clientId, ...value.user, color }`), so
- * `User` fields like `name`, `email`, `image` appear at the top level
- * (not nested under a `user` property). Consumers should read `state.id`,
- * `state.name`, and `state.email`, not `state.user.name`.
+ * Display fields such as `name`, `email`, and `color` are at the top
+ * level, not nested under `user`. Fields may be absent; a presence
+ * entry is not an authenticated account record.
  *
  * Application-specific fields attached to the awareness state by the
  * provider surface through the `[key: string]: unknown` index
  * signature; consumers narrow before use.
  */
 export interface AwarenessState extends User {
-  /** Yjs client identifier for the remote peer. */
+  /** Presence identifier. In V2, scoped to this editor instance, not a Yjs transport id. */
   clientId?: number;
-  /**
-   * Color assigned by SuperDoc's presence system. Spread onto the
-   * awareness entry after the user fields, so it takes precedence
-   * over any color the awareness user carried in (see
-   * {@link AwarenessUser.color}). Used when the presence system
-   * computes a stable palette assignment for the remote peer.
-   */
+  /** Resolved cursor color supplied by the presence system. */
   color?: string;
   /** Application-specific fields spread from the awareness provider. */
   [key: string]: unknown;
@@ -1090,12 +1085,11 @@ export interface Document {
    */
   provider?: CollaborationProvider;
   /**
-   * Document-level v2 collaboration handoff. When present, the v2 runtime
-   * makes this document collaborative through the shipped single-doc
-   * y-websocket provider (one room / Y.Doc / awareness channel per
-   * `documentId`). See {@link V2CollaborationConfig}. Ignored by the v1
-   * editor, which uses `Config.modules.collaboration` instead.
+   * Connect this document to a shared room. SuperDoc owns the provider and Y.Doc.
+   * Takes precedence over `v2Collaboration`; `null` opens a local document.
    */
+  collaboration?: DocumentCollaborationConfig | null;
+  /** @deprecated replaceWith=`collaboration` compat-indefinitely: existing v2 integrations use this field. */
   v2Collaboration?: V2CollaborationConfig | null;
 }
 
@@ -1220,9 +1214,8 @@ export interface CollaborationConfig {
 /**
  * Options for `upgradeToCollaboration()`.
  *
- * v2 promotes a local single-DOCX editor into the shipped single-doc
- * y-websocket room described by {@link V2CollaborationConfig}. Pass a
- * `v2Collaboration` target to promote into a supported v2 room.
+ * Promote a local DOCX into a shared room using `collaboration`.
+ * Supports the same providers as {@link DocumentCollaborationConfig}.
  *
  * The legacy `ydoc` / `provider` fields remain accepted for source
  * compatibility with v1-shaped callers, but v2 does **not** drive document
@@ -1232,14 +1225,15 @@ export interface CollaborationConfig {
  * fields are therefore optional and only honored when they resolve to a
  * supported v2 room.
  *
- * @see {@link V2CollaborationConfig}
+ * @see {@link DocumentCollaborationConfig}
  */
 export interface UpgradeToCollaborationOptions {
   /**
-   * Canonical supported v2 promotion target: the single-doc y-websocket room
-   * ({ documentId, serverUrl, params? }) to create from the current document.
-   * Promotion fails if the v2 room already exists.
+   * Create a shared room from the current document. Fails if the room already exists.
+   * Takes precedence over `v2Collaboration`.
    */
+  collaboration?: DocumentCollaborationConfig;
+  /** @deprecated replaceWith=`collaboration` compat-indefinitely: existing v2 integrations use this field. */
   v2Collaboration?: V2CollaborationConfig;
   /**
    * Legacy external Yjs document. Accepted for v1 source compatibility; not a
@@ -3417,6 +3411,15 @@ export interface SuperDocExceptionEditorPayload {
   workerFailure?: SuperDocWorkerFailureDetail;
 }
 
+/** Connection failure while opening a collaboration room, reported through `onException`. */
+export interface SuperDocExceptionCollaborationPayload extends SuperDocExceptionEditorPayload {
+  error: Error;
+  code: 'collaboration-access-denied' | 'collaboration-connection-failed' | 'collaboration-sync-timeout';
+  /** Access denial requires an explicit provider rejection; a timeout is not proof of denied access. */
+  collaborationReason: 'access-denied' | 'connection-failed' | 'sync-timeout';
+  editor: null;
+}
+
 /**
  * Exception payload raised by the built-in toolbar.
  *
@@ -3495,6 +3498,7 @@ export interface SuperDocExceptionDiagnosticPayload {
  * Consumers can narrow with `'stage' in payload` (store init),
  * `'code' in payload` (editor lifecycle), `'itemName' in payload`
  * (built-in toolbar), `'source' in payload` (hyperlink activation),
+ * `'collaborationReason' in payload` (collaboration connection),
  * or `'diagnosticCode' in payload` (structured diagnostic).
  *
  * The union exists today because multiple independent emit sites pre-date a
@@ -3506,6 +3510,7 @@ export type SuperDocExceptionPayload =
   | SuperDocExceptionStorePayload
   | SuperDocExceptionRestorePayload
   | SuperDocExceptionEditorPayload
+  | SuperDocExceptionCollaborationPayload
   | SuperDocExceptionToolbarPayload
   | SuperDocExceptionHyperlinkPayload
   | SuperDocExceptionDiagnosticPayload;
@@ -4264,7 +4269,7 @@ export interface Config {
   role?: 'editor' | 'viewer' | 'suggester';
   /**
    * Document to open. Pass a URL, file, byte source, or structured source.
-   * Use a structured document carrying `v2Collaboration` for collaboration,
+   * Use a structured document carrying `collaboration` for collaboration,
    * or a structured source for other metadata. Omit it to open a blank DOCX.
    */
   document?: DocumentSource | null;

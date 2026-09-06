@@ -185,6 +185,8 @@ const registeredComponents = new Set([
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
   'CustomUiArchitecture',
+  'CollaborationOverview',
+  'CollaborationDemo',
   'DocumentPreview',
   'DocumentApiNamespace',
   'DocumentApiOperation',

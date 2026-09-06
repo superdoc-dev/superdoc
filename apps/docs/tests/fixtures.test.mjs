@@ -9,6 +9,16 @@ import JSZip from 'jszip';
 
 const FIXTURES = new URL('../public/fixtures/', import.meta.url);
 
+test('the collaboration sample is a compact, metadata-free delivery agreement', async () => {
+  const { document, core, app, comments } = await openFixture('collaboration-sample.docx');
+  assert.match(document, /Delivery is due Monday\./);
+  assert.match(document, /Alex and Sam will confirm the final date\./);
+  assert.match(document, /w:pgSz w:w="5760" w:h="4320"/);
+  assert.equal(core, '');
+  assert.equal(app, '');
+  assert.equal(comments, '');
+});
+
 async function openFixture(name) {
   const bytes = await readFile(new URL(name, FIXTURES));
   const zip = await JSZip.loadAsync(bytes);

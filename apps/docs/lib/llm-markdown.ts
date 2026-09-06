@@ -43,6 +43,8 @@ export const llmPlaceholderComponents = [
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
   'CustomUiArchitecture',
+  'CollaborationOverview',
+  'CollaborationDemo',
   'DocumentPreview',
   'DocumentApiNamespace',
   'DocumentApiOperation',
@@ -216,6 +218,18 @@ export function renderLLMMarkdown(markdown: string) {
         '> Select text in the real DOCX, then use the application-owned Bold, font-family, and font-size controls. The toolbar reads `active`, `value`, and `enabled` from the corresponding command handles. Formatting one sentence and extending the selection into plain text makes the font and size pickers show `Mixed`. Each action reports the result from `executeAsync()`.',
         '',
       ].join('\n');
+    },
+    CollaborationOverview() {
+      return '> **Illustration: two editors, one shared document.** Alex changes the delivery date to Friday. A provider carries the change through their shared room, and Sam sees Friday in the other editor. Both people can edit.\n';
+    },
+    CollaborationDemo({ attributes }) {
+      if (booleanAttribute(attributes, 'access')) {
+        return '> **Live access demo:** Alex opens a temporary shared document automatically. Edit it, then connect Sam to receive the same edits. Connect Taylor: the server rejects the request because Taylor has no permission for this room. These are simulated identities with public test credentials, checked by a real server. The demo reports access denied only after server confirmation, not for every connection failure. Demo edits are not saved. If the server is unavailable, follow the local example below.\n';
+      }
+      if (booleanAttribute(attributes, 'presence')) {
+        return '> **Live presence demo:** Alex and Sam edit a temporary shared document. The participant list comes from Alex’s awareness updates and includes Alex himself. Type in Sam’s editor, then disconnect Sam: his presence disappears while his edits remain in Alex’s document. Reconnect Sam to rejoin the same room. This requires a configured collaboration server; otherwise follow the local two-editor example. Demo edits are not saved.\n';
+      }
+      return '> **Live collaboration demo:** Two real editors connect automatically in a temporary room. Expand the collapsed preview, change Monday to Friday in Alex’s editor, and watch Sam’s editor update. Alex’s cursor is blue; Sam’s is green. The demo requires a configured collaboration server; when unavailable, use the local example below. Demo edits are not saved.\n';
     },
     CustomUiArchitecture() {
       return [

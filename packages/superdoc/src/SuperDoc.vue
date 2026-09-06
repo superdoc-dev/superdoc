@@ -68,6 +68,7 @@ import { createV2SessionShortcutRoutes } from './core/editor-runtime/v2/v2-sessi
 import { markRuntimeRoot, unmarkRuntimeRoot } from './core/editor-runtime/root-marker.js';
 import { resolveV2Integration } from './core/v2-integration/v2-integration.js';
 import { resolveV2CollaborationTarget } from './core/collaboration/resolve-v2-collaboration-target.js';
+import { createCollaborationException } from './core/collaboration/collaboration-exception.js';
 import { createDocumentOpenTelemetry } from './core/document-open-telemetry.js';
 import {
   translateUnzipDiagnostic,
@@ -2056,7 +2057,7 @@ const getV2EditorFailureMessage = (reason) => {
     case 'collaboration-unsupported-huge-document':
       return 'SuperDoc could not load the document editor because large documents cannot be opened with collaboration enabled yet.';
     case 'collaboration-v1-config-unsupported':
-      return 'SuperDoc v2 cannot use modules.collaboration because it is the SuperDoc v1 collaboration API. SuperDoc did not attach the provider or change the document. Configure Document.v2Collaboration with a v2 room instead.';
+      return 'SuperDoc v2 cannot use modules.collaboration because it is the SuperDoc v1 collaboration API. SuperDoc did not attach the provider or change the document. Configure Document.collaboration with a v2 room instead.';
     case 'collaboration-room-format-unsupported':
       return 'SuperDoc v2 cannot open this collaboration state because it is not stored in the SuperDoc v2 room format. No changes were made.';
     case 'collaboration-room-format-conflict':
@@ -2087,7 +2088,8 @@ const onV2EditorFailed = (payload) => {
   const detail = normalizeV2EditorFailureDetail(payload?.detail);
   const documentId =
     typeof payload?.documentId === 'string' && payload.documentId.length > 0 ? payload.documentId : null;
-  const message = getV2EditorFailureMessage(reason);
+  const collaborationException = createCollaborationException(reason, documentId);
+  const message = collaborationException?.error.message ?? getV2EditorFailureMessage(reason);
   // plan §Workstream 3: store a renderable terminal failure state for the
   // active document surface. The worker failure detail is content-safe (typed
   // phase/reason, no document bytes or sensitive paths).
@@ -2120,13 +2122,16 @@ const onV2EditorFailed = (payload) => {
   } else {
     console.error(`[SuperDoc] ${message}`, logContext);
   }
-  proxy.$superdoc.emit('exception', {
-    error: new Error(message),
-    code: reason,
-    ...(documentId ? { documentId } : {}),
-    editor: null,
-    ...(workerFailure ? { workerFailure } : {}),
-  });
+  proxy.$superdoc.emit(
+    'exception',
+    collaborationException ?? {
+      error: new Error(message),
+      code: reason,
+      ...(documentId ? { documentId } : {}),
+      editor: null,
+      ...(workerFailure ? { workerFailure } : {}),
+    },
+  );
   // SuperDoc Diagnostics MVP: additive, structured diagnostics alongside the legacy payload above.
   // A single boot failure can produce 1 legacy payload + 0..N diagnostic
   // payloads (one per in-scope SDDiagnosticRecord the host returned), never

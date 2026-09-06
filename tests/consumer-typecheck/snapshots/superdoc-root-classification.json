@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-09-02T00:00:00.000Z",
   "summary": {
-    "total": 264,
+    "total": 266,
     "byBucket": {
-      "supported-root": 261,
+      "supported-root": 263,
       "legacy-root": 3
     },
     "byConfidence": {
       "medium": 48,
-      "high": 216
+      "high": 218
     }
   },
   "rows": [
@@ -458,6 +458,17 @@
       "rationale": "Customer-facing Document API handle type exposed through activeEditor.doc and used by public examples that type programmatic document operations from the root package.",
       "confidence": "high",
       "source": "doc-api",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "DocumentCollaborationConfig",
+      "bucket": "supported-root",
+      "rationale": "Shared-document connection settings accepted by Document.collaboration and upgradeToCollaboration.",
+      "confidence": "high",
+      "source": "config-supported",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,
@@ -1492,6 +1503,17 @@
       "rationale": "Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor.",
       "confidence": "high",
       "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocExceptionCollaborationPayload",
+      "bucket": "supported-root",
+      "rationale": "Typed onException payload for collaboration connection failures, narrowed by collaborationReason.",
+      "confidence": "high",
+      "source": "collab",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

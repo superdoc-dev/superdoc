@@ -15,6 +15,8 @@ import { CustomContentControlsDemo } from '@/components/embeds/custom-content-co
 import { CustomSearchDemo } from '@/components/embeds/custom-search-demo';
 import { CustomTrackChangesDemo } from '@/components/embeds/custom-track-changes-demo';
 import { CustomUiArchitecture } from '@/components/embeds/custom-ui-architecture';
+import { CollaborationOverview } from '@/components/embeds/collaboration-overview';
+import { CollaborationDemo } from '@/components/embeds/collaboration-demo';
 import { DocumentPreview } from '@/components/embeds/document-preview';
 import { EditorDemo } from '@/components/embeds/editor-demo';
 import { InterfaceOwnership } from '@/components/embeds/interface-ownership';
@@ -79,6 +81,8 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     CustomTrackChangesDemo,
     CustomToolbarDemo,
     CustomUiArchitecture,
+    CollaborationOverview,
+    CollaborationDemo,
     DocumentPreview,
     DocumentApiNamespace,
     DocumentApiOperation,

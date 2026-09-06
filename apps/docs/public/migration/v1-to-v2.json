@@ -570,12 +570,12 @@
     {
       "id": "runtime.modulesCollaboration",
       "v1": "modules.collaboration",
-      "v2": "document.v2Collaboration",
+      "v2": "document.collaboration",
       "disposition": "redesign",
       "failureMode": "config-silent",
       "surface": "collaboration",
       "symptom": "The config typechecks, then SuperDoc refuses to attach the provider and reports a terminal compatibility failure.",
-      "notes": "v2 owns the provider and Y.Doc. This is a data migration, not a config change: v2 rooms use a different format and must not be pointed at an existing v1 room.",
+      "notes": "The preview API uses document.collaboration; released integrations may use the supported v2Collaboration alias. SuperDoc owns the provider and Y.Doc. V2 rooms use a different format and must not be pointed at an existing v1 room.",
       "docsPath": "/editor/migrate-from-v1/overview"
     },
     {

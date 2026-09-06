@@ -493,9 +493,11 @@ focus or selection state instead. See [Custom content controls](/editor/custom-u
 
 ### Collaboration
 
-V1 applications supplied an external Y.Doc and provider through `modules.collaboration`. V2 instead takes a supported provider target on `document.v2Collaboration` and owns the provider lifecycle. Do not port the external pair directly.
+V1 applications supplied an external Y.Doc and provider through `modules.collaboration`. V2 instead takes a supported provider target and owns the provider lifecycle. Do not port the external pair directly.
 
-[Connect to a collaboration room](/editor/collaboration) owns the provider shapes, room modes, exception codes, readiness, and cleanup contract. Use [Upgrade a document](/editor/collaboration/upgrade-a-document) when a local Editor should create a new room without remounting.
+The [preview API](/editor/collaboration/connect-two-editors#configure-your-application) names that target `document.collaboration`, typed as `DocumentCollaborationConfig`. It also accepts `collaboration` in `upgradeToCollaboration()`. The older `v2Collaboration` field and `V2CollaborationConfig` type remain supported for existing integrations; new code should use the unversioned names. When both fields are supplied, `collaboration` wins as a whole—settings are not merged. On a document, `collaboration: null` explicitly opens locally.
+
+[Connect two editors](/editor/collaboration/connect-two-editors) explains create/join, readiness, connection failures, and cleanup. [Run a server](/editor/collaboration/run-a-server) covers provider targets and server responsibilities. Use [Upgrade a document](/editor/collaboration/upgrade-a-document) when a local Editor should create a new room without remounting.
 
 #### Split-origin worker assets
 

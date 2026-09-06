@@ -110,14 +110,35 @@ test('synchronizes a DOCX edit between two browser pages', async ({ browser }) =
   await expect(creator.locator('#status')).toHaveText('Connected.', { timeout: 180_000 });
   await joiner.goto('/?user=Joiner');
   await expect(joiner.locator('#status')).toHaveText('Connected.', { timeout: 180_000 });
+  await expect(creator.locator('#participants li')).toHaveText(['Creator', 'Joiner']);
+  await expect(joiner.locator('#participants li')).toHaveText(['Joiner', 'Creator']);
 
   const textRun = creator.locator('.superdoc-text-run').first();
   await textRun.click();
   await creator.keyboard.type(edit);
   await expect(joiner.locator('#editor')).toContainText(edit, { timeout: 120_000 });
 
+  const reply = 'COLLABORATIONREPLYMARKER';
+  await joiner.locator('.superdoc-text-run').filter({ hasText: 'This Mutual Non-Disclosure Agreement' }).first().click();
+  await joiner.keyboard.type(reply);
+  await expect(creator.locator('#editor')).toContainText(reply, { timeout: 120_000 });
+
   const documentXml = await exportDocumentXml(joiner);
   expect(documentXml).toContain(edit);
+  expect(documentXml).toContain(reply);
+  await joiner.close();
+  await expect(creator.locator('#participants li')).toHaveText(['Creator']);
+  await expect(creator.locator('#editor')).toContainText(reply);
+  const reopened = await context.newPage();
+  await reopened.goto('/?user=Joiner');
+  await expect(reopened.locator('#status')).toHaveText('Connected.', { timeout: 180_000 });
+  await expect(reopened.locator('#editor')).toContainText(edit);
+  await expect(reopened.locator('#editor')).toContainText(reply);
+  const duplicateCreator = await context.newPage();
+  await duplicateCreator.goto('/?mode=create&user=Creator');
+  await expect(duplicateCreator.locator('#status')).toHaveText('Connection failed.', { timeout: 180_000 });
+  await expect(creator.locator('#editor')).toContainText(edit);
+  await expect(creator.locator('#editor')).toContainText(reply);
   expect(errors).toEqual([]);
   await context.close();
 });

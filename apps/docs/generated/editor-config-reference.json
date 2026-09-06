@@ -82,7 +82,7 @@
       "name": "document",
       "type": "DocumentSource | null",
       "required": false,
-      "description": "Document to open. Pass a URL, file, byte source, or structured source. Use a structured document carrying `v2Collaboration` for collaboration, or a structured source for other metadata. Omit it to open a blank DOCX.",
+      "description": "Document to open. Pass a URL, file, byte source, or structured source. Use a structured document carrying `collaboration` for collaboration, or a structured source for other metadata. Omit it to open a blank DOCX.",
       "group": "other"
     },
     {

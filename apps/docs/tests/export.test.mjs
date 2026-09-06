@@ -58,9 +58,13 @@ const routes = [
   ['editor/dialogs-and-surfaces/index.html', 'Open dialogs and floating surfaces'],
   ['editor/themes-and-fonts/index.html', 'Theme UI and resolve document fonts'],
   ['editor/track-changes/index.html', 'Review tracked changes'],
-  ['editor/collaboration/index.html', 'Connect to a collaboration room'],
+  ['editor/collaboration/index.html', 'Understand collaboration'],
+  ['editor/collaboration/connect-two-editors/index.html', 'Connect two editors'],
+  ['editor/collaboration/initialize-a-document/index.html', 'Initialize a shared document'],
+  ['editor/collaboration/save-and-restore-a-room/index.html', 'Save and restore a room'],
+  ['editor/collaboration/control-room-access/index.html', 'Control access to a room'],
   ['editor/collaboration/run-a-server/index.html', 'Run a collaboration server'],
-  ['editor/collaboration/presence-and-awareness/index.html', 'Show collaboration presence'],
+  ['editor/collaboration/presence-and-awareness/index.html', 'Show who is editing'],
   ['editor/collaboration/upgrade-a-document/index.html', 'Upgrade a local document to collaboration'],
   ['editor/version-history/index.html', 'Add version history'],
   ['editor/platform/proofing/index.html', 'Add spelling and grammar proofing'],
@@ -1018,7 +1022,7 @@ test('exports storage, version, and configuration guidance for the v2 Editor', a
   assert.match(exportOptions, /set it to `false` to return a `Blob` or ZIP/);
   assert.match(exportOptions, /does not apply `isFinalDoc`/);
   assert.doesNotMatch(exportOptions, /isFinalDoc: true/);
-  assert.match(configuration, /structured document carrying `v2Collaboration`/);
+  assert.match(configuration, /structured document carrying `collaboration`/);
   assert.doesNotMatch(configuration, /`modules` configures[^\n]*collaboration/);
   assert.match(telemetry, /new SuperDoc\([\s\S]*telemetry: \{/);
   assert.match(license, /licenseKey: import\.meta\.env\.VITE_SUPERDOC_LICENSE_KEY/);
@@ -1256,6 +1260,75 @@ test('exports the machine-readable documentation files', async () => {
   assert.doesNotMatch(agentsOverviewMarkdown, /\bMCP\b/u);
   assert.match(agentsOverviewMarkdown, /Do not import `@superdoc\/headless`/);
   assert.match(agentsOverviewMarkdown, /no toolbar, document canvas, viewport/);
+});
+
+test('collaboration introduces shared editing before setup and persistence', async () => {
+  const overview = await readFile(new URL('../out/md/editor/collaboration.md', import.meta.url), 'utf8');
+  const guide = await readFile(new URL('../out/md/editor/collaboration/connect-two-editors.md', import.meta.url), 'utf8');
+
+  const server = await readFile(new URL('../out/md/editor/collaboration/run-a-server.md', import.meta.url), 'utf8');
+  assert.match(overview, /Illustration: two editors, one shared document/);
+  assert.match(overview, /Alex changes the delivery date to Friday/);
+  assert.doesNotMatch(overview, /Y\.Doc|roomMode|onCollaborationReady|<CollaborationOverview/);
+  assert.match(server, /Save and restore a room/);
+  assert.match(guide, /mode=create&user=Alex/);
+  assert.match(guide, /DocumentCollaborationConfig/);
+  assert.match(guide, /document: \{ url: '\/sample.docx', collaboration \}/);
+  assert.match(guide, /Preview API/);
+  assert.doesNotMatch(guide, /v2Collaboration|V2CollaborationConfig/);
+  assert.match(guide, /onCollaborationReady/);
+  assert.match(guide, /Now type a reply in Sam's editor/);
+  assert.match(guide, /Live collaboration demo/);
+  assert.match(guide, /Call `destroy\(\)` when your owning route or component unmounts/);
+  assert.doesNotMatch(guide, /Use another provider|Export DOCX|Yjs update bytes/);
+  assert.doesNotMatch(guide, /<include>/);
+});
+
+test('presence exports the working example and the local-user boundary', async () => {
+  const page = await readFile(new URL('../out/md/editor/collaboration/presence-and-awareness.md', import.meta.url), 'utf8');
+  assert.match(page, /Live presence demo/);
+  assert.match(page, /includes the current user/);
+  assert.match(page, /SuperDocAwarenessUpdatePayload/);
+  assert.match(page, /list\.replaceChildren\(\.\.\.items\)/);
+  assert.match(page, /his edits remain/);
+  assert.doesNotMatch(page, /<CollaborationDemo|<include>/);
+});
+
+test('initialization explains create, join, and reopening without promising persistence', async () => {
+  const page = await readFile(new URL('../out/md/editor/collaboration/initialize-a-document.md', import.meta.url), 'utf8');
+  assert.match(page, /Create once, then join/);
+  assert.match(page, /roomMode: 'create'/);
+  assert.match(page, /roomMode: 'join'/);
+  assert.match(page, /including the creator/);
+  assert.match(page, /does not prove durable saving/);
+  assert.match(page, /Node.js SDK/);
+});
+
+test('persistence exports storage hooks and distinguishes room state from files', async () => {
+  const page = await readFile(new URL('../out/md/editor/collaboration/save-and-restore-a-room.md', import.meta.url), 'utf8');
+  assert.match(page, /Saving only DOCX snapshots does not persist the Yjs room/);
+  assert.match(page, /not a storage acknowledgment/);
+  assert.match(page, /COLLABORATION_STORAGE_DIR/);
+  assert.match(page, /encodeStateAsUpdate/);
+  assert.match(page, /applyUpdate/);
+  assert.match(page, /power-loss durability/);
+  assert.doesNotMatch(page, /<include>/);
+});
+
+test('room access keeps public fixtures distinct from production identity', async () => {
+  const page = await readFile(new URL('../out/md/editor/collaboration/control-room-access.md', import.meta.url), 'utf8');
+  assert.match(page, /Live access demo/);
+  assert.match(page, /only after server confirmation/);
+  assert.match(page, /Public test credentials only/);
+  assert.match(page, /session\.rooms\.includes\(documentName\)/);
+  assert.match(page, /sd2\/v2\.1\/example-room/);
+  assert.match(page, /document.collaboration.token/);
+  assert.match(page, /'collaborationReason' in failure/);
+  assert.match(page, /case 'access-denied'/);
+  assert.match(page, /case 'sync-timeout'/);
+  assert.match(page, /does not implement separate create, read-only, or edit roles/);
+  assert.match(page, /does not secure separate file endpoints/);
+  assert.doesNotMatch(page, /<CollaborationDemo|<include>/);
 });
 
 test('exports the Cloudflare Pages configuration', async () => {

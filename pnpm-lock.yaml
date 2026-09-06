@@ -430,11 +430,14 @@ importers:
   examples/collaboration:
     dependencies:
       '@hocuspocus/server':
-        specifier: ^2.13.6
+        specifier: 2.15.3
         version: 2.15.3(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
+      yjs:
+        specifier: ^13.6.19
+        version: 13.6.31
     devDependencies:
       '@playwright/test':
         specifier: ^1.57.0

@@ -61,6 +61,7 @@ import type {
   DocRange,
   Document,
   DocumentDataSource,
+  DocumentCollaborationConfig,
   DocumentSource,
   DocumentUploadSource,
   DocumentApi,
@@ -185,6 +186,7 @@ import type {
   SuperDocExceptionHyperlinkPayload,
   SuperDocExceptionToolbarPayload,
   SuperDocExceptionPayload,
+  SuperDocExceptionCollaborationPayload,
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
   SuperDocExtension,
@@ -324,6 +326,7 @@ const _real_DirectSurfaceRequest: AssertNotAny<DirectSurfaceRequest> = true;
 const _real_DocRange: AssertNotAny<DocRange> = true;
 const _real_Document: AssertNotAny<Document> = true;
 const _real_DocumentDataSource: AssertNotAny<DocumentDataSource> = true;
+const _real_DocumentCollaborationConfig: AssertNotAny<DocumentCollaborationConfig> = true;
 const _real_DocumentSource: AssertNotAny<DocumentSource> = true;
 const _real_DocumentUploadSource: AssertNotAny<DocumentUploadSource> = true;
 const _real_DocumentApi: AssertNotAny<DocumentApi> = true;
@@ -448,6 +451,7 @@ const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditor
 const _real_SuperDocExceptionHyperlinkPayload: AssertNotAny<SuperDocExceptionHyperlinkPayload> = true;
 const _real_SuperDocExceptionToolbarPayload: AssertNotAny<SuperDocExceptionToolbarPayload> = true;
 const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
+const _real_SuperDocExceptionCollaborationPayload: AssertNotAny<SuperDocExceptionCollaborationPayload> = true;
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
 const _real_SuperDocExtension: AssertNotAny<SuperDocExtension> = true;

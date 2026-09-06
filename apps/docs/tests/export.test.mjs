@@ -54,7 +54,7 @@ const routes = [
   ['editor/custom-ui/search/index.html', 'Build custom find and replace controls'],
   ['editor/custom-ui/zoom-and-document-state/index.html', 'Build application document controls'],
   ['editor/custom-ui/selection-and-viewport/index.html', 'Build an AI prompt menu for selected text'],
-  ['editor/custom-ui/review-highlights/index.html', 'Build durable review highlights'],
+  ['editor/custom-ui/review-highlights/index.html', 'Turn AI findings into tracked suggestions'],
   ['editor/dialogs-and-surfaces/index.html', 'Open dialogs and floating surfaces'],
   ['editor/themes-and-fonts/index.html', 'Theme UI and resolve document fonts'],
   ['editor/track-changes/index.html', 'Review tracked changes'],

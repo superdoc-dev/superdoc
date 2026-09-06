@@ -135,6 +135,7 @@ const customSelectionPageUrl = new URL(
   import.meta.url,
 );
 const customSelectionDemoUrl = new URL('../components/embeds/custom-selection-demo.tsx', import.meta.url);
+const superdocRuntimeUrl = new URL('../components/embeds/superdoc-runtime.ts', import.meta.url);
 const customSelectionMarkupUrl = new URL('../snippets/editor/selection-and-viewport.html', import.meta.url);
 const customSelectionExampleUrl = new URL('../snippets/editor/selection-and-viewport.ts', import.meta.url);
 const reactCustomSelectionExampleUrl = new URL(
@@ -163,6 +164,10 @@ const generatedCommentInteractionConfigUrl = new URL(
 );
 const superdocCoreTypesUrl = new URL('../../../packages/superdoc/src/core/types/index.ts', import.meta.url);
 const reviewHighlightsExampleUrl = new URL('../snippets/editor/review-highlights.ts', import.meta.url);
+const reviewHighlightsPageUrl = new URL(
+  '../content/docs/editor/custom-ui/review-highlights.mdx',
+  import.meta.url,
+);
 const commentThreadExampleUrl = new URL('../snippets/document-api/comment-thread.ts', import.meta.url);
 const documentStorageExampleUrl = new URL('../snippets/editor/document-storage.ts', import.meta.url);
 const reactDocumentStorageExampleUrl = new URL('../snippets/editor/react-document-storage.tsx', import.meta.url);
@@ -192,6 +197,63 @@ function compileImageMimeNormalizer(example) {
   return Function(`${javascript}\nreturn withImageMimeType;`)();
 }
 
+function compileReviewFindingsController(example, exportName = 'createReviewFindings') {
+  const javascript = ts.transpileModule(example, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} };
+  const require = (id) => {
+    if (id === 'superdoc') return { defineSuperDocExtension: (extension) => extension };
+    if (id.endsWith('.css')) return {};
+    throw new Error(`Unexpected review findings import: ${id}`);
+  };
+  Function('require', 'module', 'exports', javascript)(require, module, module.exports);
+  return module.exports[exportName];
+}
+
+function createReviewFindingsContext(onReplace = () => {}) {
+  const mutationHandlers = [];
+  return {
+    disposables: { add() {} },
+    visuals: {
+      highlight: () => ({
+        clear() {},
+        replace(targets) {
+          onReplace(targets);
+        },
+      }),
+    },
+    onMutation(filter, handler) {
+      mutationHandlers.push(handler);
+      return () => {
+        const index = mutationHandlers.indexOf(handler);
+        if (index >= 0) mutationHandlers.splice(index, 1);
+      };
+    },
+    emitMutation() {
+      for (const handler of [...mutationHandlers]) handler({ affects: new Set(['text']) });
+    },
+  };
+}
+
+function createReviewFindingsCapture() {
+  return {
+    status: 'ready',
+    empty: false,
+    target: {
+      kind: 'text',
+      coordinateSpace: 'visible',
+      segments: [{ blockId: 'shared-block-id', range: { start: 0, end: 12 } }],
+    },
+    selectionTarget: null,
+    activeMarks: [],
+    activeCommentIds: [],
+    activeChangeIds: [],
+    quotedText: 'Twelve months',
+    capturedAt: Date.now(),
+  };
+}
+
 const registeredComponents = new Set([
   'Card',
   'Cards',
@@ -209,6 +271,7 @@ const registeredComponents = new Set([
   'CustomCommentsDemo',
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
+  'CustomReviewFindingsDemo',
   'CustomSearchDemo',
   'CustomSelectionDemo',
   'CustomTrackChangesDemo',
@@ -1399,10 +1462,1310 @@ test('the custom selection demo keeps the real editor and AI prompt in one frame
   assert.match(demo, /promptInputRef\.current\?\.focus\(\)/u);
   assert.match(demo, /actionButtonRef\.current\?\.focus\(\)/u);
   assert.match(demo, /fitRuntimeEditorToWidth\(superdoc\)/u);
-  assert.match(demo, /createDemoAnswer\(currentCapture\.quotedText\)/u);
+  assert.match(demo, /createDemoAnswer\(currentCapture\.quotedText, reviewFindings\)/u);
   assert.match(demo, />\s*Simulated response\s*</u);
   assert.match(demo, /disabled=\{!prompt\.trim\(\)\}/u);
   assert.match(demo, /<CollapsibleEditorPreview[\s\S]*sd-custom-selection-demo-document/u);
+});
+
+test('the review findings guide turns an AI finding into a tracked suggestion', async () => {
+  const [page, demo, example, runtime] = await Promise.all(
+    [reviewHighlightsPageUrl, customSelectionDemoUrl, reviewHighlightsExampleUrl, superdocRuntimeUrl].map((url) =>
+      readFile(url, 'utf8'),
+    ),
+  );
+
+  assert.match(page, /title: Turn AI findings into tracked suggestions/u);
+  assert.match(page, /navTitle: Review findings/u);
+  assert.match(page, /<CustomReviewFindingsDemo \/>/u);
+  assert.match(page, /Saving the finding and creating the tracked change use the real Document API/u);
+  assert.match(page, /Metadata does not render by itself/u);
+  assert.match(page, /Bind the selection before sending the model request/u);
+  assert.match(page, /Do not call `replaceFile\(\)` while `save\(\)`, `suggest\(\)`, or `remove\(\)` is pending/u);
+  assert.match(page, /prevent new review actions until replacement finishes/u);
+  assert.match(page, /does not cancel a write already sent to the Editor/u);
+  assert.match(page, /Set `user` to the identity that should author tracked suggestions/u);
+  assert.match(page, /Track changes[\s\S]*owns navigation and accept\/reject controls/u);
+  assert.match(page, /Continue with \[Custom commands\]/u);
+  assert.match(page, /onFindingsChanged: renderFindingPanel/u);
+  assert.match(page, /refuses a selection that the reader edited while the model request was in flight/u);
+  assert.match(page, /Only the newest `refresh\(\)` publishes/u);
+  assert.match(page, /rejects a selection that spans\nparagraphs/u);
+  assert.match(demo, /finding\.anchorStatus !== 'resolved'/u);
+  // The demo reimplements the controller inline, so it must carry the same guarantees:
+  // one-paragraph capture, edit invalidation, coalesced mutation refreshes, paint dropped
+  // when a re-resolve fails.
+  assert.match(demo, /queueMutationRefresh/u);
+  assert.match(demo, /highlightLayer\.replace\(\[\]\);\s*\n\s*setFindings\(\[\]\);/u);
+
+  assert.match(demo, /export function CustomReviewFindingsDemo/u);
+  assert.match(demo, /SuperDocCtor\.defineSuperDocExtension/u);
+  assert.match(demo, /ctx\.visuals\.highlight\('findings'/u);
+  assert.match(demo, /doc\.metadata\.attach\(/u);
+  assert.match(demo, /doc\.metadata\.remove\(/u);
+  assert.match(demo, /doc\.replace\([\s\S]*changeMode: 'tracked'/u);
+  assert.match(demo, /metadata\.scrollIntoView/u);
+  assert.match(demo, /'Save as finding'/u);
+  assert.match(demo, />\s*Show in document\s*</u);
+  assert.match(demo, /Suggest edit/u);
+  assert.match(demo, /contentClassName=\{reviewFindings \? 'sd-custom-review-findings-workspace'/u);
+
+  assert.match(example, /export type ReviewFindingPayload/u);
+  assert.match(example, /export type BoundReviewSelection/u);
+  assert.match(example, /function isReviewFindingPayload/u);
+  assert.match(example, /function toSelectionTarget/u);
+  assert.match(example, /activeSource = source/u);
+  assert.match(example, /if \(activeSource === source\) activeSource = null/u);
+  assert.match(example, /function bindSelection\(capture: SelectionCapture\)/u);
+  assert.match(example, /captureIsCurrent\(context, doc\)/u);
+  // suggest() rejects a truncated verification preview, so save() must not accept a capture
+  // longer than the preview limit.
+  assert.match(example, /MAX_VERIFIABLE_CAPTURE_LENGTH = 200/u);
+  // A quote that disagrees with the anchored text makes suggest() fail forever.
+  assert.match(example, /payload\.quote !== capture\.quotedText/u);
+  // An empty suggestion proposes deleting the anchored text; only an absent one means no edit.
+  assert.match(example, /finding\.payload\.suggestedText === undefined/u);
+  // A panel that re-renders immutably produces copies; bindings must survive that.
+  // A copy must stay valid, but a row retained across a document swap must not: a replacement
+  // DOCX can reuse metadata IDs, so the row carries a per-activation token instead.
+  assert.match(example, /sourceToken: string;/u);
+  assert.match(example, /value\.sourceToken === activeSourceToken/u);
+  // Two controllers must not mint the same token on their first activation.
+  assert.match(example, /crypto\.randomUUID\(\)/u);
+  assert.doesNotMatch(example, /sourceBindings\.set\(row\.finding/u);
+  assert.doesNotMatch(example, /if \(!suggestedText\)/u);
+  assert.match(demo, /captureLength > 200/u);
+  assert.match(example, /ctx\.onMutation\(/u);
+  assert.match(example, /sequence !== refreshSequence/u);
+  assert.match(example, /sourceIsCurrent\(finding, doc\)/u);
+  assert.match(example, /expectedRevision: overlapping\.evaluatedRevision/u);
+  assert.match(example, /expectedRevision: current\.evaluatedRevision/u);
+  assert.match(example, /changeMode: 'tracked'/u);
+  assert.match(example, /return \{ bindSelection, extension, refresh, remove, save, suggest \}/u);
+  assert.match(example, /layer\?\.replace/u);
+  assert.match(runtime, /'BlankDOCX' \| 'defineSuperDocExtension'/u);
+});
+
+test('the review findings guide refreshes after a rolled-back replacement', async () => {
+  // A rejected replaceFile() reopens and remounts the previous document, and the panel was
+  // already cleared by refresh(null), so refreshing only on success strands that document.
+  const page = await readFile(reviewHighlightsPageUrl, 'utf8');
+  assert.match(page, /Refresh on both outcomes, not only on success/u);
+  assert.match(page, /reopened and\nremounted/u);
+});
+
+test('rebinding the document retires rows and captures from the previous one', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const createReviewFindings = compileReviewFindingsController(example);
+  const reviewFindings = createReviewFindings();
+  reviewFindings.extension.activate(createReviewFindingsContext());
+
+  // Two Editors showing copies of one DOCX: same metadata IDs, same activation, so neither the
+  // id nor the activation token can tell the rows apart.
+  const makeDocument = () => ({
+    metadata: {
+      list: async () => ({ evaluatedRevision: 1, items: [{ anchorStatus: 'resolved', id: 'finding-1' }] }),
+      get: async () => ({
+        payload: { kind: 'risk', question: 'q', quote: 'Twelve months', summary: 's', suggestedText: 't' },
+      }),
+      remove: async ({ id }) => ({ id, success: true }),
+      resolve: async () => null,
+    },
+  });
+
+  const first = makeDocument();
+  const capture = reviewFindings.bindSelection(createReviewFindingsCapture());
+  const [fromFirst] = await reviewFindings.refresh(first);
+  assert.ok(capture);
+  assert.ok(fromFirst);
+
+  // Rebinding is allowed — a replacement document, or a swap racing an in-flight refresh.
+  const second = makeDocument();
+  const [fromSecond] = await reviewFindings.refresh(second);
+  assert.ok(fromSecond, 'refresh may bind a different document');
+
+  // But the retained row and capture belong to the previous binding and must be refused, even
+  // though they carry the same activation token and the caller passes the currently bound doc.
+  assert.equal(fromFirst.sourceToken, fromSecond.sourceToken, 'same activation, so only the epoch differs');
+  assert.deepEqual(await reviewFindings.remove(second, fromFirst), {
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+    success: false,
+  });
+  assert.deepEqual(
+    await reviewFindings.save(second, capture, { question: 'q', quote: 'Twelve months', summary: 's' }),
+    { message: 'The document changed after this text was selected. Select the text again.', success: false },
+  );
+
+  // The freshly listed row still works against its own binding.
+  assert.deepEqual(await reviewFindings.remove(second, fromSecond), { id: 'finding-1', success: true });
+});
+
+test('the review findings controller refuses actions carrying another document', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const createReviewFindings = compileReviewFindingsController(example);
+  const reviewFindings = createReviewFindings();
+
+  reviewFindings.extension.activate(createReviewFindingsContext());
+  const reviewSelection = reviewFindings.bindSelection(createReviewFindingsCapture());
+  assert.ok(reviewSelection);
+
+  let removedFromBoundDocument = null;
+  const boundDocument = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 1, items: [{ anchorStatus: 'resolved', id: 'finding-1' }] }),
+      get: async () => ({
+        payload: {
+          kind: 'risk',
+          question: 'What should I review?',
+          quote: 'Twelve months',
+          summary: 'Review the liability cap.',
+          suggestedText: 'the greater of twelve months of fees or USD 250,000',
+        },
+      }),
+      remove: async ({ id }) => {
+        removedFromBoundDocument = id;
+        return { id, success: true };
+      },
+      resolve: async () => null,
+    },
+  };
+  const [finding] = await reviewFindings.refresh(boundDocument);
+  assert.ok(finding);
+
+  // A second Editor showing a copy of the same DOCX reuses block IDs, so its metadata would
+  // accept this target and attach the finding to unrelated content. Refuse before reading it.
+  let otherDocumentRead = false;
+  const markRead = async () => {
+    otherDocumentRead = true;
+    return { evaluatedRevision: 1, items: [{ anchorStatus: 'resolved', id: 'finding-1' }] };
+  };
+  const otherDocument = { metadata: { get: markRead, list: markRead, remove: markRead, resolve: markRead } };
+
+  assert.deepEqual(
+    await reviewFindings.save(otherDocument, reviewSelection, {
+      question: 'What should I review?',
+      quote: 'Twelve months',
+      summary: 'Review the liability cap.',
+    }),
+    { message: 'The document changed after this text was selected. Select the text again.', success: false },
+  );
+  assert.deepEqual(await reviewFindings.suggest(otherDocument, finding), {
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+    success: false,
+  });
+  assert.deepEqual(await reviewFindings.remove(otherDocument, finding), {
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+    success: false,
+  });
+  assert.equal(otherDocumentRead, false, 'the other document is never read');
+
+  // The document this activation listed still works, so the guard is not a blanket refusal.
+  assert.deepEqual(await reviewFindings.remove(boundDocument, finding), { id: 'finding-1', success: true });
+  assert.equal(removedFromBoundDocument, 'finding-1');
+});
+
+test('the review findings controller rejects selections and cards from a replaced document', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const createReviewFindings = compileReviewFindingsController(example);
+  const reviewFindings = createReviewFindings();
+
+  reviewFindings.extension.activate(createReviewFindingsContext());
+  const reviewSelection = reviewFindings.bindSelection(createReviewFindingsCapture());
+  assert.ok(reviewSelection);
+
+  const [finding] = await reviewFindings.refresh({
+    metadata: {
+      list: async () => ({ items: [{ id: 'finding-1', anchorStatus: 'resolved' }] }),
+      get: async () => ({
+        payload: {
+          kind: 'risk',
+          question: 'What should I review?',
+          quote: 'Twelve months',
+          summary: 'Review the liability cap.',
+          suggestedText: 'the greater of twelve months of fees or USD 250,000',
+        },
+      }),
+      resolve: async () => null,
+    },
+  });
+  assert.ok(finding);
+
+  reviewFindings.extension.activate(createReviewFindingsContext());
+  let metadataRead = false;
+  const result = await reviewFindings.save(
+    {
+      metadata: {
+        list: async () => {
+          metadataRead = true;
+          return { evaluatedRevision: 1, items: [] };
+        },
+      },
+    },
+    reviewSelection,
+    { question: 'What should I review?', quote: 'Twelve months', summary: 'Review the liability cap.' },
+  );
+
+  assert.deepEqual(result, {
+    success: false,
+    message: 'The document changed after this text was selected. Select the text again.',
+  });
+  assert.equal(metadataRead, false);
+
+  const removeResult = await reviewFindings.remove(
+    {
+      metadata: {
+        list: async () => {
+          metadataRead = true;
+          return { evaluatedRevision: 1, items: [{ id: 'finding-1' }] };
+        },
+      },
+    },
+    finding,
+  );
+  assert.deepEqual(removeResult, {
+    success: false,
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+  });
+  assert.equal(metadataRead, false);
+
+  const suggestResult = await reviewFindings.suggest(
+    {
+      metadata: {
+        list: async () => {
+          metadataRead = true;
+          return { evaluatedRevision: 1, items: [{ id: 'finding-1' }] };
+        },
+      },
+    },
+    finding,
+  );
+  assert.deepEqual(suggestResult, {
+    success: false,
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+  });
+  assert.equal(metadataRead, false);
+});
+
+test('the review findings controller creates a tracked suggestion from the current anchor', async () => {
+  let suggestionStatus;
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const reviewFindings = compileReviewFindingsController(example)();
+  const paintedTargets = [];
+  reviewFindings.extension.activate({
+    disposables: { add() {} },
+    visuals: { highlight: () => ({ clear() {}, replace(targets) { paintedTargets.push(targets); } }) },
+    onMutation: () => () => {},
+  });
+
+  const calls = [];
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'revision-1', items: [{ id: 'finding-1', anchorStatus: 'resolved' }] }),
+      update: async ({ payload }) => { suggestionStatus = payload.suggestionStatus; return { success: true, id: 'finding-1' }; },
+      get: async () => ({
+        payload: {
+          kind: 'risk',
+          question: 'What should I review?',
+          quote: 'twelve months of fees',
+          summary: 'The cap may be near zero.',
+          suggestedText: 'the greater of twelve months of fees or USD 250,000',
+          suggestionStatus,
+        },
+      }),
+      resolve: async () => ({
+        target: {
+          kind: 'text',
+          segments: [{ blockId: 'paragraph-1', range: { start: 12, end: 33 } }],
+        },
+      }),
+    },
+    ranges: { resolve: async () => ({ preview: { text: 'twelve months of fees', truncated: false } }) },
+    replace: async (input, options) => {
+      calls.push({ input, options });
+      return { success: true };
+    },
+  };
+
+  const [finding] = await reviewFindings.refresh(doc);
+  assert.ok(finding);
+  assert.equal(paintedTargets.at(-1).length, 1);
+  assert.deepEqual(await reviewFindings.suggest(doc, finding), { success: true, id: 'finding-1' });
+  assert.deepEqual(paintedTargets.at(-1), []);
+  // The row still carries suggestedText, so a re-rendered panel must not apply it twice.
+  assert.deepEqual(await reviewFindings.suggest(doc, finding), {
+    success: false,
+    message: 'This finding already has a tracked suggestion.',
+  });
+  const [reListed] = await reviewFindings.refresh(doc);
+  assert.equal(reListed.suggested, true);
+  assert.deepEqual(calls, [
+    {
+      input: {
+        target: {
+          kind: 'selection',
+          start: { kind: 'text', blockId: 'paragraph-1', offset: 12 },
+          end: { kind: 'text', blockId: 'paragraph-1', offset: 33 },
+        },
+        text: 'the greater of twelve months of fees or USD 250,000',
+      },
+      options: { changeMode: 'tracked', expectedRevision: 'revision-1' },
+    },
+  ]);
+});
+
+test('the review findings controller stops accepting actions as soon as its source is torn down', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const createReviewFindings = compileReviewFindingsController(example);
+  const reviewFindings = createReviewFindings();
+
+  const activation = reviewFindings.extension.activate(createReviewFindingsContext());
+  const reviewSelection = reviewFindings.bindSelection(createReviewFindingsCapture());
+  assert.ok(reviewSelection);
+
+  const [finding] = await reviewFindings.refresh({
+    metadata: {
+      list: async () => ({ items: [{ id: 'finding-1', anchorStatus: 'resolved' }] }),
+      get: async () => ({
+        payload: {
+          kind: 'risk',
+          question: 'What should I review?',
+          quote: 'Twelve months',
+          summary: 'Review the liability cap.',
+          suggestedText: 'the greater of twelve months of fees or USD 250,000',
+        },
+      }),
+      resolve: async () => null,
+    },
+  });
+  assert.ok(finding);
+
+  // `replaceFile()` disposes the extension before the replacement document opens, so the teardown window is the
+  // dangerous one: the replacement is reachable but its activation has not run yet.
+  activation.dispose();
+
+  let metadataRead = false;
+  const replacementDoc = {
+    metadata: {
+      list: async () => {
+        metadataRead = true;
+        return { evaluatedRevision: 1, items: [] };
+      },
+    },
+  };
+
+  assert.equal(reviewFindings.bindSelection(createReviewFindingsCapture()), null);
+
+  const saveResult = await reviewFindings.save(replacementDoc, reviewSelection, {
+    question: 'What should I review?',
+    quote: 'Twelve months',
+    summary: 'Review the liability cap.',
+  });
+  assert.deepEqual(saveResult, {
+    success: false,
+    message: 'The document changed after this text was selected. Select the text again.',
+  });
+
+  const removeResult = await reviewFindings.remove(replacementDoc, finding);
+  assert.deepEqual(removeResult, {
+    success: false,
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+  });
+
+  const suggestResult = await reviewFindings.suggest(replacementDoc, finding);
+  assert.deepEqual(suggestResult, {
+    success: false,
+    message: 'The document changed after this finding was listed. Refresh the findings.',
+  });
+  assert.equal(metadataRead, false);
+});
+
+test('the review findings controller refuses a capture that an edit moved', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const reviewFindings = compileReviewFindingsController(example)();
+  const ctx = createReviewFindingsContext();
+  reviewFindings.extension.activate(ctx);
+
+  const reviewSelection = reviewFindings.bindSelection(createReviewFindingsCapture());
+  assert.ok(reviewSelection);
+
+  // The reader edits the paragraph while the model request is still in flight. The document
+  // identity is unchanged, so only the edit count can tell the frozen offsets are stale.
+  ctx.emitMutation();
+
+  let metadataRead = false;
+  const result = await reviewFindings.save(
+    {
+      metadata: {
+        list: async () => {
+          metadataRead = true;
+          return { evaluatedRevision: 1, items: [] };
+        },
+      },
+    },
+    reviewSelection,
+    { question: 'What should I review?', quote: 'Twelve months', summary: 'Review the liability cap.' },
+  );
+
+  assert.deepEqual(result, {
+    success: false,
+    message: 'The document changed after this text was selected. Select the text again.',
+  });
+  assert.equal(metadataRead, false);
+});
+
+test('the review findings controller refuses a selection that spans paragraphs', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const reviewFindings = compileReviewFindingsController(example)();
+  reviewFindings.extension.activate(createReviewFindingsContext());
+
+  const capture = createReviewFindingsCapture();
+  capture.target.segments = [
+    { blockId: 'paragraph-1', range: { start: 4, end: 12 } },
+    { blockId: 'paragraph-2', range: { start: 0, end: 6 } },
+  ];
+
+  // `suggest()` can only replace text inside one paragraph, so saving this would strand the finding.
+  assert.equal(reviewFindings.bindSelection(capture), null);
+
+  let metadataRead = false;
+  const result = await reviewFindings.save(
+    {
+      metadata: {
+        list: async () => {
+          metadataRead = true;
+          return { evaluatedRevision: 1, items: [] };
+        },
+      },
+    },
+    { capture },
+    { question: 'What should I review?', quote: 'Twelve months', summary: 'Review the liability cap.' },
+  );
+
+  assert.deepEqual(result, {
+    success: false,
+    message: 'Select up to 200 characters inside one paragraph of plain body text before saving the finding.',
+  });
+  assert.equal(metadataRead, false);
+});
+
+test('the review findings guide includes the stylesheet its controller imports', async () => {
+  const page = await readFile(reviewHighlightsPageUrl, 'utf8');
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const stylesheets = [...example.matchAll(/import '\.\/(.+\.css)';/gu)];
+  assert.ok(stylesheets.length > 0);
+  for (const [, filename] of stylesheets) {
+    assert.ok(page.includes(`<include>../../../../snippets/editor/${filename}</include>`));
+    assert.ok((await readFile(new URL(filename, reviewHighlightsExampleUrl), 'utf8')).trim());
+  }
+});
+
+test('the review findings guide ignores superseded refreshes but reports real errors', async () => {
+  const page = await readFile(reviewHighlightsPageUrl, 'utf8');
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const handler = page.match(/function showRefreshError\(error: unknown\): void \{[\s\S]*?\n\}/u)?.[0];
+  assert.ok(handler, 'The guide must provide a refresh error handler.');
+  const errors = [];
+  const panels = [];
+  const javascript = ts.transpileModule(handler, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const showRefreshError = Function('isSupersededRefresh', 'showError', 'renderFindingPanel', `${javascript}\nreturn showRefreshError;`)(
+    compileReviewFindingsController(example, 'isSupersededRefresh'),
+    (error) => errors.push(error),
+    (rows) => panels.push(rows),
+  );
+  assert.equal((page.match(/\.then\(renderFindingPanel, showRefreshError\)/gu) ?? []).length, 3);
+  assert.doesNotMatch(page, /\.then\(renderFindingPanel, showError\)/u);
+
+  const controller = compileReviewFindingsController(example)();
+  controller.extension.activate(createReviewFindingsContext());
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const doc = { metadata: { list: async () => { await gate; return { items: [] }; } } };
+  const older = controller.refresh(doc).then(() => assert.fail('Stale refresh published'), showRefreshError);
+  const newer = controller.refresh(doc);
+  release();
+  await Promise.all([older, newer]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(panels, []);
+
+  const failure = new Error('Metadata unavailable');
+  await controller.refresh({ metadata: { list: async () => { throw failure; } } }).catch(showRefreshError);
+  assert.deepEqual(errors, [failure]);
+  assert.deepEqual(panels, [[]]);
+
+  const setup = page.match(/const reviewFindings = createReviewFindings\(\{[\s\S]*?\n\}\);/u)?.[0];
+  assert.ok(setup);
+  const configured = Function('createReviewFindings', 'renderFindingPanel', 'showRefreshError', `${setup}\nreturn reviewFindings;`)(
+    compileReviewFindingsController(example), (rows) => panels.push(rows), showRefreshError,
+  );
+  const ctx = createReviewFindingsContext();
+  configured.extension.activate(ctx);
+  let fail = false;
+  await configured.refresh({ metadata: { list: async () => {
+    if (fail) throw failure;
+    return { items: [] };
+  } } });
+  fail = true;
+  ctx.emitMutation();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(errors, [failure, failure]);
+  assert.deepEqual(panels, [[], []]);
+});
+
+test('the review findings controller lets only the newest refresh publish', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const reviewFindings = compileReviewFindingsController(example)();
+  const paintedTargets = [];
+  reviewFindings.extension.activate(createReviewFindingsContext((targets) => paintedTargets.push(targets)));
+
+  const gatedDoc = (ids) => {
+    let release = () => {};
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    return {
+      release: () => release(),
+      doc: {
+        metadata: {
+          list: async () => {
+            await gate;
+            return { evaluatedRevision: 'revision-1', items: ids.map((id) => ({ id, anchorStatus: 'resolved' })) };
+          },
+          get: async () => ({
+            payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' },
+          }),
+          resolve: async () => ({
+            target: { kind: 'text', segments: [{ blockId: 'paragraph-1', range: { start: 0, end: 4 } }] },
+          }),
+        },
+      },
+    };
+  };
+
+  const older = gatedDoc(['finding-1', 'finding-2']);
+  const newer = gatedDoc(['finding-1']);
+  const olderRefresh = reviewFindings.refresh(older.doc);
+  const newerRefresh = reviewFindings.refresh(newer.doc);
+
+  newer.release();
+  const rows = await newerRefresh;
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ['finding-1'],
+  );
+  const paintedByNewer = paintedTargets.at(-1);
+
+  // The superseded call finishes last and must not restore its two-row listing.
+  older.release();
+  await assert.rejects(olderRefresh, /A newer refresh replaced this one/u);
+  assert.deepEqual(paintedTargets.at(-1), paintedByNewer);
+});
+
+test('an absent document retires pending finding refreshes and mutation reads', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const painted = [];
+  const ctx = createReviewFindingsContext((targets) => painted.push(targets));
+  const controller = compileReviewFindingsController(example)();
+  controller.extension.activate(ctx);
+  let listCalls = 0;
+  let release;
+  let gate = Promise.resolve();
+  const doc = { metadata: {
+    list: async () => { listCalls += 1; await gate; return { items: [{ id: 'f1', anchorStatus: 'resolved' }] }; },
+    get: async () => ({ payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' } }),
+    resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 1 } }] } }),
+  } };
+  await controller.refresh(doc);
+  gate = new Promise((resolve) => { release = resolve; });
+  const pending = controller.refresh(doc);
+  assert.deepEqual(await controller.refresh(undefined), []);
+  const stale = assert.rejects(pending, /A newer refresh replaced this one/u);
+  release();
+  await stale;
+  const paintCount = painted.length;
+  ctx.emitMutation();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(listCalls, 2, 'Mutations must not reread the absent document');
+  assert.equal(painted.length, paintCount, 'Mutations must not restore cached paint');
+  gate = Promise.resolve();
+  assert.equal((await controller.refresh(doc)).length, 1, 'An explicit refresh can resume');
+});
+
+test('the review findings controller suggests the stored payload, not the listed row', async () => {
+  let suggestionStatus;
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const reviewFindings = compileReviewFindingsController(example)();
+  reviewFindings.extension.activate(createReviewFindingsContext());
+
+  let storedSuggestion = 'the greater of twelve months of fees or USD 250,000';
+  const calls = [];
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'revision-1', items: [{ id: 'finding-1', anchorStatus: 'resolved' }] }),
+      update: async ({ payload }) => { suggestionStatus = payload.suggestionStatus; return { success: true, id: 'finding-1' }; },
+      get: async () => ({
+        payload: {
+          kind: 'risk',
+          question: 'What should I review?',
+          quote: 'twelve months of fees',
+          summary: 'The cap may be near zero.',
+          suggestedText: storedSuggestion,
+          suggestionStatus,
+        },
+      }),
+      resolve: async () => ({
+        target: { kind: 'text', segments: [{ blockId: 'paragraph-1', range: { start: 12, end: 33 } }] },
+      }),
+    },
+    ranges: { resolve: async () => ({ preview: { text: 'twelve months of fees', truncated: false } }) },
+    replace: async (input, options) => {
+      calls.push({ input, options });
+      return { success: true };
+    },
+  };
+
+  const [finding] = await reviewFindings.refresh(doc);
+  assert.ok(finding);
+
+  // Another writer revises the finding after the panel listed it.
+  storedSuggestion = 'the greater of twelve months of fees or USD 500,000';
+
+  assert.deepEqual(await reviewFindings.suggest(doc, finding), { success: true, id: 'finding-1' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].input.text, 'the greater of twelve months of fees or USD 500,000');
+});
+
+test('the review findings controller re-resolves its anchors after an edit', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const rendered = [];
+  const reviewFindings = compileReviewFindingsController(example)({
+    onFindingsChanged: (rows) => rendered.push(rows),
+  });
+  const paintedTargets = [];
+  const ctx = createReviewFindingsContext((targets) => paintedTargets.push(targets));
+  reviewFindings.extension.activate(ctx);
+
+  let resolvedRange = { start: 12, end: 33 };
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'revision-1', items: [{ id: 'finding-1', anchorStatus: 'resolved' }] }),
+      get: async () => ({
+        payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' },
+      }),
+      resolve: async () => ({
+        target: { kind: 'text', segments: [{ blockId: 'paragraph-1', range: { ...resolvedRange } }] },
+      }),
+    },
+  };
+
+  await reviewFindings.refresh(doc);
+  assert.deepEqual(paintedTargets.at(-1), [{ kind: 'text', blockId: 'paragraph-1', range: { start: 12, end: 33 } }]);
+
+  // An edit before the finding moves the durable anchor; the cached paint must follow it.
+  resolvedRange = { start: 40, end: 61 };
+  ctx.emitMutation();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(paintedTargets.at(-1), [{ kind: 'text', blockId: 'paragraph-1', range: { start: 40, end: 61 } }]);
+  assert.equal(rendered.length, 1);
+  assert.deepEqual(
+    rendered[0].map((row) => row.id),
+    ['finding-1'],
+  );
+});
+
+test('queued finding refreshes cannot publish pre-edit targets', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const functions = demo.slice(demo.indexOf('  const refreshFindings = useCallback('), demo.indexOf('  const teardown = useCallback('));
+  const javascript = ts.transpileModule(functions, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  for (const surface of ['demo', 'controller']) {
+    const painted = [];
+    let version = 0;
+    const releases = [];
+    const doc = { metadata: {
+      list: async () => ({ items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+      get: async () => {
+        if (version > 0) await new Promise((resolve) => releases.push(resolve));
+        return { payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' } };
+      },
+      resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: `p${version}`, range: { start: 0, end: 1 } }] } }),
+    } };
+    let mutate;
+    if (surface === 'controller') {
+      const ctx = createReviewFindingsContext((targets) => painted.push(targets));
+      const controller = compileReviewFindingsController(example)();
+      controller.extension.activate(ctx);
+      await controller.refresh(doc);
+      mutate = () => ctx.emitMutation();
+    } else {
+      const scope = {
+        useCallback: (fn) => fn, instanceRef: { current: { activeEditor: { doc } } },
+        refreshIdRef: { current: 0 }, highlightLayerRef: { current: { replace: (targets) => painted.push(targets) } },
+        mountedRef: { current: true }, suggestedFindingIdsRef: { current: new Set() },
+        mutationRefreshRunningRef: { current: false }, mutationRefreshQueuedRef: { current: false },
+        REVIEW_FINDING_NAMESPACE: 'test', isReviewFindingPayload: () => true,
+        toVisualTargets: (target) => [target], setSuggestedFindingIds() {}, setFindings() {}, setInteractionMessage() {},
+      };
+      const demoRefresh = Function(...Object.keys(scope), `${javascript}\nreturn { refreshFindings, queueMutationRefresh };`)(...Object.values(scope));
+      await demoRefresh.refreshFindings();
+      mutate = demoRefresh.queueMutationRefresh;
+    }
+    painted.length = 0;
+    version = 1;
+    mutate();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(releases.length, 1);
+    version = 2;
+    mutate();
+    releases[0]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(painted, [], `${surface}: superseded targets must not publish`);
+    assert.equal(releases.length, 2);
+    releases[1]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(painted.length, 1, `${surface}: only the newest refresh paints`);
+    assert.match(JSON.stringify(painted), /p2/u);
+  }
+});
+
+test('the review findings controller coalesces mutation refreshes and drops paint when one fails', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const errors = [];
+  const reviewFindings = compileReviewFindingsController(example)({ onFindingsError: (error) => errors.push(error) });
+  const paintedTargets = [];
+  const ctx = createReviewFindingsContext((targets) => paintedTargets.push(targets));
+  reviewFindings.extension.activate(ctx);
+
+  let listCalls = 0;
+  let failList = false;
+  const doc = {
+    metadata: {
+      list: async () => {
+        listCalls += 1;
+        if (failList) throw new Error('the worker rejected the listing');
+        return { evaluatedRevision: 'revision-1', items: [{ id: 'finding-1', anchorStatus: 'resolved' }] };
+      },
+      get: async () => ({ payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' } }),
+      resolve: async () => ({
+        target: { kind: 'text', segments: [{ blockId: 'paragraph-1', range: { start: 0, end: 4 } }] },
+      }),
+    },
+  };
+
+  await reviewFindings.refresh(doc);
+  const afterInitial = listCalls;
+  assert.equal(paintedTargets.at(-1).length, 1);
+
+  // A typing burst must not start one listing per keystroke.
+  ctx.emitMutation();
+  ctx.emitMutation();
+  ctx.emitMutation();
+  ctx.emitMutation();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.ok(listCalls - afterInitial <= 2, `expected at most 2 coalesced refreshes, saw ${listCalls - afterInitial}`);
+
+  // A genuine failure must drop the pre-edit paint rather than leave it over moved text.
+  failList = true;
+  ctx.emitMutation();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(paintedTargets.at(-1), []);
+  assert.equal(errors.length, 1);
+});
+
+test('a failed winning refresh clears paint even when a mutation refresh is pending', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const painted = [];
+  const controller = compileReviewFindingsController(example)();
+  const ctx = createReviewFindingsContext((targets) => painted.push(targets));
+  controller.extension.activate(ctx);
+  let gate = Promise.resolve();
+  let release;
+  let fail = false;
+  const doc = { metadata: {
+    list: async () => {
+      if (fail) throw new Error('Listing unavailable');
+      await gate;
+      return { items: [{ id: 'f1', anchorStatus: 'resolved' }] };
+    },
+    get: async () => ({ payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' } }),
+    resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 1 } }] } }),
+  } };
+  await controller.refresh(doc);
+  assert.equal(painted.at(-1).length, 1);
+  gate = new Promise((resolve) => { release = resolve; });
+  ctx.emitMutation();
+  fail = true;
+  await assert.rejects(controller.refresh(doc), /Listing unavailable/u);
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(painted.at(-1), []);
+});
+
+test('a failed old mutation refresh cannot clear replacement findings', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const errors = [];
+  const controller = compileReviewFindingsController(example)({ onFindingsError: (error) => errors.push(error) });
+  const oldContext = createReviewFindingsContext();
+  const oldActivation = controller.extension.activate(oldContext);
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+      get: async () => ({ payload: { kind: 'risk', question: 'q', quote: 'c', summary: 's' } }),
+      resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 1 } }] } }),
+    },
+  };
+  await controller.refresh(doc);
+  let rejectOld;
+  const originalList = doc.metadata.list;
+  doc.metadata.list = () => new Promise((_, reject) => { rejectOld = reject; });
+  oldContext.emitMutation();
+  oldActivation.dispose();
+  const paint = [];
+  controller.extension.activate(createReviewFindingsContext((targets) => paint.push(targets)));
+  await controller.refresh({ metadata: { ...doc.metadata, list: originalList } });
+  assert.equal(paint.at(-1).length, 1);
+  rejectOld(new Error('old worker disposed'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(paint.at(-1).length, 1);
+  assert.deepEqual(errors, []);
+});
+
+test('suggestions refuse changed or truncated anchored text', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const demoFunction = demo.match(/  async function suggestFinding\(finding: ReviewFinding\) \{[\s\S]*?\n  \}/u)?.[0];
+  assert.ok(demoFunction);
+  const javascript = ts.transpileModule(demoFunction, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  for (const preview of [{ text: 'reader edit', truncated: false }, { text: 'old', truncated: true }]) {
+    let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+    let replaceCalls = 0;
+    const doc = {
+      metadata: {
+        list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+        get: async () => ({ payload: structuredClone(payload) }),
+        resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+        update: async (input) => { payload = structuredClone(input.payload); return { success: true, id: 'f1' }; },
+      },
+      ranges: { resolve: async (input) => { assert.equal(input.expectedRevision, 'r1'); return { preview }; } },
+      replace: async () => { replaceCalls++; return { success: true }; },
+    };
+    const controller = compileReviewFindingsController(example)();
+    controller.extension.activate(createReviewFindingsContext());
+    const [finding] = await controller.refresh(doc);
+    const result = await controller.suggest(doc, finding);
+    assert.equal(result.success, false);
+    assert.match(result.message, /text changed|too long/u);
+    assert.equal(replaceCalls, 0);
+    assert.equal(payload.suggestionStatus, undefined);
+    let message;
+    const instance = { activeEditor: { doc } };
+    const scope = {
+      instanceRef: { current: instance }, mountedRef: { current: true }, findingActionRef: { current: null },
+      REVIEW_FINDING_NAMESPACE: 'test', isReviewFindingPayload: () => true,
+      toSelectionTarget: (target) => target, setPendingFindingId() {},
+      setInteractionMessage(value) { message = value; }, refreshFindings: async () => {},
+    };
+    const action = Function(...Object.keys(scope), `${javascript}\nreturn suggestFinding;`)(...Object.values(scope));
+    await action(finding);
+    assert.match(message, /text changed|too long/u);
+    assert.equal(replaceCalls, 0);
+    assert.equal(payload.suggestionStatus, undefined);
+  }
+});
+
+test('suggestions refuse a quote another writer changed after the reservation', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const demoFunction = demo.match(/  async function suggestFinding\(finding: ReviewFinding\) \{[\s\S]*?\n  \}/u)?.[0];
+  assert.ok(demoFunction);
+  const javascript = ts.transpileModule(demoFunction, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  // The reservation pins suggestionStatus, not the rest of the payload. A writer that rewrites
+  // `quote` in that window leaves the verification below comparing against the pre-reservation
+  // quote, so the edit would be applied against text the stored finding no longer describes.
+  const buildDoc = () => {
+    let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+    const state = { pendingLeft: false, replaceCalls: 0, updates: 0 };
+    const doc = {
+      metadata: {
+        list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+        get: async () => ({ payload: structuredClone(payload) }),
+        resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+        update: async (input) => {
+          payload = structuredClone(input.payload);
+          state.updates += 1;
+          if (state.updates === 1) payload.quote = 'rewritten by another writer';
+          state.pendingLeft = payload.suggestionStatus === 'pending';
+          return { success: true, id: 'f1' };
+        },
+      },
+      // The document still reads as the original quote, so only the payload check can catch this.
+      ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+      replace: async () => {
+        state.replaceCalls += 1;
+        return { success: true };
+      },
+    };
+    return { doc, state };
+  };
+
+  const { doc, state } = buildDoc();
+  const controller = compileReviewFindingsController(example)();
+  controller.extension.activate(createReviewFindingsContext());
+  const [finding] = await controller.refresh(doc);
+  const result = await controller.suggest(doc, finding);
+  assert.equal(result.success, false);
+  assert.match(result.message, /finding changed while requesting its suggestion/u);
+  assert.equal(state.replaceCalls, 0);
+  // The reservation was ours, so refusing must not leave the finding durably pending.
+  assert.equal(state.pendingLeft, false, 'the reservation is released after a quote-only refusal');
+
+  const demoState = buildDoc();
+  const demoController = compileReviewFindingsController(example)();
+  demoController.extension.activate(createReviewFindingsContext());
+  const [demoFinding] = await demoController.refresh(demoState.doc);
+  let message;
+  const scope = {
+    instanceRef: { current: { activeEditor: { doc: demoState.doc } } },
+    mountedRef: { current: true },
+    findingActionRef: { current: null },
+    REVIEW_FINDING_NAMESPACE: 'test',
+    isReviewFindingPayload: () => true,
+    toSelectionTarget: (target) => target,
+    setPendingFindingId() {},
+    setInteractionMessage(value) {
+      message = value;
+    },
+    refreshFindings: async () => {},
+  };
+  const action = Function(...Object.keys(scope), `${javascript}\nreturn suggestFinding;`)(...Object.values(scope));
+  await action(demoFinding);
+  assert.match(message, /finding changed while requesting its suggestion/u);
+  assert.equal(demoState.state.replaceCalls, 0);
+});
+
+test('a suggestion is not marked created from a quote rewritten after the edit', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  // Promoting to `created` records the quote the tracked replacement came from and suppresses
+  // further suggestions, so a quote rewritten between doc.replace() and the post-edit read must
+  // not be recorded as that source.
+  let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+  const statuses = [];
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+      get: async () => ({ payload: structuredClone(payload) }),
+      resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+      update: async (input) => {
+        payload = structuredClone(input.payload);
+        statuses.push(payload.suggestionStatus);
+        return { success: true, id: 'f1' };
+      },
+    },
+    ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+    replace: async () => {
+      payload.quote = 'rewritten after the edit';
+      return { success: true };
+    },
+  };
+  const controller = compileReviewFindingsController(example)();
+  controller.extension.activate(createReviewFindingsContext());
+  const [finding] = await controller.refresh(doc);
+  const result = await controller.suggest(doc, finding);
+  assert.equal(result.success, false);
+  assert.match(result.message, /edit was added, but the finding changed/u);
+  assert.ok(!statuses.includes('created'), 'the rewritten quote is never promoted to created');
+});
+
+test('an interrupted suggestion publishes its pending row to the active panel', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const panels = [];
+  const controller = compileReviewFindingsController(example)({ onFindingsChanged: (rows) => panels.push(rows) });
+  controller.extension.activate(createReviewFindingsContext());
+  let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+      get: async () => ({ payload: structuredClone(payload) }),
+      resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+      update: async (input) => { payload = structuredClone(input.payload); return { success: true, id: 'f1' }; },
+    },
+    ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+    replace: async () => { throw new Error('connection interrupted'); },
+  };
+  const [finding] = await controller.refresh(doc);
+  assert.equal(finding.payload.suggestionStatus, undefined);
+  assert.deepEqual(await controller.suggest(doc, finding), { success: false, message: 'connection interrupted' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(panels.at(-1)?.[0].payload.suggestionStatus, 'pending');
+});
+
+test('suggestion status survives a fresh controller and blocks interrupted retries', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const create = compileReviewFindingsController(example);
+  for (const failure of ['none', 'reserve', 'replace', 'record', 'changed-payload']) {
+    let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+    let replaceCalls = 0;
+    const doc = {
+      metadata: {
+        list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+        get: async () => ({ payload: structuredClone(payload) }),
+        resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+        update: async (input) => {
+          if ((failure === 'reserve' && input.payload.suggestionStatus === 'pending') ||
+              (failure === 'record' && input.payload.suggestionStatus === 'created')) {
+            return { success: false, failure: { message: 'status write failed' } };
+          }
+          payload = structuredClone(input.payload);
+          if (failure === 'changed-payload') payload.suggestedText = 'another writer changed this';
+          return { success: true, id: 'f1' };
+        },
+      },
+      ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+      replace: async () => {
+        replaceCalls++;
+        if (failure === 'replace') throw new Error('connection interrupted');
+        return { success: true };
+      },
+    };
+    const controller = create();
+    controller.extension.activate(createReviewFindingsContext());
+    const [finding] = await controller.refresh(doc);
+    assert.equal((await controller.suggest(doc, finding)).success, failure === 'none');
+    const reopened = create();
+    const paint = [];
+    reopened.extension.activate(createReviewFindingsContext((targets) => paint.push(targets)));
+    const [row] = await reopened.refresh(doc);
+    assert.equal(row.payload.suggestionStatus, failure === 'reserve' ? undefined : failure === 'none' ? 'created' : 'pending');
+    assert.equal((await reopened.suggest(doc, row)).success, false);
+    assert.equal(replaceCalls, failure === 'reserve' || failure === 'changed-payload' ? 0 : 1);
+    if (failure === 'none') assert.deepEqual(paint.at(-1), []);
+  }
+});
+
+test('completed suggestions do not mark another writer\'s payload as created', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const create = compileReviewFindingsController(example);
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const demoFunction = demo.match(/async function suggestFinding\([\s\S]*?(?=\n  async function )/u)?.[0];
+  assert.ok(demoFunction);
+  const javascript = ts.transpileModule(demoFunction, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  for (const surface of ['controller', 'demo']) {
+   for (const change of ['text', 'status']) {
+    let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+    let updateCalls = 0;
+    const doc = {
+      metadata: {
+        list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+        get: async () => ({ payload: structuredClone(payload) }),
+        resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+        update: async (input) => {
+          updateCalls++;
+          payload = structuredClone(input.payload);
+          return { success: true, id: 'f1' };
+        },
+      },
+      ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+      replace: async ({ text }) => {
+        assert.equal(text, 'new');
+        if (change === 'text') payload.suggestedText = 'another suggestion';
+        else delete payload.suggestionStatus;
+        return { success: true };
+      },
+    };
+    const controller = create();
+    controller.extension.activate(createReviewFindingsContext());
+    const [finding] = await controller.refresh(doc);
+    if (surface === 'controller') {
+      const result = await controller.suggest(doc, finding);
+      assert.equal(result.success, false, change);
+      assert.match(result.message, /edit was added/u);
+    } else {
+      let message;
+      const instance = { activeEditor: { doc }, ui: { selection: { apply() {} } } };
+      const scope = {
+        instanceRef: { current: instance }, mountedRef: { current: true }, findingActionRef: { current: null },
+        REVIEW_FINDING_NAMESPACE: 'test', isReviewFindingPayload: () => true,
+        toSelectionTarget: (target) => target, setPendingFindingId() {},
+        setInteractionMessage(value) { message = value; }, refreshFindings: async () => {},
+      };
+      const action = Function(...Object.keys(scope), `${javascript}\nreturn suggestFinding;`)(...Object.values(scope));
+      await action(finding);
+      assert.match(message, /edit was added.*finding changed/u);
+    }
+    assert.equal(updateCalls, 1, change);
+    const reopened = create();
+    reopened.extension.activate(createReviewFindingsContext());
+    const [row] = await reopened.refresh(doc);
+    assert.equal(row.payload.suggestedText, change === 'text' ? 'another suggestion' : 'new');
+    assert.equal(row.payload.suggestionStatus, change === 'text' ? 'pending' : undefined);
+   }
+  }
+});
+
+test('confirmed replacement failures release reservations without overwriting newer findings', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const demoFunction = demo.match(/  async function suggestFinding\(finding: ReviewFinding\) \{[\s\S]*?\n  \}/u)?.[0];
+  assert.ok(demoFunction);
+  const javascript = ts.transpileModule(demoFunction, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  for (const surface of ['controller', 'demo']) {
+    for (const failure of ['orphan', 'receipt', 'throw', 'cleanup', 'newer-status', 'read-list', 'read-get', 'read-resolve']) {
+      let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+      let revision = 1;
+      let replaceCalls = 0;
+      let readFailed = false;
+      const failRead = (method) => {
+        if (failure === `read-${method}` && payload.suggestionStatus === 'pending' && !readFailed) {
+          readFailed = true;
+          throw new Error('preflight read failed');
+        }
+      };
+      const doc = {
+        metadata: {
+          list: async () => { failRead('list'); return { evaluatedRevision: String(revision), items: [{ id: 'f1', anchorStatus: 'resolved' }] }; },
+          get: async () => { failRead('get'); return { payload: structuredClone(payload) }; },
+          resolve: async () => { failRead('resolve'); return failure === 'orphan' && payload.suggestionStatus === 'pending'
+            ? null
+            : { target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }; },
+          update: async (input, options) => {
+            assert.equal(options.expectedRevision, String(revision));
+            if (failure === 'cleanup' && input.payload.suggestionStatus === undefined) {
+              return { success: false, failure: { message: 'cleanup rejected' } };
+            }
+            payload = structuredClone(input.payload);
+            revision++;
+            return { success: true, id: 'f1' };
+          },
+        },
+        ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+        replace: async () => {
+          replaceCalls++;
+          revision++;
+          if (failure === 'throw') throw new Error('connection interrupted');
+          payload.summary = 'updated by another writer';
+          if (failure === 'newer-status') payload.suggestionStatus = 'created';
+          return { success: false, failure: { message: 'revision changed' } };
+        },
+      };
+      let suggest;
+      if (surface === 'controller') {
+        const controller = compileReviewFindingsController(example)();
+        controller.extension.activate(createReviewFindingsContext());
+        const [finding] = await controller.refresh(doc);
+        suggest = () => controller.suggest(doc, finding);
+      } else {
+        const instance = { activeEditor: { doc } };
+        const scope = {
+          instanceRef: { current: instance }, mountedRef: { current: true }, findingActionRef: { current: null },
+          REVIEW_FINDING_NAMESPACE: 'test', isReviewFindingPayload: () => true,
+          toSelectionTarget: (target) => target, setPendingFindingId() {}, setInteractionMessage() {},
+          refreshFindings: async () => {},
+        };
+        const action = Function(...Object.keys(scope), `${javascript}\nreturn suggestFinding;`)(...Object.values(scope));
+        suggest = () => action({ id: 'f1', payload });
+      }
+      await suggest();
+      assert.equal(payload.suggestionStatus, failure === 'receipt' || failure === 'orphan' || failure.startsWith('read-') ? undefined : failure === 'newer-status' ? 'created' : 'pending', `${surface}: ${failure}`);
+      if (failure.startsWith('read-')) assert.equal(replaceCalls, 0, 'a failed preflight never attempts replacement');
+      if (failure === 'receipt') assert.equal(payload.summary, 'updated by another writer');
+      await suggest();
+      assert.equal(replaceCalls, failure === 'orphan' ? 0 : failure === 'receipt' ? 2 : 1, `${surface}: ${failure} retry`);
+    }
+  }
+});
+
+test('saving a finding never copies caller-supplied suggestion status', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const create = compileReviewFindingsController(example);
+  for (const suggestionStatus of ['pending', 'created']) {
+    const controller = create();
+    controller.extension.activate(createReviewFindingsContext());
+    let saved;
+    const doc = { metadata: {
+      list: async () => ({ evaluatedRevision: 'r1', items: [] }),
+      attach: async ({ payload }) => { saved = payload; return { success: true, id: 'f1' }; },
+    } };
+    const context = controller.bindSelection(createReviewFindingsCapture());
+    // The quote must match the bound capture; this test is about suggestionStatus, not the quote.
+    const payload = { question: 'q', quote: 'Twelve months', summary: 's', suggestedText: 'new', suggestionStatus };
+    assert.equal((await controller.save(doc, context, payload)).success, true);
+    assert.deepEqual(saved, { kind: 'risk', question: 'q', quote: 'Twelve months', summary: 's', suggestedText: 'new' });
+  }
+});
+
+test('the findings callback publishes created status after an early mutation refresh', async () => {
+  const example = await readFile(reviewHighlightsExampleUrl, 'utf8');
+  const published = [];
+  const controller = compileReviewFindingsController(example)({ onFindingsChanged: (rows) => published.push(rows) });
+  const context = createReviewFindingsContext();
+  controller.extension.activate(context);
+  let payload = { kind: 'risk', question: 'q', quote: 'old', summary: 's', suggestedText: 'new' };
+  const doc = {
+    metadata: {
+      list: async () => ({ evaluatedRevision: 'r1', items: [{ id: 'f1', anchorStatus: 'resolved' }] }),
+      get: async () => ({ payload: structuredClone(payload) }),
+      resolve: async () => ({ target: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }] } }),
+      update: async (input) => { payload = structuredClone(input.payload); return { success: true, id: 'f1' }; },
+    },
+    ranges: { resolve: async () => ({ preview: { text: 'old', truncated: false } }) },
+    replace: async () => {
+      context.emitMutation();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(published.at(-1)[0].payload.suggestionStatus, 'pending');
+      return { success: true };
+    },
+  };
+  const [finding] = await controller.refresh(doc);
+  assert.equal((await controller.suggest(doc, finding)).success, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(published.at(-1)[0].payload.suggestionStatus, 'created');
+  assert.equal(published.at(-1)[0].suggested, true);
+});
+
+test('saving a demo finding rejects edits made while the metadata preflight is pending', async () => {
+  const demo = await readFile(customSelectionDemoUrl, 'utf8');
+  const source = demo.match(/  async function saveFinding\(\) \{[\s\S]*?\n  \}/u)?.[0];
+  assert.ok(source);
+  const javascript = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  for (const recapture of [false, true]) {
+    const mutationEpochRef = { current: 0 };
+    const captureEpochRef = { current: 0 };
+    let attaches = 0;
+    const messages = [];
+    const doc = { metadata: {
+      list: async () => {
+        mutationEpochRef.current++;
+        if (recapture) captureEpochRef.current = mutationEpochRef.current;
+        return { evaluatedRevision: 'after-edit', items: [] };
+      },
+      attach: async () => { attaches++; return { success: false, failure: { message: 'unexpected attach' } }; },
+    } };
+    const scope = {
+      instanceRef: { current: { activeEditor: { doc } } },
+      captureRef: { current: { target: { kind: 'selection' }, quotedText: 'old text' } },
+      captureEpochRef, mutationEpochRef,
+      prompt: 'question', answer: { summary: 'summary' }, findingActionRef: { current: null },
+      mountedRef: { current: true }, toSelectionTarget: (target) => target,
+      setInteractionMessage: (message) => messages.push(message), setIsSavingFinding() {},
+      REVIEW_FINDING_NAMESPACE: 'test',
+    };
+    const save = Function(...Object.keys(scope), `${javascript}\nreturn saveFinding;`)(...Object.values(scope));
+    await save();
+    assert.equal(attaches, 0, `recaptured during preflight: ${recapture}`);
+    assert.match(messages.at(-1), /document changed after this text was selected/u);
+  }
 });
 
 test('the built-in Editor demos keep focused controls and restart-safe configuration changes', async () => {

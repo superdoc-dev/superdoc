@@ -40,6 +40,7 @@ export const llmPlaceholderComponents = [
   'CustomCommentsDemo',
   'CustomContentControlsDemo',
   'CustomDocumentControlsDemo',
+  'CustomReviewFindingsDemo',
   'CustomSearchDemo',
   'CustomSelectionDemo',
   'CustomTrackChangesDemo',
@@ -202,6 +203,14 @@ export function renderLLMMarkdown(markdown: string) {
         '> **Live example: build document-wide controls without replacing the toolbar**',
         '>',
         '> The application renders Zoom, the current document mode, and Download DOCX. SuperDoc renders the remaining built-in toolbar without its Zoom control. Changing zoom updates the percentage, and Download DOCX exports the current document.',
+        '',
+      ].join('\n');
+    },
+    CustomReviewFindingsDemo() {
+      return [
+        '> **Live example: turn an AI finding into a tracked suggestion**',
+        '>',
+        '> The embedded example runs the steps above in a two-page DOCX. The model response is simulated locally; metadata and the tracked replacement use SuperDoc.',
         '',
       ].join('\n');
     },

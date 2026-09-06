@@ -30,6 +30,7 @@ const customCommandPageUrl = new URL('../content/docs/editor/custom-ui/custom-co
 const customCommandExampleUrl = new URL('../snippets/editor/custom-command.ts', import.meta.url);
 const customCommandMarkupUrl = new URL('../snippets/editor/custom-command.html', import.meta.url);
 const customUiMetaUrl = new URL('../content/docs/editor/custom-ui/meta.json', import.meta.url);
+const customUiOverviewPageUrl = new URL('../content/docs/editor/custom-ui/overview.mdx', import.meta.url);
 const customUiSetupPageUrl = new URL('../content/docs/editor/custom-ui/controller-setup.mdx', import.meta.url);
 const customToolbarPageUrl = new URL('../content/docs/editor/custom-ui/formatting-controls.mdx', import.meta.url);
 const customCommentsPageUrl = new URL('../content/docs/editor/custom-ui/comments.mdx', import.meta.url);
@@ -707,19 +708,73 @@ test('the custom UI navigation has no internal section separators', async () => 
   );
 });
 
-test('the custom UI tutorial links follow the sidebar order into document controls', async () => {
+test('the custom UI overview separates the core path from optional workflows', async () => {
   const { pages } = JSON.parse(await readFile(customUiMetaUrl, 'utf8'));
-  const [toolbar, documentControls] = await Promise.all(
-    [customToolbarPageUrl, customDocumentControlsPageUrl].map((url) => readFile(url, 'utf8')),
+  const [overview, toolbar, documentControls] = await Promise.all(
+    [customUiOverviewPageUrl, customToolbarPageUrl, customDocumentControlsPageUrl].map((url) => readFile(url, 'utf8')),
   );
 
-  // Readers follow the written continuation link, not the sidebar, so a reorder
-  // that leaves those links behind silently skips a guide.
-  const start = pages.indexOf('formatting-controls');
-  assert.deepEqual(pages.slice(start, start + 3), ['formatting-controls', 'zoom-and-document-state', 'comments']);
+  assert.deepEqual(pages.slice(0, 5), [
+    'overview',
+    'controller-setup',
+    'commands-and-state',
+    'formatting-controls',
+    'zoom-and-document-state',
+  ]);
 
   assert.match(toolbar, /Next, \[[^\]]+\]\(\/editor\/custom-ui\/zoom-and-document-state\)/u);
-  assert.match(documentControls, /Next, \[[^\]]+\]\(\/editor\/custom-ui\/comments\)/u);
+  assert.match(documentControls, /This completes the core Custom UI path/u);
+  assert.doesNotMatch(documentControls, /\/editor\/custom-ui\/comments/u);
+
+  for (const page of pages.slice(1)) {
+    assert.match(overview, new RegExp(`/editor/custom-ui/${page}(?:\\)|/)`, 'u'));
+  }
+
+  assert.match(overview, /\/editor\/dialogs-and-surfaces/u);
+  assert.match(overview, /\/editor\/themes-and-fonts/u);
+});
+
+/** Slugs linked from the numbered list under a heading, in the order they are listed. */
+function orderedCorePathSlugs(overview) {
+  const section = overview.split('## Follow the core path')[1]?.split('\n## ')[0] ?? '';
+  return [...section.matchAll(/^\d+\.\s.*?\/editor\/custom-ui\/([a-z0-9-]+)\)/gmu)].map(([, slug]) => slug);
+}
+
+/** Slugs linked from the workflow table rows, which must stay disjoint from the core path. */
+function workflowTableSlugs(overview) {
+  const section = overview.split('## Choose a workflow')[1]?.split('\n## ')[0] ?? '';
+  return [...section.matchAll(/^\|.*?\/editor\/custom-ui\/([a-z0-9-]+)\)/gmu)].map(([, slug]) => slug);
+}
+
+test('the overview core-path list matches navigation order and excludes optional workflows', async () => {
+  const { pages } = JSON.parse(await readFile(customUiMetaUrl, 'utf8'));
+  const overview = await readFile(customUiOverviewPageUrl, 'utf8');
+
+  // The reader-facing contract is the numbered list, not just that each page is linked
+  // somewhere: a meta.json reorder or a swapped core guide must fail here rather than leave
+  // the list walking readers through a different sequence than the sidebar.
+  assert.deepEqual(orderedCorePathSlugs(overview), pages.slice(1, 5));
+
+  const optional = workflowTableSlugs(overview);
+  assert.ok(optional.length > 0);
+  for (const slug of pages.slice(1, 5)) {
+    assert.ok(!optional.includes(slug), `${slug} is listed as both a core-path step and an optional workflow`);
+  }
+});
+
+test('the core path promises only what its guides deliver', async () => {
+  const [overview, toolbar, documentControls] = await Promise.all(
+    [customUiOverviewPageUrl, customToolbarPageUrl, customDocumentControlsPageUrl].map((url) => readFile(url, 'utf8')),
+  );
+
+  // Steps 2-4 each restart from the setup guide, and step 4 restores the built-in toolbar that
+  // step 3 replaces, so the overview must not describe the path as cumulative.
+  assert.match(overview, /Only the first guide is a prerequisite/u);
+  // Step 2 is conceptual, so the replacement claim must not cover it.
+  assert.match(overview, /Step 2 explains how command state stays in sync and asks you to change nothing/u);
+  assert.match(overview, /alternatives rather than a sequence/u);
+  assert.match(toolbar, /Continue with the `\/sample\.docx` project from \[[^\]]+\]\(\/editor\/custom-ui\/controller-setup\)/u);
+  assert.match(documentControls, /Start from \[[^\]]+\]\(\/editor\/custom-ui\/controller-setup\)/u);
 });
 
 test('the custom toolbar demo proves toggle, picker, and mixed selection state', async () => {
@@ -830,7 +885,7 @@ test('the custom tracked-change examples build one application-owned review pane
   assert.match(page, /<CustomTrackChangesDemo \/>/u);
   assert.match(page, /custom-track-changes-workflow\.docx/u);
   assert.match(page, /A successful decision should remove one row and decrease the count/u);
-  assert.match(page, /build a content-control panel/u);
+  assert.match(page, /\/editor\/custom-ui\/overview/u);
   assert.match(html, /id="toolbar"/u);
   assert.match(html, /id="previous-change"/u);
   assert.match(html, /id="next-change"/u);
@@ -912,7 +967,7 @@ test('the custom content-control examples build one application-owned field pane
   assert.match(page, /<CustomContentControlsDemo \/>/u);
   assert.match(page, /custom-content-controls-workflow\.docx/u);
   assert.match(page, /observer returns the updated value/u);
-  assert.match(page, /build custom search controls/u);
+  assert.match(page, /\/editor\/custom-ui\/overview/u);
 
   assert.match(demo, /value: 80/u);
   assert.match(demo, /instance\.ui\.zoom\.set\(INITIAL_ZOOM\.value\)/u);
@@ -1414,6 +1469,24 @@ test('React selection prompts remeasure when their card remounts', async () => {
       assert.equal(measured, before + 1, 'unchanged visibility must not trigger a render loop');
     }
   }
+});
+
+test('the comments guide does not promise the tracked panel continues its interface', async () => {
+  // tracked-changes.mdx restarts from the setup guide and replaces index.html with
+  // custom-tracked-review.html, which carries no comments markup, so the link must not read as
+  // an addition to the panel the reader just built.
+  const page = await readFile(
+    new URL('../content/docs/editor/custom-ui/comments.mdx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(page, /the same review interface/u);
+  assert.match(page, /separate workflow rather than a panel you add to\nthis one/u);
+
+  const fixture = await readFile(
+    new URL('../snippets/editor/custom-tracked-review.html', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(fixture, /comment/iu, 'the tracked fixture still omits the comments panel');
 });
 
 test('the selection guide separates SelectionTarget from the geometry fallback', async () => {

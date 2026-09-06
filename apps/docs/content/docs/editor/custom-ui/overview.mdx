@@ -39,7 +39,39 @@ executes the action through the same controller as SuperDoc's built-in toolbar.
 The control follows one reusable pattern: observe state, render it, execute the action, and inspect the result. The
 [custom UI example](https://go.superdoc.dev/examples/custom-ui) contains the complete runnable project.
 
-## Build your first control
+## Follow the core path
 
-Continue with [Custom UI setup](/editor/custom-ui/controller-setup) to connect one control to a real DOCX and manage its
-lifecycle.
+If this is your first custom UI, read these guides in this order:
+
+1. [Build your first custom control](/editor/custom-ui/controller-setup) and move Bold into your application.
+2. [Keep commands and controls in sync](/editor/custom-ui/commands-and-state) as the selection changes.
+3. [Build a custom toolbar](/editor/custom-ui/formatting-controls) with a toggle and value pickers.
+4. [Add document controls](/editor/custom-ui/zoom-and-document-state) for zoom and DOCX download.
+
+Only the first guide is a prerequisite. It establishes the controller setup the rest build on, so you can stop after
+any step. Step 2 explains how command state stays in sync and asks you to change nothing; steps 3 and 4 each replace
+that setup's Editor code rather than the guide before it.
+
+Steps 3 and 4 take the toolbar in different directions and are alternatives rather than a sequence: the custom toolbar
+owns the toolbar markup outright, while document controls keep SuperDoc's toolbar and remove only Zoom. Read both before
+combining them.
+
+## Choose a workflow
+
+After the first control, choose only the workflows your product needs. These guides are independent unless a page names
+a prerequisite.
+
+| Your application needs to                                    | Guide                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Own the comment thread list and actions                      | [Comments](/editor/custom-ui/comments)                             |
+| Own the queue for accepting or rejecting revisions           | [Track changes](/editor/custom-ui/tracked-changes)                 |
+| Navigate and edit structured document fields                 | [Content controls](/editor/custom-ui/content-controls)             |
+| Own a visual find and replace session                        | [Search](/editor/custom-ui/search)                                 |
+| Replace the menu shown for a pointer or keyboard interaction | [Context menu](/editor/custom-ui/context-menus)                    |
+| Show table actions that follow the active cell               | [Tables](/editor/custom-ui/tables)                                 |
+| Position an AI prompt beside selected text                   | [Selection and position](/editor/custom-ui/selection-and-viewport) |
+| Turn an application finding into a tracked suggestion        | [Review findings](/editor/custom-ui/review-highlights)             |
+| Share one application action across multiple controls        | [Custom commands](/editor/custom-ui/custom-commands)               |
+
+Use [Dialogs and surfaces](/editor/dialogs-and-surfaces) when your application only needs content in a SuperDoc-managed
+layer. Use [Themes and fonts](/editor/themes-and-fonts) to style SuperDoc chrome or resolve fonts used by the DOCX.

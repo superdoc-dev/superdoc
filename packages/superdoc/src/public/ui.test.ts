@@ -7423,13 +7423,319 @@ describe('public ui — document control parity (row 742)', () => {
     expect(setDocumentMode).toHaveBeenCalledWith('suggesting');
   });
 
+  it('tracks local V2 mutations until the current document changes', async () => {
+    const hostEventListeners: Array<(event: Record<string, unknown>) => void> = [];
+    const instanceEventListeners = new Map<string, (payload?: unknown) => void>();
+    const makeHost = () => ({
+      events: {
+        subscribe: (listener: (event: Record<string, unknown>) => void) => {
+          hostEventListeners.push(listener);
+          return () => undefined;
+        },
+      },
+    });
+    const doc = {
+      comments: { list: () => ({ items: [] }) },
+      trackChanges: { list: () => ({ items: [] }) },
+      selection: { current: () => null },
+    };
+    const firstHost = makeHost();
+    const exportFn = vi.fn(() => new Blob(['document']));
+    const superdoc = {
+      activeEditor: { doc, host: firstHost },
+      config: { documentMode: 'editing' },
+      export: exportFn,
+      on: vi.fn((event: string, listener: (payload?: unknown) => void) => {
+        instanceEventListeners.set(event, listener);
+      }),
+      off: vi.fn(),
+    };
+    const ui = createSuperDocUI({ superdoc });
+    const observedDirtyStates: boolean[] = [];
+    const stopObserving = ui.document.observe((documentState) => observedDirtyStates.push(documentState.dirty));
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    hostEventListeners.at(-1)?.({
+      type: 'collaboration:remote-changed',
+      changedStoryIds: ['main:/word/document.xml'],
+      changedPartUris: ['/word/document.xml'],
+    });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    hostEventListeners.at(-1)?.({ type: 'mutation:committed', editableCommandKind: 'insert-text' });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+    expect(observedDirtyStates.at(-1)).toBe(true);
+
+    await ui.document.export({ exportType: ['docx'], triggerDownload: false });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    instanceEventListeners.get('document-replaced')?.({ editor: superdoc.activeEditor, host: firstHost });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    expect(observedDirtyStates.at(-1)).toBe(false);
+
+    hostEventListeners.at(-1)?.({ type: 'mutation:committed' });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    const secondHost = makeHost();
+    superdoc.activeEditor = { doc, host: secondHost };
+    instanceEventListeners.get('active-editor-change')?.();
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    stopObserving();
+  });
+
+  it('keeps per-editor dirty state across active-editor switches', () => {
+    const listenersByHost = new Map<object, (event: Record<string, unknown>) => void>();
+    const instanceEventListeners = new Map<string, (payload?: unknown) => void>();
+    const makeHost = () => {
+      const host = {
+        events: {
+          subscribe: (listener: (event: Record<string, unknown>) => void) => {
+            listenersByHost.set(host, listener);
+            return () => undefined;
+          },
+        },
+      };
+      return host;
+    };
+    const doc = {
+      comments: { list: () => ({ items: [] }) },
+      trackChanges: { list: () => ({ items: [] }) },
+      selection: { current: () => null },
+    };
+    const hostA = makeHost();
+    const hostB = makeHost();
+    const editorA = { doc, host: hostA };
+    const editorB = { doc, host: hostB };
+    const superdoc = {
+      activeEditor: editorA as { doc: typeof doc; host: object },
+      config: { documentMode: 'editing' },
+      on: vi.fn((event: string, listener: (payload?: unknown) => void) => {
+        instanceEventListeners.set(event, listener);
+      }),
+      off: vi.fn(),
+    };
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    listenersByHost.get(hostA)?.({ type: 'document:mutated', source: 'input', revision: 1 });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    superdoc.activeEditor = editorB;
+    instanceEventListeners.get('active-editor-change')?.();
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    superdoc.activeEditor = editorA;
+    instanceEventListeners.get('active-editor-change')?.();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    // Exporting bytes is not persistence: the host's save event leaves A dirty.
+    listenersByHost.get(hostA)?.({ type: 'save:completed', saveId: 's1', byteLength: 10 });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+  });
+
+  it.each([
+    { initialRevision: 0, inactiveRevision: 1, readFails: false, expectedDirty: true },
+    { initialRevision: 1, inactiveRevision: 0, readFails: false, expectedDirty: false },
+    { initialRevision: 1, inactiveRevision: 0, readFails: true, expectedDirty: true },
+  ])(
+    'reconciles an inactive editor revision from $initialRevision to $inactiveRevision (readFails: $readFails)',
+    ({ initialRevision, inactiveRevision, readFails, expectedDirty }) => {
+      const instanceListeners = new Map<string, () => void>();
+      const makeHost = () => ({
+        revision: 0,
+        getLocalMutationRevision() {
+          return this.revision;
+        },
+        events: { subscribe: vi.fn(() => vi.fn()) },
+      });
+      const doc = {
+        comments: { list: () => ({ items: [] }) },
+        trackChanges: { list: () => ({ items: [] }) },
+        selection: { current: () => null },
+      };
+      const editorA = { doc, host: makeHost() };
+      const editorB = { doc, host: makeHost() };
+      editorA.host.revision = initialRevision;
+      const superdoc = {
+        activeEditor: editorA,
+        config: { documentMode: 'editing' },
+        on: vi.fn((name: string, listener: () => void) => instanceListeners.set(name, listener)),
+        off: vi.fn(),
+      };
+      const ui = createSuperDocUI({ superdoc });
+      expect(ui.document.getSnapshot().dirty).toBe(initialRevision > 0);
+      superdoc.activeEditor = editorB;
+      instanceListeners.get('active-editor-change')?.();
+      expect(editorA.host.events.subscribe.mock.results[0].value).toHaveBeenCalled();
+      editorA.host.revision = inactiveRevision;
+      if (readFails) {
+        vi.spyOn(editorA.host, 'getLocalMutationRevision').mockImplementation(() => {
+          throw new Error('Revision unavailable');
+        });
+      }
+      expect(ui.document.getSnapshot().dirty).toBe(false);
+      superdoc.activeEditor = editorA;
+      instanceListeners.get('active-editor-change')?.();
+      expect(ui.document.getSnapshot().dirty).toBe(expectedDirty);
+    },
+  );
+
+  it('clears dirty state when the host replaces the document from collaboration', () => {
+    const hostEventListeners: Array<(event: Record<string, unknown>) => void> = [];
+    const doc = {
+      comments: { list: () => ({ items: [] }) },
+      trackChanges: { list: () => ({ items: [] }) },
+      selection: { current: () => null },
+    };
+    let revision = 0;
+    const host = {
+      getLocalMutationRevision: () => revision,
+      events: {
+        subscribe: (listener: (event: Record<string, unknown>) => void) => {
+          hostEventListeners.push(listener);
+          return () => undefined;
+        },
+      },
+    };
+    const ui = createSuperDocUI({
+      superdoc: { activeEditor: { doc, host }, config: { documentMode: 'editing' }, on: vi.fn(), off: vi.fn() },
+    });
+    revision = 1;
+    hostEventListeners.at(-1)?.({ type: 'document:mutated', source: 'input', revision });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    // The host reopened the remote document and reset its revision.
+    revision = 0;
+    hostEventListeners.at(-1)?.({
+      type: 'collaboration:document-replaced',
+      previousSource: { kind: 'remote' },
+      source: { kind: 'remote' },
+    });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+  });
+
+  it('seeds dirty state from a host that was edited before the controller existed', () => {
+    const doc = {
+      comments: { list: () => ({ items: [] }) },
+      trackChanges: { list: () => ({ items: [] }) },
+      selection: { current: () => null },
+    };
+    const host = {
+      getLocalMutationRevision: vi.fn(() => 3),
+      events: { subscribe: () => () => undefined },
+    };
+    const superdoc = {
+      activeEditor: { doc, host },
+      config: { documentMode: 'editing' },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+    expect(host.getLocalMutationRevision).toHaveBeenCalled();
+  });
+
+  it('marks non-receipt document mutations dirty through document:mutated', () => {
+    const hostEventListeners: Array<(event: Record<string, unknown>) => void> = [];
+    const doc = {
+      comments: { list: () => ({ items: [] }) },
+      trackChanges: { list: () => ({ items: [] }) },
+      selection: { current: () => null },
+    };
+    const host = {
+      getLocalMutationRevision: () => 0,
+      events: {
+        subscribe: (listener: (event: Record<string, unknown>) => void) => {
+          hostEventListeners.push(listener);
+          return () => undefined;
+        },
+      },
+    };
+    const ui = createSuperDocUI({
+      superdoc: { activeEditor: { doc, host }, config: { documentMode: 'editing' }, on: vi.fn(), off: vi.fn() },
+    });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    // A `create.table` result never emits `mutation:committed`; the dedicated
+    // signal is the only thing that fires.
+    hostEventListeners.at(-1)?.({ type: 'document:mutated', source: 'facade', revision: 1 });
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+  });
+
+  it('leaves the document clean for previews and no-op committed mutations', () => {
+    const mountUi = () => {
+      const hostEventListeners: Array<(event: Record<string, unknown>) => void> = [];
+      const doc = {
+        comments: { list: () => ({ items: [] }) },
+        trackChanges: { list: () => ({ items: [] }) },
+        selection: { current: () => null },
+      };
+      const host = {
+        getLocalMutationRevision: () => 0,
+        events: {
+          subscribe: (listener: (event: Record<string, unknown>) => void) => {
+            hostEventListeners.push(listener);
+            return () => undefined;
+          },
+        },
+      };
+      const ui = createSuperDocUI({
+        superdoc: { activeEditor: { doc, host }, config: { documentMode: 'editing' }, on: vi.fn(), off: vi.fn() },
+      });
+      return { ui, emit: (event: Record<string, unknown>) => hostEventListeners.at(-1)?.(event) };
+    };
+
+    // A dry-run preview emits `mutation:committed` with `dryRun: true`.
+    const preview = mountUi();
+    preview.emit({ type: 'mutation:committed', origin: 'command', dryRun: true, receipt: { success: true } });
+    expect(preview.ui.document.getSnapshot().dirty).toBe(false);
+
+    // Applying a list a range already has commits a synthetic `changed: false`
+    // receipt: the toolbar sees success, but no document bytes changed.
+    const noop = mountUi();
+    noop.emit({ type: 'mutation:committed', origin: 'command', receipt: { success: true, changed: false } });
+    expect(noop.ui.document.getSnapshot().dirty).toBe(false);
+
+    const statusNoop = mountUi();
+    statusNoop.emit({ type: 'mutation:committed', origin: 'command', receipt: { success: true, status: 'NO_OP' } });
+    expect(statusNoop.ui.document.getSnapshot().dirty).toBe(false);
+
+    const typedNoop = mountUi();
+    typedNoop.emit({ type: 'mutation:committed', origin: 'command', receipt: { success: true, noop: true } });
+    expect(typedNoop.ui.document.getSnapshot().dirty).toBe(false);
+
+    // A real committed mutation still marks the document dirty.
+    const edit = mountUi();
+    edit.emit({ type: 'mutation:committed', origin: 'command', receipt: { success: true } });
+    expect(edit.ui.document.getSnapshot().dirty).toBe(true);
+  });
+
+  it('preserves an editor-provided dirty state', () => {
+    const superdoc = makeDocControlSuperdoc();
+    Object.assign(superdoc.activeEditor, { isDirty: true });
+
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+  });
+
   it('export resolves through superdoc.export', async () => {
-    const blob = { size: 42 };
+    const blob = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const params = { exportType: ['docx'], triggerDownload: false } as const;
     const exportFn = vi.fn(() => blob);
     const superdoc = makeDocControlSuperdoc({ instance: { export: exportFn } });
     const ui = createSuperDocUI({ superdoc });
-    await expect(ui.document.export({ exportType: ['docx'] })).resolves.toBe(blob);
-    expect(exportFn).toHaveBeenCalledWith({ exportType: ['docx'] });
+    const result = await ui.document.export(params);
+
+    expect(result).toBe(blob);
+    expect(result).toBeInstanceOf(Blob);
+    expect(result?.size).toBe(4);
+    expect(result?.type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    expect(exportFn).toHaveBeenCalledOnce();
+    expect(exportFn).toHaveBeenCalledWith(params);
   });
 
   it('replaceFile routes through the host replaceFile/loadDocument capability', async () => {
@@ -14682,6 +14988,53 @@ describe('public ui — async browser reads (read coordinator)', () => {
     };
     return { superdoc, notifySelection: () => notifySelection() };
   }
+
+  it('refreshes settled content-control observers for consecutive standalone document mutations', async () => {
+    const hostEvents: Array<(event: Record<string, unknown>) => void> = [];
+    let items = [ASYNC_CONTENT_CONTROL];
+    const listInRange = vi.fn(async () => ({ items }));
+    const { superdoc } = makeAsyncSuperdoc({ hostEvents, contentControls: { listInRange } });
+    const ui = createSuperDocUI({ superdoc });
+    const observed: string[][] = [];
+    const stop = ui.contentControls.observe((snapshot) => observed.push([...snapshot.activeIds]));
+    await flush();
+    expect(ui.contentControls.getSnapshot().activeIds).toEqual(['cc-1']);
+
+    for (const id of ['cc-2', 'cc-3']) {
+      items = [{ ...ASYNC_CONTENT_CONTROL, id }];
+      hostEvents.at(-1)?.({ type: 'document:mutated', source: 'facade', hasCommitEvent: false });
+      await flush();
+      expect(ui.contentControls.getSnapshot().activeIds).toEqual([id]);
+      expect(observed.at(-1)).toEqual([id]);
+      expect(ui.document.getSnapshot().dirty).toBe(true);
+    }
+    expect(listInRange).toHaveBeenCalledTimes(3);
+    stop();
+    ui.destroy();
+  });
+
+  it.each(['before', 'after'] as const)(
+    'does not refresh twice when document:mutated comes %s its commit event',
+    async (order) => {
+      const hostEvents: Array<(event: Record<string, unknown>) => void> = [];
+      const listInRange = vi.fn(async () => ({ items: [ASYNC_CONTENT_CONTROL] }));
+      const { superdoc } = makeAsyncSuperdoc({ hostEvents, contentControls: { listInRange } });
+      const ui = createSuperDocUI({ superdoc });
+      await flush();
+      const emitDocumentMutation = () =>
+        hostEvents.at(-1)?.({
+          type: 'document:mutated',
+          source: 'facade',
+          hasCommitEvent: true,
+        });
+      if (order === 'before') emitDocumentMutation();
+      hostEvents.at(-1)?.({ type: 'mutation:committed', receipt: { success: true } });
+      if (order === 'after') emitDocumentMutation();
+      await flush();
+      expect(listInRange).toHaveBeenCalledTimes(2);
+      ui.destroy();
+    },
+  );
 
   it('settles promise-returning selection/comments/trackChanges/contentControls into slices', async () => {
     const { superdoc } = makeAsyncSuperdoc();

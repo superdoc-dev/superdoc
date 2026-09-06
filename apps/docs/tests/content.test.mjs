@@ -18,7 +18,12 @@ const docsHomeUrl = new URL('../components/docs-home.tsx', import.meta.url);
 const builtInUiMetaUrl = new URL('../content/docs/editor/built-in-ui/meta.json', import.meta.url);
 const builtInUiMapUrl = new URL('../components/embeds/built-in-ui-map.tsx', import.meta.url);
 const editorDemoUrl = new URL('../components/embeds/editor-demo.tsx', import.meta.url);
+const editorDemoZoomUrl = new URL('../components/embeds/editor-demo-zoom.ts', import.meta.url);
 const customBoldDemoUrl = new URL('../components/embeds/custom-bold-demo.tsx', import.meta.url);
+const customDocumentControlsDemoUrl = new URL(
+  '../components/embeds/custom-document-controls-demo.tsx',
+  import.meta.url,
+);
 const customUiMetaUrl = new URL('../content/docs/editor/custom-ui/meta.json', import.meta.url);
 const customUiSetupPageUrl = new URL('../content/docs/editor/custom-ui/controller-setup.mdx', import.meta.url);
 const customToolbarPageUrl = new URL('../content/docs/editor/custom-ui/formatting-controls.mdx', import.meta.url);
@@ -67,6 +72,7 @@ const builtInToolbarPageUrl = new URL(
 const redirectsConfigUrl = new URL('../config/redirects.json', import.meta.url);
 const builtInEditorDemoDataUrl = new URL('../lib/built-in-editor-demos.ts', import.meta.url);
 const customUiControllerExampleUrl = new URL('../snippets/editor/custom-ui-controller.ts', import.meta.url);
+const customUiControllerMarkupUrl = new URL('../snippets/editor/custom-ui-controller.html', import.meta.url);
 const reactToolbarExampleUrl = new URL('../snippets/editor/react-custom-toolbar.tsx', import.meta.url);
 const customToolbarExampleUrl = new URL('../snippets/editor/custom-toolbar.ts', import.meta.url);
 const reactCustomToolbarExampleUrl = new URL(
@@ -112,6 +118,16 @@ const reactBuiltInContextMenuExampleUrl = new URL('../snippets/editor/react-buil
 const customContextMenuExampleUrl = new URL('../snippets/editor/custom-context-menu.ts', import.meta.url);
 const reactCustomContextMenuExampleUrl = new URL(
   '../snippets/editor/react-custom-context-menu.tsx',
+  import.meta.url,
+);
+const customDocumentControlsExampleUrl = new URL('../snippets/editor/custom-zoom-document.ts', import.meta.url);
+const customDocumentControlsMarkupUrl = new URL('../snippets/editor/custom-zoom-document.html', import.meta.url);
+const reactCustomDocumentControlsExampleUrl = new URL(
+  '../snippets/editor/react-custom-zoom-document.tsx',
+  import.meta.url,
+);
+const customDocumentControlsPageUrl = new URL(
+  '../content/docs/editor/custom-ui/zoom-and-document-state.mdx',
   import.meta.url,
 );
 const documentApiReferenceModelUrl = new URL('../generated/document-api-reference.json', import.meta.url);
@@ -181,6 +197,7 @@ const registeredComponents = new Set([
   'CustomBoldDemo',
   'CustomCommentsDemo',
   'CustomContentControlsDemo',
+  'CustomDocumentControlsDemo',
   'CustomSearchDemo',
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
@@ -532,9 +549,10 @@ test('the React toolbar example uses command ids from the public v2 command cata
 });
 
 test('the custom UI setup preserves selection and shares the Editor-owned controller', async () => {
-  const markupUrl = new URL('../snippets/editor/custom-ui-controller.html', import.meta.url);
   const [markup, vanilla, react] = await Promise.all(
-    [markupUrl, customUiControllerExampleUrl, reactToolbarExampleUrl].map((url) => readFile(url, 'utf8')),
+    [customUiControllerMarkupUrl, customUiControllerExampleUrl, reactToolbarExampleUrl].map((url) =>
+      readFile(url, 'utf8'),
+    ),
   );
 
   for (const example of [vanilla, react]) {
@@ -545,9 +563,12 @@ test('the custom UI setup preserves selection and shares the Editor-owned contro
 
   assert.match(markup, /id="toolbar"/u);
   assert.match(vanilla, /container: '#toolbar'/u);
+  assert.match(vanilla, /const editorUi = \{/u);
   assert.match(vanilla, /ui: editorUi/u);
   assert.match(vanilla, /readySuperDoc\.ui\.commands\.get\('bold'\)/u);
   assert.match(vanilla, /bold\.executeAsync\(\)/u);
+  assert.match(react, /const editorUi = \{/u);
+  assert.match(react, /\} satisfies UIConfig/u);
   assert.doesNotMatch(react, /container: '#toolbar'/u);
   assert.match(react, /useSuperDocCommand\('bold'\)/u);
   assert.match(react, /bold\.executeAsync\(\)/u);
@@ -681,7 +702,7 @@ test('the custom comments examples replace one surface with a focused workflow',
   assert.match(demo, /instance\.ui\.zoom\.set\(INITIAL_ZOOM\.value\)/u);
   assert.match(demo, /instance\.ui\.comments\.observe/u);
   assert.match(demo, /instance\.ui\.zoom\.observe/u);
-  assert.match(demo, /ui\.zoom\.setMode\('fit-width'\)/u);
+  assert.match(demo, /fitRuntimeEditorToWidth\(instanceRef\.current\)/u);
   assert.match(demo, /comments\.createFromCapture/u);
   assert.match(demo, /commentsHandle\?\.setActive/u);
   assert.match(demo, /commentsHandle\.scrollTo/u);
@@ -767,7 +788,7 @@ test('the custom tracked-change examples build one application-owned review pane
   assert.match(demo, /instance\.ui\.zoom\.set\(INITIAL_ZOOM\.value\)/u);
   assert.match(demo, /instance\.ui\.trackChanges\.observe/u);
   assert.match(demo, /instance\.ui\.zoom\.observe/u);
-  assert.match(demo, /ui\.zoom\.setMode\('fit-width'\)/u);
+  assert.match(demo, /fitRuntimeEditorToWidth\(instanceRef\.current\)/u);
   assert.match(demo, /trackChangesHandle\.navigatePrevious/u);
   assert.match(demo, /trackChangesHandle\.navigateNext/u);
   // The demo awaits the one Document API operation a decision routes to, so
@@ -801,7 +822,7 @@ test('the custom content-control examples build one application-owned field pane
   assert.match(demo, /instance\.ui\.zoom\.set\(INITIAL_ZOOM\.value\)/u);
   assert.match(demo, /instance\.ui\.contentControls\.observe/u);
   assert.match(demo, /instance\.ui\.zoom\.observe/u);
-  assert.match(demo, /ui\.zoom\.setMode\('fit-width'\)/u);
+  assert.match(demo, /fitRuntimeEditorToWidth\(instanceRef\.current\)/u);
   assert.match(demo, /textControls\.setValue/u);
   assert.match(demo, /checkboxes\.setState/u);
   assert.match(demo, /mutationIsObserved/u);
@@ -898,7 +919,7 @@ test('the custom Search examples replace only the built-in surface', async () =>
   assert.match(demo, /clientWidth.*NARROW_DEMO_WIDTH/u);
   assert.match(demo, /instance\.ui\.search\.observe/u);
   assert.match(demo, /instance\.ui\.zoom\.observe/u);
-  assert.match(demo, /ui\.zoom\.setMode\('fit-width'\)/u);
+  assert.match(demo, /fitRuntimeEditorToWidth\(instanceRef\.current\)/u);
   assert.match(demo, /ui\.search\.close\(\)/u);
   assert.match(demo, /replacementPending/u);
 
@@ -993,6 +1014,59 @@ test('the custom context-menu examples replace only the built-in surface', async
   assert.match(html, /<script type="module" src="\/src\/main\.ts"><\/script>/u);
 });
 
+test('the custom document controls replace only built-in zoom', async () => {
+  const [markup, vanilla, react] = await Promise.all(
+    [customDocumentControlsMarkupUrl, customDocumentControlsExampleUrl, reactCustomDocumentControlsExampleUrl].map(
+      (url) => readFile(url, 'utf8'),
+    ),
+  );
+
+  for (const example of [vanilla, react]) {
+    assert.match(example, /document(?:=|:)\s*['"]\/sample\.docx['"]/u);
+    assert.match(example, /excludeItems: \['zoom'\]/u);
+    assert.match(example, /ui(?::\s*editorUi|=\{editorUi\})/u);
+    assert.match(example, /zoom\.set\(/u);
+    assert.match(example, /zoom\.setMode\('fit-width'\)/u);
+    assert.match(example, /document\.export\(\{ exportType: \['docx'\], triggerDownload: true \}\)/u);
+    assert.match(example, /documentState\.mode|currentDocument\.mode/u);
+    assert.match(example, /The document could not be read or updated\./u);
+    assert.match(example, /The editor reported a runtime error\./u);
+    assert.doesNotMatch(example, /\/contract\.docx|setMode\('manual'\)|toolbar: false/u);
+  }
+
+  assert.match(markup, /id="toolbar"/u);
+  assert.match(markup, /id="document-error" role="alert"/u);
+  assert.match(vanilla, /container: '#toolbar'/u);
+  assert.match(vanilla, /ui\.zoom\.observe\(render\)/u);
+  assert.match(vanilla, /ui\.document\.observe\(render\)/u);
+  assert.match(vanilla, /if \(exportInFlight\) return;/u);
+  assert.match(vanilla, /exportButton\.disabled = !currentDocument\.ready \|\| exportInFlight/u);
+  assert.match(react, /useSuperDocZoom\(\)/u);
+  assert.match(react, /useSuperDocDocument\(\)/u);
+  assert.match(react, /if \(exportInFlight\.current\) return;/u);
+  assert.match(react, /!documentState\.ready \|\| isExporting/u);
+  assert.doesNotMatch(react, /container: '#toolbar'/u);
+});
+
+test('the custom document controls demo shows a partial ownership handoff', async () => {
+  const [page, demo] = await Promise.all(
+    [customDocumentControlsPageUrl, customDocumentControlsDemoUrl].map((url) => readFile(url, 'utf8')),
+  );
+
+  assert.match(page, /<CustomDocumentControlsDemo \/>/u);
+  assert.match(demo, /data-custom-document-controls-demo/u);
+  assert.match(demo, /excludeItems: \['zoom'\]/u);
+  assert.match(demo, /ui\.zoom\.observe\(setZoom\)/u);
+  assert.match(demo, /ui\.document\.observe\(setDocumentState\)/u);
+  assert.match(demo, /if \(!ui \|\| exportInFlightRef\.current\) return;/u);
+  assert.match(demo, /disabled=\{!controlsReady \|\| isExporting\}/u);
+  // A content error after onReady is reported beside the live editor; only an
+  // initial-load failure tears the session down.
+  assert.match(demo, /if \(readyRef\.current\) \{\s+setRuntimeError\(/u);
+  assert.match(demo, />\s*Your application\s*</u);
+  assert.match(demo, />\s*SuperDoc UI\s*</u);
+});
+
 test('the built-in Editor demos keep focused controls and restart-safe configuration changes', async () => {
   const demo = await readFile(editorDemoUrl, 'utf8');
 
@@ -1044,6 +1118,35 @@ test('the built-in Editor demos keep focused controls and restart-safe configura
   assert.match(demo, /label='Ruler'[\s\S]*label='Measurements'/u);
   assert.match(demo, /label='Replace controls'/u);
   assert.match(demo, /label='Tracked deletions'/u);
+});
+
+test('the shared Editor demo fit-width helper uses V2 base page metrics', async () => {
+  const { EDITOR_DEMO_FIT_WIDTH_PADDING, fitRuntimeEditorToWidth } = await import(editorDemoZoomUrl);
+  const calls = [];
+  const instance = {
+    activeEditor: {
+      pageMetrics: {
+        getSnapshot: () => ({
+          pages: [{ base: { widthPx: 816 } }, { base: { widthPx: 1056 } }],
+        }),
+      },
+    },
+    getViewportMetrics: () => ({ availableWidth: 658 }),
+    getZoomState: () => ({ max: 100, min: 50 }),
+    ui: {
+      zoom: {
+        set: (value) => calls.push(['set', value]),
+        setMode: (mode) => calls.push(['setMode', mode]),
+      },
+    },
+  };
+
+  assert.equal(EDITOR_DEMO_FIT_WIDTH_PADDING, 2);
+  assert.equal(fitRuntimeEditorToWidth(instance), true);
+  assert.deepEqual(calls, [
+    ['set', 62],
+    ['setMode', 'fit-width'],
+  ]);
 });
 
 test('the shared Editor demo view controls preserve every interaction contract', async () => {

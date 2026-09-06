@@ -1917,8 +1917,8 @@
   }
 }
 
-/* Live application-owned formatting controls. The overview, ownership handoff,
-   and toolbar pages share one Editor frame so the journey feels continuous. */
+/* Live application-owned controls. The custom UI journey reuses this Editor
+   frame so each ownership handoff feels like the next step in one project. */
 .sd-custom-bold-demo {
   --sd-custom-ui-text-secondary: #5a5a61;
   margin-block: 1.5rem;
@@ -2143,6 +2143,53 @@
   border-top: 1px solid var(--sd-border-soft);
   color: var(--sd-custom-ui-text-secondary);
   font-size: 0.8125rem;
+}
+
+.sd-custom-document-controls-toolbar {
+  gap: 0.625rem;
+}
+
+.sd-custom-document-controls-toolbar .sd-custom-bold-demo-state {
+  order: 2;
+  flex-basis: 100%;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--sd-border-soft);
+}
+
+.sd-custom-document-controls-zoom {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-md);
+}
+
+.sd-custom-document-controls-zoom button {
+  min-width: 2rem;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+}
+
+.sd-custom-document-controls-zoom button + button {
+  border-left: 1px solid var(--sd-border-soft);
+}
+
+.sd-custom-document-controls-canvas {
+  min-height: 28rem;
+}
+
+.sd-custom-document-controls-error {
+  margin: 0;
+  padding: 0.75rem 1.125rem;
+  border-bottom: 1px solid var(--sd-border-soft);
+  color: var(--sd-error);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 42rem) {
+  .sd-custom-document-controls-toolbar .sd-custom-bold-demo-owner {
+    flex-basis: 100%;
+  }
 }
 
 /* Custom UI ownership boundary, drawn as an editor. Solid borders are what

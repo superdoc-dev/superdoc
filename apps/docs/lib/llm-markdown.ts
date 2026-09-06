@@ -39,6 +39,7 @@ export const llmPlaceholderComponents = [
   'CustomBoldDemo',
   'CustomCommentsDemo',
   'CustomContentControlsDemo',
+  'CustomDocumentControlsDemo',
   'CustomSearchDemo',
   'CustomTrackChangesDemo',
   'CustomToolbarDemo',
@@ -192,6 +193,14 @@ export function renderLLMMarkdown(markdown: string) {
         '> **Live example: edit document fields from an application-owned panel**',
         '>',
         '> SuperDoc renders its toolbar and a two-page DOCX while the application renders a persistent field panel. Show in document moves between a text field on page 1 and a checkbox on page 2. The panel observes `ui.contentControls`, runs `activeEditor.doc.contentControls.text.setValue()` or `checkbox.setState()`, and stays pending until the observed field contains the new value.',
+        '',
+      ].join('\n');
+    },
+    CustomDocumentControlsDemo() {
+      return [
+        '> **Live example: build document-wide controls without replacing the toolbar**',
+        '>',
+        '> The application renders Zoom, the current document mode, and Download DOCX. SuperDoc renders the remaining built-in toolbar without its Zoom control. Changing zoom updates the percentage, and Download DOCX exports the current document.',
         '',
       ].join('\n');
     },

@@ -1,4 +1,6 @@
 import { SuperDoc } from 'superdoc';
+import type { UIConfig } from 'superdoc';
+import type { DocumentSlice } from 'superdoc/ui';
 import 'superdoc/style.css';
 
 const zoomOut = document.querySelector<HTMLButtonElement>('#zoom-out');
@@ -6,18 +8,42 @@ const fitWidth = document.querySelector<HTMLButtonElement>('#fit-width');
 const zoomIn = document.querySelector<HTMLButtonElement>('#zoom-in');
 const exportButton = document.querySelector<HTMLButtonElement>('#export');
 const status = document.querySelector<HTMLOutputElement>('#document-status');
+const errorMessage = document.querySelector<HTMLParagraphElement>('#document-error');
 
-if (!zoomOut || !fitWidth || !zoomIn || !exportButton || !status) {
+if (!zoomOut || !fitWidth || !zoomIn || !exportButton || !status || !errorMessage) {
   throw new Error('The document controls are incomplete.');
 }
 
 let stopObservers: Array<() => void> = [];
 let removeHandlers: (() => void) | null = null;
+let actionMessage = '';
+let exportInFlight = false;
+
+function modeLabel(mode: DocumentSlice['mode']) {
+  if (mode === 'editing') return 'Editing';
+  if (mode === 'suggesting') return 'Suggesting';
+  if (mode === 'viewing') return 'Viewing';
+  return 'Ready';
+}
+
+const editorUi = {
+  toolbar: {
+    container: '#toolbar',
+    excludeItems: ['zoom'],
+  },
+} satisfies UIConfig;
 
 const superdoc = new SuperDoc({
   selector: '#editor',
-  document: '/contract.docx',
+  document: '/sample.docx',
+  ui: editorUi,
   onReady: ({ superdoc: readySuperDoc }) => {
+    for (const stop of stopObservers) stop();
+    removeHandlers?.();
+    actionMessage = '';
+    exportInFlight = false;
+    errorMessage.textContent = '';
+
     const ui = readySuperDoc.ui;
 
     const render = () => {
@@ -25,33 +51,40 @@ const superdoc = new SuperDoc({
       const currentDocument = ui.document.getSnapshot();
       zoomOut.disabled = zoom.value <= zoom.min;
       zoomIn.disabled = zoom.value >= zoom.max;
+      fitWidth.disabled = false;
       fitWidth.setAttribute('aria-pressed', String(zoom.mode === 'fit-width'));
-      exportButton.disabled = !currentDocument.ready;
+      exportButton.disabled = !currentDocument.ready || exportInFlight;
       status.value = currentDocument.ready
-        ? `${currentDocument.dirty ? 'Unsaved changes' : 'Saved'} · ${zoom.value}% · ${currentDocument.mode ?? 'loading'}`
+        ? `${modeLabel(currentDocument.mode)} · ${zoom.value}%${actionMessage ? ` · ${actionMessage}` : ''}`
         : 'Loading the document…';
     };
 
     const changeZoom = (delta: number) => {
       const zoom = ui.zoom.getSnapshot();
-      ui.zoom.setMode('manual');
       ui.zoom.set(Math.min(zoom.max, Math.max(zoom.min, zoom.value + delta)));
     };
     const zoomOutHandler = () => changeZoom(-10);
     const zoomInHandler = () => changeZoom(10);
     const fitWidthHandler = () => ui.zoom.setMode('fit-width');
     const exportHandler = async () => {
-      status.value = 'Preparing the DOCX…';
-      const pendingExport = ui.document.export({ exportType: ['docx'] });
-      if (!pendingExport) {
-        status.value = 'Export is unavailable in this host.';
-        return;
-      }
+      if (exportInFlight) return;
+
+      exportInFlight = true;
+      actionMessage = 'Preparing the DOCX…';
+      render();
       try {
+        const pendingExport = ui.document.export({ exportType: ['docx'], triggerDownload: true });
+        if (!pendingExport) {
+          actionMessage = 'Export is unavailable in this host.';
+          return;
+        }
         await pendingExport;
-        status.value = 'DOCX downloaded.';
+        actionMessage = 'DOCX downloaded.';
       } catch (error) {
-        status.value = error instanceof Error ? error.message : 'The DOCX could not be exported.';
+        actionMessage = error instanceof Error ? error.message : 'The DOCX could not be exported.';
+      } finally {
+        exportInFlight = false;
+        render();
       }
     };
 
@@ -67,6 +100,14 @@ const superdoc = new SuperDoc({
       fitWidth.removeEventListener('click', fitWidthHandler);
       exportButton.removeEventListener('click', exportHandler);
     };
+  },
+  onContentError: ({ error }) => {
+    errorMessage.textContent = 'The document could not be read or updated.';
+    console.error(error);
+  },
+  onException: ({ error }) => {
+    errorMessage.textContent = 'The editor reported a runtime error.';
+    console.error(error);
   },
 });
 

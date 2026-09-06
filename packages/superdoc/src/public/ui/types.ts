@@ -101,6 +101,7 @@ import type {
 } from '@superdoc/document-api';
 
 import type { PartialBrowserDocumentApi } from '../browser-document-api.js';
+import type { ExportParams } from '../export-types.js';
 
 import type { SuperDocUIReason } from './reasons.js';
 import type { BuiltInCommandId } from './commands.js';
@@ -792,7 +793,7 @@ export interface DocumentSlice {
   ready: boolean;
   /** Current document mode. */
   mode: 'editing' | 'suggesting' | 'viewing' | null;
-  /** The document has unsaved changes. */
+  /** The current document has local changes. */
   dirty: boolean;
 }
 
@@ -1263,8 +1264,8 @@ export interface DocumentHandle extends SnapshotSubscribable<DocumentSlice> {
   getSnapshot(): DocumentSlice;
   /** Set the document mode (editing / suggesting / viewing). */
   setMode(mode: 'editing' | 'suggesting' | 'viewing'): void;
-  /** Export the document; returns the SuperDoc export promise when available. */
-  export(input?: unknown): Promise<unknown> | undefined;
+  /** Export the document and return the produced Blob, optionally downloading it. */
+  export(input?: ExportParams): Promise<Blob> | undefined;
   /** Read text through the Document API; `null` when unavailable. */
   getText(): string | null;
   /** Replace the active document file, when supported by the host. */
@@ -1567,7 +1568,7 @@ export interface SuperDocLike {
   /** Set the document mode across the instance. */
   setDocumentMode?(mode: string): unknown;
   /** Export the active document. */
-  export?(...args: unknown[]): Promise<unknown> | unknown;
+  export?(params?: ExportParams): Promise<Blob> | Blob;
   /** Set an absolute zoom value. */
   setZoom?(value: number): unknown;
   /** Set a zoom mode. */

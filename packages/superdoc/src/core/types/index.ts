@@ -52,6 +52,7 @@ import type { BrowserDocumentApi } from '../../public/browser-document-api.js';
 export type { BrowserDocumentApi } from '../../public/browser-document-api.js';
 
 import type { CustomCommandContext, FontFamilyOption as ToolbarFontFamilyOption } from '../../public/ui/types.js';
+export type { CommentsType, ExportParams, ExportType } from '../../public/export-types.js';
 
 /**
  * A row in a custom dropdown's option list, and the value handed back to the
@@ -2921,14 +2922,6 @@ export interface TrackChangesModuleConfig {
 
 export type DocumentMode = 'editing' | 'viewing' | 'suggesting';
 
-export type ExportType = 'docx';
-
-/**
- * - 'external': Include only external comments (default)
- * - 'clean': Export without any comments
- */
-export type CommentsType = 'external' | 'clean';
-
 /**
  * Document view layout values — mirrors OOXML ST_View (ECMA-376 §17.18.102).
  * - 'print': Print Layout View — displays document as it prints (default)
@@ -2947,31 +2940,6 @@ export interface ViewOptions {
    * rewraps content as the editor container changes width.
    */
   layout?: ViewLayout;
-}
-
-export interface ExportParams {
-  /** Browser export format. DOCX is the only supported output. */
-  exportType?: readonly [ExportType];
-  /** How to handle comments. */
-  commentsType?: CommentsType;
-  /** Custom filename (without extension). */
-  exportedName?: string;
-  /** Extra files to include in the export zip. */
-  additionalFiles?: globalThis.Blob[];
-  /** Filenames for the additional files. */
-  additionalFileNames?: string[];
-  /** Whether this is a final document export. */
-  isFinalDoc?: boolean;
-  /** Auto-download or return blob. */
-  triggerDownload?: boolean;
-  /**
-   * Color for field highlights. The runtime defaults to `null` when no
-   * value is supplied (and forwards `null` through to the underlying
-   * editor export, which accepts `string | null`); the typedef accepts
-   * `null` explicitly so consumers can pass an explicit "no highlight"
-   * value without a typecheck failure.
-   */
-  fieldsHighlightColor?: string | null;
 }
 
 /** Surface where the edit originated. */

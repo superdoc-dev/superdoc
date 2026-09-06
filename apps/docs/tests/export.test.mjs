@@ -52,7 +52,7 @@ const routes = [
   ['editor/custom-ui/content-controls/index.html', 'Build a document field panel'],
   ['editor/custom-ui/context-menus/index.html', 'Build an application-owned context menu'],
   ['editor/custom-ui/search/index.html', 'Build custom find and replace controls'],
-  ['editor/custom-ui/zoom-and-document-state/index.html', 'Control zoom and document state'],
+  ['editor/custom-ui/zoom-and-document-state/index.html', 'Build application document controls'],
   ['editor/custom-ui/selection-and-viewport/index.html', 'Preserve selections and position UI'],
   ['editor/custom-ui/review-highlights/index.html', 'Build durable review highlights'],
   ['editor/dialogs-and-surfaces/index.html', 'Open dialogs and floating surfaces'],
@@ -749,15 +749,31 @@ test('exports the custom toolbar workflow as clean Markdown', async () => {
 });
 
 test('exports custom document controls as clean Markdown', async () => {
+  const article = await readFile(
+    new URL('../out/editor/custom-ui/zoom-and-document-state/index.html', import.meta.url),
+    'utf8',
+  );
   const markdown = await readFile(
     new URL('../out/md/editor/custom-ui/zoom-and-document-state.md', import.meta.url),
     'utf8',
   );
 
+  assert.match(article, /data-custom-document-controls-demo="true"/);
+  assert.match(markdown, /> \*\*Live example: build document-wide controls without replacing the toolbar\*\*/);
+  assert.match(markdown, /\*\*Vanilla — `src\/main\.ts`\*\*/);
+  assert.match(markdown, /\*\*React — `src\/App\.tsx`\*\*/);
+  assert.match(markdown, /excludeItems: \['zoom'\]/);
   assert.match(markdown, /ui\.zoom\.setMode\('fit-width'\)/);
   assert.match(markdown, /ui\.document\.observe\(render\)/);
+  assert.match(markdown, /useSuperDocZoom\(\)/);
+  assert.match(markdown, /useSuperDocDocument\(\)/);
   assert.match(markdown, /if \(!pendingExport\)/);
-  assert.match(markdown, /dirty.*prompt to save or export/s);
+  assert.match(markdown, /triggerDownload: true/);
+  assert.match(markdown, /exportInFlight/);
+  assert.match(markdown, /`mode` field reports whether\s+the Editor is in editing, suggesting, or viewing mode/s);
+  assert.match(markdown, /ui\.document\.getSnapshot\(\)/);
+  assert.doesNotMatch(markdown, /`ui\.document\.(?:ready|mode)`/);
+  assert.doesNotMatch(markdown, /<CustomDocumentControlsDemo\b/);
   assert.doesNotMatch(markdown, /<include>/);
 });
 

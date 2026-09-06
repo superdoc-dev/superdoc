@@ -1663,6 +1663,19 @@ function isSuccessfulReceipt(result: CommandExecutionResult): result is Extract<
   return Boolean(result) && typeof result === 'object' && (result as LooseRecord).success === true;
 }
 
+/**
+ * The host also emits `mutation:committed` for previews and no-op receipts;
+ * those events must not mark the document as having unsaved edits.
+ */
+function mutationCommittedEventChangedDocument(event: LooseRecord): boolean {
+  if (event.dryRun === true) return false;
+  const receipt = event.receipt;
+  if (receipt && typeof receipt === 'object' && (receipt as LooseRecord).changed === false) return false;
+  if (receipt && typeof receipt === 'object' && (receipt as LooseRecord).noop === true) return false;
+  if (receipt && typeof receipt === 'object' && (receipt as LooseRecord).status === 'NO_OP') return false;
+  return true;
+}
+
 function commandResultSucceeded(result: CommandExecutionResult): boolean {
   if (result === false) return false;
   if (result && typeof result === 'object' && (result as LooseRecord).success === false) return false;
@@ -2682,6 +2695,35 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   let allTrackedChangesResolvedToken: string | null = null;
   let selectionEpoch = 0;
   let lastCoordinatorEditor: LooseRecord | null = null;
+  /**
+   * Fallback dirty state for editors that do not expose `isDirty` (V2). Kept
+   * per host so switching the active editor away and back does not forget an
+   * edit, and seeded from the host's local mutation revision so a controller
+   * created after the first edit still reports it. A document replacement or
+   * a verified zero revision clears an entry: `save:completed` fires for every DOCX export,
+   * including a download, and producing bytes is not persistence.
+   */
+  const dirtyHosts = new WeakSet<object>();
+  const hostSeededMutationRevision = new WeakMap<object, number>();
+  const seedLocalDocumentMutation = (host: LooseRecord): void => {
+    if (hostSeededMutationRevision.has(host)) return;
+    const revision =
+      typeof host.getLocalMutationRevision === 'function'
+        ? safeCall<unknown>(() => host.getLocalMutationRevision(), null)
+        : null;
+    const seeded = typeof revision === 'number' ? revision : 0;
+    hostSeededMutationRevision.set(host, seeded);
+    if (seeded > 0) dirtyHosts.add(host);
+    else if (revision === 0) dirtyHosts.delete(host);
+  };
+  // Seeds on first read as well as on subscription: the initial state is
+  // computed before the host subscription is wired.
+  const hasLocalDocumentMutation = (): boolean => {
+    const host = getHost();
+    if (!host) return false;
+    seedLocalDocumentMutation(host);
+    return dirtyHosts.has(host);
+  };
 
   /** Token shared by document-content reads (editor identity + mutation revision). */
   const contentToken = (): string => `${editorIdentityId(getEditor())}|m${documentMutationRevision}`;
@@ -4394,10 +4436,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const computeDocument = (): DocumentSlice => {
     const editor = getEditor();
+    const editorDirty = editor ? (editor as LooseRecord).isDirty : undefined;
     return {
       ready: editor != null,
       mode: readDocumentMode(),
-      dirty: editor ? Boolean((editor as LooseRecord).isDirty) : false,
+      dirty: editor ? (editorDirty === undefined ? hasLocalDocumentMutation() : Boolean(editorDirty)) : false,
     };
   };
 
@@ -6817,9 +6860,37 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     }
     currentHostEventsSource = next;
     if (!next) return;
+    if (host) {
+      // The host can commit edits while another editor owns this subscription.
+      hostSeededMutationRevision.delete(host);
+      seedLocalDocumentMutation(host);
+    }
     try {
       const off = next.subscribe((event: LooseRecord) => {
         const type = event?.type;
+        const isStandaloneDocumentMutation = type === 'document:mutated' && event.hasCommitEvent !== true;
+        // `document:mutated` covers every committed family, including the
+        // non-receipt Document API results that never emit
+        // `mutation:committed`. The receipt event stays as a fallback for
+        // hosts that predate the dedicated signal.
+        if (
+          (type === 'document:mutated' ||
+            (type === 'mutation:committed' && mutationCommittedEventChangedDocument(event))) &&
+          host &&
+          !dirtyHosts.has(host)
+        ) {
+          dirtyHosts.add(host);
+          recompute('document-dirty');
+        }
+        if (type === 'collaboration:document-replaced' && host) {
+          // The host reopened the authoritative remote document under the
+          // same identity and reset its local revision. Local edits made to
+          // the previous document are gone with it.
+          dirtyHosts.delete(host);
+          hostSeededMutationRevision.delete(host);
+          seedLocalDocumentMutation(host);
+          recompute('document-dirty');
+        }
         if (type === 'review-mutation:started') {
           beginUiReviewMutation((event.reviewMutation as LooseRecord | undefined)?.token);
           return;
@@ -6841,12 +6912,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
           refreshIncompleteTrackChangesDirectories();
           return;
         }
-        if (type === 'mutation:committed' || type === 'collaboration:remote-changed') {
+        if (isStandaloneDocumentMutation || type === 'mutation:committed' || type === 'collaboration:remote-changed') {
           // Input-idle signal for the source-complete heavy-read recompute:
           // local commits and remote applies both count as recent activity.
           lastEditableMutationAtMs = Date.now();
         }
-        if (type === 'mutation:committed' || type === 'save:completed' || type === 'collaboration:remote-changed') {
+        if (
+          isStandaloneDocumentMutation ||
+          type === 'mutation:committed' ||
+          type === 'save:completed' ||
+          type === 'collaboration:remote-changed'
+        ) {
           // A document mutation can change content reads (comments, tracked
           // changes, content controls, styles catalogue, node/list/hyperlink
           // reads), so bump the content revision before recomputing; the
@@ -6889,7 +6965,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
           if (impact?.removedIds.size && impact.upsertIds.size === 0) {
             return;
           }
-          if (type === 'collaboration:remote-changed' || (type === 'mutation:committed' && !isTypingBurst)) {
+          if (
+            isStandaloneDocumentMutation ||
+            type === 'collaboration:remote-changed' ||
+            (type === 'mutation:committed' && !isTypingBurst)
+          ) {
             // These events follow source application but precede the scheduler
             // paint. Refresh immediately for direct source values, then once
             // more after mounted projection catches up so inherited paragraph
@@ -7062,6 +7142,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
                 const matchesHost = Boolean(replacedHost) && replacedHost === getHost();
                 // Still a positive match: an event naming neither is not ours.
                 if (!matchesEditor && !matchesHost) return;
+                // The replaced document starts clean. This is not part of
+                // `documentResetHooks`: those also run on `active-editor-change`,
+                // where the previous editor's unsaved edits must survive.
+                const replacedDirtyHost = (matchesHost ? replacedHost : getHost()) as object | null;
+                if (replacedDirtyHost) {
+                  dirtyHosts.delete(replacedDirtyHost);
+                  hostSeededMutationRevision.delete(replacedDirtyHost);
+                }
 
                 // Search state is the visible half; the async read caches are the
                 // quiet half. They are keyed by `contentToken()` — editor identity
@@ -10501,7 +10589,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         }
       }
     },
-    export: (input?: unknown) => {
+    export: (input) => {
       if (typeof superdoc?.export === 'function') {
         try {
           return Promise.resolve(superdoc.export(input));

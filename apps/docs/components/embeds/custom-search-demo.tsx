@@ -6,6 +6,7 @@ import type { UIConfig } from 'superdoc';
 import type { SearchSnapshot, WorkflowActionResult, ZoomSlice } from 'superdoc/ui';
 import { CollapsibleEditorPreview } from './collapsible-editor-preview';
 import { EditorDemoViewControls } from './editor-demo-view-controls';
+import { EDITOR_DEMO_FIT_WIDTH_PADDING, fitRuntimeEditorToWidth } from './editor-demo-zoom';
 import { createRuntimeEditor, loadRuntime, type SuperDocInstance } from './superdoc-runtime';
 
 const DEMO_DOCUMENT = '/fixtures/search-sample.docx';
@@ -113,7 +114,14 @@ export function CustomSearchDemo() {
         document: DEMO_DOCUMENT,
         documentMode: 'editing',
         ui: editorUi,
-        zoom: { mode: 'manual', fitWidth: { min: INITIAL_ZOOM.min, max: INITIAL_ZOOM.max } },
+        zoom: {
+          mode: 'manual',
+          fitWidth: {
+            min: INITIAL_ZOOM.min,
+            max: INITIAL_ZOOM.max,
+            padding: EDITOR_DEMO_FIT_WIDTH_PADDING,
+          },
+        },
         onReady: () => {
           if (!isCurrent()) return;
           if ((rootRef.current?.clientWidth ?? NARROW_DEMO_WIDTH) < NARROW_DEMO_WIDTH) {
@@ -253,7 +261,7 @@ export function CustomSearchDemo() {
   }
 
   function fitToWidth() {
-    instanceRef.current?.ui.zoom.setMode('fit-width');
+    if (instanceRef.current) fitRuntimeEditorToWidth(instanceRef.current);
   }
 
   async function toggleFullscreen() {

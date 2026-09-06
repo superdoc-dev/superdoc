@@ -13,6 +13,7 @@ import type {
 } from 'superdoc/ui';
 import { CollapsibleEditorPreview } from './collapsible-editor-preview';
 import { EditorDemoViewControls } from './editor-demo-view-controls';
+import { EDITOR_DEMO_FIT_WIDTH_PADDING, fitRuntimeEditorToWidth } from './editor-demo-zoom';
 import { createRuntimeEditor, loadRuntime, type SuperDocInstance } from './superdoc-runtime';
 
 const DEMO_DOCUMENT = '/fixtures/custom-comments-workflow.docx';
@@ -114,7 +115,14 @@ export function CustomCommentsDemo() {
         documentMode: 'editing',
         ui: editorUi,
         user: { name: 'Alex Rivera', email: 'alex@example.com' },
-        zoom: { mode: 'manual', fitWidth: { min: INITIAL_ZOOM.min, max: INITIAL_ZOOM.max } },
+        zoom: {
+          mode: 'manual',
+          fitWidth: {
+            min: INITIAL_ZOOM.min,
+            max: INITIAL_ZOOM.max,
+            padding: EDITOR_DEMO_FIT_WIDTH_PADDING,
+          },
+        },
         onReady: () => {
           if (!isCurrent()) return;
           instance.ui.zoom.set(INITIAL_ZOOM.value);
@@ -287,7 +295,7 @@ export function CustomCommentsDemo() {
   }
 
   function fitToWidth() {
-    instanceRef.current?.ui.zoom.setMode('fit-width');
+    if (instanceRef.current) fitRuntimeEditorToWidth(instanceRef.current);
   }
 
   async function toggleFullscreen() {

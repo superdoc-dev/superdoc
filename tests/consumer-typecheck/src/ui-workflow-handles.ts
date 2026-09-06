@@ -35,6 +35,7 @@ import type {
   CommandExecutionResult,
   SuperDocUIReason,
 } from 'superdoc/ui';
+import type { ExportParams } from 'superdoc';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
@@ -186,7 +187,10 @@ void styles.getActiveParagraphStyle();
 // ─── Document (compat) ──────────────────────────────────────────────
 const document: DocumentHandle = ui.document;
 const _documentGetText: AssertEqual<ReturnType<DocumentHandle['getText']>, string | null> = true;
+const _documentExportParams: AssertEqual<Parameters<DocumentHandle['export']>, [input?: ExportParams]> = true;
+const _documentExportResult: AssertEqual<ReturnType<DocumentHandle['export']>, Promise<Blob> | undefined> = true;
 void document.getText();
+void document.export({ exportType: ['docx'], triggerDownload: false });
 
 // ─── Fail-closed result reason is the stable union, not string/any ──
 const _wfReason: WorkflowActionResult['reason'] = 'host-capability-unavailable';

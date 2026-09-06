@@ -10,7 +10,7 @@ import JSZip from 'jszip';
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
-import { resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
+import { computeAppliedFitZoom, resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
@@ -3789,6 +3789,19 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     }
     if (this.superdocStore.zoomMode === mode) return;
     this.superdocStore.zoomMode = mode;
+
+    if (mode === 'fit-width') {
+      const metrics = this.superdocStore.viewportMetrics;
+      if (metrics) {
+        const target = computeAppliedFitZoom(
+          metrics.availableWidth,
+          metrics.documentWidth,
+          resolveFitWidthOptions(this.config.zoom?.fitWidth),
+        );
+        if (target !== null) this.superdocStore.activeZoom = target;
+      }
+    }
+
     this.emit('zoomChange', { zoom: this.getZoom(), mode });
   }
 

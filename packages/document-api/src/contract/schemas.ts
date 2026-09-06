@@ -4484,6 +4484,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'blocks.list': {
     input: objectSchema({
+      nodeIds: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+        description: 'Top-level block identities to match before pagination.',
+      },
+      textSearch: objectSchema(
+        {
+          terms: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+          match: { enum: ['all', 'any'] },
+          caseSensitive: { type: 'boolean' },
+        },
+        ['terms'],
+      ),
       in: storyLocatorSchema,
       offset: { type: 'number', minimum: 0, description: 'Number of blocks to skip. Default: 0.' },
       limit: { type: 'number', minimum: 1, description: 'Maximum blocks to return. Omit for all blocks.' },
@@ -8252,6 +8265,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           type: 'array',
           items: objectSchema(
             {
+              firstParagraphNodeId: { type: 'string' },
               nodeId: { type: 'string' },
               address: tableCellAddressSchema,
               rowIndex: { type: 'integer', minimum: 0 },

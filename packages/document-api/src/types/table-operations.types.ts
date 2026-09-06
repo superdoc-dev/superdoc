@@ -724,6 +724,8 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
+  /** First paragraph in this cell, when the engine exposes paragraph identities. */
+  firstParagraphNodeId?: string;
   /** Shorthand cell identifier: convenient for logging, Map keys, and display. */
   nodeId: string;
   /** Mutation-ready address: pass directly as `target` in follow-up cell operations. */

@@ -1103,7 +1103,7 @@ export const OPERATION_DEFINITIONS = {
   'blocks.list': {
     memberPath: 'blocks.list',
     description:
-      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit, optional nodeType filtering, single-story scoping via `in: <StoryLocator>`, and final/original/redline projection of numbering metadata without changing block membership.',
+      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit after optional nodeTypes, nodeIds, and literal textSearch filtering, single-story scoping via `in: <StoryLocator>`, and final/original/redline projection of numbering metadata without changing block membership.',
     expectedResult:
       'Returns a BlocksListResult with total block count, an ordered array of block entries, the effective numbering reviewMode, and the current document revision.',
     requiresDocumentContext: true,

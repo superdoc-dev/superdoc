@@ -60,6 +60,10 @@ export interface BlockListEntry {
   ref?: string;
 }
 export interface BlocksListInput {
+  /** Filter top-level blocks by identity before pagination. Cell paragraphs do not match body blocks. */
+  nodeIds?: string[];
+  /** Literal terms matched against complete block text before pagination; occurrences are blocks. */
+  textSearch?: { terms: string[]; match?: 'all' | 'any'; caseSensitive?: boolean };
   offset?: number;
   limit?: number;
   nodeTypes?: BlockNodeType[];

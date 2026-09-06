@@ -782,6 +782,22 @@ test('exports custom document controls as clean Markdown', async () => {
   assert.doesNotMatch(markdown, /<include>/);
 });
 
+test('exports the surface lifecycle experience as clean Markdown', async () => {
+  const article = await readFile(new URL('../out/editor/dialogs-and-surfaces/index.html', import.meta.url), 'utf8');
+  const markdown = await readFile(new URL('../out/md/editor/dialogs-and-surfaces.md', import.meta.url), 'utf8');
+
+  assert.match(article, /data-surface-lifecycle-demo="true"/u);
+  assert.match(markdown, /> \*\*Live example: compare a dialog and a floating surface\*\*/u);
+  assert.match(markdown, /openSurface\(\{ mode: 'dialog' \}\)/u);
+  assert.match(markdown, /openSurface\(\{ mode: 'floating' \}\)/u);
+  assert.match(markdown, /SurfaceOutcome<ConfirmationResult>/u);
+  assert.match(markdown, /return \{\s+destroy\(\)/u);
+  assert.match(markdown, /`submitted`.*`closed`.*`replaced`/su);
+  assert.match(markdown, /Selection and viewport APIs/u);
+  assert.doesNotMatch(markdown, /<SurfaceLifecycleDemo\b/u);
+  assert.doesNotMatch(markdown, /<include>/u);
+});
+
 test('exports custom command registration as clean Markdown', async () => {
   const article = await readFile(new URL('../out/editor/custom-ui/custom-commands/index.html', import.meta.url), 'utf8');
   const markdown = await readFile(new URL('../out/md/editor/custom-ui/custom-commands.md', import.meta.url), 'utf8');

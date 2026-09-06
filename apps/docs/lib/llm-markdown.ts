@@ -69,6 +69,7 @@ export const llmPlaceholderComponents = [
   'RuntimeExampleTabs',
   'RulerConfigReference',
   'SearchConfigReference',
+  'SurfaceLifecycleDemo',
   'ToolbarConfigReference',
   'TemplatePopulationDemo',
   'MigrationExample',
@@ -420,6 +421,14 @@ export function renderLLMMarkdown(markdown: string) {
     },
     SearchConfigReference() {
       return renderConfigReferenceMarkdown(searchConfigExplorer);
+    },
+    SurfaceLifecycleDemo() {
+      return [
+        '> **Live example: compare a dialog and a floating surface**',
+        '>',
+        '> Open confirmation to see a modal dialog finish as `submitted` or `closed`. Open inspector twice to see the first floating surface finish as `replaced` while the new inspector stays open. The floating inspector leaves the document usable. The status line reports each lifecycle result.',
+        '',
+      ].join('\n');
     },
     ToolbarConfigReference() {
       return renderConfigReferenceMarkdown(toolbarConfigExplorer);

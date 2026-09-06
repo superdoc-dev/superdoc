@@ -23,6 +23,7 @@ import { CollaborationDemo } from '@/components/embeds/collaboration-demo';
 import { DocumentPreview } from '@/components/embeds/document-preview';
 import { EditorDemo } from '@/components/embeds/editor-demo';
 import { InterfaceOwnership } from '@/components/embeds/interface-ownership';
+import { SurfaceLifecycleDemo } from '@/components/embeds/surface-lifecycle-demo';
 import { DocsHome } from '@/components/docs-home';
 import { Callout } from '@/components/mdx/callout';
 import { CommentsConfigReference } from '@/components/mdx/comments-config-reference';
@@ -113,6 +114,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     RuntimeExampleTabs,
     RulerConfigReference,
     SearchConfigReference,
+    SurfaceLifecycleDemo,
     ToolbarConfigReference,
     TemplatePopulationDemo,
     img: DocsImage,

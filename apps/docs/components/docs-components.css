@@ -1538,7 +1538,7 @@
 
 .sd-editor-demo[data-fullscreen='true'] {
   position: fixed;
-  z-index: 1000;
+  z-index: calc(var(--sd-ui-surface-z-index, 100) - 1);
   inset: 0;
   display: flex;
   width: 100vw;
@@ -4667,6 +4667,171 @@
 
 .sd-custom-search-demo:fullscreen .sd-custom-search-demo-canvas {
   height: auto;
+}
+
+.sd-surface-lifecycle-demo-built-in-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sd-surface-lifecycle-demo-built-in-header .sd-editor-demo-view-controls {
+  margin-left: auto;
+}
+
+.dark .sd-surface-host {
+  --sd-ui-surface-bg: #ffffff;
+  --sd-ui-surface-border: #dadce0;
+  --sd-ui-text: #202124;
+  --sd-ui-text-muted: #5f6368;
+}
+
+.sd-surface-lifecycle-demo-workspace {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.sd-surface-lifecycle-demo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  align-items: center;
+  padding: 0.75rem 1.125rem;
+  border-bottom: 1px solid var(--sd-border-soft);
+  background: var(--sd-surface);
+}
+
+.sd-surface-lifecycle-demo-controls button,
+.sd-surface-lifecycle-demo-surface-actions button,
+.sd-surface-lifecycle-demo-surface-button {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-sm);
+  background: var(--sd-surface);
+  color: var(--sd-text-primary);
+  cursor: pointer;
+  font: 600 0.75rem/1.2 var(--font-sans);
+}
+
+.sd-surface-lifecycle-demo-controls button:hover:not(:disabled),
+.sd-surface-lifecycle-demo-surface-actions button:hover,
+.sd-surface-lifecycle-demo-surface-button:hover {
+  border-color: var(--sd-blue-300);
+  background: var(--sd-blue-50);
+}
+
+.dark .sd-surface-lifecycle-demo-controls button:hover:not(:disabled) {
+  background: var(--color-fd-accent);
+}
+
+.sd-surface-lifecycle-demo-controls button:focus-visible,
+.sd-surface-lifecycle-demo-surface-actions button:focus-visible,
+.sd-surface-lifecycle-demo-surface-button:focus-visible {
+  outline: 3px solid var(--color-fd-ring);
+  outline-offset: 2px;
+}
+
+.sd-surface-lifecycle-demo-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.sd-surface-lifecycle-demo-controls output {
+  flex: 1 1 15rem;
+  color: var(--sd-custom-ui-text-secondary);
+  font-size: 0.75rem;
+}
+
+.sd-surface-lifecycle-demo-canvas {
+  height: min(32rem, 68vh);
+  min-height: 26rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.sd-surface-lifecycle-demo-surface-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sd-surface-lifecycle-demo-surface-actions button,
+.sd-surface-lifecycle-demo-surface-button {
+  border-color: var(--sd-ui-surface-border);
+  background: var(--sd-ui-surface-bg);
+  color: var(--sd-ui-text);
+}
+
+.sd-surface-lifecycle-demo-surface-actions button:hover,
+.sd-surface-lifecycle-demo-surface-button:hover {
+  background: #f5f5f5;
+}
+
+.sd-surface-lifecycle-demo-surface-description {
+  margin: 0 0 1rem;
+  color: var(--sd-ui-text-muted, var(--sd-text-secondary));
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.sd-surface-lifecycle-demo-surface-actions .sd-surface-lifecycle-demo-primary {
+  border-color: var(--sd-blue);
+  background: var(--sd-blue);
+  color: #ffffff;
+}
+
+.sd-surface-lifecycle-demo-surface-actions .sd-surface-lifecycle-demo-primary:hover {
+  border-color: var(--sd-blue-600);
+  background: var(--sd-blue-600);
+}
+
+.sd-surface-lifecycle-demo[data-fullscreen='true'] {
+  position: fixed;
+  z-index: calc(var(--sd-ui-surface-z-index, 100) - 1);
+  inset: 0;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: column;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--sd-surface);
+}
+
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-surface-lifecycle-demo-preview,
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-editor-preview-content,
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-surface-lifecycle-demo-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  max-height: none;
+}
+
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-surface-lifecycle-demo-canvas {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-editor-preview-toggle,
+.sd-surface-lifecycle-demo[data-fullscreen='true'] .sd-editor-preview-fade {
+  display: none;
+}
+
+@media (max-width: 36rem) {
+  .sd-surface-lifecycle-demo-controls .sd-custom-bold-demo-owner {
+    flex-basis: 100%;
+  }
 }
 
 @media (max-width: 30rem) {

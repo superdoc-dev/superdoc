@@ -136,6 +136,9 @@ const customDocumentControlsPageUrl = new URL(
   '../content/docs/editor/custom-ui/zoom-and-document-state.mdx',
   import.meta.url,
 );
+const surfaceLifecyclePageUrl = new URL('../content/docs/editor/dialogs-and-surfaces.mdx', import.meta.url);
+const surfaceLifecycleDemoUrl = new URL('../components/embeds/surface-lifecycle-demo.tsx', import.meta.url);
+const externalSurfaceExampleUrl = new URL('../snippets/editor/external-surface.ts', import.meta.url);
 const customSelectionPageUrl = new URL(
   '../content/docs/editor/custom-ui/selection-and-viewport.mdx',
   import.meta.url,
@@ -309,6 +312,7 @@ const registeredComponents = new Set([
   'RuntimeExampleTabs',
   'RulerConfigReference',
   'SearchConfigReference',
+  'SurfaceLifecycleDemo',
   'ToolbarConfigReference',
   'TemplatePopulationDemo',
 ]);
@@ -1218,6 +1222,95 @@ test('the custom document controls demo shows a partial ownership handoff', asyn
   assert.match(demo, />\s*SuperDoc UI\s*</u);
 });
 
+test('the dialogs and surfaces guide demonstrates both lifecycle slots', async () => {
+  const [page, demo, example, styles] = await Promise.all(
+    [surfaceLifecyclePageUrl, surfaceLifecycleDemoUrl, externalSurfaceExampleUrl, docsComponentsCssUrl].map((url) =>
+      readFile(url, 'utf8'),
+    ),
+  );
+
+  assert.match(page, /<SurfaceLifecycleDemo \/>/u);
+  // The trap is scoped to the dialog backdrop, so the guide must say the application owns
+  // everything outside it rather than implying the trap covers the whole page.
+  assert.match(page, /are not part of it/u);
+  assert.match(page, /`inert` on the surrounding region is enough/u);
+  assert.match(page, /mode: 'dialog'/u);
+  assert.match(page, /mode: 'floating'/u);
+  assert.match(page, /Selection and viewport APIs/u);
+  assert.match(page, /`submitted`.*`closed`.*`replaced`/su);
+  assert.match(page, /Destroying the Editor produces.*`destroyed`/su);
+
+  assert.match(demo, /DEMO_DOCUMENT = '\/fixtures\/getting-started\.docx'/u);
+  assert.match(demo, /data-surface-lifecycle-demo/u);
+  assert.match(demo, /openSurface<ConfirmationResult>/u);
+  assert.match(demo, /mode: 'dialog'/u);
+  assert.match(demo, /mode: 'floating'/u);
+  assert.match(demo, /observeOutcome\('Inspector'/u);
+  assert.match(demo, /EditorDemoViewControls/u);
+  assert.match(demo, /contentClassName='sd-surface-lifecycle-demo-workspace'/u);
+  assert.match(demo, /document\.documentElement\.requestFullscreen\(\)/u);
+  assert.match(demo, /return \{\s+destroy\(\)/u);
+
+  assert.match(example, /document: '\/sample\.docx'/u);
+  assert.match(example, /SurfaceOutcome<ConfirmationResult>/u);
+  // A modal owns focus: the dialog's trap is bound to its own backdrop and the host stands
+  // down from floating Escape while a dialog exists, so a floating surface must not be
+  // openable on top of one.
+  assert.match(demo, /disabled=\{!controlsReady \|\| isDialogOpen \|\| !isPreviewExpanded\}/u);
+  // A collapsed preview clips the canvas the teleported host is sized to.
+  assert.match(demo, /disabled=\{!controlsReady \|\| !isPreviewExpanded \|\| isDialogOpen\}/u);
+  // The preview renders its own toggle outside `children`, so it needs gating too, and the
+  // dialog restores focus while the opener is still disabled.
+  assert.match(demo, /toggleDisabled=\{isDialogOpen\}/u);
+  // A promise callback's state update renders in a later task, so a microtask queued beside it
+  // still sees the disabled opener. The restore must run after the commit that re-enables it.
+  assert.doesNotMatch(demo, /queueMicrotask/u);
+  assert.match(demo, /restoreOpenerFocusRef\.current = true;/u);
+  // Teleported toolbar menus sit above the surface host and outside the inert toolbar mount, so
+  // they must be dismissed — but only after openSurface(), because SurfaceHost's floating Escape
+  // handler defers to an open dialog and would otherwise close the inspector.
+  const openIndex = demo.indexOf('instance.openSurface<ConfirmationResult>(');
+  const dismissIndex = demo.indexOf("document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));");
+  assert.ok(openIndex > 0 && dismissIndex > openIndex, 'the toolbar dismissal runs after the dialog opens');
+  assert.match(
+    demo,
+    /useLayoutEffect\(\(\) => \{\n    if \(isDialogOpen \|\| !restoreOpenerFocusRef\.current\) return;[\s\S]*?\}, \[isDialogOpen\]\);/u,
+  );
+  // onContentError also covers update failures; a post-ready one must not destroy the session.
+  assert.match(demo, /if \(readyRef\.current\) \{[\s\S]*?Your edits are still here/u);
+  // Everything outside the dialog backdrop must be unreachable while a modal is open,
+  // not just the surface buttons: the trap only sees keydowns bubbling through it.
+  assert.match(demo, /inert=\{isDialogOpen\}/u);
+  // Fullscreen is owned by document.documentElement, which outlives this component.
+  // Cleanup must not read a DOM ref: React detaches host refs before passive effect
+  // cleanup, so ownership is tracked independently.
+  assert.match(demo, /ownsFullscreenRef\.current && document\.fullscreenElement/u);
+  // A request that settles after unmount must hand fullscreen back itself.
+  assert.match(demo, /if \(!mountedRef\.current\) \{\s*\n\s*void document\.exitFullscreen/u);
+  assert.doesNotMatch(demo, /rootRef\.current\?\.dataset\.fullscreen/u);
+  assert.match(demo, /document\.exitFullscreen\(\)\.catch/u);
+  // A superseded dialog settles after dialogRef points at its replacement.
+  assert.match(demo, /if \(activeRef\.current !== handle\)/u);
+  assert.match(example, /case 'submitted'/u);
+  assert.match(example, /case 'closed'/u);
+  assert.match(example, /case 'replaced'/u);
+  assert.match(example, /case 'destroyed'/u);
+  assert.match(example, /return \{\s+destroy\(\)/u);
+
+  assert.match(
+    styles,
+    /\.sd-editor-demo\[data-fullscreen='true'\][\s\S]*?z-index: calc\(var\(--sd-ui-surface-z-index, 100\) - 1\)/u,
+  );
+  assert.match(
+    styles,
+    /\.sd-surface-lifecycle-demo\[data-fullscreen='true'\][\s\S]*?z-index: calc\(var\(--sd-ui-surface-z-index, 100\) - 1\)/u,
+  );
+  assert.match(
+    styles,
+    /\.dark \.sd-surface-host \{[\s\S]*?--sd-ui-surface-bg: #ffffff;[\s\S]*?--sd-ui-text: #202124;/u,
+  );
+});
+
 test('the custom commands guide shares one application action across two controls', async () => {
   const [page, demo, example, markup] = await Promise.all(
     [customCommandPageUrl, customCommandDemoUrl, customCommandExampleUrl, customCommandMarkupUrl].map((url) =>
@@ -1487,6 +1580,25 @@ test('the comments guide does not promise the tracked panel continues its interf
     'utf8',
   );
   assert.doesNotMatch(fixture, /comment/iu, 'the tracked fixture still omits the comments panel');
+});
+
+test('the surfaces guide qualifies the dialog focus trap', async () => {
+  // SurfaceDialog's trapFocus() returns early when its focusable query is empty, so the
+  // unconditional "dialogs trap focus" claim needs the empty-content case spelled out.
+  const page = await readFile(
+    new URL('../content/docs/editor/dialogs-and-surfaces.mdx', import.meta.url),
+    'utf8',
+  );
+  assert.match(page, /The trap also needs something to hold/u);
+  assert.match(page, /has no cycle\nto enforce and Tab leaves it on the first press/u);
+  assert.match(page, /at least one enabled control/u);
+
+  // Pinned to the runtime behaviour the paragraph describes.
+  const dialog = await readFile(
+    new URL('../../../packages/superdoc/src/components/surfaces/SurfaceDialog.vue', import.meta.url),
+    'utf8',
+  );
+  assert.match(dialog, /if \(focusable\.length === 0\) return;/u);
 });
 
 test('the selection guide separates SelectionTarget from the geometry fallback', async () => {

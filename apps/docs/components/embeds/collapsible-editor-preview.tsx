@@ -10,6 +10,10 @@ type CollapsibleEditorPreviewProps = {
   defaultExpanded?: boolean;
   expandedMaxHeight?: CSSProperties['maxHeight'];
   onCollapse?: () => void;
+  /** Called with the new state whenever the reader toggles the preview. */
+  onExpandedChange?: (expanded: boolean) => void;
+  /** Blocks the preview's own toggle, which renders outside `children`. */
+  toggleDisabled?: boolean;
 };
 
 export function CollapsibleEditorPreview({
@@ -19,13 +23,18 @@ export function CollapsibleEditorPreview({
   defaultExpanded = false,
   expandedMaxHeight,
   onCollapse,
+  onExpandedChange,
+  toggleDisabled = false,
 }: CollapsibleEditorPreviewProps) {
   const contentId = useId();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   function toggle() {
     if (expanded) onCollapse?.();
-    setExpanded((current) => !current);
+    setExpanded((current) => {
+      onExpandedChange?.(!current);
+      return !current;
+    });
   }
 
   return (
@@ -43,6 +52,7 @@ export function CollapsibleEditorPreview({
         type='button'
         aria-controls={contentId}
         aria-expanded={expanded}
+        disabled={toggleDisabled}
         onClick={toggle}
       >
         <ChevronDown aria-hidden='true' />

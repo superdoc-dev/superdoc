@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T23:43:43.642Z",
+  "generatedAt": "2026-09-04T14:00:54.747Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -234,6 +234,10 @@
         "TextAddress",
         "TextSegment",
         "TextTarget",
+        "ThemeColors",
+        "ThemeConfig",
+        "ThemeResult",
+        "ThemeVariableOverrides",
         "ToolbarCommandId",
         "ToolbarConfig",
         "ToolbarCustomButton",
@@ -506,6 +510,10 @@
         "TextAddress",
         "TextSegment",
         "TextTarget",
+        "ThemeColors",
+        "ThemeConfig",
+        "ThemeResult",
+        "ThemeVariableOverrides",
         "ToolbarCommandId",
         "ToolbarConfig",
         "ToolbarCustomButton",
@@ -589,11 +597,11 @@
     }
   },
   "counts": {
-    "types.import": 264,
-    "types.require": 264,
+    "types.import": 268,
+    "types.require": 268,
     "import": 10,
     "require": 10,
-    "union": 264
+    "union": 268
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -821,6 +829,10 @@
         "TextAddress",
         "TextSegment",
         "TextTarget",
+        "ThemeColors",
+        "ThemeConfig",
+        "ThemeResult",
+        "ThemeVariableOverrides",
         "ToolbarCommandId",
         "ToolbarConfig",
         "ToolbarCustomButton",

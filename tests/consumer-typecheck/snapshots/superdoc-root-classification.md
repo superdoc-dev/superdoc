@@ -1,22 +1,22 @@
 # SD-3212 A1 — root classification
 
 Generated: derived from superdoc-root-classification.json (aligned with current root export inventory)
-Input: tests/consumer-typecheck/snapshots/superdoc-root-classification.json (264 names)
+Input: tests/consumer-typecheck/snapshots/superdoc-root-classification.json (270 names)
 
 ## Summary
 
 | Bucket | Count |
 |---|---|
-| supported-root | 261 |
+| supported-root | 267 |
 | legacy-root | 3 |
 | move-to-subpath | 0 |
 | internal-candidate | 0 |
 | NEEDS-REVIEW | 0 |
-| **total** | **264** |
+| **total** | **270** |
 
-Confidence: high=216, medium=48, low=0, needs-review=0.
+Confidence: high=222, medium=48, low=0, needs-review=0.
 
-## supported-root (261)
+## supported-root (267)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -59,6 +59,7 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `DocRange` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `Document` | high | core | Customer-facing core API type or runtime export. Consumer-supplied document descriptor used in Config.documents and now SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal). |
 | `DocumentApi` | high | doc-api | Customer-facing Document API handle type exposed through activeEditor.doc and used by public examples that type programmatic document operations from the root package. |
+| `DocumentCollaborationConfig` | high | config-supported | Shared-document connection settings accepted by Document.collaboration and upgradeToCollaboration. |
 | `DocumentDataSource` | high | config-supported | File and byte inputs accepted by Document.data and structured Config.document sources. |
 | `DocumentMode` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `DocumentProtectionState` | high | doc-api | Document API result type returned by activeEditor.doc.protection.get(); useful for consumers typing document-protection workflows from the root package. |
@@ -153,6 +154,7 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `SuperDocDisposableBag` | high | core | v2 SuperDoc extension authoring API (defineSuperDocExtension contract). Customer-facing public type exported from src/public/index.ts; reachable through Config.extensions and the activeEditor.extensions facet. |
 | `SuperDocDocumentModeChangePayload` | high | core | Payload emitted with document-mode-change after role restrictions are applied. |
 | `SuperDocEditorPayload` | high | core | Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor. |
+| `SuperDocExceptionCollaborationPayload` | high | collab | Typed onException payload for collaboration connection failures, narrowed by collaborationReason. |
 | `SuperDocExceptionDiagnosticPayload` | high | diagnostics | Member of the SuperDocExceptionPayload union; structured diagnostic translated from an internal v2-kernel diagnostic. Narrowed by 'diagnosticCode' in payload. SuperDoc Diagnostics MVP. |
 | `SuperDocExceptionEditorPayload` | high | locked | Member of the SuperDocExceptionPayload union; named so consumers can discriminate the editor-lifecycle shape. SD-673 Phase 4D. |
 | `SuperDocExceptionHyperlinkPayload` | high | hyperlinks | Exception payload for application hyperlink activation and rendering failures, narrowed by source. |
@@ -235,6 +237,10 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `TextAddress` | high | doc-api | Document API text target accepted by v2 comments, formatting, insertion, and replace-style operations; resolved and validated by the v2 Document API adapter. |
 | `TextSegment` | high | doc-api | Document API text-range segment used inside TextTarget.segments; needed for consumers typing multi-segment text targets from the root package. |
 | `TextTarget` | high | doc-api | Document API range target used by v2 comments, tracked-change decisions, fields, and selection flows; resolved by the v2 Document API adapter. |
+| `ThemeColors` | high | theme | Semantic color configuration accepted by createTheme() and buildTheme(); exported so consumers can type reusable palettes directly. |
+| `ThemeConfig` | high | theme | Public input contract for createTheme() and buildTheme(); exported so theme objects retain autocomplete when declared outside a call. |
+| `ThemeResult` | high | theme | Public return shape of buildTheme(), containing the generated class name and CSS for consumer-managed style injection. |
+| `ThemeVariableOverrides` | high | theme | Typed component-level theme override map that preserves autocomplete and rejects keys outside the SuperDoc --sd-* variable namespace. |
 | `ToolbarCommandId` | high | toolbar-config | Command id accepted by the runtime toolbar handle, including application ids registered through ui.commands.register(). |
 | `ToolbarConfig` | high | toolbar-config | Named startup configuration for the built-in toolbar under ui.toolbar. Lets consumers assemble and validate a readonly toolbar config outside the root Config object. |
 | `ToolbarCustomButton` | high | toolbar-custom-buttons | Deprecated union accepted by ui.toolbar.customButtons. Kept for existing v2 integrations; use ToolbarCustomItem. |
@@ -349,6 +355,7 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `DocRange` | ✓ | ✓ |   |   |
 | `Document` | ✓ | ✓ |   |   |
 | `DocumentApi` | ✓ | ✓ |   |   |
+| `DocumentCollaborationConfig` | ✓ | ✓ |   |   |
 | `DocumentDataSource` | ✓ | ✓ |   |   |
 | `DocumentMode` | ✓ | ✓ |   |   |
 | `DocumentProtectionState` | ✓ | ✓ |   |   |
@@ -444,6 +451,7 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `SuperDocDisposableBag` | ✓ | ✓ |   |   |
 | `SuperDocDocumentModeChangePayload` | ✓ | ✓ |   |   |
 | `SuperDocEditorPayload` | ✓ | ✓ |   |   |
+| `SuperDocExceptionCollaborationPayload` | ✓ | ✓ |   |   |
 | `SuperDocExceptionDiagnosticPayload` | ✓ | ✓ |   |   |
 | `SuperDocExceptionEditorPayload` | ✓ | ✓ |   |   |
 | `SuperDocExceptionHyperlinkPayload` | ✓ | ✓ |   |   |
@@ -526,6 +534,10 @@ Confidence: high=216, medium=48, low=0, needs-review=0.
 | `TextAddress` | ✓ | ✓ |   |   |
 | `TextSegment` | ✓ | ✓ |   |   |
 | `TextTarget` | ✓ | ✓ |   |   |
+| `ThemeColors` | ✓ | ✓ |   |   |
+| `ThemeConfig` | ✓ | ✓ |   |   |
+| `ThemeResult` | ✓ | ✓ |   |   |
+| `ThemeVariableOverrides` | ✓ | ✓ |   |   |
 | `ToolbarCommandId` | ✓ | ✓ |   |   |
 | `ToolbarConfig` | ✓ | ✓ |   |   |
 | `ToolbarCustomButton` | ✓ | ✓ |   |   |

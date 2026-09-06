@@ -2834,7 +2834,8 @@
     },
     {
       "source": "/editor/theming",
-      "kind": "archive"
+      "kind": "v2",
+      "destination": "/editor/theming/"
     },
     {
       "source": "/editor/theming/css-variable-migration",

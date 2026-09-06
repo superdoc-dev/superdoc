@@ -32,6 +32,7 @@ export { SuperDoc } from '../core/SuperDoc.js';
 // Source: ./core/theme/create-theme.ts
 export { buildTheme } from '../core/theme/create-theme.js';
 export { createTheme } from '../core/theme/create-theme.js';
+export type { ThemeColors, ThemeConfig, ThemeResult, ThemeVariableOverrides } from '../core/theme/create-theme.js';
 
 // Type source: ./core/types/index.js
 export type { AwarenessState } from '../core/types/index.js';

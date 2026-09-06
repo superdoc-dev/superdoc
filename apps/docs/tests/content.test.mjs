@@ -139,6 +139,9 @@ const customDocumentControlsPageUrl = new URL(
 const surfaceLifecyclePageUrl = new URL('../content/docs/editor/dialogs-and-surfaces.mdx', import.meta.url);
 const surfaceLifecycleDemoUrl = new URL('../components/embeds/surface-lifecycle-demo.tsx', import.meta.url);
 const externalSurfaceExampleUrl = new URL('../snippets/editor/external-surface.ts', import.meta.url);
+const themingPageUrl = new URL('../content/docs/editor/theming.mdx', import.meta.url);
+const themePlaygroundUrl = new URL('../components/embeds/theme-playground.tsx', import.meta.url);
+const themeExampleUrl = new URL('../snippets/editor/theme.ts', import.meta.url);
 const customSelectionPageUrl = new URL(
   '../content/docs/editor/custom-ui/selection-and-viewport.mdx',
   import.meta.url,
@@ -313,6 +316,7 @@ const registeredComponents = new Set([
   'RulerConfigReference',
   'SearchConfigReference',
   'SurfaceLifecycleDemo',
+  'ThemePlayground',
   'ToolbarConfigReference',
   'TemplatePopulationDemo',
 ]);
@@ -735,7 +739,7 @@ test('the custom UI overview separates the core path from optional workflows', a
   }
 
   assert.match(overview, /\/editor\/dialogs-and-surfaces/u);
-  assert.match(overview, /\/editor\/themes-and-fonts/u);
+  assert.match(overview, /\/editor\/theming/u);
 });
 
 /** Slugs linked from the numbered list under a heading, in the order they are listed. */
@@ -1305,10 +1309,82 @@ test('the dialogs and surfaces guide demonstrates both lifecycle slots', async (
     styles,
     /\.sd-surface-lifecycle-demo\[data-fullscreen='true'\][\s\S]*?z-index: calc\(var\(--sd-ui-surface-z-index, 100\) - 1\)/u,
   );
-  assert.match(
-    styles,
-    /\.dark \.sd-surface-host \{[\s\S]*?--sd-ui-surface-bg: #ffffff;[\s\S]*?--sd-ui-text: #202124;/u,
+  // An unthemed teleported surface host must keep light surface tokens in dark mode, or its
+  // text resolves near-white on a white background. The playground opts out via the root
+  // attribute rather than the fallback being deleted for every surface demo.
+  assert.match(styles, /html\.dark:not\(\[data-sd-theme-active\]\) \.sd-surface-host \{[\s\S]*?--sd-ui-text: #202124;/u);
+  assert.doesNotMatch(styles, /^\.dark \.sd-surface-host \{/mu);
+});
+
+test('the theming guide moves from semantic tokens to one component override', async () => {
+  const [page, demo, example, styles, preview] = await Promise.all(
+    [
+      themingPageUrl,
+      themePlaygroundUrl,
+      themeExampleUrl,
+      docsComponentsCssUrl,
+      new URL('../components/embeds/collapsible-editor-preview.tsx', import.meta.url),
+    ].map((url) => readFile(url, 'utf8')),
   );
+
+  assert.match(page, /<ThemePlayground \/>/u);
+  // A post-ready content error must not destroy the session, and collapsing the preview must
+  // make its clipped content unreachable rather than merely invisible.
+  assert.match(demo, /if \(readyRef\.current\) \{[\s\S]*?Your edits are still here/u);
+  assert.match(preview, /inert=\{!expanded\}/u);
+  assert.match(page, /Start with semantic tokens/u);
+  assert.match(page, /Override one component/u);
+  assert.match(page, /document\.documentElement/u);
+  assert.match(page, /`buildTheme\(\)`/u);
+  // `colors.bg` also feeds --sd-layout-page-bg, so both the example and the playground must
+  // pin the document page or a dark UI surface repaints pages behind unchanged DOCX text.
+  assert.match(example, /'--sd-layout-page-bg': '#ffffff'/u);
+  assert.match(demo, /'--sd-layout-page-bg': '#ffffff'/u);
+  assert.match(page, /'--sd-layout-page-bg': '#ffffff'/u);
+  assert.doesNotMatch(page, /document font|fonts\.map|onFontsChanged|uiDisplayFallbackFont/iu);
+
+  assert.match(demo, /data-theme-playground/u);
+  assert.match(demo, /EditorDemoViewControls/u);
+  assert.match(demo, /value: 80/u);
+  assert.match(demo, /runtime\.createTheme\(themeConfig\)/u);
+  assert.match(demo, /document\.documentElement\.classList\.add\(themeClass\)/u);
+  // Fullscreen is owned by document.documentElement, which outlives this component.
+  assert.match(demo, /ownsFullscreenRef\.current && document\.fullscreenElement/u);
+  // The dialog's trap is backdrop-scoped, so nothing outside it may stay reachable.
+  assert.match(demo, /className='sd-theme-playground-controls' inert=\{isDialogOpen\}/u);
+  assert.match(demo, /className='sd-theme-playground-toolbar' inert=\{isDialogOpen\}/u);
+  assert.match(demo, /<div inert=\{isDialogOpen\}>\s*\n\s*<DynamicCodeBlock/u);
+  // The preview's own Collapse button renders outside `children`.
+  assert.match(demo, /toggleDisabled=\{isDialogOpen\}/u);
+  // A collapsed preview clips the canvas the surface host is sized to, and the dialog's
+  // focus restore lands while the opener is still inert.
+  assert.match(demo, /disabled=\{!controlsReady \|\| !isPreviewExpanded\}/u);
+  // A promise callback's state update renders in a later task, so a microtask queued beside it
+  // still sees the inert region. The restore must run after the commit that clears `inert`.
+  assert.doesNotMatch(demo, /queueMicrotask/u);
+  assert.match(demo, /restoreOpenerFocusRef\.current = true;/u);
+  assert.match(
+    demo,
+    /useLayoutEffect\(\(\) => \{\n    if \(isDialogOpen \|\| !restoreOpenerFocusRef\.current\) return;[\s\S]*?\}, \[isDialogOpen\]\);/u,
+  );
+  // Teleported toolbar menus must be dismissed, but only after openSurface() claims the dialog
+  // slot, so SurfaceHost's floating handlers defer instead of closing a surface beside it.
+  const themeOpenIndex = demo.indexOf('instance.openSurface(');
+  const themeDismissIndex = demo.indexOf("document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));");
+  assert.ok(themeOpenIndex > 0 && themeDismissIndex > themeOpenIndex, 'the dismissal runs after the dialog opens');
+  // A collapsed preview hides the header these controls live in.
+  assert.match(demo, /disabled=\{!controlsReady \|\| isDialogOpen \|\| !isPreviewExpanded\}/u);
+  assert.match(demo, /if \(!mountedRef\.current\) \{\s*\n\s*void document\.exitFullscreen/u);
+  assert.match(demo, /'--sd-ui-toolbar-bg'/u);
+  assert.match(demo, /mode: 'dialog'/u);
+  assert.match(demo, /return \{\s+destroy\(\)/u);
+
+  assert.match(example, /satisfies ThemeConfig/u);
+  assert.match(example, /document\.documentElement\.classList\.add\(themeClass\)/u);
+  assert.match(example, /document: '\/sample\.docx'/u);
+  assert.doesNotMatch(example, /fonts|uiDisplayFallbackFont/iu);
+
+  assert.match(styles, /\.sd-theme-playground\[data-fullscreen='true'\]/u);
 });
 
 test('the custom commands guide shares one application action across two controls', async () => {
@@ -1825,7 +1901,7 @@ test('the review findings guide turns an AI finding into a tracked suggestion', 
   assert.match(example, /changeMode: 'tracked'/u);
   assert.match(example, /return \{ bindSelection, extension, refresh, remove, save, suggest \}/u);
   assert.match(example, /layer\?\.replace/u);
-  assert.match(runtime, /'BlankDOCX' \| 'defineSuperDocExtension'/u);
+  assert.match(runtime, /'BlankDOCX' \| 'createTheme' \| 'defineSuperDocExtension'/u);
 });
 
 test('the review findings guide refreshes after a rolled-back replacement', async () => {

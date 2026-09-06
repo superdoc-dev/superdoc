@@ -48,6 +48,6 @@ function createEditor(file: File, responseNonce: string) {
 }
 ```
 
-`cspNonce` applies only to SuperDoc's runtime `<style>` elements. It does not configure CSP, authorize scripts or workers, or apply to styles created by your application. SuperDoc uses inline style attributes for document layout, so account for them in `style-src-attr`. For a custom theme, use [`buildTheme()`](/editor/themes-and-fonts) and inject its CSS with the same nonce.
+`cspNonce` applies only to SuperDoc's runtime `<style>` elements. It does not configure CSP, authorize scripts or workers, or apply to styles created by your application. SuperDoc uses inline style attributes for document layout, so account for them in `style-src-attr`. For a custom theme, use [`buildTheme()`](/editor/theming) and inject its CSS with the same nonce.
 
 In the deployed application, confirm that the browser reports no `style-src` violations and that SuperDoc runtime `<style>` elements carry the response nonce.

@@ -42,6 +42,8 @@ export function CollapsibleEditorPreview({
       <div
         className={`sd-editor-preview-content ${contentClassName}`.trim()}
         id={contentId}
+        // Collapsing clips the content; without this its controls stay tabbable while invisible.
+        inert={!expanded}
         style={expanded && expandedMaxHeight !== undefined ? { maxHeight: expandedMaxHeight } : undefined}
       >
         {children}

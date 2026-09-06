@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-09-02T00:00:00.000Z",
   "summary": {
-    "total": 266,
+    "total": 270,
     "byBucket": {
-      "supported-root": 263,
-      "legacy-root": 3
+      "legacy-root": 3,
+      "supported-root": 267
     },
     "byConfidence": {
-      "medium": 48,
-      "high": 218
+      "high": 222,
+      "medium": 48
     }
   },
   "rows": [
@@ -2427,6 +2427,50 @@
       "rationale": "Document API range target used by v2 comments, tracked-change decisions, fields, and selection flows; resolved by the v2 Document API adapter.",
       "confidence": "high",
       "source": "doc-api",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ThemeColors",
+      "bucket": "supported-root",
+      "rationale": "Semantic color configuration accepted by createTheme() and buildTheme(); exported so consumers can type reusable palettes directly.",
+      "confidence": "high",
+      "source": "theme",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ThemeConfig",
+      "bucket": "supported-root",
+      "rationale": "Public input contract for createTheme() and buildTheme(); exported so theme objects retain autocomplete when declared outside a call.",
+      "confidence": "high",
+      "source": "theme",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ThemeResult",
+      "bucket": "supported-root",
+      "rationale": "Public return shape of buildTheme(), containing the generated class name and CSS for consumer-managed style injection.",
+      "confidence": "high",
+      "source": "theme",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "ThemeVariableOverrides",
+      "bucket": "supported-root",
+      "rationale": "Typed component-level theme override map that preserves autocomplete and rejects keys outside the SuperDoc --sd-* variable namespace.",
+      "confidence": "high",
+      "source": "theme",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

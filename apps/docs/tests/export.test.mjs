@@ -56,7 +56,7 @@ const routes = [
   ['editor/custom-ui/selection-and-viewport/index.html', 'Build an AI prompt menu for selected text'],
   ['editor/custom-ui/review-highlights/index.html', 'Turn AI findings into tracked suggestions'],
   ['editor/dialogs-and-surfaces/index.html', 'Open dialogs and floating surfaces'],
-  ['editor/themes-and-fonts/index.html', 'Theme UI and resolve document fonts'],
+  ['editor/theming/index.html', 'Theme the Editor UI'],
   ['editor/track-changes/index.html', 'Review tracked changes'],
   ['editor/collaboration/index.html', 'Understand collaboration'],
   ['editor/collaboration/connect-two-editors/index.html', 'Connect two editors'],
@@ -798,6 +798,20 @@ test('exports the surface lifecycle experience as clean Markdown', async () => {
   assert.doesNotMatch(markdown, /<include>/u);
 });
 
+test('exports the theming experience as clean Markdown', async () => {
+  const article = await readFile(new URL('../out/editor/theming/index.html', import.meta.url), 'utf8');
+  const markdown = await readFile(new URL('../out/md/editor/theming.md', import.meta.url), 'utf8');
+
+  assert.match(article, /data-theme-playground="true"/u);
+  assert.match(markdown, /> \*\*Live example: theme the Editor UI\*\*/u);
+  assert.match(markdown, /satisfies ThemeConfig/u);
+  assert.match(markdown, /document\.documentElement\.classList\.add\(themeClass\)/u);
+  assert.match(markdown, /--sd-ui-toolbar-bg/u);
+  assert.match(markdown, /buildTheme\(\)/u);
+  assert.doesNotMatch(markdown, /<ThemePlayground\b/u);
+  assert.doesNotMatch(markdown, /<include>/u);
+});
+
 test('exports custom command registration as clean Markdown', async () => {
   const article = await readFile(new URL('../out/editor/custom-ui/custom-commands/index.html', import.meta.url), 'utf8');
   const markdown = await readFile(new URL('../out/md/editor/custom-ui/custom-commands.md', import.meta.url), 'utf8');
@@ -1023,7 +1037,7 @@ test('exports the redistributed Editor guidance as clean Markdown', async () => 
     'lifecycle-and-events',
     'load-and-save-documents',
     'dialogs-and-surfaces',
-    'themes-and-fonts',
+    'theming',
     'platform/proofing',
     'accessibility',
     'secure-integration',
@@ -1039,7 +1053,7 @@ test('exports the redistributed Editor guidance as clean Markdown', async () => 
   assert.match(corpus, /Show a retry path instead of an empty mount point/);
   assert.match(corpus, /triggerDownload: false/);
   assert.match(corpus, /await handle\.result/);
-  assert.match(corpus, /fonts\.map\(\{ Calibri: 'Product Sans' \}\)/);
+  assert.match(corpus, /document\.documentElement\.classList\.add\(themeClass\)/);
   assert.match(corpus, /If the provider uses a network, document text leaves the browser/);
   assert.match(corpus, /Accessibility remains a shared responsibility/);
   assert.match(corpus, /client code a trusted authorization boundary/);

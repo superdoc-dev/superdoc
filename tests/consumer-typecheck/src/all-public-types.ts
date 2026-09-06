@@ -261,6 +261,10 @@ import type {
   SurfaceResolver,
   StructuredDocumentSource,
   SurfacesModuleConfig,
+  ThemeColors,
+  ThemeConfig,
+  ThemeResult,
+  ThemeVariableOverrides,
   TextAddress,
   TextSegment,
   TextTarget,
@@ -526,6 +530,10 @@ const _real_SurfaceResolution: AssertNotAny<SurfaceResolution> = true;
 const _real_SurfaceResolver: AssertNotAny<SurfaceResolver> = true;
 const _real_StructuredDocumentSource: AssertNotAny<StructuredDocumentSource> = true;
 const _real_SurfacesModuleConfig: AssertNotAny<SurfacesModuleConfig> = true;
+const _real_ThemeColors: AssertNotAny<ThemeColors> = true;
+const _real_ThemeConfig: AssertNotAny<ThemeConfig> = true;
+const _real_ThemeResult: AssertNotAny<ThemeResult> = true;
+const _real_ThemeVariableOverrides: AssertNotAny<ThemeVariableOverrides> = true;
 const _real_TextAddress: AssertNotAny<TextAddress> = true;
 const _real_TextSegment: AssertNotAny<TextSegment> = true;
 const _real_TextTarget: AssertNotAny<TextTarget> = true;

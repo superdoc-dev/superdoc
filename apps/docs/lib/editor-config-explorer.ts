@@ -280,7 +280,6 @@ const presentation = {
   },
   uiDisplayFallbackFont: {
     example: { value: "'Inter, sans-serif'", code: "uiDisplayFallbackFont: 'Inter, sans-serif'" },
-    guide: { label: 'Themes and fonts', href: '/editor/themes-and-fonts' },
   },
   trackChanges: {
     status: 'Deprecated. Use viewing.trackedChanges.',
@@ -342,7 +341,6 @@ const presentation = {
   },
   fonts: {
     example: { value: '{ assetBaseUrl: … }', code: "fonts: { assetBaseUrl: '/fonts/' }" },
-    guide: { label: 'Themes and fonts', href: '/editor/themes-and-fonts' },
   },
   workerUrls: {
     example: { value: '{ document: … }', code: "workerUrls: { document: '/workers/document.js' }" },

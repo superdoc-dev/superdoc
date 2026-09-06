@@ -70,6 +70,7 @@ export const llmPlaceholderComponents = [
   'RulerConfigReference',
   'SearchConfigReference',
   'SurfaceLifecycleDemo',
+  'ThemePlayground',
   'ToolbarConfigReference',
   'TemplatePopulationDemo',
   'MigrationExample',
@@ -427,6 +428,14 @@ export function renderLLMMarkdown(markdown: string) {
         '> **Live example: compare a dialog and a floating surface**',
         '>',
         '> Open confirmation to see a modal dialog finish as `submitted` or `closed`. Open inspector twice to see the first floating surface finish as `replaced` while the new inspector stays open. The floating inspector leaves the document usable. The status line reports each lifecycle result.',
+        '',
+      ].join('\n');
+    },
+    ThemePlayground() {
+      return [
+        '> **Live example: theme the Editor UI**',
+        '>',
+        '> Change the semantic action, surface, text, border, or radius value and the real Editor updates. The dialog inherits the same theme because the generated class is applied to `<html>`. Turning on Toolbar override adds `--sd-ui-toolbar-bg` after the semantic values. The generated `ThemeConfig` code updates with each choice.',
         '',
       ].join('\n');
     },

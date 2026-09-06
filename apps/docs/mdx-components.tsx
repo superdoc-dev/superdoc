@@ -24,6 +24,7 @@ import { DocumentPreview } from '@/components/embeds/document-preview';
 import { EditorDemo } from '@/components/embeds/editor-demo';
 import { InterfaceOwnership } from '@/components/embeds/interface-ownership';
 import { SurfaceLifecycleDemo } from '@/components/embeds/surface-lifecycle-demo';
+import { ThemePlayground } from '@/components/embeds/theme-playground';
 import { DocsHome } from '@/components/docs-home';
 import { Callout } from '@/components/mdx/callout';
 import { CommentsConfigReference } from '@/components/mdx/comments-config-reference';
@@ -115,6 +116,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     RulerConfigReference,
     SearchConfigReference,
     SurfaceLifecycleDemo,
+    ThemePlayground,
     ToolbarConfigReference,
     TemplatePopulationDemo,
     img: DocsImage,

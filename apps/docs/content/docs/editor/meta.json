@@ -14,7 +14,7 @@
     "built-in-ui",
     "custom-ui",
     "dialogs-and-surfaces",
-    "themes-and-fonts",
+    "theming",
     "---Features---",
     "track-changes",
     "content-controls",

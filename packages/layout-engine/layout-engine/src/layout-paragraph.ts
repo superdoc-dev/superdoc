@@ -1002,6 +1002,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromLine: 0,
       toLine: lines.length,
       x,
@@ -1655,6 +1656,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     const fragment: ParaFragment = {
       kind: 'para',
       blockId: block.id,
+      columnIndex: state.columnIndex,
       fromLine,
       toLine: slice.toLine,
       x: adjustedX,
@@ -1663,10 +1665,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       sourceAnchor: block.sourceAnchor,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
-    if (ctx.collapseSplitLineBreakCarrier) {
-      fragment.columnIndex = state.columnIndex;
-    }
-
     // Store remeasured lines in fragment so renderer can use them.
     // This is needed because the original measure has different line breaks.
     if (didRemeasureForColumnWidth || didRemeasureForFloats) {

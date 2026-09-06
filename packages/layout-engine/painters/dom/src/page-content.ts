@@ -153,8 +153,9 @@ export function createEmptyPaintWorkSummary(): PaintWorkSummary {
  * Painter plan P3a: reuse key for one exact page slot on the persistent-page
  * path. Joins everything the painted page DOM depends on for a fixed page
  * index: the resolve-stage version stamp per item (the product paint-reuse
- * mechanism), fragment identity + geometry (stamps do not cover geometry),
- * and, only when body content contains a dynamic field, its page context.
+ * mechanism), fragment identity + geometry + column ownership (stamps do not
+ * cover these), and, only when body content contains a dynamic field, its
+ * page context.
  * Header/footer providers have a separate decoration-only refresh path, so
  * their context must not invalidate otherwise reusable body fragments.
  *
@@ -212,7 +213,10 @@ export function persistentPageVersionKey(
       parts.push(`d:${derivedRunTextPlane!.revision}`);
     }
     const height = (fragment as { height?: number }).height;
-    parts.push(`f:${fragmentKey(fragment)}@${fragment.x},${fragment.y},${fragment.width},${height ?? ''}#${signature}`);
+    const columnIndex = 'columnIndex' in fragment ? fragment.columnIndex : undefined;
+    parts.push(
+      `f:${fragmentKey(fragment)}@${fragment.x},${fragment.y},${fragment.width},${height ?? ''},${columnIndex ?? ''}#${signature}`,
+    );
   }
   if (missingStamp) return null;
   return parts.join('|');

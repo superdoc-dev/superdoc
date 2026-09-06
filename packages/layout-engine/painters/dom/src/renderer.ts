@@ -1952,13 +1952,8 @@ export class DomPainter {
       // starts left of its own column and ends past the separator, while never having left the
       // later column at all.
       //
-      // `fragment.columnIndex` is the engine's own record of the owning column, and it is the
-      // first thing consulted. It reaches only a few fragment kinds: tables (`layout-table.ts`,
-      // five sites), the three footnote body kinds in `incrementalLayout.ts`, and a paragraph ONLY
-      // when it is a collapsed split-line-break anchor carrier (`layout-paragraph.ts`, under
-      // `collapseSplitLineBreakCarrier`) — a narrow document shape, not the ordinary paragraph. So
-      // the geometry fallback below carries almost every fragment on the page and has to be right
-      // on its own; the record is a shortcut for the cases that keep one, not the main path.
+      // `fragment.columnIndex` is the engine's own record of the owning flow column and is the
+      // first thing consulted. The geometry fallback keeps older or hand-built fragments working.
       const lastColumnIndex = geometry.length - 1;
       const occupiedColumns = new Set<number>();
       for (const item of fragmentsInRegion) {
@@ -5615,6 +5610,7 @@ export class DomPainter {
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    this.applyFragmentColumnOwnership(el, fragment);
     applySourceAnchorDataset(el, fragment.sourceAnchor);
     applyLayoutIdentityDataset(
       el,
@@ -5767,6 +5763,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    this.applyFragmentColumnOwnership(el, fragment);
     applySourceAnchorDataset(el, item.sourceAnchor);
     applyLayoutIdentityDataset(
       el,
@@ -5786,6 +5783,15 @@ export class DomPainter {
     }
 
     this.applyFragmentPmAttributes(el, fragment, section, item);
+  }
+
+  private applyFragmentColumnOwnership(el: HTMLElement, fragment: Fragment): void {
+    const columnIndex = 'columnIndex' in fragment ? fragment.columnIndex : undefined;
+    if (typeof columnIndex === 'number' && Number.isInteger(columnIndex) && columnIndex >= 0) {
+      el.dataset[DATASET_KEYS.LAYOUT_COLUMN_INDEX] = String(columnIndex);
+    } else {
+      delete el.dataset[DATASET_KEYS.LAYOUT_COLUMN_INDEX];
+    }
   }
 
   /**

@@ -1088,6 +1088,18 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'format',
     skipAsATool: true,
   },
+  'blocks.findText': {
+    memberPath: 'blocks.findText',
+    description:
+      'Find top-level body blocks containing a literal case-insensitive substring. Matches flattened block text, coalescing repeated hits and nested table paragraphs into one block. Scans at most 20,000 blocks inside the document host and returns compact previews without transferring full-text pages.',
+    expectedResult:
+      'Returns matching-block total within the scan, limited matches with zero-based ordinals and 100-character previews, firstMatchOrdinal even for limit:0, scannedBlocks, truncated, and revision. A failed read retains completed pages and reports scanError; revision is unknown if no page succeeded. Whitespace and Unicode are not normalized.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: ['INVALID_INPUT'] }),
+    referenceDocPath: 'blocks/find-text.mdx',
+    referenceGroup: 'blocks',
+    skipAsATool: true,
+  },
   'blocks.list': {
     memberPath: 'blocks.list',
     description:

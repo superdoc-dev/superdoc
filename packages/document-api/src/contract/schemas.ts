@@ -4447,6 +4447,41 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
+  'blocks.findText': {
+    input: objectSchema(
+      {
+        text: {
+          type: 'string',
+          pattern: '\\S',
+          description: 'Literal case-insensitive substring. Whitespace is preserved.',
+        },
+        limit: { type: 'integer', minimum: 0, description: 'Maximum matches. Default: 8; zero returns counts only.' },
+      },
+      ['text'],
+    ),
+    output: objectSchema(
+      {
+        total: { type: 'integer', minimum: 0 },
+        matches: arraySchema(
+          objectSchema(
+            {
+              ordinal: { type: 'integer', minimum: 0, description: 'Zero-based top-level body ordinal.' },
+              nodeId: { type: 'string' },
+              nodeType: { enum: [...blockNodeTypeValues] },
+              preview: { type: 'string', maxLength: 100 },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'preview'],
+          ),
+        ),
+        firstMatchOrdinal: { type: 'integer', minimum: 0 },
+        scanError: objectSchema({ message: { type: 'string' } }, ['message']),
+        scannedBlocks: { type: 'integer', minimum: 0, maximum: 20000 },
+        truncated: { type: 'boolean' },
+        revision: { type: 'string' },
+      },
+      ['total', 'matches', 'scannedBlocks', 'truncated', 'revision'],
+    ),
+  },
   'blocks.list': {
     input: objectSchema({
       in: storyLocatorSchema,

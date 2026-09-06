@@ -5,6 +5,8 @@ import type {
   BlocksDeleteResult,
   BlocksListInput,
   BlocksListResult,
+  BlocksFindTextInput,
+  BlocksFindTextResult,
   BlocksDeleteRangeInput,
   BlocksDeleteRangeResult,
   BlocksMergeInput,
@@ -25,6 +27,7 @@ import { validateStoryLocator } from '../validation/story-validator.js';
 // ---------------------------------------------------------------------------
 export interface BlocksApi {
   list(input?: BlocksListInput): BlocksListResult;
+  findText(input: BlocksFindTextInput): BlocksFindTextResult;
   delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult;
   deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult;
   /** Split a paragraph at a visible-text offset. */

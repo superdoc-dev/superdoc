@@ -292,6 +292,7 @@ import {
   executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
+import { executeBlocksFindText } from './blocks/find-text.js';
 import {
   executeBlocksList,
   executeBlocksDelete,
@@ -305,6 +306,8 @@ import type {
   BlocksDeleteResult,
   BlocksListInput,
   BlocksListResult,
+  BlocksFindTextInput,
+  BlocksFindTextResult,
   BlocksDeleteRangeInput,
   BlocksDeleteRangeResult,
 } from './types/blocks.types.js';
@@ -1688,6 +1691,7 @@ export type {
   CommentTarget,
 } from './comments/comments.types.js';
 export type { BlocksApi } from './blocks/blocks.js';
+export { executeBlocksFindText } from './blocks/find-text.js';
 export {
   executeBlocksList,
   executeBlocksDelete,
@@ -2471,6 +2475,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     blocks: {
+      findText(input: BlocksFindTextInput): BlocksFindTextResult {
+        return executeBlocksFindText(adapters.blocks, input);
+      },
       list(input?: BlocksListInput): BlocksListResult {
         return executeBlocksList(adapters.blocks, input);
       },

@@ -34,6 +34,7 @@
     "/document-api/reference/blocks/",
     "/document-api/reference/blocks/delete-range/",
     "/document-api/reference/blocks/delete/",
+    "/document-api/reference/blocks/find-text/",
     "/document-api/reference/blocks/list/",
     "/document-api/reference/blocks/merge/",
     "/document-api/reference/blocks/move/",

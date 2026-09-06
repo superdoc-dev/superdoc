@@ -1072,6 +1072,9 @@ test('renders input fields for every operation with a non-empty input schema', a
 });
 
 test('exports the searchable reference experience from contract data', async () => {
+  const model = JSON.parse(
+    await readFile(new URL('../generated/document-api-reference.json', import.meta.url), 'utf8'),
+  );
   const landing = await readFile(new URL('../out/document-api/reference/index.html', import.meta.url), 'utf8');
   const namespace = await readFile(
     new URL('../out/document-api/reference/content-controls/index.html', import.meta.url),
@@ -1085,7 +1088,10 @@ test('exports the searchable reference experience from contract data', async () 
   const namespaceText = namespace.replaceAll('<!-- -->', '');
   const operationText = operation.replaceAll('<!-- -->', '');
 
-  assert.match(landingText, /Search all 427 operations in contract 0\.1\.0/);
+  assert.ok(
+    landingText.includes(`Search all ${Object.keys(model.operations).length} operations in contract ${model.contractVersion}`),
+  );
+  assert.match(landing, /blocks\.findText/);
   assert.match(landing, /Search operation names, paths, and descriptions/);
   assert.match(landing, /contentControls/);
   assert.match(namespaceText, /55 operations/);

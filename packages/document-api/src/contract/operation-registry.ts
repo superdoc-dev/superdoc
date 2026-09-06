@@ -23,6 +23,8 @@ import type {
   BlocksDeleteResult,
   BlocksListInput,
   BlocksListResult,
+  BlocksFindTextInput,
+  BlocksFindTextResult,
   BlocksDeleteRangeInput,
   BlocksDeleteRangeResult,
   BlocksMergeInput,
@@ -617,6 +619,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   formatRange: { input: FormatRangeInput; options: MutationOptions; output: TextMutationReceipt };
   // --- blocks.* ---
   'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
+  'blocks.findText': { input: BlocksFindTextInput; options: never; output: BlocksFindTextResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
   'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
   'blocks.split': { input: BlocksSplitInput; options: MutationOptions; output: BlocksSplitResult };

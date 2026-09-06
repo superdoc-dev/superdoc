@@ -362,7 +362,9 @@ function validateContentPayload(input: { content?: unknown; format?: unknown }, 
       value: input.content,
     });
   }
-  validateContentFormat(input.format, 'format', operationName);
+  if (!(operationName === 'contentControls.replaceContent' && input.format === 'ooxml')) {
+    validateContentFormat(input.format, 'format', operationName);
+  }
 }
 
 function validateSymbol(value: unknown, field: string, operationName: string): void {

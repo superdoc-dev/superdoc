@@ -3423,7 +3423,17 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
       input: ccTargetInput(),
       output: objectSchema({ content: { type: 'string' }, format: { enum: ['text', 'html'] } }, ['content', 'format']),
     },
-    'contentControls.replaceContent': ccContentMutation,
+    'contentControls.replaceContent': {
+      ...ccContentMutation,
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          content: { type: 'string' },
+          format: { enum: ['text', 'html', 'ooxml'] },
+        },
+        ['target', 'content'],
+      ),
+    },
     'contentControls.clearContent': targetOnlyMutation,
     'contentControls.appendContent': ccContentMutation,
     'contentControls.prependContent': ccContentMutation,

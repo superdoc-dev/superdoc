@@ -402,7 +402,7 @@ export interface ContentControlsGetContentResult {
 export interface ContentControlsReplaceContentInput {
   target: ContentControlTarget;
   content: string;
-  format?: 'text' | 'html';
+  format?: 'text' | 'html' | 'ooxml';
 }
 
 export interface ContentControlsClearContentInput {
